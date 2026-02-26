@@ -1,0 +1,43 @@
+{
+  "name": "rowan-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node src/db/runMigration.js"
+  },
+  "keywords": [
+    "stellar",
+    "mobile-money",
+    "escrow",
+    "otc"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "Rowan — Stellar-to-mobile-money liquidity bridge backend",
+  "dependencies": {
+    "@sentry/node": "^10.40.0",
+    "@stellar/stellar-sdk": "^13.1.0",
+    "@supabase/supabase-js": "^2.49.0",
+    "africastalking": "^0.7.0",
+    "bcryptjs": "^2.4.3",
+    "bull": "^4.16.5",
+    "cors": "^2.8.6",
+    "decimal.js": "^10.6.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.6.1",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.1",
+    "nanoid": "^5.1.5",
+    "pg": "^8.16.0",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
