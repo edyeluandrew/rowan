@@ -3,6 +3,7 @@ import redis from '../db/redis.js';
 import config from '../config/index.js';
 import notificationService from './notificationService.js';
 import stateMachine from './transactionStateMachine.js';
+import { fiatToUgx, getFloatColumn } from '../utils/financial.js';
 import logger from '../utils/logger.js';
 
 // Will be set by websocket module after init
@@ -68,16 +69,10 @@ async function matchTrader(transactionId) {
 
     // ── [C-1 FIX] Determine the fiat currency and float column ──
     const fiatCurrency = transaction.fiat_currency || 'UGX';
-    const floatCol = fiatCurrency === 'KES' ? 'float_kes'
-                   : fiatCurrency === 'TZS' ? 'float_tzs'
-                   : 'float_ugx';
+    const floatCol = getFloatColumn(fiatCurrency);
 
-    // Convert fiat amount to UGX equivalent for daily_volume comparison
-    const KES_TO_UGX = config.usdcFiatRates.UGX / config.usdcFiatRates.KES; // ~24.5
-    const TZS_TO_UGX = config.usdcFiatRates.UGX / config.usdcFiatRates.TZS; // ~1.42
-    const fiatToUgx = fiatCurrency === 'KES' ? fiatNeeded * KES_TO_UGX
-                    : fiatCurrency === 'TZS' ? fiatNeeded * TZS_TO_UGX
-                    : fiatNeeded;
+    // [F-6 FIX] Convert fiat amount to UGX equivalent using shared helper
+    const fiatAmountUgx = fiatToUgx(fiatNeeded, fiatCurrency);
 
     // ── C5 FIX: Filter by network + P2 FIX: Use status enum ──
     // [C-1 FIX] Compare daily_volume (UGX) + fiat-in-UGX against daily_limit_ugx
@@ -95,7 +90,7 @@ async function matchTrader(transactionId) {
          AND (t.daily_volume + $3) <= t.daily_limit_ugx
        ORDER BY t.trust_score DESC, active_load ASC
        LIMIT 1`,
-      [transaction.network, fiatNeeded, fiatToUgx]
+      [transaction.network, fiatNeeded, fiatAmountUgx]
     );
 
     const trader = traderResult.rows[0];
@@ -132,11 +127,11 @@ async function matchTrader(transactionId) {
     if (floatDecrResult.rows.length === 0) {
       // Float was insufficient (race condition) — roll back the assignment
       logger.warn(`[Matching] Float decrement failed for trader ${trader.id} — rolling back assignment`);
-      await db.query(
-        `UPDATE transactions SET trader_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL
-         WHERE id = $1 AND state = 'TRADER_MATCHED' AND trader_id = $2`,
-        [transactionId, trader.id]
-      );
+      // [F-5 FIX] Route rollback through state machine for audit trail
+      await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'ESCROW_LOCKED', {
+        trader_id: null,
+        trader_matched_at: null,
+      });
       // Retry matching (will pick next best trader)
       return matchTrader(transactionId);
     }
@@ -213,14 +208,18 @@ async function acceptRequest(transactionId, traderId) {
  * Moves state to FIAT_SENT — escrow release handled by the caller.
  */
 async function confirmPayout(transactionId, traderId) {
-  const transaction = await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'FIAT_SENT');
-
-  if (!transaction) throw new Error('Cannot confirm — transaction not found or wrong state');
-
-  // Verify trader ownership
-  if (transaction.trader_id !== traderId) {
+  // [F-2 FIX] Verify trader authorization BEFORE state transition to prevent state corruption
+  const txCheck = await db.query(
+    `SELECT trader_id FROM transactions WHERE id = $1 AND state = 'TRADER_MATCHED'`,
+    [transactionId]
+  );
+  if (!txCheck.rows[0]) throw new Error('Cannot confirm — transaction not found or wrong state');
+  if (txCheck.rows[0].trader_id !== traderId) {
     throw new Error('Cannot confirm — transaction not assigned to this trader');
   }
+
+  const transaction = await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'FIAT_SENT');
+  if (!transaction) throw new Error('Cannot confirm — state transition failed (concurrent modification)');
 
   logger.info(`[Matching] Trader ${traderId} confirmed payout for tx ${transactionId}`);
 

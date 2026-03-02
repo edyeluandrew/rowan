@@ -1,0 +1,12 @@
+{
+  "appId": "app.rowan.wallet",
+  "appName": "Rowan",
+  "webDir": "dist",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#0B0E11",
+      "showSpinner": false
+    }
+  }
+}

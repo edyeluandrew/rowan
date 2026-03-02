@@ -207,6 +207,45 @@ router.post(
 );
 
 /**
+ * POST /api/v1/auth/trader/signup
+ * Public trader self-registration.
+ * Body: { name, email, password }
+ */
+router.post(
+  '/trader/signup',
+  validate(['name', 'email', 'password']),
+  async (req, res, next) => {
+    try {
+      const { name, email, password } = req.body;
+
+      const existing = await db.query(
+        `SELECT id FROM traders WHERE email = $1`,
+        [email]
+      );
+      if (existing.rows.length > 0) {
+        return res.status(409).json({ error: 'Email already registered' });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      const result = await db.query(
+        `INSERT INTO traders (name, email, password_hash)
+         VALUES ($1, $2, $3)
+         RETURNING id, name, email, trust_score`,
+        [name, email, passwordHash]
+      );
+
+      const trader = result.rows[0];
+      const token = signToken(trader.id, 'trader');
+
+      res.status(201).json({ token, trader });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
  * Verify a Stellar challenge-response signature.
  * Returns true if the signature is valid for the stored nonce.
  */

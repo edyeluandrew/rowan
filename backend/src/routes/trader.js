@@ -150,6 +150,67 @@ router.post('/requests/:id/confirm', authTrader, async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/trader/profile
+ * Full trader profile for the Profile page.
+ */
+router.get('/profile', authTrader, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT id, name, email, stellar_address, usdc_float,
+              daily_limit, daily_volume, trust_score, status,
+              verification_status, is_active, networks,
+              float_ugx, float_kes, float_tzs,
+              created_at, updated_at, last_active_at
+       FROM traders WHERE id = $1`,
+      [req.traderId]
+    );
+    const trader = result.rows[0];
+    if (!trader) return res.status(404).json({ error: 'Trader not found' });
+
+    // Build float_balances object for the frontend
+    const float_balances = {};
+    if (trader.float_ugx > 0) float_balances.UGX = Number(trader.float_ugx);
+    if (trader.float_kes > 0) float_balances.KES = Number(trader.float_kes);
+    if (trader.float_tzs > 0) float_balances.TZS = Number(trader.float_tzs);
+
+    res.json({
+      trader: {
+        ...trader,
+        float_balances,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/trader/history?page=1&limit=20
+ * Paginated transaction history for the History page.
+ */
+router.get('/history', authTrader, async (req, res, next) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+
+    const result = await db.query(
+      `SELECT id, usdc_amount, fiat_amount, fiat_currency, network,
+              state, completed_at, created_at
+       FROM transactions
+       WHERE trader_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [req.traderId, limit, offset]
+    );
+
+    res.json({ transactions: result.rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/trader/stats
  * Trader's float balance, daily volume, and recent history.
  */
@@ -177,10 +238,21 @@ router.get('/stats', authTrader, async (req, res, next) => {
       [req.traderId]
     );
 
+    // Lifetime stats for History page header
+    const lifetimeResult = await db.query(
+      `SELECT COUNT(*) as completed_count,
+              COALESCE(SUM(fiat_amount), 0) as total_volume_ugx,
+              COALESCE(SUM(fiat_amount * 0.02), 0) as total_earnings_ugx
+       FROM transactions
+       WHERE trader_id = $1 AND state = 'COMPLETE'`,
+      [req.traderId]
+    );
+
     res.json({
       ...traderResult.rows[0],
       today: todayResult.rows[0],
       recentTransactions: historyResult.rows,
+      ...lifetimeResult.rows[0],
     });
   } catch (err) {
     next(err);

@@ -1,4 +1,6 @@
 import db from '../db/index.js';
+import config from '../config/index.js';
+import { fiatToUgx } from '../utils/financial.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -27,25 +29,37 @@ async function checkTransaction(userId, fiatAmount, fiatCurrency) {
   const limits = KYC_LIMITS[user.kyc_level] || KYC_LIMITS.NONE;
   const amount = parseFloat(fiatAmount);
 
-  // 1. Per-transaction cap
-  if (amount > limits.perTx) {
-    await logAlert(userId, 'PER_TX_LIMIT', `Attempted ${amount} ${fiatCurrency}, limit is ${limits.perTx}`);
-    return { allowed: false, reason: `Exceeds per-transaction limit of ${limits.perTx} ${fiatCurrency} for KYC level ${user.kyc_level}` };
+  // [F-3 FIX] Normalize fiat amount to UGX for limit comparison (limits are in UGX)
+  const amountUgx = fiatToUgx(amount, fiatCurrency);
+
+  // 1. Per-transaction cap (UGX-normalized)
+  if (amountUgx > limits.perTx) {
+    await logAlert(userId, 'PER_TX_LIMIT', `Attempted ${amount} ${fiatCurrency} (${amountUgx} UGX), limit is ${limits.perTx} UGX`);
+    return { allowed: false, reason: `Exceeds per-transaction limit of ${limits.perTx} UGX for KYC level ${user.kyc_level}` };
   }
 
-  // 2. Daily limit — sum fiat moved today
+  // 2. Daily limit — sum fiat moved today, normalized to UGX
+  // [F-3 FIX] Use CASE to normalize multi-currency daily totals to UGX
+  const kesToUgx = config.usdcFiatRates.UGX / config.usdcFiatRates.KES;
+  const tzsToUgx = config.usdcFiatRates.UGX / config.usdcFiatRates.TZS;
   const dailyResult = await db.query(
-    `SELECT COALESCE(SUM(fiat_amount), 0) as daily_total
+    `SELECT COALESCE(SUM(
+       CASE fiat_currency
+         WHEN 'KES' THEN fiat_amount * $2
+         WHEN 'TZS' THEN fiat_amount * $3
+         ELSE fiat_amount
+       END
+     ), 0) as daily_total_ugx
      FROM transactions
      WHERE user_id = $1
        AND state NOT IN ('FAILED', 'REFUNDED')
        AND created_at >= CURRENT_DATE`,
-    [userId]
+    [userId, kesToUgx, tzsToUgx]
   );
-  const dailyTotal = parseFloat(dailyResult.rows[0].daily_total);
-  if (dailyTotal + amount > limits.daily) {
-    await logAlert(userId, 'DAILY_LIMIT', `Daily total would be ${dailyTotal + amount}, limit is ${limits.daily}`);
-    return { allowed: false, reason: `Exceeds daily limit of ${limits.daily} ${fiatCurrency} (used today: ${dailyTotal})` };
+  const dailyTotalUgx = parseFloat(dailyResult.rows[0].daily_total_ugx);
+  if (dailyTotalUgx + amountUgx > limits.daily) {
+    await logAlert(userId, 'DAILY_LIMIT', `Daily total would be ${dailyTotalUgx + amountUgx} UGX, limit is ${limits.daily} UGX`);
+    return { allowed: false, reason: `Exceeds daily limit of ${limits.daily} UGX (used today: ${Math.round(dailyTotalUgx)} UGX)` };
   }
 
   // 3. Concurrent quote check — flag users requesting multiple simultaneous quotes
@@ -62,8 +76,8 @@ async function checkTransaction(userId, fiatAmount, fiatCurrency) {
   }
 
   // 4. Flag unusually large transactions (above 80% of limit)
-  if (amount > limits.perTx * 0.8) {
-    await logAlert(userId, 'LARGE_TX', `Transaction of ${amount} ${fiatCurrency} is above 80% of per-tx limit`);
+  if (amountUgx > limits.perTx * 0.8) {
+    await logAlert(userId, 'LARGE_TX', `Transaction of ${amount} ${fiatCurrency} (${Math.round(amountUgx)} UGX) is above 80% of per-tx limit`);
     // Allow but flag — admin can review
   }
 
@@ -138,7 +152,7 @@ async function logAlert(userId, alertType, details, traderId = null) {
       [userId || null, traderId, alertType, details, severity]
     );
   } catch (err) {
-    logger.error('[FraudMonitor] Failed to persist alert:', err.message);
+    logger.error('[FraudMonitor] Failed to persist alert:', { error: err.message });
   }
 }
 
