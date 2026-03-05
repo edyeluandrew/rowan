@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Copy, CopyCheck, Hash, TriangleAlert, Circle, CircleCheck } from 'lucide-react'
 import AddressDisplay from '../wallet/AddressDisplay'
+import { COPY_FEEDBACK_TIMEOUT_MS } from '../../utils/constants'
 
 /**
  * MemoBox — displays the escrow address, amount, and memo
@@ -95,7 +96,7 @@ function CopyableBox({ value, display, borderClass = 'border-rowan-border' }) {
     try {
       await navigator.clipboard.writeText(value)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_TIMEOUT_MS)
     } catch {
       /* clipboard not available */
     }

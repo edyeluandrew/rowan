@@ -1,6 +1,5 @@
 import {
   Keypair,
-  Networks,
   TransactionBuilder,
   Operation,
   Asset,
@@ -8,6 +7,7 @@ import {
   BASE_FEE,
   Horizon,
 } from '@stellar/stellar-sdk'
+import { CURRENT_NETWORK, STELLAR_TX_TIMEOUT_SECONDS } from './constants'
 
 /**
  * Generate a new random Stellar keypair.
@@ -53,17 +53,6 @@ export function isValidSecretKey(secret) {
 }
 
 /**
- * Sign a challenge nonce with the user's secret key.
- * Returns base64-encoded signature.
- */
-export async function signChallenge(nonce, secretKey) {
-  const keypair = Keypair.fromSecret(secretKey)
-  const hash = Buffer.from(nonce, 'utf8')
-  const signature = keypair.sign(hash)
-  return Buffer.from(signature).toString('base64')
-}
-
-/**
  * Build and sign a payment transaction, sending XLM
  * from the user's wallet to the escrow address.
  *
@@ -81,10 +70,7 @@ export async function buildAndSignPayment({
   const keypair = Keypair.fromSecret(sourceSecretKey)
   const sourceAccount = await server.loadAccount(keypair.publicKey())
 
-  const networkPassphrase =
-    import.meta.env.VITE_STELLAR_NETWORK === 'mainnet'
-      ? Networks.PUBLIC
-      : Networks.TESTNET
+  const networkPassphrase = CURRENT_NETWORK.passphrase
 
   const txBuilder = new TransactionBuilder(sourceAccount, {
     fee: BASE_FEE,
@@ -98,7 +84,7 @@ export async function buildAndSignPayment({
       })
     )
     .addMemo(Memo.text(memo))
-    .setTimeout(180)
+    .setTimeout(STELLAR_TX_TIMEOUT_SECONDS)
     .build()
 
   txBuilder.sign(keypair)
@@ -112,23 +98,41 @@ export async function submitTransaction(signedXdr, horizonUrl) {
   const server = new Horizon.Server(horizonUrl)
   const transaction = TransactionBuilder.fromXDR(
     signedXdr,
-    import.meta.env.VITE_STELLAR_NETWORK === 'mainnet'
-      ? Networks.PUBLIC
-      : Networks.TESTNET
+    CURRENT_NETWORK.passphrase
   )
-  return server.submitTransaction(transaction)
+  try {
+    return await server.submitTransaction(transaction)
+  } catch (err) {
+    const codes = err?.response?.data?.extras?.result_codes
+    if (codes) {
+      const opCodes = codes.operations?.join(', ') || ''
+      const txCode = codes.transaction || ''
+      throw new Error(
+        `Transaction failed: ${txCode}${opCodes ? ` (${opCodes})` : ''}`
+      )
+    }
+    throw err
+  }
 }
 
 /**
  * Load account balances from Horizon.
+ * Returns { xlm: 0 } for unfunded accounts (404).
  */
 export async function loadAccountBalances(publicKey, horizonUrl) {
   const server = new Horizon.Server(horizonUrl)
-  const account = await server.loadAccount(publicKey)
-  const xlmBalance = account.balances.find(
-    (b) => b.asset_type === 'native'
-  )
-  return {
-    xlm: xlmBalance ? parseFloat(xlmBalance.balance) : 0,
+  try {
+    const account = await server.loadAccount(publicKey)
+    const xlmBalance = account.balances.find(
+      (b) => b.asset_type === 'native'
+    )
+    return {
+      xlm: xlmBalance ? parseFloat(xlmBalance.balance) : 0,
+    }
+  } catch (err) {
+    if (err?.response?.status === 404) {
+      return { xlm: 0 }
+    }
+    throw err
   }
 }

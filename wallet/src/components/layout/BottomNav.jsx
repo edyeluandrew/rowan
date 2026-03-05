@@ -1,11 +1,13 @@
 import { NavLink } from 'react-router-dom'
-import { House, ArrowDownToLine, Clock, UserCircle } from 'lucide-react'
-import useNotifications from '../../hooks/useNotifications'
+import { House, ArrowDownToLine, Clock, Bell, UserCircle } from 'lucide-react'
+import { useNotificationsContext } from '../../context/NotificationsContext'
+import NotificationBadge from '../ui/NotificationBadge'
 
 const tabs = [
   { path: '/home', label: 'Home', Icon: House },
   { path: '/cashout', label: 'Cash Out', Icon: ArrowDownToLine, primary: true },
   { path: '/history', label: 'History', Icon: Clock },
+  { path: '/notifications', label: 'Alerts', Icon: Bell },
   { path: '/profile', label: 'Profile', Icon: UserCircle },
 ]
 
@@ -13,7 +15,7 @@ const tabs = [
  * Fixed bottom navigation bar.
  */
 export default function BottomNav() {
-  const { unreadCount } = useNotifications()
+  const { unreadCount } = useNotificationsContext()
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-rowan-surface border-t border-rowan-border z-40 safe-area-pb">
@@ -34,10 +36,8 @@ export default function BottomNav() {
           >
             <Icon size={22} />
             <span className="text-[10px] font-medium">{label}</span>
-            {path === '/home' && unreadCount > 0 && (
-              <span className="absolute -top-0.5 right-0 w-4 h-4 bg-rowan-red rounded-full text-[9px] text-white flex items-center justify-center font-bold">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
+            {path === '/notifications' && (
+              <NotificationBadge count={unreadCount} />
             )}
           </NavLink>
         ))}

@@ -10,6 +10,7 @@ export default function useRates() {
   const [allRates, setAllRates] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState(null)
   const intervalRef = useRef(null)
 
   const fetchRates = useCallback(async (isRefresh = false) => {
@@ -22,8 +23,9 @@ export default function useRates() {
       ])
       setRates(current)
       setAllRates(all)
-    } catch {
-      /* rate fetch failed — previous data preserved */
+      setError(null)
+    } catch (err) {
+      setError(err)
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -36,5 +38,5 @@ export default function useRates() {
     return () => clearInterval(intervalRef.current)
   }, [fetchRates])
 
-  return { rates, allRates, loading, refreshing, refresh: () => fetchRates(true) }
+  return { rates, allRates, loading, refreshing, error, refresh: () => fetchRates(true) }
 }

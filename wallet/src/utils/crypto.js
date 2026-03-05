@@ -31,9 +31,6 @@ export function maskPhoneNumber(phoneNumber) {
 
 /**
  * Truncate a Stellar address for display.
- * GABCD...WXYZ showing first 6 and last 6 characters.
+ * @deprecated Use formatAddress from ./format.js instead.
  */
-export function truncateAddress(address) {
-  if (!address || address.length < 16) return address || ''
-  return `${address.slice(0, 6)}...${address.slice(-6)}`
-}
+export { formatAddress as truncateAddress } from './format'

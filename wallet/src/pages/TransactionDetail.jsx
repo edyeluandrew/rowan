@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, Star, Smartphone, Clock, Copy, CopyCheck, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, Star, Smartphone, Clock, Copy, CopyCheck, AlertTriangle, FileText } from 'lucide-react'
 import { getTransactionStatus } from '../api/cashout'
 import useSocketHook from '../hooks/useSocket'
 import TransactionStatusBadge from '../components/transactions/TransactionStatusBadge'
 import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
 import { formatXlm, formatCurrency, formatDateTime, formatAddress } from '../utils/format'
-import { NETWORKS } from '../utils/constants'
+import { NETWORKS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 
 export default function TransactionDetail() {
   const { id } = useParams()
@@ -54,7 +54,7 @@ export default function TransactionDetail() {
     try {
       await navigator.clipboard.writeText(text)
       setCopied(field)
-      setTimeout(() => setCopied(null), 2000)
+      setTimeout(() => setCopied(null), COPY_FEEDBACK_TIMEOUT_MS)
     } catch {
       // clipboard not available
     }
@@ -168,6 +168,17 @@ export default function TransactionDetail() {
         <h3 className="text-rowan-text text-sm font-semibold mb-3">Progress</h3>
         <TransactionStateTracker currentState={tx.state} compact />
       </div>
+
+      {/* Receipt button — completed transactions */}
+      {tx.state === 'COMPLETE' && (
+        <button
+          onClick={() => navigate(`/receipt/${tx.id}`)}
+          className="w-full flex items-center justify-center gap-2 bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 min-h-11 mt-4"
+        >
+          <FileText size={16} className="text-rowan-text" />
+          <span className="text-rowan-text text-sm font-medium">View Receipt</span>
+        </button>
+      )}
 
       {/* Dispute button */}
       {canDispute && (

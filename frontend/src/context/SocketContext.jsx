@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef, useCallback } f
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { getPreference } from '../utils/storage';
-import { SOCKET_RECONNECT_ATTEMPTS } from '../utils/constants';
+import { SOCKET_RECONNECT_ATTEMPTS, SOCKET_RECONNECT_DELAY, SOCKET_RECONNECT_DELAY_MAX } from '../utils/constants';
 
 const SocketContext = createContext(null);
 
@@ -35,8 +35,8 @@ export function SocketProvider({ children }) {
       auth: { token },
       transports: ['websocket', 'polling'],
       reconnectionAttempts: SOCKET_RECONNECT_ATTEMPTS,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 16000,
+      reconnectionDelay: SOCKET_RECONNECT_DELAY,
+      reconnectionDelayMax: SOCKET_RECONNECT_DELAY_MAX,
     });
 
     socketRef.current = s;

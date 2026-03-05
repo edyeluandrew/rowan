@@ -47,7 +47,7 @@ export default function ChangePassword() {
       setCurrentPw('');
       setNewPw('');
       setConfirmPw('');
-      setTimeout(() => navigate(-1), 2000);
+      setTimeout(() => navigate(-1), CHANGE_PASSWORD_REDIRECT_MS);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to change password');
     } finally {

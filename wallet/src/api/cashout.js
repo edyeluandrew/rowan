@@ -23,3 +23,7 @@ export function fileDispute({ transactionId, reason, description }) {
     description,
   })
 }
+
+export function getTransactionReceipt(transactionId) {
+  return client.get(`/api/v1/cashout/receipt/${transactionId}`)
+}

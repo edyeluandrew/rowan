@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, Eye, EyeOff, TriangleAlert } from 'lucide-react'
 import { isValidSecretKey, keypairFromSecret } from '../utils/stellar'
 import { setSecure } from '../utils/storage'
 import Button from '../components/ui/Button'
+import Input from '../components/ui/Input'
 
 export default function ImportWallet() {
   const navigate = useNavigate()
@@ -13,6 +14,9 @@ export default function ImportWallet() {
   const [loading, setLoading] = useState(false)
 
   const valid = isValidSecretKey(secret)
+
+  // Clear sensitive input on unmount
+  useEffect(() => () => setSecret(''), [])
 
   const handleImport = async () => {
     if (!valid) return
@@ -41,25 +45,22 @@ export default function ImportWallet() {
       </p>
 
       <div className="relative">
-        <input
+        <Input
           type={show ? 'text' : 'password'}
           value={secret}
           onChange={(e) => { setSecret(e.target.value); setTouched(true) }}
           placeholder="S..."
-          className={`bg-rowan-surface border text-rowan-text font-mono rounded-xl px-4 py-4 w-full text-sm focus:outline-none pr-20 min-h-11 ${
-            valid
-              ? 'border-rowan-green focus:border-rowan-green'
-              : touched && secret
-              ? 'border-rowan-red focus:border-rowan-red'
-              : 'border-rowan-border focus:border-rowan-yellow'
-          }`}
+          error={touched && secret && !valid}
+          className="font-mono pr-20"
+          rightElement={
+            <div className="flex items-center gap-2">
+              {valid && <CheckCircle2 size={16} className="text-rowan-green" />}
+              <button onClick={() => setShow(!show)} className="text-rowan-muted p-1">
+                {show ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          }
         />
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          {valid && <CheckCircle2 size={16} className="text-rowan-green" />}
-          <button onClick={() => setShow(!show)} className="text-rowan-muted p-1">
-            {show ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
-        </div>
       </div>
 
       {touched && secret && !valid && (

@@ -1,5 +1,5 @@
 import { BellDot, Check, Clock } from 'lucide-react'
-import useNotifications from '../hooks/useNotifications'
+import { useNotificationsContext } from '../context/NotificationsContext'
 import NotificationItem from '../components/notifications/NotificationItem'
 
 export default function Notifications() {
@@ -11,7 +11,7 @@ export default function Notifications() {
     loadMore,
     markRead,
     markAllRead,
-  } = useNotifications()
+  } = useNotificationsContext()
 
   const groupByDate = (items) => {
     const groups = {}

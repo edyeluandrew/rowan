@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ArrowDownToLine } from 'lucide-react'
 import useRates from '../hooks/useRates'
 import useWallet from '../hooks/useWallet'
 import { getQuote } from '../api/cashout'
 import { hashPhoneNumber } from '../utils/crypto'
-import { MIN_XLM_AMOUNT } from '../utils/constants'
+import { MIN_XLM_AMOUNT, NETWORKS, COUNTRY_CODES } from '../utils/constants'
 import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
@@ -18,19 +18,28 @@ export default function Cashout() {
   const [amount, setAmount] = useState('')
   const [network, setNetwork] = useState(null)
   const [phone, setPhone] = useState('')
-  const [countryCode, setCountryCode] = useState('+256')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
   const xlmAmount = parseFloat(amount) || 0
-  const selectedRate = network && allRates ? allRates.find((r) => r.network === network) : null
-  const fiatEquivalent = selectedRate ? xlmAmount * selectedRate.rate : 0
-  const fee = selectedRate ? selectedRate.fee || 0 : 0
-  const minAmount = MIN_XLM_AMOUNT
+  // allRates may be array [{network, rate, fee}] or object {NETWORK_KEY: rate}
+  const selectedRate = network && allRates
+    ? Array.isArray(allRates)
+      ? allRates.find((r) => r.network === network)
+      : allRates[network] != null
+        ? { rate: allRates[network], fee: 0 }
+        : null
+    : null
+  const rateValue = selectedRate?.rate || 0
+  const currency = network ? NETWORKS[network]?.currency : null
+  const feeXlm = selectedRate?.fee || 0
+  const fiatAmount = xlmAmount && rateValue ? xlmAmount * rateValue : 0
+  const fiatFee = feeXlm * rateValue
+  const netFiat = fiatAmount - fiatFee
   const maxAmount = balance || 0
 
   const canProceed =
-    xlmAmount >= minAmount &&
+    xlmAmount >= MIN_XLM_AMOUNT &&
     xlmAmount <= maxAmount &&
     network &&
     phone.length >= 7
@@ -40,7 +49,12 @@ export default function Cashout() {
     setLoading(true)
     setError(null)
     try {
-      const fullPhone = `${countryCode}${phone}`
+      const networkConfig = NETWORKS[network]
+      const derivedCountryCode = networkConfig
+        ? COUNTRY_CODES[networkConfig.country]?.code || '+256'
+        : '+256'
+      const cleanPhone = phone.replace(/\D/g, '')
+      const fullPhone = `${derivedCountryCode}${cleanPhone}`
       const phoneHash = await hashPhoneNumber(fullPhone)
       const quote = await getQuote({ xlmAmount, network, phoneHash })
       navigate('/cashout/confirm', { state: { quote, network, phone: fullPhone } })
@@ -61,13 +75,13 @@ export default function Cashout() {
       </div>
 
       <AmountInput
-        value={amount}
-        onChange={setAmount}
-        rate={selectedRate?.rate}
-        fee={fee}
-        min={minAmount}
-        max={maxAmount}
-        fiatCurrency={selectedRate?.currency}
+        xlmAmount={amount}
+        onAmountChange={setAmount}
+        fiatAmount={netFiat}
+        currency={currency}
+        rate={rateValue}
+        fee={feeXlm}
+        netFiat={netFiat}
       />
 
       <div className="mt-6">
@@ -78,8 +92,6 @@ export default function Cashout() {
         <PhoneInput
           phone={phone}
           onPhoneChange={setPhone}
-          countryCode={countryCode}
-          onCountryCodeChange={setCountryCode}
           network={network}
         />
       </div>

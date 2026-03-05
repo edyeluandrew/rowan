@@ -1,5 +1,5 @@
 import { Star, Coins, Smartphone, ArrowLeftRight, Hash } from 'lucide-react'
-import { NETWORKS } from '../../utils/constants'
+import { NETWORKS, ESTIMATED_DELIVERY } from '../../utils/constants'
 import { maskPhoneNumber } from '../../utils/crypto'
 
 /**
@@ -57,9 +57,22 @@ export default function QuoteSummary({ quote }) {
       <div className="border-t border-rowan-border mt-4 pt-4 space-y-2">
         <DetailRow label="Rate" value={`1 XLM = ${quote.currency} ${Number(quote.rate).toLocaleString('en-US', { maximumFractionDigits: 2 })}`} />
         <DetailRow label="Platform fee" value={`${quote.fee} XLM`} />
+        {quote.spread && (
+          <DetailRow label="Spread" value={`${(Number(quote.spread) * 100).toFixed(2)}%`} />
+        )}
         <DetailRow label="Network" value={network.label || quote.network} />
-        <DetailRow label="Estimated delivery" value="5-10 minutes" />
+        <DetailRow label="Estimated delivery" value={ESTIMATED_DELIVERY} />
         <DetailRow label="Phone" value={maskPhoneNumber(quote.phone || '')} />
+      </div>
+
+      {/* Total deductions summary */}
+      <div className="border-t border-rowan-border mt-2 pt-3">
+        <div className="flex justify-between py-1">
+          <span className="text-rowan-muted text-sm font-medium">You receive</span>
+          <span className="text-rowan-green text-sm font-bold tabular-nums">
+            {Number(quote.fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {quote.currency}
+          </span>
+        </div>
       </div>
 
       {/* Quote ID */}

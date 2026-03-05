@@ -28,7 +28,7 @@ function init(httpServer) {
     if (!token) return next(new Error('Authentication required'));
 
     try {
-      const payload = jwt.verify(token, config.jwt.secret);
+      const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] });
       socket.userId = payload.sub;
       socket.role = payload.role;
       next();

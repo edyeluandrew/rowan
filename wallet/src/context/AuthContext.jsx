@@ -2,9 +2,10 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { getSecure, setSecure, clearAllSecure } from '../utils/storage'
 import { setPreference } from '../utils/storage'
 import { setClientToken } from '../api/client'
-import { getChallenge, register, login } from '../api/auth'
-import { signChallenge } from '../utils/stellar'
+import { getChallenge, registerUser, submitChallenge } from '../api/auth'
+import { fetchStellarToml, verifyChallengeTransaction, signChallengeTransaction } from '../utils/sep10'
 import { hashPhoneNumber } from '../utils/crypto'
+import { CURRENT_NETWORK } from '../utils/constants'
 
 const AuthContext = createContext(null)
 
@@ -26,14 +27,14 @@ export function AuthProvider({ children }) {
         if (!cancelled && storedToken && storedKeypair) {
           const kp = JSON.parse(storedKeypair)
           setToken(storedToken)
-          setKeypair(kp)
+          setKeypair({ publicKey: kp.publicKey })
           setClientToken(storedToken)
           if (storedProfile) {
             setUser(JSON.parse(storedProfile))
           }
           setIsAuthenticated(true)
         } else if (!cancelled && storedKeypair) {
-          setKeypair(JSON.parse(storedKeypair))
+          setKeypair({ publicKey: JSON.parse(storedKeypair).publicKey })
         }
       } catch {
         /* secure storage read failure — treat as logged out */
@@ -50,16 +51,33 @@ export function AuthProvider({ children }) {
     if (!stored) throw new Error('No wallet found')
     const kp = JSON.parse(stored)
 
-    const challengeRes = await getChallenge(kp.publicKey)
-    const nonce = challengeRes.challenge || challengeRes.nonce
-    const signature = await signChallenge(nonce, kp.secretKey)
+    // SEP-1: fetch SIGNING_KEY + WEB_AUTH_ENDPOINT from stellar.toml
+    const homeDomain = import.meta.env.VITE_HOME_DOMAIN || 'rowan.app'
+    const { signingKey, webAuthEndpoint, networkPassphrase: tomlPassphrase } =
+      await fetchStellarToml(homeDomain)
+
+    // SEP-10: get challenge XDR from the dynamic WEB_AUTH_ENDPOINT
+    const challengeRes = await getChallenge(kp.publicKey, webAuthEndpoint)
+    const xdr = challengeRes.transaction
+    const passphrase = tomlPassphrase || challengeRes.networkPassphrase || CURRENT_NETWORK.passphrase
+
+    // Verify the challenge using SDK's WebAuth.readChallengeTx
+    verifyChallengeTransaction({
+      challengeXdr: xdr,
+      serverSigningKey: signingKey,
+      networkPassphrase: passphrase,
+      homeDomain,
+      clientPublicKey: kp.publicKey,
+    })
+
+    // Sign the challenge with the user's secret key
+    const signedXdr = signChallengeTransaction(xdr, kp.secretKey, passphrase)
+
     const phoneHash = await hashPhoneNumber(phoneNumber)
 
     try {
-      const result = await register({
-        stellarAddress: kp.publicKey,
-        signature,
-        nonce,
+      const result = await registerUser({
+        transaction: signedXdr,
         phoneHash,
       })
 
@@ -68,7 +86,7 @@ export function AuthProvider({ children }) {
       setClientToken(result.token)
       setToken(result.token)
       setUser(result.user)
-      setKeypair(kp)
+      setKeypair({ publicKey: kp.publicKey })
       setIsAuthenticated(true)
       return result
     } catch (err) {
@@ -84,22 +102,36 @@ export function AuthProvider({ children }) {
     if (!stored) throw new Error('No wallet found')
     const kp = JSON.parse(stored)
 
-    const challengeRes = await getChallenge(kp.publicKey)
-    const nonce = challengeRes.challenge || challengeRes.nonce
-    const signature = await signChallenge(nonce, kp.secretKey)
+    // SEP-1: fetch SIGNING_KEY + WEB_AUTH_ENDPOINT from stellar.toml
+    const homeDomain = import.meta.env.VITE_HOME_DOMAIN || 'rowan.app'
+    const { signingKey, webAuthEndpoint, networkPassphrase: tomlPassphrase } =
+      await fetchStellarToml(homeDomain)
 
-    const result = await login({
-      stellarAddress: kp.publicKey,
-      signature,
-      nonce,
+    // SEP-10: get challenge XDR from the dynamic WEB_AUTH_ENDPOINT
+    const challengeRes = await getChallenge(kp.publicKey, webAuthEndpoint)
+    const xdr = challengeRes.transaction
+    const passphrase = tomlPassphrase || challengeRes.networkPassphrase || CURRENT_NETWORK.passphrase
+
+    // Verify the challenge using SDK's WebAuth.readChallengeTx
+    verifyChallengeTransaction({
+      challengeXdr: xdr,
+      serverSigningKey: signingKey,
+      networkPassphrase: passphrase,
+      homeDomain,
+      clientPublicKey: kp.publicKey,
     })
+
+    // Sign the challenge with the user's secret key
+    const signedXdr = signChallengeTransaction(xdr, kp.secretKey, passphrase)
+
+    const result = await submitChallenge(signedXdr)
 
     await setSecure('rowan_user_token', result.token)
     await setSecure('rowan_user_profile', JSON.stringify(result.user))
     setClientToken(result.token)
     setToken(result.token)
     setUser(result.user)
-    setKeypair(kp)
+    setKeypair({ publicKey: kp.publicKey })
     setIsAuthenticated(true)
     return result
   }, [])

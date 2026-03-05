@@ -57,7 +57,7 @@ export default function Profile() {
     if (!addr) return;
     navigator.clipboard.writeText(addr).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_TIMEOUT_MS);
     });
   };
 

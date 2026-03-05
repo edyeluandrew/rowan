@@ -2,20 +2,20 @@ import { Hash } from 'lucide-react'
 import { NETWORKS, COUNTRY_CODES } from '../../utils/constants'
 
 /**
- * Phone number input with auto-selected country code based on network.
+ * Phone number input with auto-selected country code + flag based on network.
  */
 export default function PhoneInput({ phone, onPhoneChange, network }) {
   const networkInfo = NETWORKS[network]
-  const countryCode = networkInfo
-    ? COUNTRY_CODES[networkInfo.country]?.code || '+256'
-    : '+256'
+  const countryKey = networkInfo?.country || 'UG'
+  const country = COUNTRY_CODES[countryKey] || COUNTRY_CODES.UG
+  const countryCode = country.code
+  const flag = country.flag
 
   const handleChange = (e) => {
     const val = e.target.value.replace(/[^\d]/g, '')
     onPhoneChange(val)
   }
 
-  const fullNumber = phone ? `${countryCode}${phone}` : ''
   const masked = phone && phone.length >= 4
     ? `${countryCode} ${phone.slice(0, 1)}XX XXX ${phone.slice(-3)}`
     : ''
@@ -26,8 +26,9 @@ export default function PhoneInput({ phone, onPhoneChange, network }) {
         Mobile money number
       </p>
       <div className="flex">
-        <div className="bg-rowan-surface border border-rowan-border rounded-l-xl px-3 py-4 text-rowan-text text-sm w-20 flex items-center justify-center">
-          {countryCode}
+        <div className="bg-rowan-surface border border-rowan-border rounded-l-xl px-3 py-4 text-rowan-text text-sm w-24 flex items-center justify-center gap-1.5">
+          <span className="text-base">{flag}</span>
+          <span>{countryCode}</span>
         </div>
         <input
           type="tel"
@@ -39,8 +40,14 @@ export default function PhoneInput({ phone, onPhoneChange, network }) {
         />
       </div>
 
+      {network && (
+        <p className="text-rowan-muted text-xs mt-2">
+          {flag} {country.name} ({countryCode})
+        </p>
+      )}
+
       {masked && (
-        <div className="flex items-center gap-1 mt-2">
+        <div className="flex items-center gap-1 mt-1">
           <Hash size={13} className="text-rowan-muted" />
           <span className="text-rowan-muted text-xs">
             Your phone: {masked} → SHA-256 → sent to server

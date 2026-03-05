@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { fileDispute } from '../api/cashout'
 import Button from '../components/ui/Button'
+import Textarea from '../components/ui/Textarea'
 
 const REASONS = [
   'Did not receive mobile money',
@@ -25,7 +26,11 @@ export default function DisputeForm() {
     setLoading(true)
     setError(null)
     try {
-      await fileDispute({ transactionId: id, reason, description })
+      await fileDispute({
+        transactionId: id,
+        reason,
+        description: description.trim().slice(0, 1000),
+      })
       setSuccess(true)
     } catch (err) {
       setError(err.message)
@@ -91,12 +96,11 @@ export default function DisputeForm() {
       </div>
 
       <h3 className="text-rowan-text text-sm font-semibold mb-3">Description (optional)</h3>
-      <textarea
+      <Textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Provide any additional details..."
         rows={4}
-        className="w-full bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 text-rowan-text text-sm placeholder:text-rowan-muted focus:outline-none focus:border-rowan-yellow resize-none"
       />
 
       {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}

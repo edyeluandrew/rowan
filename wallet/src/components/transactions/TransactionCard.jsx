@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { NETWORKS, TX_STATES } from '../../utils/constants'
+import { NETWORKS } from '../../utils/constants'
 import { formatDate } from '../../utils/format'
 import TransactionStatusBadge from './TransactionStatusBadge'
 import Badge from '../ui/Badge'
@@ -10,7 +10,6 @@ import Badge from '../ui/Badge'
 export default function TransactionCard({ transaction }) {
   const navigate = useNavigate()
   const network = NETWORKS[transaction.network] || {}
-  const state = TX_STATES[transaction.state] || {}
 
   return (
     <button

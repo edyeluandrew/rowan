@@ -13,7 +13,7 @@ const pool = new Pool({
   ssl: needsSsl ? { rejectUnauthorized: false } : false,
   max: 5,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: 30000, // 30s — Supabase free-tier can take 15-20s to wake from pause
 });
 
 pool.on('error', (err) => {

@@ -115,7 +115,7 @@ export default function RequestDetail() {
   const handleReveal = () => {
     setPhoneRevealed(true);
     if (revealTimer) clearTimeout(revealTimer);
-    const timer = setTimeout(() => setPhoneRevealed(false), 30000);
+    const timer = setTimeout(() => setPhoneRevealed(false), PHONE_REVEAL_TIMEOUT_MS);
     setRevealTimer(timer);
   };
 

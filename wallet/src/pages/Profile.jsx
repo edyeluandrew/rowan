@@ -2,19 +2,19 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   UserCircle, Star, Shield, Copy, CopyCheck, LogOut, Volume2, VolumeX,
-  Vibrate, ShieldCheck, Clock
+  Vibrate, ShieldCheck, Clock, Fingerprint, Bell, ChevronRight
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import useWallet from '../hooks/useWallet'
 import useTransactions from '../hooks/useTransactions'
 import { getPreference, setPreference } from '../utils/storage'
 import { formatAddress, formatXlm } from '../utils/format'
-import { KYC_LEVELS } from '../utils/constants'
+import { KYC_LEVELS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 import Badge from '../components/ui/Badge'
 
 export default function Profile() {
   const navigate = useNavigate()
-  const { user, keypair, logout } = useAuth()
+  const { user, logout } = useAuth()
   const { balance, publicKey } = useWallet()
   const { stats } = useTransactions()
   const [copied, setCopied] = useState(false)
@@ -25,8 +25,8 @@ export default function Profile() {
   useEffect(() => {
     const loadPrefs = async () => {
       try {
-        const sound = await getPreference('rowan_sound_enabled')
-        const vibration = await getPreference('rowan_vibration_enabled')
+        const sound = await getPreference('rowan_user_sound_enabled')
+        const vibration = await getPreference('rowan_user_vibration_enabled')
         if (sound !== null) setSoundEnabled(sound === 'true')
         if (vibration !== null) setVibrationEnabled(vibration === 'true')
       } catch {
@@ -39,13 +39,13 @@ export default function Profile() {
   const toggleSound = async () => {
     const next = !soundEnabled
     setSoundEnabled(next)
-    await setPreference('rowan_sound_enabled', String(next))
+    await setPreference('rowan_user_sound_enabled', String(next))
   }
 
   const toggleVibration = async () => {
     const next = !vibrationEnabled
     setVibrationEnabled(next)
-    await setPreference('rowan_vibration_enabled', String(next))
+    await setPreference('rowan_user_vibration_enabled', String(next))
   }
 
   const handleCopy = async () => {
@@ -53,7 +53,7 @@ export default function Profile() {
     try {
       await navigator.clipboard.writeText(publicKey)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_TIMEOUT_MS)
     } catch {
       // clipboard not available
     }
@@ -69,8 +69,8 @@ export default function Profile() {
     }
   }
 
-  const kycLevel = user?.kycLevel || 0
-  const kycInfo = KYC_LEVELS[kycLevel] || KYC_LEVELS[0]
+  const kycLevel = user?.kycLevel || 'NONE'
+  const kycInfo = KYC_LEVELS[kycLevel] || KYC_LEVELS.NONE
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
@@ -135,6 +135,30 @@ export default function Profile() {
           enabled={vibrationEnabled}
           onToggle={toggleVibration}
         />
+      </div>
+
+      {/* Security */}
+      <div className="bg-rowan-surface rounded-xl divide-y divide-rowan-border mb-4">
+        <button
+          onClick={() => navigate('/biometric-setup')}
+          className="flex items-center justify-between w-full px-4 py-3 min-h-11"
+        >
+          <div className="flex items-center gap-3">
+            <Fingerprint size={18} className="text-rowan-muted" />
+            <span className="text-rowan-text text-sm">Biometric Unlock</span>
+          </div>
+          <ChevronRight size={16} className="text-rowan-muted" />
+        </button>
+        <button
+          onClick={() => navigate('/rate-alerts')}
+          className="flex items-center justify-between w-full px-4 py-3 min-h-11"
+        >
+          <div className="flex items-center gap-3">
+            <Bell size={18} className="text-rowan-muted" />
+            <span className="text-rowan-text text-sm">Rate Alerts</span>
+          </div>
+          <ChevronRight size={16} className="text-rowan-muted" />
+        </button>
       </div>
 
       <button

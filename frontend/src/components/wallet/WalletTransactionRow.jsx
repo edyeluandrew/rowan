@@ -14,7 +14,7 @@ export default function WalletTransactionRow({ transaction }) {
     if (!tx.hash && !tx.stellar_tx_hash) return;
     navigator.clipboard.writeText(tx.hash || tx.stellar_tx_hash).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_TIMEOUT_MS);
     });
   };
 

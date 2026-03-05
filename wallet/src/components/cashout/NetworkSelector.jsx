@@ -1,5 +1,5 @@
 import { Signal, Radio, Landmark, Smartphone } from 'lucide-react'
-import { NETWORKS } from '../../utils/constants'
+import { NETWORKS, COUNTRY_CODES } from '../../utils/constants'
 
 const NETWORK_ICONS = {
   MTN_MOMO_UG: Signal,
@@ -34,7 +34,9 @@ export default function NetworkSelector({ selected, onSelect }) {
             >
               <Icon size={24} className={isSelected ? 'text-rowan-yellow' : network.color} />
               <span className="text-rowan-text text-sm font-medium">{network.label}</span>
-              <span className="text-rowan-muted text-xs">{network.country}</span>
+              <span className="text-rowan-muted text-xs">
+                {COUNTRY_CODES[network.country]?.flag} {COUNTRY_CODES[network.country]?.name || network.country}
+              </span>
             </button>
           )
         })}

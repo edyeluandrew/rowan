@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ChevronLeft, ShieldCheck } from 'lucide-react'
+import { ChevronLeft, ShieldCheck, AlertTriangle } from 'lucide-react'
 import { confirmQuote } from '../api/cashout'
 import QuoteSummary from '../components/cashout/QuoteSummary'
 import CountdownTimer from '../components/ui/CountdownTimer'
@@ -68,24 +68,27 @@ export default function CashoutConfirm() {
       </div>
 
       {expired && (
-        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mt-4">
-          <p className="text-rowan-red text-sm font-medium">Quote expired</p>
-          <button
-            onClick={() => navigate('/cashout', { replace: true })}
-            className="text-rowan-yellow text-sm underline mt-2"
-          >
-            Get a new quote
-          </button>
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mt-4">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle size={18} className="text-rowan-yellow" />
+            <p className="text-rowan-yellow font-bold text-sm">Quote Expired</p>
+          </div>
+          <p className="text-rowan-muted text-xs mb-3">This quote is no longer valid. Please request a new one.</p>
+          <Button onClick={() => navigate('/cashout', { replace: true })}>
+            Get New Quote
+          </Button>
         </div>
       )}
 
       {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
 
-      <div className="mt-8">
-        <Button onClick={handleConfirm} loading={loading} disabled={expired}>
-          Confirm and Proceed
-        </Button>
-      </div>
+      {!expired && (
+        <div className="mt-8">
+          <Button onClick={handleConfirm} loading={loading}>
+            Confirm and Proceed
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

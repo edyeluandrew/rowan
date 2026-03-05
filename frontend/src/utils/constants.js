@@ -1,3 +1,14 @@
+/** Change password redirect delay (ms) */
+export const CHANGE_PASSWORD_REDIRECT_MS = 2000;
+
+/** Copy feedback timeout (ms) */
+export const COPY_FEEDBACK_TIMEOUT_MS = 2000;
+
+/** Float update modal close delay (ms) */
+export const FLOAT_UPDATE_CLOSE_MS = 1500;
+
+/** Onboarding verified redirect delay (ms) */
+export const ONBOARDING_VERIFIED_REDIRECT_MS = 1500;
 /** Mobile money network metadata */
 export const NETWORKS = {
   MTN_UG:    { label: 'MTN MoMo',  color: 'bg-rowan-yellow/20 text-rowan-yellow' },

@@ -23,13 +23,13 @@ export default function useNotifications() {
       }
       setHasMore(items.length === 20)
       setPage(pageNum)
-      setUnreadCount(items.filter((n) => !n.readAt).length + (append ? unreadCount : 0))
+      setUnreadCount((prev) => items.filter((n) => !n.readAt).length + (append ? prev : 0))
     } catch {
       /* initial fetch failed — empty list shown */
     } finally {
       setLoading(false)
     }
-  }, [unreadCount])
+  }, [])
 
   useEffect(() => {
     fetchNotifications(1)

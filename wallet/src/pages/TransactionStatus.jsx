@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, PartyPopper, RotateCcw, XCircle } from 'lucide-react'
+import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText } from 'lucide-react'
 import { getTransactionStatus } from '../api/cashout'
 import useSocketHook from '../hooks/useSocket'
 import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
@@ -57,31 +57,39 @@ export default function TransactionStatus() {
 
   const isTerminal = transaction && TERMINAL_STATES.includes(transaction.state)
 
-  const terminalIcon = () => {
-    if (!transaction) return null
-    switch (transaction.state) {
-      case 'COMPLETE':
-        return <PartyPopper size={48} className="text-rowan-green animate-scale-in" />
-      case 'REFUNDED':
-        return <RotateCcw size={48} className="text-rowan-yellow animate-scale-in" />
-      case 'FAILED':
-        return <XCircle size={48} className="text-rowan-red animate-scale-in" />
-      default:
-        return null
-    }
-  }
-
   const terminalMessage = () => {
     if (!transaction) return ''
     switch (transaction.state) {
       case 'COMPLETE':
         return 'Payment sent successfully! The mobile money transfer has been completed.'
       case 'REFUNDED':
-        return 'Your XLM has been refunded to your wallet.'
+        return 'Your XLM has been safely returned to your wallet. No funds were lost — you can try again whenever you\u0027re ready.'
       case 'FAILED':
         return 'This transaction has failed. Please contact support if you need assistance.'
       default:
         return ''
+    }
+  }
+
+  const terminalIcon = () => {
+    if (!transaction) return null
+    switch (transaction.state) {
+      case 'COMPLETE':
+        return <PartyPopper size={48} className="text-rowan-green animate-scale-in" />
+      case 'REFUNDED':
+        return (
+          <div className="flex flex-col items-center animate-scale-in">
+            <RotateCcw size={48} className="text-rowan-yellow" />
+            <div className="flex items-center gap-1 mt-3 bg-rowan-green/10 rounded-full px-3 py-1">
+              <ShieldCheck size={14} className="text-rowan-green" />
+              <span className="text-rowan-green text-xs font-medium">Funds safe</span>
+            </div>
+          </div>
+        )
+      case 'FAILED':
+        return <XCircle size={48} className="text-rowan-red animate-scale-in" />
+      default:
+        return null
     }
   }
 
@@ -139,10 +147,27 @@ export default function TransactionStatus() {
       <TransactionStateTracker currentState={transaction.state} />
 
       {isTerminal && (
-        <div className="mt-8">
+        <div className="mt-8 space-y-3">
           <Button onClick={() => navigate('/home', { replace: true })}>
             Back to Home
           </Button>
+          {transaction.state === 'COMPLETE' && (
+            <button
+              onClick={() => navigate(`/receipt/${id}`)}
+              className="w-full flex items-center justify-center gap-2 bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 min-h-11"
+            >
+              <FileText size={16} className="text-rowan-text" />
+              <span className="text-rowan-text text-sm font-medium">View Receipt</span>
+            </button>
+          )}
+          {transaction.state === 'REFUNDED' && (
+            <button
+              onClick={() => navigate('/cashout', { replace: true })}
+              className="w-full text-rowan-yellow text-sm underline min-h-11"
+            >
+              Try another cash out
+            </button>
+          )}
         </div>
       )}
     </div>

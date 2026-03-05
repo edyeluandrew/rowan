@@ -8,9 +8,16 @@ const client = axios.create({
 })
 
 let _token = null
+const _logoutCallbacks = new Set()
 
 export function setClientToken(token) {
   _token = token
+}
+
+/** Register a callback to run on 401 logout (e.g. socket disconnect). */
+export function onLogout(cb) {
+  _logoutCallbacks.add(cb)
+  return () => _logoutCallbacks.delete(cb)
 }
 
 client.interceptors.request.use((config) => {
@@ -25,6 +32,7 @@ client.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 401) {
       _token = null
+      _logoutCallbacks.forEach((cb) => { try { cb() } catch { /* noop */ } })
       await clearAllSecure()
       window.location.replace('/onboarding')
     }

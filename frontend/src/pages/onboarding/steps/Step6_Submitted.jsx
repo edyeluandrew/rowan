@@ -24,7 +24,7 @@ export default function Step6_Submitted() {
       if (status === 'VERIFIED') {
         setIsVerified(true);
         setMessage('You have been verified!');
-        setTimeout(() => navigate('/home', { replace: true }), 1500);
+        setTimeout(() => navigate('/home', { replace: true }), ONBOARDING_VERIFIED_REDIRECT_MS);
       } else {
         setMessage('No update yet — your application is still being reviewed.');
       }

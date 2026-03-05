@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { maskPhoneNumber } from '../utils/crypto'
 import { COUNTRY_CODES } from '../utils/constants'
 import Button from '../components/ui/Button'
+import Input from '../components/ui/Input'
 
 const countries = Object.entries(COUNTRY_CODES)
 
@@ -67,13 +68,13 @@ export default function Register() {
             </option>
           ))}
         </select>
-        <input
+        <Input
           type="tel"
           inputMode="numeric"
           value={phone}
           onChange={(e) => setPhone(e.target.value.replace(/[^\d]/g, ''))}
           placeholder="7XXXXXXXX"
-          className="bg-rowan-surface border border-rowan-border border-l-0 rounded-r-xl px-4 py-4 text-rowan-text text-sm flex-1 focus:outline-none focus:border-rowan-yellow min-h-11"
+          className="rounded-l-none border-l-0"
         />
       </div>
 

@@ -11,6 +11,7 @@ import redis from './db/redis.js';
 import { errorHandler } from './middleware/validate.js';
 
 // Routes
+import wellKnownRoutes from './routes/wellKnown.js';
 import authRoutes from './routes/auth.js';
 import cashoutRoutes from './routes/cashout.js';
 import traderRoutes from './routes/trader.js';
@@ -47,12 +48,30 @@ const requiredEnvVars = [
   { key: 'ESCROW_SECRET_KEY', label: 'Stellar escrow secret key' },
   { key: 'ENCRYPTION_KEY', label: 'AES-256 encryption key for PII' },
   { key: 'CORS_ORIGIN', label: 'Comma-separated list of allowed frontend origins (no wildcards in production)' },
+  { key: 'SEP10_SIGNING_KEY', label: 'SEP-10 signing public key (served in stellar.toml)' },
+  { key: 'API_URL', label: 'Public API URL (used in stellar.toml WEB_AUTH_ENDPOINT)' },
+  { key: 'STELLAR_NETWORK', label: 'Stellar network (testnet or mainnet)' },
+  { key: 'HORIZON_URL', label: 'Stellar Horizon API URL' },
 ];
 const missingVars = requiredEnvVars.filter(v => !process.env[v.key]);
 if (missingVars.length > 0) {
   console.error('FATAL: Missing required environment variables:');
   missingVars.forEach(v => console.error(`  - ${v.key}: ${v.label}`));
   console.error('Refusing to start. See .env.example for reference.');
+  process.exit(1);
+}
+
+// [SEP-10] Validate that SEP10_SIGNING_KEY is a valid Stellar public key
+try {
+  StellarSdk.Keypair.fromPublicKey(process.env.SEP10_SIGNING_KEY);
+} catch {
+  console.error('FATAL: SEP10_SIGNING_KEY is not a valid Stellar public key (G...)');
+  process.exit(1);
+}
+
+// [AUDIT FIX] JWT_SECRET must be at least 32 characters to resist brute-force
+if (process.env.JWT_SECRET.length < 32) {
+  console.error('FATAL: JWT_SECRET must be at least 32 characters long');
   process.exit(1);
 }
 
@@ -75,16 +94,19 @@ const authLimiter = rateLimit({
   message: { error: 'Too many auth attempts, please try again later.' },
 });
 
+// [SEP-1] stellar.toml — must be public with CORS *, registered before app-wide CORS
+app.use('/.well-known', wellKnownRoutes);
+
 // [AUDIT FIX] CORS origin from env — no wildcard fallback.
 // CORS_ORIGIN is validated at startup; parsed as comma-separated list.
 const allowedOrigins = process.env.CORS_ORIGIN.split(',').map(o => o.trim());
 app.use(cors({ origin: allowedOrigins }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '100kb' }));
 
 // Request logging (dev)
 if (config.nodeEnv === 'development') {
   app.use((req, _res, next) => {
-    console.log(`${req.method} ${req.originalUrl}`);
+    logger.debug(`${req.method} ${req.originalUrl}`);
     next();
   });
 }
@@ -133,7 +155,7 @@ async function ensureUsdcTrustline() {
   const escrowSecret = config.stellar.escrowSecretKey;
 
   if (!escrowPub || !escrowSecret) {
-    console.warn('[Bootstrap] Escrow keys not set — skipping USDC trustline check');
+    logger.warn('[Bootstrap] Escrow keys not set — skipping USDC trustline check');
     return;
   }
 
@@ -147,11 +169,11 @@ async function ensureUsdcTrustline() {
       (b) => b.asset_code === usdcAsset.code && b.asset_issuer === usdcAsset.issuer
     );
     if (hasTrustline) {
-      console.log('[Bootstrap] USDC trustline already exists on escrow account');
+      logger.info('[Bootstrap] USDC trustline already exists on escrow account');
       return;
     }
 
-    console.log('[Bootstrap] Creating USDC trustline on escrow account...');
+    logger.info('[Bootstrap] Creating USDC trustline on escrow account...');
     const keypair = StellarSdk.Keypair.fromSecret(escrowSecret);
     const txBuilder = new StellarSdk.TransactionBuilder(account, {
       fee: StellarSdk.BASE_FEE,
@@ -165,9 +187,9 @@ async function ensureUsdcTrustline() {
     const tx = txBuilder.build();
     tx.sign(keypair);
     await server.submitTransaction(tx);
-    console.log('[Bootstrap] USDC trustline created successfully');
+    logger.info('[Bootstrap] USDC trustline created successfully');
   } catch (err) {
-    console.error('[Bootstrap] Failed to check/create USDC trustline:', err.message);
+    logger.error('[Bootstrap] Failed to check/create USDC trustline', { error: err.message });
     // Non-fatal — don't crash the server
   }
 }
@@ -179,40 +201,52 @@ async function seedAdminAccount() {
   const adminEmail = process.env.ADMIN_EMAIL;
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminEmail || !adminPassword) {
-    console.log('[Bootstrap] ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping admin seed');
+    logger.info('[Bootstrap] ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping admin seed');
     return;
   }
 
   const existing = await db.query(`SELECT id FROM users WHERE email = $1 AND role = 'admin'`, [adminEmail]);
   if (existing.rows.length > 0) {
-    console.log('[Bootstrap] Admin account already exists');
+    logger.info('[Bootstrap] Admin account already exists');
     return;
   }
 
-  const bcrypt = await import('bcryptjs');
+  const { default: bcrypt } = await import('bcryptjs');
   const passwordHash = await bcrypt.hash(adminPassword, 12);
   const crypto = await import('crypto');
-  // [M-8 FIX] Use NULL for admin stellar_address instead of 'ADMIN_PLACEHOLDER'
+  // Admin doesn't need a real Stellar address — use a deterministic placeholder
   const adminPhoneHash = crypto.createHash('sha256').update('admin').digest('hex');
+  const adminStellarPlaceholder = 'ADMIN_' + crypto.createHash('sha256').update(adminEmail).digest('hex').slice(0, 50).toUpperCase();
   await db.query(
     `INSERT INTO users (stellar_address, phone_hash, email, password_hash, role, kyc_level, created_at)
-     VALUES (NULL, $1, $2, $3, 'admin', 'VERIFIED', NOW())
+     VALUES ($4, $1, $2, $3, 'admin', 'VERIFIED', NOW())
      ON CONFLICT DO NOTHING`,
-    [adminPhoneHash, adminEmail, passwordHash]
+    [adminPhoneHash, adminEmail, passwordHash, adminStellarPlaceholder]
   );
-  console.log('[Bootstrap] Admin account seeded');
+  logger.info('[Bootstrap] Admin account seeded');
 }
 
 // ─── Boot ───────────────────────────────────────────────────
 async function start() {
   try {
-    // Verify DB connection
-    await db.query('SELECT NOW()');
-    console.log('[DB] PostgreSQL connected (raw pool)');
+    // Verify DB connection (retry up to 3 times for Supabase cold-start wake-up)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await db.query('SELECT NOW()');
+        logger.info('[DB] PostgreSQL connected (raw pool)');
+        break;
+      } catch (dbErr) {
+        logger.warn(`[DB] Connection attempt ${attempt}/3 failed`, { error: dbErr.message });
+        if (attempt === 3) throw dbErr;
+        const delay = attempt * 5000;
+        logger.info(`[DB] Retrying in ${delay / 1000}s (Supabase may be waking up)...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
 
     // Verify Redis
     await redis.ping();
-    console.log('[Redis] Connected');
+    logger.info('[Redis] Connected');
 
     // Bootstrap: seed admin + ensure USDC trustline + ensure storage bucket
     await seedAdminAccount();
@@ -227,10 +261,10 @@ async function start() {
            AND created_at < NOW() - INTERVAL '30 minutes'`
       );
       if (orphanResult.rows.length > 0) {
-        console.warn(`[Bootstrap] Found ${orphanResult.rows.length} potentially orphaned transactions — orphan recovery cron will handle them`);
+        logger.warn(`[Bootstrap] Found ${orphanResult.rows.length} potentially orphaned transactions — orphan recovery cron will handle them`);
       }
     } catch (err) {
-      console.warn('[Bootstrap] Orphan scan skipped:', err.message);
+      logger.warn('[Bootstrap] Orphan scan skipped', { error: err.message });
     }
 
     // Ensure Supabase Storage bucket exists (idempotent — safe to run every boot)
@@ -238,7 +272,7 @@ async function start() {
       const { default: storageService } = await import('./services/storageService.js');
       await storageService.ensureBucket();
     } catch (err) {
-      console.warn('[Bootstrap] Supabase Storage bucket check skipped:', err.message);
+      logger.warn('[Bootstrap] Supabase Storage bucket check skipped', { error: err.message });
     }
 
     // Init WebSocket
@@ -249,20 +283,21 @@ async function start() {
 
     // Start HTTP server
     httpServer.listen(config.port, () => {
-      console.log(`\n[Server] Rowan Backend running on port ${config.port}`);
-      console.log(`   Environment: ${config.nodeEnv}`);
-      console.log(`   Stellar network: ${config.stellar.network}`);
-      console.log(`   Escrow address: ${config.stellar.escrowPublicKey || 'NOT SET'}\n`);
+      logger.info(`[Server] Rowan Backend running on port ${config.port}`, {
+        environment: config.nodeEnv,
+        stellarNetwork: config.stellar.network,
+        escrowAddress: config.stellar.escrowPublicKey || 'NOT SET',
+      });
     });
   } catch (err) {
-    console.error('Failed to start server:', err);
+    logger.error('Failed to start server', { error: err.message });
     process.exit(1);
   }
 }
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('[Server] SIGTERM received, shutting down...');
+  logger.info('[Server] SIGTERM received, shutting down...');
   horizonWatcher.stopWatcher();
   httpServer.close();
   await db.pool.end();

@@ -14,9 +14,11 @@ export default function RateDisplay({ allRates, loading }) {
     )
   }
 
-  const rateEntries = Object.entries(allRates).filter(
-    ([key]) => NETWORKS[key]
-  )
+  const rateEntries = Array.isArray(allRates)
+    ? allRates
+        .filter((r) => NETWORKS[r.network])
+        .map((r) => [r.network, r.rate ?? r.price ?? r])
+    : Object.entries(allRates).filter(([key]) => NETWORKS[key])
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">

@@ -18,7 +18,7 @@ export default function ConfirmPayoutModal({ open, request, onClose }) {
     try {
       await confirmRequest(request.id);
       setSuccess(true);
-      setTimeout(() => navigate('/requests'), 3000);
+      setTimeout(() => navigate('/requests'), PAYOUT_CONFIRM_REDIRECT_MS);
     } catch (err) {
       setError(err.response?.data?.error || 'Confirmation failed');
       setConfirming(false);

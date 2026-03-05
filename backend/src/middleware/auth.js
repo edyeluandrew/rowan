@@ -13,7 +13,7 @@ export function authUser(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Missing auth token' });
 
   try {
-    const payload = jwt.verify(token, config.jwt.secret);
+    const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] });
     if (payload.role !== 'user') return res.status(403).json({ error: 'Not a user token' });
     req.userId = payload.sub;
     req.deviceId = payload.deviceId;
@@ -31,7 +31,7 @@ export function authTrader(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Missing auth token' });
 
   try {
-    const payload = jwt.verify(token, config.jwt.secret);
+    const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] });
     if (payload.role !== 'trader') return res.status(403).json({ error: 'Not a trader token' });
     req.traderId = payload.sub;
     req.deviceId = payload.deviceId;
@@ -49,7 +49,7 @@ export function authAdmin(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Missing auth token' });
 
   try {
-    const payload = jwt.verify(token, config.jwt.secret);
+    const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] });
     if (payload.role !== 'admin') return res.status(403).json({ error: 'Not an admin token' });
     req.adminId = payload.sub;
     next();
@@ -65,7 +65,7 @@ export function signToken(sub, role, deviceId = null) {
   return jwt.sign(
     { sub, role, deviceId },
     config.jwt.secret,
-    { expiresIn: config.jwt.expiresIn }
+    { algorithm: 'HS256', expiresIn: config.jwt.expiresIn }
   );
 }
 

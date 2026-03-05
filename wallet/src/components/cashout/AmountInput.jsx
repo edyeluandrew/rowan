@@ -15,7 +15,8 @@ export default function AmountInput({
 }) {
   const handleChange = (e) => {
     const val = e.target.value
-    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+    // Allow only valid decimal input with max 7 decimals (Stellar precision)
+    if (val === '' || /^\d*\.?\d{0,7}$/.test(val)) {
       onAmountChange(val)
     }
   }

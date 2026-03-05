@@ -19,7 +19,7 @@ export default function FloatUpdateModal({ currentFloat = {}, onClose, onSuccess
       await updateFloat(currency, Number(amount));
       setSuccess(true);
       onSuccess?.();
-      setTimeout(() => onClose(), 1500);
+      setTimeout(() => onClose(), FLOAT_UPDATE_CLOSE_MS);
     } catch (err) {
       setError(err.response?.data?.error || 'Update failed');
     } finally {

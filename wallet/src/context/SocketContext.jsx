@@ -1,8 +1,10 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { io } from 'socket.io-client'
 import { useAuth } from './AuthContext'
-import { SOCKET_RECONNECT_ATTEMPTS } from '../utils/constants'
+import { SOCKET_RECONNECT_ATTEMPTS, SOCKET_RECONNECT_DELAY, SOCKET_RECONNECT_DELAY_MAX } from '../utils/constants'
 import { getPreference } from '../utils/storage'
+import { scheduleLocalNotification } from '../utils/notifications'
+import { onLogout } from '../api/client'
 
 const SocketContext = createContext(null)
 
@@ -18,8 +20,8 @@ export function SocketProvider({ children }) {
     const socket = io(import.meta.env.VITE_API_URL, {
       auth: { token },
       reconnectionAttempts: SOCKET_RECONNECT_ATTEMPTS,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
+      reconnectionDelay: SOCKET_RECONNECT_DELAY,
+      reconnectionDelayMax: SOCKET_RECONNECT_DELAY_MAX,
     })
 
     socket.on('connect', () => {
@@ -33,12 +35,44 @@ export function SocketProvider({ children }) {
       setIsConnected(false)
     })
 
-    socket.on('transaction_complete', () => playNotification())
-    socket.on('transaction_refunded', () => playNotification())
+    socket.on('transaction_complete', (data) => {
+      playNotification()
+      scheduleLocalNotification({
+        id: Date.now(),
+        title: '\uD83D\uDCB0 Payment received!',
+        body: 'Mobile money has been sent to the recipient.',
+        data,
+      })
+    })
+    socket.on('transaction_refunded', (data) => {
+      playNotification()
+      scheduleLocalNotification({
+        id: Date.now() + 1,
+        title: '\u21A9\uFE0F Refund processed',
+        body: 'Your XLM has been refunded to your wallet.',
+        data,
+      })
+    })
+    socket.on('trader_matched', (data) => {
+      playNotification()
+      scheduleLocalNotification({
+        id: Date.now() + 2,
+        title: '\uD83E\uDD1D Trader matched',
+        body: 'A trader has been assigned to your cashout.',
+        data,
+      })
+    })
 
     socketRef.current = socket
 
+    // Disconnect socket when a 401 logout occurs
+    const unregister = onLogout(() => {
+      socket.disconnect()
+      socketRef.current = null
+    })
+
     return () => {
+      unregister()
       socket.disconnect()
       socketRef.current = null
     }
