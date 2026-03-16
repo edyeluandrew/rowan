@@ -41,7 +41,25 @@ export async function fetchStellarToml(homeDomain) {
   }
 
   try {
-    const toml = await StellarToml.Resolver.resolve(homeDomain)
+    let toml
+
+    // In development (localhost), the Stellar SDK resolver tries HTTPS which fails.
+    // Fetch the toml directly from the API server instead.
+    const isDev = homeDomain === 'localhost' || homeDomain.startsWith('localhost:')
+    if (isDev) {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+      const resp = await fetch(`${apiUrl}/.well-known/stellar.toml`)
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const text = await resp.text()
+      // Parse the TOML manually (simple key=value pairs)
+      toml = {}
+      for (const line of text.split('\n')) {
+        const match = line.match(/^\s*([A-Z_]+)\s*=\s*"([^"]*)"/)
+        if (match) toml[match[1]] = match[2]
+      }
+    } else {
+      toml = await StellarToml.Resolver.resolve(homeDomain)
+    }
 
     if (!toml.SIGNING_KEY) {
       throw new Error(

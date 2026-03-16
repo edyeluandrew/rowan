@@ -9,7 +9,7 @@ import Button from '../components/ui/Button'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { getTransaction, forceRefund, forceComplete, reassignTrader } from '../api/transactions'
 import { logAdminAction } from '../api/system'
-import { formatXlm, formatDateTime, formatAddress } from '../utils/format'
+import { formatUsdc, formatCurrency, formatDateTime, formatAddress } from '../utils/format'
 import { STATE_ORDER, STELLAR_EXPLORER_URL } from '../utils/constants'
 
 export default function TransactionDetail() {
@@ -26,7 +26,7 @@ export default function TransactionDetail() {
     setError(null)
     try {
       const data = await getTransaction(id)
-      setTx(data)
+      setTx(data.transaction || data)
     } catch (err) {
       setError(err?.message || 'Failed to load transaction')
     } finally {
@@ -45,10 +45,10 @@ export default function TransactionDetail() {
     try {
       if (confirm.action === 'refund') {
         await forceRefund(id)
-        logAdminAction('force_refund', { transactionId: id, amount: tx?.amount })
+        logAdminAction('force_refund', { transactionId: id, usdc_amount: tx?.usdc_amount })
       } else if (confirm.action === 'complete') {
         await forceComplete(id)
-        logAdminAction('force_complete', { transactionId: id, amount: tx?.amount })
+        logAdminAction('force_complete', { transactionId: id, usdc_amount: tx?.usdc_amount })
       }
       setConfirm({ open: false, action: null, title: '', message: '' })
       await fetchTx()
@@ -109,23 +109,40 @@ export default function TransactionDetail() {
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Transaction ID" value={tx.id} copy />
                   <Field label="State" value={<TransactionStateTag state={tx.state} />} />
-                  <Field label="Amount" value={formatXlm(tx.amount)} />
-                  <Field label="Network" value={tx.network || '-'} />
-                  <Field label="Phone" value={tx.phone || '-'} />
-                  <Field label="User Wallet" value={tx.user_wallet ? formatAddress(tx.user_wallet) : '-'} copy={tx.user_wallet} />
+                  <Field label="USDC Amount" value={`${formatUsdc(tx.usdc_amount)} USDC`} />
+                  <Field label="Fiat Amount" value={formatCurrency(tx.fiat_amount, tx.fiat_currency)} />
+                  <Field label="Mobile Network" value={tx.network || '-'} />
                   <Field label="Trader" value={tx.trader_name || formatAddress(tx.trader_id || '')} />
+                  <Field label="Locked Rate" value={tx.locked_rate ? `${Number(tx.locked_rate).toFixed(2)} UGX` : '-'} />
+                  <Field label="Platform Fee" value={tx.platform_fee ? `${formatUsdc(tx.platform_fee)} USDC` : '-'} />
                   <Field label="Created" value={formatDateTime(tx.created_at)} />
                   <Field label="Updated" value={formatDateTime(tx.updated_at)} />
-                  {tx.stellar_tx_hash && (
+                  {tx.escrow_locked_at && <Field label="Escrow Locked" value={formatDateTime(tx.escrow_locked_at)} />}
+                  {tx.completed_at && <Field label="Completed" value={formatDateTime(tx.completed_at)} />}
+                  {tx.failure_reason && <Field label="Failure Reason" value={tx.failure_reason} />}
+                  {tx.stellar_deposit_tx && (
                     <div className="col-span-2">
-                      <p className="text-rowan-muted text-xs mb-1">Stellar TX</p>
+                      <p className="text-rowan-muted text-xs mb-1">Stellar Deposit TX</p>
                       <a
-                        href={`${STELLAR_EXPLORER_URL}/transactions/${tx.stellar_tx_hash}`}
+                        href={`${STELLAR_EXPLORER_URL}/transactions/${tx.stellar_deposit_tx}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-rowan-yellow text-sm hover:underline break-all"
                       >
-                        {tx.stellar_tx_hash}
+                        {tx.stellar_deposit_tx}
+                      </a>
+                    </div>
+                  )}
+                  {tx.stellar_release_tx && (
+                    <div className="col-span-2">
+                      <p className="text-rowan-muted text-xs mb-1">Stellar Release TX</p>
+                      <a
+                        href={`${STELLAR_EXPLORER_URL}/transactions/${tx.stellar_release_tx}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-rowan-yellow text-sm hover:underline break-all"
+                      >
+                        {tx.stellar_release_tx}
                       </a>
                     </div>
                   )}
@@ -141,7 +158,7 @@ export default function TransactionDetail() {
                   <Button
                     variant="danger"
                     className="w-full"
-                    onClick={() => handleAction('refund', 'Force Refund', `This will force a refund for transaction ${formatAddress(tx.id)}. The locked XLM will be returned to the user. This action cannot be undone.`)}
+                    onClick={() => handleAction('refund', 'Force Refund', `This will force a refund for transaction ${formatAddress(tx.id)}. The locked USDC will be returned to the user. This action cannot be undone.`)}
                   >
                     Force Refund
                   </Button>

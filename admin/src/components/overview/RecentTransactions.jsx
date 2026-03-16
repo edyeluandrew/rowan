@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { TRANSACTION_STATES } from '../../utils/constants'
-import { formatXlm, formatTimeAgo, formatAddress } from '../../utils/format'
+import { formatUsdc, formatTimeAgo, formatAddress } from '../../utils/format'
 import Badge from '../ui/Badge'
 
 export default function RecentTransactions({ transactions = [], loading = false }) {
@@ -33,10 +33,10 @@ export default function RecentTransactions({ transactions = [], loading = false 
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-rowan-bg/50 transition-colors text-left"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-rowan-text text-sm truncate">{formatAddress(tx.user_wallet || tx.id)}</p>
+                  <p className="text-rowan-text text-sm truncate">{tx.trader_name || formatAddress(tx.id)}</p>
                   <p className="text-rowan-muted text-xs">{formatTimeAgo(tx.created_at)}</p>
                 </div>
-                <p className="text-rowan-text text-sm font-medium">{formatXlm(tx.amount)}</p>
+                <p className="text-rowan-text text-sm font-medium">{formatUsdc(tx.usdc_amount)} USDC</p>
                 <Badge color={state.color} bg={state.bg}>{state.label}</Badge>
               </button>
             )

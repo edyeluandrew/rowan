@@ -18,17 +18,17 @@ export default function Traders() {
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
   const filters = { status: statusFilter || undefined, search: search || undefined }
-  const { data, loading, error, page, setPage, refetch } = useTraders(filters)
+  const { data, loading, error, total, page, setPage, refresh } = useTraders(filters)
   const [refreshing, setRefreshing] = useState(false)
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
-    await refetch()
+    await refresh()
     setRefreshing(false)
-  }, [refetch])
+  }, [refresh])
 
-  const traders = data?.traders || []
-  const totalPages = data?.total_pages || 1
+  const traders = data || []
+  const totalPages = Math.max(1, Math.ceil((total || 0) / 25))
 
   return (
     <>
@@ -77,10 +77,10 @@ export default function Traders() {
                 <thead>
                   <tr className="border-b border-rowan-border text-rowan-muted text-xs uppercase tracking-wider">
                     <th className="text-left px-4 py-3 font-medium">Name</th>
-                    <th className="text-left px-4 py-3 font-medium">Phone</th>
+                    <th className="text-left px-4 py-3 font-medium">Email</th>
                     <th className="text-left px-4 py-3 font-medium">Status</th>
                     <th className="text-left px-4 py-3 font-medium">Volume</th>
-                    <th className="text-left px-4 py-3 font-medium">Completed</th>
+                    <th className="text-left px-4 py-3 font-medium">Trust</th>
                     <th className="text-left px-4 py-3 font-medium">Float</th>
                   </tr>
                 </thead>

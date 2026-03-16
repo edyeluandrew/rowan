@@ -11,7 +11,7 @@ import Button from '../components/ui/Button'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { getDispute, resolveDispute, escalateDispute, addDisputeNote } from '../api/disputes'
 import { logAdminAction } from '../api/system'
-import { formatXlm, formatDateTime, formatAddress } from '../utils/format'
+import { formatUsdc, formatCurrency, formatDateTime, formatAddress } from '../utils/format'
 
 export default function DisputeDetail() {
   const { id } = useParams()
@@ -30,7 +30,7 @@ export default function DisputeDetail() {
     setError(null)
     try {
       const data = await getDispute(id)
-      setDispute(data)
+      setDispute(data.dispute || data)
     } catch (err) {
       setError(err?.message || 'Failed to load dispute')
     } finally {
@@ -43,8 +43,8 @@ export default function DisputeDetail() {
   const handleResolve = async ({ outcome, notes }) => {
     setActionLoading(true)
     try {
-      await resolveDispute(id, { outcome, notes })
-      logAdminAction('resolve_dispute', { disputeId: id, outcome, notes })
+      await resolveDispute(id, { resolution: outcome, adminNotes: notes })
+      logAdminAction('resolve_dispute', { disputeId: id, resolution: outcome, notes })
       setResolveModal(false)
       await fetchDispute()
     } catch {
@@ -104,9 +104,9 @@ export default function DisputeDetail() {
                 <h3 className="text-rowan-text font-bold mb-4">Transaction Summary</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Transaction ID" value={formatAddress(dispute.transaction_id || '')} copy={dispute.transaction_id} />
-                  <Field label="Amount" value={formatXlm(dispute.amount)} />
-                  <Field label="Network" value={dispute.network || '-'} />
-                  <Field label="State" value={<TransactionStateTag state={dispute.transaction_state || 'disputed'} />} />
+                  <Field label="USDC Amount" value={`${formatUsdc(dispute.usdc_amount)} USDC`} />
+                  <Field label="Fiat" value={dispute.fiat_amount ? formatCurrency(dispute.fiat_amount, dispute.fiat_currency) : '-'} />
+                  <Field label="State" value={<TransactionStateTag state={dispute.transaction_state} />} />
                 </div>
               </div>
 
@@ -148,7 +148,7 @@ export default function DisputeDetail() {
             {/* Right Column */}
             <div className="space-y-4">
               {/* Actions */}
-              {dispute.status !== 'resolved' && (
+              {!['RESOLVED_FOR_USER', 'RESOLVED_FOR_TRADER', 'DISMISSED'].includes(dispute.status) && (
                 <div className="bg-rowan-surface rounded-xl border border-rowan-border p-4">
                   <h3 className="text-rowan-text font-bold mb-3">Actions</h3>
                   <div className="space-y-2">

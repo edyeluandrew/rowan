@@ -14,7 +14,7 @@ export default function DisputeRow({ dispute }) {
       <td className="px-4 py-3 text-sm text-rowan-muted font-mono">{formatAddress(dispute.id)}</td>
       <td className="px-4 py-3 text-sm text-rowan-text">{dispute.reason || '-'}</td>
       <td className="px-4 py-3"><DisputePriorityBadge priority={dispute.priority} /></td>
-      <td className="px-4 py-3"><TransactionStateTag state={dispute.status || 'open'} /></td>
+      <td className="px-4 py-3"><TransactionStateTag state={dispute.status || 'OPEN'} /></td>
       <td className="px-4 py-3 text-sm text-rowan-muted">{formatDateTime(dispute.created_at)}</td>
     </tr>
   )

@@ -243,11 +243,9 @@ async function releaseToTrader(transactionId) {
       );
       if (!hasTrustline) {
         logger.error(`[Escrow] Trader ${transaction.trader_id} has no USDC trustline — blocking release`);
-        await db.query(
-          `UPDATE transactions SET state = 'RELEASE_BLOCKED', failure_reason = 'Trader missing USDC trustline'
-           WHERE id = $1 AND state = 'FIAT_SENT'`,
-          [transactionId]
-        );
+        await stateMachine.transition(transactionId, 'FIAT_SENT', 'RELEASE_BLOCKED', {
+          failure_reason: 'Trader missing USDC trustline',
+        });
         return null;
       }
     } catch (trustlineErr) {

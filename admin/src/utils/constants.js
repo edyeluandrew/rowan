@@ -4,19 +4,20 @@
  */
 
 export const TRANSACTION_STATES = {
-  quote_requested: { label: 'Quote Requested', color: 'text-rowan-muted', bg: 'bg-rowan-muted/20' },
-  quote_confirmed: { label: 'Confirmed', color: 'text-rowan-blue', bg: 'bg-rowan-blue/20' },
-  escrow_locked:   { label: 'Escrow Locked', color: 'text-rowan-blue', bg: 'bg-rowan-blue/20' },
-  trader_matched:  { label: 'Trader Matched', color: 'text-rowan-yellow', bg: 'bg-rowan-yellow/20' },
-  fiat_sent:       { label: 'Fiat Sent', color: 'text-rowan-orange', bg: 'bg-rowan-orange/20' },
-  complete:        { label: 'Complete', color: 'text-rowan-green', bg: 'bg-rowan-green/20' },
-  refunded:        { label: 'Refunded', color: 'text-rowan-yellow', bg: 'bg-rowan-yellow/20' },
-  failed:          { label: 'Failed', color: 'text-rowan-red', bg: 'bg-rowan-red/20' },
-  disputed:        { label: 'Disputed', color: 'text-rowan-red', bg: 'bg-rowan-red/20' },
-  locked:          { label: 'Locked', color: 'text-rowan-blue', bg: 'bg-rowan-blue/20' },
-  open:            { label: 'Open', color: 'text-rowan-orange', bg: 'bg-rowan-orange/20' },
-  resolved:        { label: 'Resolved', color: 'text-rowan-green', bg: 'bg-rowan-green/20' },
-  pending_trader:  { label: 'Pending Trader', color: 'text-rowan-yellow', bg: 'bg-rowan-yellow/20' },
+  QUOTE_REQUESTED: { label: 'Quote Requested', color: 'text-rowan-muted', bg: 'bg-rowan-muted/20' },
+  QUOTE_CONFIRMED: { label: 'Confirmed', color: 'text-rowan-blue', bg: 'bg-rowan-blue/20' },
+  ESCROW_LOCKED:   { label: 'Escrow Locked', color: 'text-rowan-blue', bg: 'bg-rowan-blue/20' },
+  TRADER_MATCHED:  { label: 'Trader Matched', color: 'text-rowan-yellow', bg: 'bg-rowan-yellow/20' },
+  FIAT_SENT:       { label: 'Fiat Sent', color: 'text-rowan-orange', bg: 'bg-rowan-orange/20' },
+  RELEASE_BLOCKED: { label: 'Release Blocked', color: 'text-rowan-red', bg: 'bg-rowan-red/20' },
+  COMPLETE:        { label: 'Complete', color: 'text-rowan-green', bg: 'bg-rowan-green/20' },
+  REFUNDED:        { label: 'Refunded', color: 'text-rowan-yellow', bg: 'bg-rowan-yellow/20' },
+  FAILED:          { label: 'Failed', color: 'text-rowan-red', bg: 'bg-rowan-red/20' },
+  OPEN:            { label: 'Open', color: 'text-rowan-orange', bg: 'bg-rowan-orange/20' },
+  UNDER_REVIEW:    { label: 'Under Review', color: 'text-rowan-yellow', bg: 'bg-rowan-yellow/20' },
+  RESOLVED_FOR_USER:   { label: 'Resolved (User)', color: 'text-rowan-green', bg: 'bg-rowan-green/20' },
+  RESOLVED_FOR_TRADER: { label: 'Resolved (Trader)', color: 'text-rowan-green', bg: 'bg-rowan-green/20' },
+  DISMISSED:       { label: 'Dismissed', color: 'text-rowan-muted', bg: 'bg-rowan-muted/20' },
 }
 
 export const NETWORKS = {
@@ -28,15 +29,16 @@ export const NETWORKS = {
 }
 
 export const DISPUTE_OUTCOMES = {
-  refund_user:    { label: 'Refund User', color: 'text-rowan-red' },
-  release_trader: { label: 'Release to Trader', color: 'text-rowan-green' },
-  split:          { label: 'Split', color: 'text-rowan-orange' },
+  RESOLVED_FOR_USER:   { label: 'Refund User', color: 'text-rowan-red' },
+  RESOLVED_FOR_TRADER: { label: 'Release to Trader', color: 'text-rowan-green' },
+  DISMISSED:           { label: 'Dismiss', color: 'text-rowan-orange' },
 }
 
 export const TRADER_STATUSES = {
-  pending:   { label: 'Pending', color: 'text-rowan-orange', bg: 'bg-rowan-orange/20' },
-  active:    { label: 'Active', color: 'text-rowan-green', bg: 'bg-rowan-green/20' },
-  suspended: { label: 'Suspended', color: 'text-rowan-red', bg: 'bg-rowan-red/20' },
+  ACTIVE:    { label: 'Active', color: 'text-rowan-green', bg: 'bg-rowan-green/20' },
+  PAUSED:    { label: 'Pending', color: 'text-rowan-orange', bg: 'bg-rowan-orange/20' },
+  SUSPENDED: { label: 'Suspended', color: 'text-rowan-red', bg: 'bg-rowan-red/20' },
+  BANNED:    { label: 'Banned', color: 'text-rowan-red', bg: 'bg-rowan-red/20' },
 }
 
 export const DISPUTE_PRIORITIES = {
@@ -56,24 +58,24 @@ export const SYSTEM_SERVICES = [
 ]
 
 export const STATE_ORDER = [
-  'quote_requested',
-  'quote_confirmed',
-  'escrow_locked',
-  'trader_matched',
-  'fiat_sent',
-  'complete',
+  'QUOTE_REQUESTED',
+  'QUOTE_CONFIRMED',
+  'ESCROW_LOCKED',
+  'TRADER_MATCHED',
+  'FIAT_SENT',
+  'COMPLETE',
 ]
 
 export const FILTER_STATUSES = [
   { value: '', label: 'All' },
-  { value: 'quote_requested', label: 'Quote Requested' },
-  { value: 'escrow_locked', label: 'Escrow Locked' },
-  { value: 'trader_matched', label: 'Trader Matched' },
-  { value: 'fiat_sent', label: 'Fiat Sent' },
-  { value: 'complete', label: 'Complete' },
-  { value: 'failed', label: 'Failed' },
-  { value: 'refunded', label: 'Refunded' },
-  { value: 'disputed', label: 'Disputed' },
+  { value: 'QUOTE_REQUESTED', label: 'Quote Requested' },
+  { value: 'ESCROW_LOCKED', label: 'Escrow Locked' },
+  { value: 'TRADER_MATCHED', label: 'Trader Matched' },
+  { value: 'FIAT_SENT', label: 'Fiat Sent' },
+  { value: 'COMPLETE', label: 'Complete' },
+  { value: 'FAILED', label: 'Failed' },
+  { value: 'REFUNDED', label: 'Refunded' },
+  { value: 'RELEASE_BLOCKED', label: 'Release Blocked' },
 ]
 
 export const FILTER_NETWORKS = [
@@ -88,7 +90,7 @@ export const ALERT_SEVERITIES = {
 }
 
 export const MIN_ESCROW_XLM_RESERVE = 5
-export const FLOAT_WARNING_THRESHOLD = 100
+export const FLOAT_WARNING_THRESHOLD = 500_000  // UGX — flag traders with low mobile money float
 export const DISPUTE_HIGH_PRIORITY_HOURS = 24
 export const OVERVIEW_REFRESH_INTERVAL = 30000
 export const HEALTH_REFRESH_INTERVAL = 60000

@@ -12,11 +12,11 @@ export default function TraderRow({ trader }) {
       className="border-b border-rowan-border hover:bg-rowan-surface/50 cursor-pointer transition-colors"
     >
       <td className="px-4 py-3 text-sm text-rowan-text font-medium">{trader.name || formatAddress(trader.id)}</td>
-      <td className="px-4 py-3 text-sm text-rowan-muted">{trader.phone || '-'}</td>
+      <td className="px-4 py-3 text-sm text-rowan-muted">{trader.email || '-'}</td>
       <td className="px-4 py-3"><TraderStatusBadge status={trader.status} /></td>
-      <td className="px-4 py-3 text-sm text-rowan-text">{formatCurrency(trader.total_volume || 0)}</td>
-      <td className="px-4 py-3 text-sm text-rowan-text">{trader.completed_count || 0}</td>
-      <td className="px-4 py-3 w-32"><FloatBar current={trader.float_balance} limit={trader.float_limit} /></td>
+      <td className="px-4 py-3 text-sm text-rowan-text">{formatCurrency(trader.daily_volume || 0)}</td>
+      <td className="px-4 py-3 text-sm text-rowan-text">{trader.trust_score ? `${trader.trust_score}%` : '-'}</td>
+      <td className="px-4 py-3 w-32"><FloatBar current={trader.float_ugx} limit={trader.daily_limit_ugx} /></td>
     </tr>
   )
 }

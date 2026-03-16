@@ -15,17 +15,17 @@ import AlertBanner from '../components/overview/AlertBanner'
 import RecentTransactions from '../components/overview/RecentTransactions'
 import EscrowBalanceCard from '../components/escrow/EscrowBalanceCard'
 import useOverview from '../hooks/useOverview'
-import { formatXlm, formatCurrency, formatNumber } from '../utils/format'
+import { formatUsdc, formatCurrency, formatNumber } from '../utils/format'
 
 export default function Overview() {
-  const { data, loading, error, refetch } = useOverview()
+  const { data, loading, error, refresh } = useOverview()
   const [refreshing, setRefreshing] = useState(false)
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
-    await refetch()
+    await refresh()
     setRefreshing(false)
-  }, [refetch])
+  }, [refresh])
 
   const stats = data?.stats || {}
   const alerts = data?.alerts || []
@@ -49,10 +49,10 @@ export default function Overview() {
           <StatCard label="Active Traders" value={formatNumber(stats.active_traders)} change={stats.traders_change} icon={Users} loading={loading} />
           <StatCard label="Open Disputes" value={formatNumber(stats.open_disputes)} icon={Flag} loading={loading} />
           <StatCard label="Revenue Today" value={formatCurrency(stats.revenue_today)} change={stats.revenue_change} icon={DollarSign} loading={loading} />
-          <StatCard label="Volume Today" value={formatXlm(stats.volume_today)} change={stats.volume_change} icon={TrendingUp} loading={loading} />
+          <StatCard label="Volume Today" value={`${formatUsdc(stats.volume_today)} USDC`} change={stats.volume_change} icon={TrendingUp} loading={loading} />
           <StatCard label="Avg Settlement" value={stats.avg_settlement_time ? `${stats.avg_settlement_time}m` : '-'} icon={Clock} loading={loading} />
           <StatCard label="Pending Approvals" value={formatNumber(stats.pending_approvals)} icon={Users} loading={loading} />
-          <StatCard label="Escrow Locked" value={formatXlm(stats.escrow_locked)} icon={Lock} loading={loading} />
+          <StatCard label="Escrow Locked" value={`${formatUsdc(stats.escrow_locked)} USDC`} icon={Lock} loading={loading} />
           <StatCard label="Failed Today" value={formatNumber(stats.failed_today)} icon={AlertTriangle} loading={loading} />
           <StatCard label="Success Rate" value={stats.success_rate ? `${stats.success_rate}%` : '-'} icon={TrendingUp} loading={loading} />
         </div>
@@ -62,7 +62,7 @@ export default function Overview() {
             <RecentTransactions transactions={recentTransactions} loading={loading} />
           </div>
           <div className="lg:col-span-2 space-y-6">
-            <EscrowBalanceCard status={escrow} loading={loading} />
+            <EscrowBalanceCard status={{ total_locked: escrow.locked, ...escrow }} loading={loading} />
           </div>
         </div>
       </div>

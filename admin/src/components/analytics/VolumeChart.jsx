@@ -35,7 +35,7 @@ export default function VolumeChart({ data = [], loading = false }) {
             <XAxis dataKey="date" stroke={CHART_MUTED} fontSize={11} tickLine={false} />
             <YAxis stroke={CHART_MUTED} fontSize={11} tickLine={false} />
             <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="volume" fill={CHART_YELLOW} radius={[4, 4, 0, 0]} name="Volume" />
+            <Bar dataKey="usdc_volume" fill={CHART_YELLOW} radius={[4, 4, 0, 0]} name="Volume" />
           </BarChart>
         </ResponsiveContainer>
       </div>

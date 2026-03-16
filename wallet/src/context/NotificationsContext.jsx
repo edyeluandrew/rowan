@@ -1,14 +1,17 @@
 import { createContext, useContext } from 'react'
 import useNotificationsHook from '../hooks/useNotifications'
+import { useAuth } from './AuthContext'
 
 const NotificationsContext = createContext(null)
 
 /**
  * Provides shared notification state to the entire app.
  * Wrap inside AuthProvider so the API token is available.
+ * Only fetches notifications when the user is authenticated.
  */
 export function NotificationsProvider({ children }) {
-  const notifications = useNotificationsHook()
+  const { isAuthenticated } = useAuth()
+  const notifications = useNotificationsHook(isAuthenticated)
   return (
     <NotificationsContext.Provider value={notifications}>
       {children}

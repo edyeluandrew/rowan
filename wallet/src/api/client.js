@@ -30,10 +30,12 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (response) => response.data,
   async (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && _token) {
+      // Only nuke session if we *had* a token (real session expiry).
+      // Skip if no token — the request was unauthenticated to begin with.
       _token = null
       _logoutCallbacks.forEach((cb) => { try { cb() } catch { /* noop */ } })
-      await clearAllSecure()
+      try { await clearAllSecure() } catch { /* SecureStorage unavailable on web */ }
       window.location.replace('/onboarding')
     }
     const message =

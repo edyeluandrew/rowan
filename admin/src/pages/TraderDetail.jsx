@@ -36,10 +36,11 @@ export default function TraderDetail() {
     setError(null)
     try {
       const data = await getTrader(id)
-      setTrader(data)
+      const t = data.trader || data
+      setTrader(t)
       setLimitForm({
-        daily_limit: String(data.daily_limit || ''),
-        monthly_limit: String(data.monthly_limit || ''),
+        daily_limit: String(t.daily_limit_ugx || t.daily_limit || ''),
+        monthly_limit: String(t.monthly_limit || ''),
       })
     } catch (err) {
       setError(err?.message || 'Failed to load trader')
@@ -121,12 +122,12 @@ export default function TraderDetail() {
                 </div>
               </div>
               <div className="flex gap-2">
-                {trader.status === 'pending' && (
+                {(trader.status === 'PAUSED' || trader.verification_status === 'SUBMITTED') && (
                   <Button variant="success" onClick={() => handleAction('approve', 'Approve Trader', `Approve ${trader.name || trader.id} as an active trader?`)}>
                     Approve
                   </Button>
                 )}
-                {trader.status === 'active' && (
+                {trader.status === 'ACTIVE' && (
                   <Button variant="danger" onClick={() => {
                     setSuspendError('')
                     handleAction('suspend', 'Suspend Trader', `Suspend ${trader.name || trader.id}? They will not receive new transactions.`)
@@ -134,7 +135,7 @@ export default function TraderDetail() {
                     Suspend
                   </Button>
                 )}
-                {trader.status === 'suspended' && (
+                {trader.status === 'SUSPENDED' && (
                   <Button variant="success" onClick={() => handleAction('reactivate', 'Reactivate Trader', `Reactivate ${trader.name || trader.id}?`)}>
                     Reactivate
                   </Button>

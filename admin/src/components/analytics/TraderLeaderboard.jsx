@@ -48,8 +48,8 @@ export default function TraderLeaderboard({ traders = [], loading = false }) {
                   )}
                 </td>
                 <td className="py-2 text-sm text-rowan-text">{trader.name || trader.id}</td>
-                <td className="py-2 text-sm text-rowan-text text-right">{formatCurrency(trader.volume || 0)}</td>
-                <td className="py-2 text-sm text-rowan-green text-right">{formatPercent(trader.success_rate)}</td>
+                <td className="py-2 text-sm text-rowan-text text-right">{formatCurrency(trader.usdc_volume || 0, 'USDC')}</td>
+                <td className="py-2 text-sm text-rowan-green text-right">{formatPercent(trader.total_transactions > 0 ? (trader.completed / trader.total_transactions) * 100 : 0)}</td>
               </tr>
             ))}
           </tbody>

@@ -11,8 +11,26 @@ import logger from '../utils/logger.js';
  * Backed by Redis (Upstash).
  */
 
+// Parse Redis URL into an options object so Bull's internal ioredis client
+// gets maxRetriesPerRequest: null (prevents crash on transient disconnects).
+function parseRedisOpts(url) {
+  const parsed = new URL(url);
+  return {
+    host: parsed.hostname,
+    port: parseInt(parsed.port, 10) || 6379,
+    password: parsed.password || undefined,
+    username: parsed.username !== 'default' ? parsed.username : undefined,
+    tls: url.startsWith('rediss://') ? {} : undefined,
+    maxRetriesPerRequest: null,
+    enableOfflineQueue: true,
+    retryStrategy(times) {
+      return Math.min(times * 500, 15000);
+    },
+  };
+}
+
 const defaultOpts = {
-  redis: config.redisUrl,
+  redis: parseRedisOpts(config.redisUrl),
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },
@@ -214,8 +232,6 @@ orphanRecoveryQueue.process(async () => {
   );
   for (const tx of stuckFiatSent.rows) {
     logger.warn(`[Job:orphan-recovery] FIAT_SENT stuck for tx ${tx.id} — flagging for admin review`);
-    // Don't auto-refund FIAT_SENT — trader may have actually sent money.
-    // Log for admin dashboard review.
   }
 
   // 2. TRADER_MATCHED but never accepted → unassign, restore float, re-match

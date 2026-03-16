@@ -5,34 +5,50 @@ import { validate } from '../middleware/validate.js';
 import db from '../db/index.js';
 import redis from '../db/redis.js';
 import bcrypt from 'bcryptjs';
-import { StellarSdk } from '../config/stellar.js';
+import { StellarSdk, networkPassphrase } from '../config/stellar.js';
 import logger from '../utils/logger.js';
 
 const router = Router();
 
+/* ── SEP-10 server signing keypair (loaded once at startup) ────────── */
+const sep10Keypair = process.env.SEP10_SIGNING_SECRET
+  ? StellarSdk.Keypair.fromSecret(process.env.SEP10_SIGNING_SECRET)
+  : null;
+const sep10HomeDomain = (process.env.API_URL || 'http://localhost:4000')
+  .replace(/^https?:\/\//, '')   // strip protocol
+  .replace(/:\d+$/, '') || 'localhost';  // strip port for home domain
+
 /**
  * GET /api/v1/auth/challenge
- * [C1 FIX] Issue a cryptographic challenge nonce for Stellar signature auth.
- * The wallet must sign this nonce with its private key and return it to /login.
- * Query: ?stellarAddress=G...
+ * SEP-10 Web Authentication — issue a challenge transaction XDR.
+ * The wallet signs this and returns it to /auth/submit (login) or /auth/register.
+ * Query: ?account=G... (SEP-10 standard) or ?stellarAddress=G... (legacy)
  */
 router.get('/challenge', async (req, res, next) => {
   try {
-    const { stellarAddress } = req.query;
+    const stellarAddress = req.query.account || req.query.stellarAddress;
     if (!stellarAddress || !stellarAddress.startsWith('G') || stellarAddress.length !== 56) {
-      return res.status(400).json({ error: 'Valid Stellar public key (G...) required' });
+      return res.status(400).json({ error: 'Valid Stellar public key (G...) required as ?account=G...' });
     }
 
-    // Generate a random nonce, store in Redis with 5-minute TTL
-    const nonce = crypto.randomBytes(32).toString('hex');
-    const challengeKey = `auth:challenge:${stellarAddress}`;
-    await redis.set(challengeKey, nonce, 'EX', 300);
+    if (!sep10Keypair) {
+      logger.error('[Auth] SEP10_SIGNING_SECRET not configured');
+      return res.status(500).json({ error: 'SEP-10 auth not configured on server' });
+    }
+
+    // Build a proper SEP-10 challenge transaction using the SDK
+    const challengeXdr = StellarSdk.WebAuth.buildChallengeTx(
+      sep10Keypair,           // server signing keypair
+      stellarAddress,         // client account
+      sep10HomeDomain,        // home domain (e.g. 'localhost')
+      300,                    // timeout in seconds
+      networkPassphrase,      // testnet or public
+      sep10HomeDomain,        // webAuthDomain — same as homeDomain for first-party
+    );
 
     res.json({
-      challenge: nonce,
-      stellarAddress,
-      expiresIn: 300,
-      message: 'Sign this challenge with your Stellar private key and POST to /auth/login',
+      transaction: challengeXdr,
+      networkPassphrase,
     });
   } catch (err) {
     next(err);
@@ -41,21 +57,20 @@ router.get('/challenge', async (req, res, next) => {
 
 /**
  * POST /api/v1/auth/register
- * Register a new wallet user.
- * [C1 FIX] Requires a signed challenge to prove key ownership.
- * Body: { stellarAddress, phoneHash, signature, deviceId? }
+ * Register a new wallet user with a signed SEP-10 challenge.
+ * Body: { transaction: <signed XDR>, phoneHash, deviceId? }
  */
 router.post(
   '/register',
-  validate(['stellarAddress', 'phoneHash', 'signature']),
+  validate(['transaction', 'phoneHash']),
   async (req, res, next) => {
     try {
-      const { stellarAddress, phoneHash, signature, deviceId } = req.body;
+      const { transaction, phoneHash, deviceId } = req.body;
 
-      // Verify the challenge signature
-      const verified = await verifyChallenge(stellarAddress, signature);
-      if (!verified) {
-        return res.status(401).json({ error: 'Invalid or expired challenge signature' });
+      // Verify the SEP-10 signed challenge and extract the client's account
+      const stellarAddress = await verifySep10Challenge(transaction);
+      if (!stellarAddress) {
+        return res.status(401).json({ error: 'Invalid or expired SEP-10 challenge' });
       }
 
       // Check for duplicates
@@ -85,8 +100,52 @@ router.post(
 );
 
 /**
+ * POST /api/v1/auth/submit
+ * SEP-10 login — submit a signed challenge XDR for an existing user.
+ * Body: { transaction: <signed XDR>, deviceId? }
+ */
+router.post(
+  '/submit',
+  validate(['transaction']),
+  async (req, res, next) => {
+    try {
+      const { transaction, deviceId } = req.body;
+
+      // Verify the SEP-10 signed challenge and extract the client's account
+      const stellarAddress = await verifySep10Challenge(transaction);
+      if (!stellarAddress) {
+        return res.status(401).json({ error: 'Invalid or expired SEP-10 challenge' });
+      }
+
+      const result = await db.query(
+        `SELECT * FROM users WHERE stellar_address = $1`,
+        [stellarAddress]
+      );
+      const user = result.rows[0];
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      if (!user.is_active) return res.status(403).json({ error: 'Account disabled' });
+
+      const token = signToken(user.id, 'user', deviceId);
+
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          stellarAddress: user.stellar_address,
+          kycLevel: user.kyc_level,
+          dailyLimit: user.daily_limit,
+          perTxLimit: user.per_tx_limit,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
  * POST /api/v1/auth/login
- * [C1 FIX] User login via Stellar address + cryptographic signature verification.
+ * Legacy login — kept for backward compatibility.
  * Body: { stellarAddress, signature, deviceId? }
  */
 router.post(
@@ -96,8 +155,8 @@ router.post(
     try {
       const { stellarAddress, signature, deviceId } = req.body;
 
-      // Verify the challenge signature
-      const verified = await verifyChallenge(stellarAddress, signature);
+      // Try legacy nonce-based verification
+      const verified = await verifyLegacyChallenge(stellarAddress, signature);
       if (!verified) {
         return res.status(401).json({ error: 'Invalid or expired challenge signature' });
       }
@@ -246,19 +305,53 @@ router.post(
 );
 
 /**
- * Verify a Stellar challenge-response signature.
- * Returns true if the signature is valid for the stored nonce.
+ * Verify a SEP-10 signed challenge XDR.
+ * Returns the client's Stellar address if valid, or null if invalid.
  */
-async function verifyChallenge(stellarAddress, signatureBase64) {
+async function verifySep10Challenge(signedXdr) {
+  try {
+    if (!sep10Keypair) return null;
+
+    const serverAccountId = sep10Keypair.publicKey();
+
+    // readChallengeTx validates: seq 0, timebounds, ManageData op, server sig, etc.
+    const { clientAccountID } = StellarSdk.WebAuth.readChallengeTx(
+      signedXdr,
+      serverAccountId,
+      networkPassphrase,
+      sep10HomeDomain,
+      sep10HomeDomain,
+    );
+
+    // Verify the client actually signed the challenge
+    const signers = StellarSdk.WebAuth.verifyChallengeTxSigners(
+      signedXdr,
+      serverAccountId,
+      networkPassphrase,
+      sep10HomeDomain,
+      sep10HomeDomain,
+      [clientAccountID],  // expected signers
+    );
+
+    if (!signers || signers.length === 0) return null;
+    return clientAccountID;
+  } catch (err) {
+    logger.error('[Auth] SEP-10 challenge verification error:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Legacy: Verify a raw nonce + ed25519 signature (for backward compatibility).
+ */
+async function verifyLegacyChallenge(stellarAddress, signatureBase64) {
   try {
     const challengeKey = `auth:challenge:${stellarAddress}`;
     const nonce = await redis.get(challengeKey);
-    if (!nonce) return false; // expired or never issued
+    if (!nonce) return false;
 
-    // Delete the nonce immediately (single-use)
     await redis.del(challengeKey);
 
-    // Verify ed25519 signature
     const keypair = StellarSdk.Keypair.fromPublicKey(stellarAddress);
     const isValid = keypair.verify(
       Buffer.from(nonce, 'utf-8'),
@@ -266,7 +359,7 @@ async function verifyChallenge(stellarAddress, signatureBase64) {
     );
     return isValid;
   } catch (err) {
-    logger.error('[Auth] Challenge verification error:', err.message);
+    logger.error('[Auth] Legacy challenge verification error:', err.message);
     return false;
   }
 }

@@ -49,6 +49,7 @@ const requiredEnvVars = [
   { key: 'ENCRYPTION_KEY', label: 'AES-256 encryption key for PII' },
   { key: 'CORS_ORIGIN', label: 'Comma-separated list of allowed frontend origins (no wildcards in production)' },
   { key: 'SEP10_SIGNING_KEY', label: 'SEP-10 signing public key (served in stellar.toml)' },
+  { key: 'SEP10_SIGNING_SECRET', label: 'SEP-10 signing secret key (used to sign challenges)' },
   { key: 'API_URL', label: 'Public API URL (used in stellar.toml WEB_AUTH_ENDPOINT)' },
   { key: 'STELLAR_NETWORK', label: 'Stellar network (testnet or mainnet)' },
   { key: 'HORIZON_URL', label: 'Stellar Horizon API URL' },
@@ -281,8 +282,8 @@ async function start() {
     // Start Horizon escrow watcher
     await horizonWatcher.startWatcher();
 
-    // Start HTTP server
-    httpServer.listen(config.port, () => {
+    // Start HTTP server — bind to 0.0.0.0 so physical devices on the LAN can reach it
+    httpServer.listen(config.port, '0.0.0.0', () => {
       logger.info(`[Server] Rowan Backend running on port ${config.port}`, {
         environment: config.nodeEnv,
         stellarNetwork: config.stellar.network,

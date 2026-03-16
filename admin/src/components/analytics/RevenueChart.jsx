@@ -35,8 +35,8 @@ export default function RevenueChart({ data = [], loading = false }) {
             <XAxis dataKey="date" stroke={CHART_MUTED} fontSize={11} tickLine={false} />
             <YAxis stroke={CHART_MUTED} fontSize={11} tickLine={false} tickFormatter={(v) => `$${v}`} />
             <Tooltip content={<CustomTooltip />} />
-            <Area type="monotone" dataKey="fees" stackId="1" stroke={CHART_YELLOW} fill={CHART_YELLOW} fillOpacity={0.2} name="Fees" />
-            <Area type="monotone" dataKey="spread" stackId="1" stroke={CHART_GREEN} fill={CHART_GREEN} fillOpacity={0.2} name="Spread" />
+            <Area type="monotone" dataKey="revenue" stackId="1" stroke={CHART_YELLOW} fill={CHART_YELLOW} fillOpacity={0.2} name="Revenue" />
+            <Area type="monotone" dataKey="volume" stackId="1" stroke={CHART_GREEN} fill={CHART_GREEN} fillOpacity={0.2} name="Volume" />
           </AreaChart>
         </ResponsiveContainer>
       </div>

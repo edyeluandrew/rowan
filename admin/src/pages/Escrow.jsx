@@ -3,27 +3,26 @@ import TopBar from '../components/layout/TopBar'
 import EscrowBalanceCard from '../components/escrow/EscrowBalanceCard'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import EmptyState from '../components/ui/EmptyState'
-import { Lock, ExternalLink } from 'lucide-react'
+import { Lock } from 'lucide-react'
 import useEscrow from '../hooks/useEscrow'
-import { formatXlm, formatDateTime, formatAddress } from '../utils/format'
-import { STELLAR_EXPLORER_URL } from '../utils/constants'
+import { formatUsdc, formatDateTime, formatAddress } from '../utils/format'
 import TransactionStateTag from '../components/transactions/TransactionStateTag'
 
 export default function Escrow() {
-  const { data, loading, error, refetch } = useEscrow()
+  const { status: escrowStatus, transactions: escrowTxs, loading, error, refresh } = useEscrow()
   const [refreshing, setRefreshing] = useState(false)
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
-    await refetch()
+    await refresh()
     setRefreshing(false)
-  }, [refetch])
+  }, [refresh])
 
-  const status = data?.status || {}
-  const transactions = data?.transactions || []
+  const status = escrowStatus || {}
+  const transactions = escrowTxs || []
 
-  const lockedTxs = transactions.filter((t) => t.type === 'lock' || t.locked)
-  const refundTxs = transactions.filter((t) => t.type === 'refund' || t.pending_refund)
+  const lockedTxs = transactions
+  const refundTxs = []
 
   return (
     <>
@@ -53,24 +52,17 @@ export default function Escrow() {
                     <th className="text-left px-4 py-2 font-medium">Amount</th>
                     <th className="text-left px-4 py-2 font-medium">State</th>
                     <th className="text-left px-4 py-2 font-medium">Locked At</th>
-                    <th className="text-left px-4 py-2 font-medium">Stellar TX</th>
+                    <th className="text-left px-4 py-2 font-medium">Trader</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lockedTxs.map((tx) => (
                     <tr key={tx.id} className="border-b border-rowan-border/50">
-                      <td className="px-4 py-2 text-sm text-rowan-muted font-mono">{formatAddress(tx.id || tx.transaction_id)}</td>
-                      <td className="px-4 py-2 text-sm text-rowan-text">{formatXlm(tx.amount)}</td>
-                      <td className="px-4 py-2"><TransactionStateTag state={tx.state || 'locked'} /></td>
-                      <td className="px-4 py-2 text-sm text-rowan-muted">{formatDateTime(tx.locked_at || tx.created_at)}</td>
-                      <td className="px-4 py-2 text-sm">
-                        {tx.stellar_tx_hash ? (
-                          <a href={`${STELLAR_EXPLORER_URL}/transactions/${tx.stellar_tx_hash}`} target="_blank" rel="noopener noreferrer" className="text-rowan-yellow hover:underline inline-flex items-center gap-1">
-                            <span>{formatAddress(tx.stellar_tx_hash)}</span>
-                            <ExternalLink size={10} />
-                          </a>
-                        ) : '-'}
-                      </td>
+                      <td className="px-4 py-2 text-sm text-rowan-muted font-mono">{formatAddress(tx.id)}</td>
+                      <td className="px-4 py-2 text-sm text-rowan-text">{formatUsdc(tx.usdc_amount)} USDC</td>
+                      <td className="px-4 py-2"><TransactionStateTag state={tx.state} /></td>
+                      <td className="px-4 py-2 text-sm text-rowan-muted">{formatDateTime(tx.escrow_locked_at || tx.created_at)}</td>
+                      <td className="px-4 py-2 text-sm text-rowan-muted">{tx.trader_name || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -100,7 +92,7 @@ export default function Escrow() {
                   {refundTxs.map((tx) => (
                     <tr key={tx.id} className="border-b border-rowan-border/50">
                       <td className="px-4 py-2 text-sm text-rowan-muted font-mono">{formatAddress(tx.id || tx.transaction_id)}</td>
-                      <td className="px-4 py-2 text-sm text-rowan-text">{formatXlm(tx.amount)}</td>
+                      <td className="px-4 py-2 text-sm text-rowan-text">{formatUsdc(tx.usdc_amount || tx.amount)} USDC</td>
                       <td className="px-4 py-2 text-sm text-rowan-muted">{formatDateTime(tx.created_at)}</td>
                     </tr>
                   ))}

@@ -5,6 +5,7 @@ import {
   KeyRound, AlertTriangle, Wallet, TrendingUp,
 } from 'lucide-react';
 import { getWallet, verifyWalletAddress } from '../api/wallet';
+import { COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants';
 import WalletTransactionRow from '../components/wallet/WalletTransactionRow';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';

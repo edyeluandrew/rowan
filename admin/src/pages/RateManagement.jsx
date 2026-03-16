@@ -6,15 +6,14 @@ import Input from '../components/ui/Input'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { AlertTriangle } from 'lucide-react'
 import { getRates, updateRates, logAdminAction } from '../api/system'
-import { formatDateTime } from '../utils/format'
-import { RATE_MIN } from '../utils/constants'
+import { formatDateTime, formatCurrency } from '../utils/format'
 
 export default function RateManagement() {
   const [rates, setRates] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [overrides, setOverrides] = useState({})
-  const [rateErrors, setRateErrors] = useState({})
+  const [newRate, setNewRate] = useState('')
+  const [rateError, setRateError] = useState('')
   const [confirm, setConfirm] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -24,7 +23,7 @@ export default function RateManagement() {
     try {
       const data = await getRates()
       setRates(data)
-      setOverrides({})
+      setNewRate('')
     } catch (err) {
       setError(err?.message || 'Failed to load rates')
     } finally {
@@ -35,26 +34,20 @@ export default function RateManagement() {
   useEffect(() => { fetchRates() }, [fetchRates])
 
   const handleOpenConfirm = () => {
-    const errors = {}
-    for (const [pair, val] of Object.entries(overrides)) {
-      const num = Number(val)
-      if (isNaN(num) || num <= RATE_MIN) {
-        errors[pair] = 'Rate must be a positive number.'
-      }
-    }
-    if (Object.keys(errors).length > 0) {
-      setRateErrors(errors)
+    const num = Number(newRate)
+    if (!newRate || isNaN(num) || num <= 0) {
+      setRateError('Rate must be a positive number.')
       return
     }
-    setRateErrors({})
+    setRateError('')
     setConfirm(true)
   }
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      await updateRates(overrides)
-      logAdminAction('rate_override', { rates: overrides })
+      await updateRates({ wholesale_rate_ugx: Number(newRate) })
+      logAdminAction('rate_override', { wholesale_rate_ugx: Number(newRate) })
       setConfirm(false)
       await fetchRates()
     } catch {
@@ -63,8 +56,6 @@ export default function RateManagement() {
       setSaving(false)
     }
   }
-
-  const hasOverrides = Object.keys(overrides).length > 0
 
   return (
     <>
@@ -78,92 +69,56 @@ export default function RateManagement() {
           <div className="flex items-center justify-center py-16"><LoadingSpinner size={24} /></div>
         ) : rates ? (
           <>
-            {/* Current Rates */}
+            {/* Current Rates Summary */}
             <div className="bg-rowan-surface rounded-xl border border-rowan-border p-4">
-              <h3 className="text-rowan-text font-bold mb-4">Current Rates</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {rates.current && Object.entries(rates.current).map(([pair, rate]) => (
-                  <div key={pair}>
-                    <p className="text-rowan-muted text-xs uppercase tracking-wider mb-1">{pair}</p>
-                    <p className="text-rowan-text text-lg font-bold">{Number(rate).toFixed(4)}</p>
-                  </div>
-                ))}
+              <h3 className="text-rowan-text font-bold mb-4">Wholesale Rate (UGX per USDC)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-rowan-muted text-xs uppercase tracking-wider mb-1">Average</p>
+                  <p className="text-rowan-text text-lg font-bold">{formatCurrency(rates.avg_rate_ugx)}</p>
+                </div>
+                <div>
+                  <p className="text-rowan-muted text-xs uppercase tracking-wider mb-1">Minimum</p>
+                  <p className="text-rowan-text text-lg font-bold">{formatCurrency(rates.min_rate_ugx)}</p>
+                </div>
+                <div>
+                  <p className="text-rowan-muted text-xs uppercase tracking-wider mb-1">Maximum</p>
+                  <p className="text-rowan-text text-lg font-bold">{formatCurrency(rates.max_rate_ugx)}</p>
+                </div>
               </div>
-              {rates.last_updated && (
-                <p className="text-rowan-muted text-xs mt-3">Last updated: {formatDateTime(rates.last_updated)}</p>
+              {rates.updated_at && (
+                <p className="text-rowan-muted text-xs mt-3">Last updated: {formatDateTime(rates.updated_at)}</p>
               )}
             </div>
 
-            {/* Rate Overrides */}
+            {/* Rate Override */}
             <div className="bg-rowan-surface rounded-xl border border-rowan-border p-4">
-              <h3 className="text-rowan-text font-bold mb-3">Rate Overrides</h3>
+              <h3 className="text-rowan-text font-bold mb-3">Override Wholesale Rate</h3>
 
               <div className="flex items-center gap-2 bg-rowan-orange/10 border border-rowan-orange/30 text-rowan-orange rounded-xl px-3 py-2 text-sm mb-4">
                 <AlertTriangle size={14} />
-                <span>Rate overrides affect all active transactions. Use with caution.</span>
+                <span>This will update the wholesale rate for all active traders immediately.</span>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-                {rates.current && Object.keys(rates.current).map((pair) => (
-                  <Input
-                    key={pair}
-                    label={pair}
-                    type="number"
-                    step="0.0001"
-                    value={overrides[pair] !== undefined ? overrides[pair] : ''}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      if (val === '') {
-                        const next = { ...overrides }
-                        delete next[pair]
-                        setOverrides(next)
-                      } else {
-                        setOverrides({ ...overrides, [pair]: val })
-                      }
-                      setRateErrors((prev) => { const next = { ...prev }; delete next[pair]; return next })
-                    }}
-                    placeholder={String(rates.current[pair])}
-                    error={rateErrors[pair]}
-                  />
-                ))}
+              <div className="max-w-sm mb-4">
+                <Input
+                  label="New Wholesale Rate (UGX)"
+                  type="number"
+                  step="1"
+                  value={newRate}
+                  onChange={(e) => { setNewRate(e.target.value); setRateError('') }}
+                  placeholder={String(Math.round(rates.avg_rate_ugx) || '')}
+                  error={rateError}
+                />
               </div>
 
               <Button
-                disabled={!hasOverrides}
+                disabled={!newRate}
                 onClick={handleOpenConfirm}
               >
-                Apply Overrides
+                Apply Rate
               </Button>
             </div>
-
-            {/* Rate History */}
-            {rates.history && rates.history.length > 0 && (
-              <div className="bg-rowan-surface rounded-xl border border-rowan-border p-4">
-                <h3 className="text-rowan-text font-bold mb-4">Rate History</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-rowan-border text-rowan-muted text-xs uppercase tracking-wider">
-                        <th className="text-left px-4 py-2 font-medium">Pair</th>
-                        <th className="text-left px-4 py-2 font-medium">Rate</th>
-                        <th className="text-left px-4 py-2 font-medium">Source</th>
-                        <th className="text-left px-4 py-2 font-medium">Updated</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rates.history.map((entry, i) => (
-                        <tr key={i} className="border-b border-rowan-border/50">
-                          <td className="px-4 py-2 text-sm text-rowan-text">{entry.pair}</td>
-                          <td className="px-4 py-2 text-sm text-rowan-text">{Number(entry.rate).toFixed(4)}</td>
-                          <td className="px-4 py-2 text-sm text-rowan-muted">{entry.source || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-rowan-muted">{formatDateTime(entry.updated_at)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </>
         ) : null}
 
@@ -171,9 +126,9 @@ export default function RateManagement() {
           open={confirm}
           onClose={() => setConfirm(false)}
           onConfirm={handleSave}
-          title="Apply Rate Overrides"
-          message={`You are about to override ${Object.keys(overrides).length} rate(s). This will affect all active and new transactions immediately. Are you sure?`}
-          confirmLabel="Apply Overrides"
+          title="Apply Wholesale Rate"
+          message={`You are about to set the wholesale rate to UGX ${Number(newRate).toLocaleString()} for all active traders. Are you sure?`}
+          confirmLabel="Apply Rate"
           loading={saving}
         />
       </div>

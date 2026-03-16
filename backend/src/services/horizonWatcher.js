@@ -12,7 +12,7 @@ let heartbeatTimer = null;
 let lastPaymentAt = Date.now();
 
 // Max interval (ms) without any stream event before forcing reconnect
-const HEARTBEAT_INTERVAL_MS = 120_000; // 2 minutes
+const HEARTBEAT_INTERVAL_MS = 600_000; // 10 minutes (was 2 minutes)
 
 /**
  * Start watching the escrow account for incoming payments via Horizon event streaming.
@@ -102,7 +102,7 @@ function startHeartbeat() {
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(() => {
     if (Date.now() - lastPaymentAt > HEARTBEAT_INTERVAL_MS && closeStream) {
-      logger.warn('[Horizon] No events in 2 minutes — forcing reconnect');
+      logger.warn('[Horizon] No events in 10 minutes — forcing reconnect');
       scheduleReconnect();
     }
   }, HEARTBEAT_INTERVAL_MS / 2);

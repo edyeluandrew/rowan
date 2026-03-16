@@ -8,5 +8,8 @@
       "backgroundColor": "#0B0E11",
       "showSpinner": false
     }
+  },
+  "server": {
+    "androidScheme": "https"
   }
 }

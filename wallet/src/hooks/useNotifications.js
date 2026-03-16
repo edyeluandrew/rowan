@@ -3,13 +3,14 @@ import { getNotifications, markNotificationsRead, markAllNotificationsRead } fro
 
 /**
  * Hook to fetch and manage user notifications.
+ * @param {boolean} enabled — only fetch when the user is authenticated
  */
-export default function useNotifications() {
+export default function useNotifications(enabled = true) {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   const fetchNotifications = useCallback(async (pageNum = 1, append = false) => {
     setLoading(true)
@@ -23,7 +24,7 @@ export default function useNotifications() {
       }
       setHasMore(items.length === 20)
       setPage(pageNum)
-      setUnreadCount((prev) => items.filter((n) => !n.readAt).length + (append ? prev : 0))
+      setUnreadCount((prev) => items.filter((n) => !n.readAt && !n.read_at).length + (append ? prev : 0))
     } catch {
       /* initial fetch failed — empty list shown */
     } finally {
@@ -32,8 +33,8 @@ export default function useNotifications() {
   }, [])
 
   useEffect(() => {
-    fetchNotifications(1)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    if (enabled) fetchNotifications(1)
+  }, [enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const markRead = useCallback(async (ids) => {
     try {

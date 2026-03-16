@@ -22,7 +22,7 @@ export default function Analytics() {
   const [refreshing, setRefreshing] = useState(false)
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
-    await Promise.all([revenue.refetch(), volume.refetch(), traderPerf.refetch(), userAnalytics.refetch()])
+    await Promise.all([revenue.refresh(), volume.refresh(), traderPerf.refresh(), userAnalytics.refresh()])
     setRefreshing(false)
   }, [revenue, volume, traderPerf, userAnalytics])
 
@@ -47,12 +47,12 @@ export default function Analytics() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <RevenueChart data={revenue.data?.data || []} loading={revenue.loading} />
-          <VolumeChart data={volume.data?.data || []} loading={volume.loading} />
+          <RevenueChart data={revenue.data?.byDay || []} loading={revenue.loading} />
+          <VolumeChart data={volume.data?.byDay || []} loading={volume.loading} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <TraderLeaderboard traders={traderPerf.data?.traders || []} loading={traderPerf.loading} />
+          <TraderLeaderboard traders={traderPerf.data || []} loading={traderPerf.loading} />
 
           <div className="bg-rowan-surface rounded-xl border border-rowan-border p-4">
             <h3 className="text-rowan-text font-bold mb-4">User Analytics</h3>
@@ -61,23 +61,23 @@ export default function Analytics() {
             ) : (
               <div className="grid grid-cols-2 gap-4">
                 <StatBox label="Total Users" value={formatNumber(userAnalytics.data?.total_users)} />
-                <StatBox label="Active Users" value={formatNumber(userAnalytics.data?.active_users)} />
-                <StatBox label="New This Period" value={formatNumber(userAnalytics.data?.new_users)} />
-                <StatBox label="Retention Rate" value={userAnalytics.data?.retention_rate ? `${userAnalytics.data.retention_rate}%` : '-'} />
+                <StatBox label="New (7d)" value={formatNumber(userAnalytics.data?.new_users_7d)} />
+                <StatBox label="New (30d)" value={formatNumber(userAnalytics.data?.new_users_30d)} />
+                <StatBox label="Signups Trend" value={userAnalytics.data?.signups_by_day?.length ? `${userAnalytics.data.signups_by_day.length} days` : '-'} />
               </div>
             )}
           </div>
         </div>
 
         {/* Network Breakdown */}
-        {volume.data?.networks && (
+        {volume.data?.byNetwork?.length > 0 && (
           <div className="bg-rowan-surface rounded-xl border border-rowan-border p-4">
             <h3 className="text-rowan-text font-bold mb-4">Network Breakdown</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              {Object.entries(volume.data.networks).map(([network, vol]) => (
-                <div key={network}>
-                  <p className="text-rowan-muted text-xs uppercase tracking-wider mb-1">{network}</p>
-                  <p className="text-rowan-text text-lg font-bold">{formatNumber(vol)}</p>
+              {volume.data.byNetwork.map((item) => (
+                <div key={item.network}>
+                  <p className="text-rowan-muted text-xs uppercase tracking-wider mb-1">{item.network}</p>
+                  <p className="text-rowan-text text-lg font-bold">{formatNumber(item.fiat_volume)}</p>
                 </div>
               ))}
             </div>

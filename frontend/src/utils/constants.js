@@ -35,6 +35,12 @@ export const API_TIMEOUT = 30000;
 /** Max socket reconnection attempts */
 export const SOCKET_RECONNECT_ATTEMPTS = 5;
 
+/** Socket reconnection delay (ms) */
+export const SOCKET_RECONNECT_DELAY = 1000;
+
+/** Socket max reconnection delay (ms) */
+export const SOCKET_RECONNECT_DELAY_MAX = 5000;
+
 /** Currency flag emojis */
 export const CURRENCY_FLAGS = {
   UGX: '🇺🇬',

@@ -18,17 +18,17 @@ export default function Disputes() {
   const [priorityFilter, setPriorityFilter] = useState('')
   const [search, setSearch] = useState('')
   const filters = { priority: priorityFilter || undefined, search: search || undefined }
-  const { data, loading, error, page, setPage, refetch } = useDisputes(filters)
+  const { data, loading, error, total, page, setPage, refresh } = useDisputes(filters)
   const [refreshing, setRefreshing] = useState(false)
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
-    await refetch()
+    await refresh()
     setRefreshing(false)
-  }, [refetch])
+  }, [refresh])
 
-  const disputes = data?.disputes || []
-  const totalPages = data?.total_pages || 1
+  const disputes = data || []
+  const totalPages = Math.max(1, Math.ceil((total || 0) / 50))
 
   return (
     <>

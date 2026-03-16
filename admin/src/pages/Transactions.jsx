@@ -10,17 +10,17 @@ import useTransactions from '../hooks/useTransactions'
 
 export default function Transactions() {
   const [filters, setFilters] = useState({})
-  const { data, loading, error, page, setPage, refetch } = useTransactions(filters)
+  const { data, loading, error, pages, page, setPage, refresh } = useTransactions(filters)
   const [refreshing, setRefreshing] = useState(false)
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
-    await refetch()
+    await refresh()
     setRefreshing(false)
-  }, [refetch])
+  }, [refresh])
 
-  const transactions = data?.transactions || []
-  const totalPages = data?.total_pages || 1
+  const transactions = data || []
+  const totalPages = pages || 1
 
   return (
     <>
@@ -48,7 +48,7 @@ export default function Transactions() {
                   <tr className="border-b border-rowan-border text-rowan-muted text-xs uppercase tracking-wider">
                     <th className="text-left px-4 py-3 font-medium">ID</th>
                     <th className="text-left px-4 py-3 font-medium">Amount</th>
-                    <th className="text-left px-4 py-3 font-medium">Network</th>
+                    <th className="text-left px-4 py-3 font-medium">Currency</th>
                     <th className="text-left px-4 py-3 font-medium">State</th>
                     <th className="text-left px-4 py-3 font-medium">Trader</th>
                     <th className="text-left px-4 py-3 font-medium">Created</th>

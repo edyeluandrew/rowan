@@ -353,4 +353,194 @@ router.put('/float', authTrader, async (req, res, next) => {
   }
 });
 
+/* ═══════════════════════════════════════════════════════════
+ *  WALLET ENDPOINT
+ * ═══════════════════════════════════════════════════════════ */
+
+/**
+ * GET /api/v1/trader/wallet
+ * Stellar wallet details: address, USDC balance, recent receipts.
+ */
+router.get('/wallet', authTrader, async (req, res, next) => {
+  try {
+    const traderResult = await db.query(
+      `SELECT stellar_address, usdc_float FROM traders WHERE id = $1`,
+      [req.traderId]
+    );
+    const trader = traderResult.rows[0];
+    if (!trader) return res.status(404).json({ error: 'Trader not found' });
+
+    // Recent completed transactions (USDC receipts to this trader)
+    const txResult = await db.query(
+      `SELECT id, usdc_amount, fiat_amount, fiat_currency, state,
+              stellar_release_tx, completed_at, created_at
+       FROM transactions
+       WHERE trader_id = $1 AND state = 'COMPLETE'
+       ORDER BY completed_at DESC
+       LIMIT 20`,
+      [req.traderId]
+    );
+
+    res.json({
+      stellar_address: trader.stellar_address,
+      usdc_balance: parseFloat(trader.usdc_float) || 0,
+      recent_transactions: txResult.rows,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/trader/wallet/verify
+ * Verify / update the trader's Stellar receiving address.
+ */
+router.post('/wallet/verify', authTrader, async (req, res, next) => {
+  try {
+    const { stellarAddress } = req.body;
+    if (!stellarAddress || !stellarAddress.startsWith('G') || stellarAddress.length !== 56) {
+      return res.status(400).json({ error: 'Invalid Stellar address. Must start with G and be 56 characters.' });
+    }
+
+    // Check uniqueness
+    const existing = await db.query(
+      `SELECT id FROM traders WHERE stellar_address = $1 AND id != $2`,
+      [stellarAddress, req.traderId]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'This Stellar address is already registered to another trader.' });
+    }
+
+    await db.query(
+      `UPDATE traders SET stellar_address = $1, updated_at = NOW() WHERE id = $2`,
+      [stellarAddress, req.traderId]
+    );
+
+    logger.info(`[Trader] ${req.traderId} updated Stellar address to ${stellarAddress}`);
+    res.json({ success: true, stellar_address: stellarAddress });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════
+ *  SLA PERFORMANCE ENDPOINT
+ * ═══════════════════════════════════════════════════════════ */
+
+/**
+ * GET /api/v1/trader/sla?period=30d
+ * SLA metrics: met rate, avg payout time, breaches, breakdown.
+ * SLA target: payout within 5 minutes (300s) of being matched.
+ */
+router.get('/sla', authTrader, async (req, res, next) => {
+  try {
+    const period = req.query.period || '30d';
+    const intervalMap = { '7d': '7 days', '30d': '30 days', '90d': '90 days' };
+    const interval = intervalMap[period] || '30 days';
+
+    // Get all completed/failed transactions in period with payout timing
+    const txResult = await db.query(
+      `SELECT id,
+              EXTRACT(EPOCH FROM (fiat_sent_at - trader_matched_at)) as payout_seconds,
+              EXTRACT(EPOCH FROM (trader_matched_at - escrow_locked_at)) as response_seconds,
+              fiat_sent_at, trader_matched_at, completed_at, state
+       FROM transactions
+       WHERE trader_id = $1
+         AND state IN ('COMPLETE', 'FAILED')
+         AND trader_matched_at IS NOT NULL
+         AND created_at >= NOW() - $2::INTERVAL
+       ORDER BY created_at DESC`,
+      [req.traderId, interval]
+    );
+
+    const txs = txResult.rows;
+    const SLA_TARGET = 300; // 5 minutes in seconds
+
+    // Filter valid transactions (have both matched and fiat_sent timestamps)
+    const withPayout = txs.filter(t => t.payout_seconds != null && t.payout_seconds >= 0);
+
+    const totalWithPayout = withPayout.length;
+    const slaMet = withPayout.filter(t => t.payout_seconds <= SLA_TARGET).length;
+    const slaBreaches = totalWithPayout - slaMet;
+    const slaMetRate = totalWithPayout > 0 ? (slaMet / totalWithPayout) * 100 : 100;
+
+    const avgPayout = totalWithPayout > 0
+      ? withPayout.reduce((s, t) => s + t.payout_seconds, 0) / totalWithPayout
+      : 0;
+
+    const withResponse = txs.filter(t => t.response_seconds != null && t.response_seconds >= 0);
+    const avgResponse = withResponse.length > 0
+      ? withResponse.reduce((s, t) => s + t.response_seconds, 0) / withResponse.length
+      : 0;
+
+    const bestTime = withPayout.length > 0
+      ? Math.min(...withPayout.map(t => t.payout_seconds))
+      : null;
+
+    // Breakdown: last 20 transactions
+    const breakdown = withPayout.slice(0, 20).map(t => ({
+      transaction_id: t.id,
+      payout_time: Math.round(t.payout_seconds),
+      met: t.payout_seconds <= SLA_TARGET,
+    }));
+
+    res.json({
+      slaMetRate: Math.round(slaMetRate * 10) / 10,
+      averagePayoutTime: Math.round(avgPayout),
+      averageResponseTime: Math.round(avgResponse),
+      slaBreaches,
+      best_time: bestTime != null ? Math.round(bestTime) : null,
+      breakdown,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════
+ *  NETWORK PERFORMANCE ENDPOINT
+ * ═══════════════════════════════════════════════════════════ */
+
+/**
+ * GET /api/v1/trader/performance/networks
+ * Per-network stats: completion rate, avg time, volume.
+ */
+router.get('/performance/networks', authTrader, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT
+         t.network,
+         COUNT(*) as total_transactions,
+         COUNT(*) FILTER (WHERE t.state = 'COMPLETE') as completed,
+         ROUND(
+           COUNT(*) FILTER (WHERE t.state = 'COMPLETE')::NUMERIC /
+           NULLIF(COUNT(*), 0) * 100, 1
+         ) as completion_rate,
+         ROUND(
+           AVG(EXTRACT(EPOCH FROM (t.fiat_sent_at - t.trader_matched_at)))
+           FILTER (WHERE t.fiat_sent_at IS NOT NULL AND t.trader_matched_at IS NOT NULL)
+         ) as avg_time,
+         COALESCE(SUM(t.fiat_amount) FILTER (WHERE t.state = 'COMPLETE'), 0) as total_volume
+       FROM transactions t
+       WHERE t.trader_id = $1
+         AND t.state IN ('COMPLETE', 'FAILED', 'REFUNDED')
+       GROUP BY t.network
+       ORDER BY total_transactions DESC`,
+      [req.traderId]
+    );
+
+    const byNetwork = result.rows.map(row => ({
+      network: row.network,
+      totalTransactions: parseInt(row.total_transactions),
+      completionRate: parseFloat(row.completion_rate) || 0,
+      avg_time: row.avg_time != null ? parseInt(row.avg_time) : null,
+      total_volume: parseFloat(row.total_volume) || 0,
+    }));
+
+    res.json({ byNetwork });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
