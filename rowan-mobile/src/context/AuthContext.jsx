@@ -108,6 +108,8 @@ export function AuthProvider({ children }) {
     const webAuthUrl = toml.webAuthEndpoint;
 
     const { transaction: challengeXdr } = await getChallenge(account, webAuthUrl);
+    console.log('[Auth] Challenge received:', challengeXdr.substring(0, 50) + '...');
+    
     verifyChallengeTransaction({
       challengeXdr,
       serverSigningKey: toml.signingKey,
@@ -115,7 +117,13 @@ export function AuthProvider({ children }) {
       homeDomain: import.meta.env.VITE_HOME_DOMAIN,
       clientPublicKey: account,
     });
+    console.log('[Auth] Challenge verified');
+    
     const signedXdr = signChallengeTransaction(challengeXdr, kpData.secretKey, CURRENT_NETWORK.passphrase);
+    console.log('[Auth] Challenge signed:', signedXdr?.substring(0, 50) + '...');
+    console.log('[Auth] Signed XDR type:', typeof signedXdr);
+    console.log('[Auth] Signed XDR length:', signedXdr?.length);
+    
     const phoneHash = await hashPhoneNumber(phoneNumber);
     const data = await registerUser({ transaction: signedXdr, phoneHash });
 
@@ -141,6 +149,8 @@ export function AuthProvider({ children }) {
     const webAuthUrl = toml.webAuthEndpoint;
 
     const { transaction: challengeXdr } = await getChallenge(account, webAuthUrl);
+    console.log('[Auth] Challenge received:', challengeXdr.substring(0, 50) + '...');
+    
     verifyChallengeTransaction({
       challengeXdr,
       serverSigningKey: toml.signingKey,
@@ -148,7 +158,13 @@ export function AuthProvider({ children }) {
       homeDomain: import.meta.env.VITE_HOME_DOMAIN,
       clientPublicKey: account,
     });
+    console.log('[Auth] Challenge verified');
+    
     const signedXdr = signChallengeTransaction(challengeXdr, kpData.secretKey, CURRENT_NETWORK.passphrase);
+    console.log('[Auth] Challenge signed:', signedXdr?.substring(0, 50) + '...');
+    console.log('[Auth] Signed XDR type:', typeof signedXdr);
+    console.log('[Auth] Signed XDR length:', signedXdr?.length);
+    
     const data = await submitChallenge(signedXdr);
 
     const jwt = data.token;

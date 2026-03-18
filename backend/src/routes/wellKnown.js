@@ -14,6 +14,10 @@ const router = express.Router();
  * Reference: github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0001.md
  */
 router.get('/stellar.toml', (req, res) => {
+  // Debug logging to verify API_URL is read correctly
+  console.log('[stellar.toml] process.env.API_URL =', process.env.API_URL);
+  console.log('[stellar.toml] All env keys:', Object.keys(process.env).filter(k => k.includes('API')));
+  
   // CORS must be * specifically for stellar.toml per SEP-1 spec
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'text/plain');

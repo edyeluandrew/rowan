@@ -14,6 +14,10 @@ export function setClientToken(token) {
 /** Register a callback invoked on 401 — used by AuthContext to clear state. */
 export function onLogout(callback) {
   _onLogout = callback;
+  // Return an unregister function for cleanup
+  return () => {
+    _onLogout = null;
+  };
 }
 
 const client = axios.create({

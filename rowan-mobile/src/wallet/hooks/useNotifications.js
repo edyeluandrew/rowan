@@ -15,7 +15,7 @@ export default function useNotifications() {
     setLoading(true)
     try {
       const data = await getNotifications({ page: pageNum, limit: 20 })
-      const items = data.notifications || data || []
+      const items = Array.isArray(data?.notifications) ? data.notifications : Array.isArray(data) ? data : []
       if (append) {
         setNotifications((prev) => [...prev, ...items])
       } else {
