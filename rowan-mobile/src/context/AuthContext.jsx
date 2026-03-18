@@ -9,7 +9,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { setClientToken, onLogout } from '../shared/api/client';
 import {
-  getSecure, setSecure, clearAllSecure, clearPreferences,
+  getSecure, setSecure, clearAllSecure, clearPreferences, initStorage,
 } from '../shared/utils/storage';
 
 /* ── Wallet-specific imports (lazy to avoid bundling for traders) ── */
@@ -36,6 +36,11 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  /* ── Warm up SecureStoragePlugin in background on app start (don't wait) ── */
+  useEffect(() => {
+    initStorage(); // Fire and forget — initializes plugin in background
+  }, []);
+
   /* ── Global 401 handler ── */
   useEffect(() => {
     onLogout(() => {
@@ -52,11 +57,18 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     (async () => {
       try {
+        console.log('[Auth] Starting bootstrap...');
         const t = await getSecure('rowan_token');
+        console.log('[Auth] ✓ Token loaded:', t ? 'found' : 'empty');
+        
         const u = await getSecure('rowan_user');
+        console.log('[Auth] ✓ User loaded:', u ? 'found' : 'empty');
+        
         const kp = await getSecure('rowan_stellar_keypair');
+        console.log('[Auth] ✓ Keypair loaded:', kp ? 'found' : 'empty');
 
         if (t && u) {
+          console.log('[Auth] Restoring wallet session...');
           setClientToken(t);
           setToken(t);
           const parsed = JSON.parse(u);
@@ -67,11 +79,16 @@ export function AuthProvider({ children }) {
             const kpData = JSON.parse(kp);
             setKeypair({ publicKey: kpData.publicKey });
           }
+          console.log('[Auth] ✓ Wallet session restored');
+        } else {
+          console.log('[Auth] No session found (first time or trader mode)');
         }
         // NOTE: trader sessions are memory-only — never restored from storage
-      } catch {
+      } catch (err) {
+        console.error('[Auth] Bootstrap error:', err.message);
         /* treat as unauthenticated */
       } finally {
+        console.log('[Auth] ✓ Bootstrap complete');
         setIsLoading(false);
       }
     })();
@@ -87,11 +104,17 @@ export function AuthProvider({ children }) {
     const kpData = JSON.parse(stored);
     const account = kpData.publicKey;
 
-    const toml = await fetchStellarToml(import.meta.env.VITE_API_URL);
-    const webAuthUrl = toml.WEB_AUTH_ENDPOINT;
+    const toml = await fetchStellarToml(import.meta.env.VITE_HOME_DOMAIN);
+    const webAuthUrl = toml.webAuthEndpoint;
 
     const { transaction: challengeXdr } = await getChallenge(account, webAuthUrl);
-    verifyChallengeTransaction(challengeXdr, toml.SIGNING_KEY, CURRENT_NETWORK.passphrase);
+    verifyChallengeTransaction({
+      challengeXdr,
+      serverSigningKey: toml.signingKey,
+      networkPassphrase: CURRENT_NETWORK.passphrase,
+      homeDomain: import.meta.env.VITE_HOME_DOMAIN,
+      clientPublicKey: account,
+    });
     const signedXdr = signChallengeTransaction(challengeXdr, kpData.secretKey, CURRENT_NETWORK.passphrase);
     const phoneHash = await hashPhoneNumber(phoneNumber);
     const data = await registerUser({ transaction: signedXdr, phoneHash });
@@ -114,11 +137,17 @@ export function AuthProvider({ children }) {
     const kpData = JSON.parse(stored);
     const account = kpData.publicKey;
 
-    const toml = await fetchStellarToml(import.meta.env.VITE_API_URL);
-    const webAuthUrl = toml.WEB_AUTH_ENDPOINT;
+    const toml = await fetchStellarToml(import.meta.env.VITE_HOME_DOMAIN);
+    const webAuthUrl = toml.webAuthEndpoint;
 
     const { transaction: challengeXdr } = await getChallenge(account, webAuthUrl);
-    verifyChallengeTransaction(challengeXdr, toml.SIGNING_KEY, CURRENT_NETWORK.passphrase);
+    verifyChallengeTransaction({
+      challengeXdr,
+      serverSigningKey: toml.signingKey,
+      networkPassphrase: CURRENT_NETWORK.passphrase,
+      homeDomain: import.meta.env.VITE_HOME_DOMAIN,
+      clientPublicKey: account,
+    });
     const signedXdr = signChallengeTransaction(challengeXdr, kpData.secretKey, CURRENT_NETWORK.passphrase);
     const data = await submitChallenge(signedXdr);
 

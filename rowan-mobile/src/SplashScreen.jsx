@@ -7,6 +7,7 @@ export default function SplashScreen() {
   const [dots, setDots] = useState('');
 
   useEffect(() => {
+    console.log('[SplashScreen] 🚀 Mounted - app is alive and rendering');
     const id = setInterval(() => {
       setDots((prev) => (prev.length >= 3 ? '' : prev + '.'));
     }, 400);
