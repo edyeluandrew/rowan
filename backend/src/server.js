@@ -98,10 +98,13 @@ const authLimiter = rateLimit({
 // [SEP-1] stellar.toml — must be public with CORS *, registered before app-wide CORS
 app.use('/.well-known', wellKnownRoutes);
 
-// [AUDIT FIX] CORS origin from env — no wildcard fallback.
-// CORS_ORIGIN is validated at startup; parsed as comma-separated list.
-const allowedOrigins = process.env.CORS_ORIGIN.split(',').map(o => o.trim());
-app.use(cors({ origin: allowedOrigins }));
+// [AUDIT FIX] CORS origin from env — supports wildcard for development.
+// CORS_ORIGIN is validated at startup; parsed as comma-separated list or '*'.
+const corsOrigin = process.env.CORS_ORIGIN.trim();
+const corsConfig = corsOrigin === '*' 
+  ? cors() // Wildcard — allows all origins
+  : cors({ origin: corsOrigin.split(',').map(o => o.trim()) }); // Specific origins
+app.use(corsConfig);
 app.use(express.json({ limit: '100kb' }));
 
 // Request logging (dev)
@@ -112,7 +115,6 @@ if (config.nodeEnv === 'development') {
   });
 }
 
-// ─── Health check ───────────────────────────────────────────
 app.get('/health', async (req, res) => {
   try {
     await db.query('SELECT 1');

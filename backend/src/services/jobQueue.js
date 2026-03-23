@@ -82,7 +82,8 @@ refundQueue.process(async (job) => {
     stellar_refund_tx: refundHash,
   });
 
-  notificationService.notifyRefund(tx.user_id, tx, tx.failure_reason || 'No trader available');
+  // [SMS Integration] notify with async fallback
+  await notificationService.notifyRefund(tx.user_id, tx, tx.failure_reason || 'No trader available');
 
   return { refundHash };
 });
@@ -114,7 +115,8 @@ releaseQueue.process(async (job) => {
   );
   const tx = txResult.rows[0];
   if (tx) {
-    notificationService.notifyTransactionComplete(tx.user_id, tx.trader_id, tx);
+    // [SMS Integration] notify with async fallback (phone will be looked up from cache)
+    await notificationService.notifyTransactionComplete(tx.user_id, tx.trader_id, tx);
   }
 
   return { releaseHash };
@@ -278,7 +280,7 @@ orphanRecoveryQueue.process(async () => {
          failure_reason = 'Auto-refund: orphan recovery' WHERE id = $2`,
         [refundHash, tx.id]
       );
-      notificationService.notifyRefund(tx.user_id, tx, 'No trader available — auto-refunded');
+      await notificationService.notifyRefund(tx.user_id, tx, 'No trader available — auto-refunded');
     } catch (err) {
       logger.error(`[Job:orphan-recovery] Refund failed for tx ${tx.id}:`, err.message);
     }

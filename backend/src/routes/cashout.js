@@ -49,6 +49,14 @@ router.post(
         phoneHash,
       });
 
+      // [SMS Integration] Cache the phone number for SMS fallback notifications
+      // Phone number comes from the request body — store in Redis for later retrieval
+      // This enables SMS fallback if user goes offline during transaction
+      if (req.body.phoneNumber) {
+        await notificationService.cacheUserPhoneNumber(req.userId, req.body.phoneNumber);
+        logger.debug(`[Cashout] Cached phone number for user ${req.userId}`);
+      }
+
       res.json({
         quoteId: quote.id,
         memo: quote.memo,

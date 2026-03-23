@@ -45,9 +45,10 @@ export async function fetchStellarToml(homeDomain) {
   try {
     let toml
 
-    // In development (localhost), the Stellar SDK resolver tries HTTPS which fails.
+    // In development (localhost or IP address), the Stellar SDK resolver tries HTTPS which fails.
     // Fetch the toml directly from the API server instead.
-    const isDev = homeDomain === 'localhost' || homeDomain.startsWith('localhost:')
+    // Dev detection: localhost, IP addresses (10.x.x.x, 192.168.x.x, 127.x.x.x), or contains ':'
+    const isDev = /^(localhost|127\.|10\.|192\.168\.|172\.|localhost:|\d+\.\d+\.\d+\.\d+:)/.test(homeDomain)
     if (isDev) {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
       const resp = await fetch(`${apiUrl}/.well-known/stellar.toml`)

@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+www/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Capacitor
+dist/
+www/
+
+# Android build artifacts
+android/build/
+android/.gradle/
+android/app/build/
+android/app/.cxx/
+android/.idea/
+
+# iOS build artifacts
+ios/Pods/
+ios/Podfile.lock
+
+# Cordova
+cordova_plugins.js
+plugins/
+
+# Local properties
+android/local.properties
+
+# Dart/Flutter
+.dart_tool/
+build/

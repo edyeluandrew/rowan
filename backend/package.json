@@ -17,6 +17,9 @@
   "author": "",
   "license": "ISC",
   "description": "Rowan — Stellar-to-mobile-money liquidity bridge backend",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@sentry/node": "^10.40.0",
     "@stellar/stellar-sdk": "^13.1.0",
