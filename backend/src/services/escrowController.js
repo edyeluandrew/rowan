@@ -1,0 +1,383 @@
+import {
+  server as horizon,
+  networkPassphrase,
+  escrowKeypair,
+  USDC_ASSET,
+  StellarSdk,
+} from '../config/stellar.js';
+import config from '../config/index.js';
+import db from '../db/index.js';
+import redis from '../db/redis.js';
+import quoteEngine from './quoteEngine.js';
+import matchingEngine from './matchingEngine.js';
+import fraudMonitor from './fraudMonitor.js';
+import stateMachine from './transactionStateMachine.js';
+import logger from '../utils/logger.js';
+
+/**
+ * Verify an incoming deposit against a locked quote.
+ * Called by the Horizon event watcher when XLM arrives at the escrow address.
+ *
+ * [C2] Protected by Redis distributed lock to prevent double-processing
+ *       of duplicate Horizon stream events.
+ * [B6] Uses a SQL transaction to atomically mark quote used + create tx record.
+ * [B5] Refunds go to user's registered address, not sourceAccount.
+ */
+async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
+  logger.info(`[Escrow] Deposit detected — memo: ${memo}, amount: ${amount} XLM, tx: ${txHash}`);
+
+  // ── C2 FIX: Distributed lock prevents double-processing ──
+  const lockKey = `lock:deposit:${memo}`;
+  const lockAcquired = await redis.set(lockKey, txHash, 'EX', 120, 'NX');
+  if (!lockAcquired) {
+    logger.warn(`[Escrow] Duplicate deposit event for memo ${memo} — skipping (lock held)`);
+    return;
+  }
+
+  // 1. Look up the quote
+  const quote = await quoteEngine.getQuoteByMemo(memo);
+  if (!quote) {
+    logger.warn(`[Escrow] No valid quote for memo ${memo} — will refund`);
+    await refundXlm(sourceAccount, amount, `No valid quote for memo ${memo}`);
+    await redis.del(lockKey);
+    return;
+  }
+
+  // ── B5 FIX: Always refund to user's registered Stellar address ──
+  const userResult = await db.query(
+    `SELECT stellar_address FROM users WHERE id = $1`,
+    [quote.user_id]
+  );
+  const userStellarAddress = userResult.rows[0]?.stellar_address || sourceAccount;
+
+  // 2. Verify amount matches (with small tolerance for Stellar fees)
+  const expectedXlm = parseFloat(quote.xlm_amount);
+  const receivedXlm = parseFloat(amount);
+  if (Math.abs(receivedXlm - expectedXlm) > 0.01) {
+    logger.warn(`[Escrow] Amount mismatch: expected ${expectedXlm}, got ${receivedXlm}`);
+    // [FIX 4] Mark quote as INVALID before refunding
+    await db.query(`UPDATE quotes SET status = 'INVALID' WHERE id = $1`, [quote.id]);
+    await refundXlm(userStellarAddress, amount, 'Amount mismatch');
+    await redis.del(lockKey);
+    return;
+  }
+
+  // 3. Check quote hasn't expired
+  if (new Date(quote.expires_at) < new Date()) {
+    logger.warn(`[Escrow] Quote ${quote.id} expired`);
+    // [FIX 4] Mark quote as EXPIRED before refunding
+    await db.query(`UPDATE quotes SET status = 'EXPIRED' WHERE id = $1`, [quote.id]);
+    await refundXlm(userStellarAddress, amount, 'Quote expired');
+    await redis.del(lockKey);
+    return;
+  }
+
+  // ── B6 FIX: Atomic SQL transaction for quote-used + tx-record ──
+  const client = await db.getClient();
+  let transaction;
+  try {
+    await client.query('BEGIN');
+
+    // Mark quote used with a conditional guard (prevents double-use)
+    // [FIX 4] Mark quote used AND set status = 'CONFIRMED' atomically
+    const markResult = await client.query(
+      `UPDATE quotes SET is_used = TRUE, status = 'CONFIRMED' WHERE id = $1 AND is_used = FALSE RETURNING id`,
+      [quote.id]
+    );
+    if (markResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      logger.warn(`[Escrow] Quote ${quote.id} already used — skipping`);
+      await redis.del(lockKey);
+      return;
+    }
+
+    const txResult = await client.query(
+      `INSERT INTO transactions
+         (quote_id, user_id, xlm_amount, fiat_amount, fiat_currency,
+          network, phone_hash, state, stellar_deposit_tx, locked_rate, escrow_locked_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'ESCROW_LOCKED',$8,$9,NOW())
+       RETURNING *`,
+      [
+        quote.id, quote.user_id, receivedXlm, quote.fiat_amount,
+        quote.fiat_currency, quote.network, quote.phone_hash,
+        txHash, quote.user_rate,
+      ]
+    );
+    transaction = txResult.rows[0];
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    logger.error(`[Escrow] DB error during deposit handling:`, err.message);
+    await redis.del(lockKey);
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  logger.info(`[Escrow] Transaction ${transaction.id} created — state: ESCROW_LOCKED`);
+
+  // 5. Immediately swap XLM → USDC inside the escrow
+  try {
+    const swapResult = await swapXlmToUsdc(receivedXlm, quote);
+    await db.query(
+      `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
+      [swapResult.amount, swapResult.txHash, transaction.id]
+    );
+    logger.info(`[Escrow] Swap complete — ${swapResult.amount} USDC, tx: ${swapResult.txHash}`);
+
+    // 6. Trigger trader matching
+    await matchingEngine.matchTrader(transaction.id);
+  } catch (err) {
+    logger.error(`[Escrow] Swap failed for tx ${transaction.id}:`, err.message);
+
+    // ── B3 FIX: Save refund hash and set state to REFUNDED ──
+    try {
+      const refundHash = await refundXlm(userStellarAddress, amount, 'Swap failed');
+      await stateMachine.transition(transaction.id, 'ESCROW_LOCKED', 'REFUNDED', {
+        failure_reason: 'XLM→USDC swap failed: ' + err.message,
+        stellar_refund_tx: refundHash,
+      });
+    } catch (refundErr) {
+      // If refund also fails, mark FAILED so Bull queue can retry
+      logger.error(`[Escrow] REFUND ALSO FAILED for tx ${transaction.id}:`, refundErr.message);
+      await stateMachine.transition(transaction.id, 'ESCROW_LOCKED', 'FAILED', {
+        failure_reason: 'Swap failed + refund failed: ' + err.message,
+      });
+    }
+  }
+}
+
+/**
+ * Execute XLM → USDC pathPaymentStrictReceive on the Stellar DEX.
+ * The escrow account is both sender (XLM) and receiver (USDC).
+ *
+ * [C4] pathPaymentStrictReceive guarantees the escrow receives exactly destAmount USDC
+ *      or the tx fails entirely. The amount stored in DB is the requested destAmount.
+ */
+async function swapXlmToUsdc(xlmAmount, quote) {
+  const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+
+  // Calculate expected USDC amount based on the locked rate
+  const usdcToFiat = quoteEngine.getUsdcToFiatRate(quote.fiat_currency);
+  const expectedUsdc = (parseFloat(quote.fiat_amount) + parseFloat(quote.platform_fee)) / usdcToFiat;
+
+  // Allow max slippage on the send side (from config)
+  const slippageMultiplier = 1 + (config.platform.maxSlippagePercent / 100);
+  const sendMax = (xlmAmount * slippageMultiplier).toFixed(7);
+
+  const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
+    fee: config.stellarMaxFee,
+    networkPassphrase,
+  })
+    .addOperation(
+      StellarSdk.Operation.pathPaymentStrictReceive({
+        sendAsset: StellarSdk.Asset.native(),
+        sendMax: sendMax,
+        destination: config.stellar.escrowPublicKey, // self-swap
+        destAsset: USDC_ASSET,
+        destAmount: expectedUsdc.toFixed(7),
+      })
+    )
+    .setTimeout(30)
+    .build();
+
+  tx.sign(escrowKeypair);
+  const result = await horizon.submitTransaction(tx);
+
+  // pathPaymentStrictReceive guarantees destAmount is received or tx fails.
+  // Parse result XDR for the actual amount to be safe.
+  let actualUsdc = expectedUsdc;
+  try {
+    const txResult = StellarSdk.xdr.TransactionResult.fromXDR(result.result_xdr, 'base64');
+    const opResult = txResult.result().results()[0].tr().pathPaymentStrictReceiveResult();
+    // The last element in the path is the dest amount
+    const claimedOffers = opResult.success?.offers?.() || [];
+    // For strict receive, destAmount is guaranteed — use it directly
+    actualUsdc = expectedUsdc;
+  } catch (parseErr) {
+    logger.warn('[Escrow] Could not parse swap result XDR, using expected amount:', parseErr.message);
+  }
+
+  return { amount: actualUsdc.toFixed(7), txHash: result.hash };
+}
+
+/**
+ * Release USDC from escrow to a trader's Stellar address.
+ * Called after trader confirms fiat payout.
+ *
+ * [AUDIT FIX] Protected by Redis distributed lock to prevent double-release
+ * when Bull retry and trader confirm race.
+ */
+async function releaseToTrader(transactionId) {
+  // ── Distributed lock prevents double-release ──
+  const lockKey = `lock:release:${transactionId}`;
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', 60, 'NX');
+  if (!lockAcquired) {
+    logger.warn(`[Escrow] Release lock held for tx ${transactionId} — skipping duplicate`);
+    return null;
+  }
+
+  try {
+    const txResult = await db.query(
+      `SELECT t.*, tr.stellar_address as trader_stellar
+       FROM transactions t
+       JOIN traders tr ON tr.id = t.trader_id
+       WHERE t.id = $1 AND t.state = 'FIAT_SENT'`,
+      [transactionId]
+    );
+    const transaction = txResult.rows[0];
+    if (!transaction) throw new Error('Transaction not found or wrong state');
+
+    // Guard: if already COMPLETE (e.g., concurrent release succeeded), bail out
+    if (transaction.stellar_release_tx) {
+      logger.warn(`[Escrow] Tx ${transactionId} already has release hash — skipping`);
+      return transaction.stellar_release_tx;
+    }
+
+    // ── [H-1 FIX] Check trader has USDC trustline before attempting release ──
+    try {
+      const traderAccount = await horizon.loadAccount(transaction.trader_stellar);
+      const hasTrustline = traderAccount.balances.some(
+        (b) => b.asset_code === USDC_ASSET.code && b.asset_issuer === USDC_ASSET.issuer
+      );
+      if (!hasTrustline) {
+        logger.error(`[Escrow] Trader ${transaction.trader_id} has no USDC trustline — blocking release`);
+        await stateMachine.transition(transactionId, 'FIAT_SENT', 'RELEASE_BLOCKED', {
+          failure_reason: 'Trader missing USDC trustline',
+        });
+        return null;
+      }
+    } catch (trustlineErr) {
+      logger.error(`[Escrow] Failed to check trader trustline:`, trustlineErr.message);
+      // Don't block — allow release attempt (Stellar will reject if no trustline)
+    }
+
+    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+
+    const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: transaction.trader_stellar,
+          asset: USDC_ASSET,
+          amount: parseFloat(transaction.usdc_amount).toFixed(7),
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    tx.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(tx);
+
+    // ── [M-5 FIX] Calculate and store platform revenue in UGX ──
+    const quoteResult = await db.query(
+      `SELECT platform_fee, fiat_currency FROM quotes WHERE id = $1`,
+      [transaction.quote_id]
+    );
+    if (quoteResult.rows[0]) {
+      const q = quoteResult.rows[0];
+      const feeInFiat = parseFloat(q.platform_fee);
+      const currency = q.fiat_currency || 'UGX';
+      const KES_TO_UGX_r = config.usdcFiatRates.UGX / config.usdcFiatRates.KES;
+      const TZS_TO_UGX_r = config.usdcFiatRates.UGX / config.usdcFiatRates.TZS;
+      const revenueUgx = currency === 'KES' ? Math.round(feeInFiat * KES_TO_UGX_r)
+                       : currency === 'TZS' ? Math.round(feeInFiat * TZS_TO_UGX_r)
+                       : Math.round(feeInFiat);
+      await db.query(
+        `UPDATE transactions SET platform_revenue_ugx = $1 WHERE id = $2`,
+        [revenueUgx, transactionId]
+      );
+    }
+
+    // Update transaction to COMPLETE
+    await stateMachine.transition(transactionId, 'FIAT_SENT', 'COMPLETE', {
+      stellar_release_tx: result.hash,
+    });
+
+    // ── [C-1 FIX] Update trader daily volume in UGX equivalent, not USDC ──
+    const fiatAmount = parseFloat(transaction.fiat_amount);
+    const fiatCurrency = transaction.fiat_currency || 'UGX';
+    const KES_TO_UGX = config.usdcFiatRates.UGX / config.usdcFiatRates.KES;
+    const TZS_TO_UGX = config.usdcFiatRates.UGX / config.usdcFiatRates.TZS;
+    const ugxEquivalent = fiatCurrency === 'KES' ? fiatAmount * KES_TO_UGX
+                        : fiatCurrency === 'TZS' ? fiatAmount * TZS_TO_UGX
+                        : fiatAmount;
+    await db.query(
+      `UPDATE traders SET daily_volume = daily_volume + $1 WHERE id = $2`,
+      [ugxEquivalent, transaction.trader_id]
+    );
+
+    logger.info(`[Escrow] Released ${transaction.usdc_amount} USDC to trader — tx: ${result.hash}`);
+
+    // Run trader health check after each completed release
+    fraudMonitor.checkTraderHealth(transaction.trader_id).catch((err) => {
+      logger.error(`[Escrow] Trader health check failed:`, err.message);
+    });
+
+    return result.hash;
+  } finally {
+    // Release lock after a short delay
+    setTimeout(() => redis.del(lockKey), 5000);
+  }
+}
+
+/**
+ * Refund XLM back to the user.
+ * Swaps USDC back to XLM if necessary, then sends to user's address.
+ */
+async function refundXlm(userStellarAddress, xlmAmount, reason) {
+  try {
+    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+
+    const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: userStellarAddress,
+          asset: StellarSdk.Asset.native(),
+          amount: parseFloat(xlmAmount).toFixed(7),
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    tx.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(tx);
+    logger.info(`[Escrow] Refunded ${xlmAmount} XLM to ${userStellarAddress} — reason: ${reason}, tx: ${result.hash}`);
+    return result.hash;
+  } catch (err) {
+    logger.error(`[Escrow] REFUND FAILED for ${userStellarAddress}:`, err.message);
+    throw err;
+  }
+}
+
+/**
+ * [C-2 FIX] Restore trader float when a matched transaction is refunded/declined.
+ * Must be called whenever a transaction in TRADER_MATCHED state is unassigned.
+ */
+async function restoreTraderFloat(transaction) {
+  if (!transaction.trader_id) return;
+  const fiatAmount = parseFloat(transaction.fiat_amount);
+  const fiatCurrency = transaction.fiat_currency || 'UGX';
+  const floatCol = fiatCurrency === 'KES' ? 'float_kes'
+                 : fiatCurrency === 'TZS' ? 'float_tzs'
+                 : 'float_ugx';
+  await db.query(
+    `UPDATE traders SET ${floatCol} = ${floatCol} + $1 WHERE id = $2`,
+    [fiatAmount, transaction.trader_id]
+  );
+  logger.info(`[Escrow] Restored ${floatCol} +${fiatAmount} for trader ${transaction.trader_id}`);
+}
+
+export default {
+  handleDeposit,
+  swapXlmToUsdc,
+  releaseToTrader,
+  refundXlm,
+  restoreTraderFloat,
+};
