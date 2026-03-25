@@ -3,7 +3,7 @@
  */
 
 export const NETWORKS = {
-  MTN_MOMO_UG: {
+  MTN_UG: {
     label: 'MTN MoMo',
     currency: 'UGX',
     country: 'UG',
@@ -24,15 +24,15 @@ export const NETWORKS = {
     color: 'text-rowan-green',
     bg: 'bg-rowan-green/20',
   },
-  VODACOM_TZ: {
-    label: 'Vodacom',
+  MTN_TZ: {
+    label: 'MTN',
     currency: 'TZS',
     country: 'TZ',
     color: 'text-rowan-muted',
     bg: 'bg-rowan-surface',
   },
-  TIGO_TZ: {
-    label: 'Tigo',
+  AIRTEL_TZ: {
+    label: 'Airtel',
     currency: 'TZS',
     country: 'TZ',
     color: 'text-blue-400',
