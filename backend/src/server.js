@@ -123,6 +123,7 @@ app.get('/health', async (req, res) => {
       status: 'ok',
       db: 'connected',
       redis: redisPing === 'PONG' ? 'connected' : 'error',
+      horizon: horizonWatcher.getStatus(),
       uptime: process.uptime(),
     });
   } catch (err) {

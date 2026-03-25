@@ -164,4 +164,11 @@ function stopWatcher() {
   }
 }
 
-export default { startWatcher, stopWatcher };
+/**
+ * Get watcher status for health checks.
+ */
+function getStatus() {
+  return closeStream ? 'connected' : 'disconnected';
+}
+
+export default { startWatcher, stopWatcher, getStatus };
