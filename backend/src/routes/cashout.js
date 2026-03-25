@@ -139,6 +139,40 @@ router.get('/status/:id', authUser, async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/cashout/receipt/:id
+ * Fetch transaction receipt for display.
+ */
+router.get('/receipt/:id', authUser, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT id, xlm_amount, fiat_amount, fiat_currency, network, stellar_deposit_tx,
+              stellar_release_tx, locked_rate, completed_at, fiat_sent_at, quote_confirmed_at
+       FROM transactions WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.userId]
+    );
+
+    const tx = result.rows[0];
+    if (!tx) return res.status(404).json({ error: 'Transaction receipt not found' });
+
+    res.json({
+      id: tx.id,
+      xlmAmount: tx.xlm_amount,
+      fiatAmount: tx.fiat_amount,
+      fiatCurrency: tx.fiat_currency,
+      network: tx.network,
+      stellarTxHash: tx.stellar_deposit_tx,
+      releaseTxHash: tx.stellar_release_tx,
+      rate: tx.locked_rate,
+      completedAt: tx.completed_at,
+      fiatSentAt: tx.fiat_sent_at,
+      confirmedAt: tx.quote_confirmed_at,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /api/v1/cashout/dispute
  * User reports non-receipt of mobile money.
  * Body: { transactionId, reason }
