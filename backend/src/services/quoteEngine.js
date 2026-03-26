@@ -166,6 +166,9 @@ async function getQuoteByMemo(memo) {
     if (quote.platform_fee) quote.platform_fee = Number(quote.platform_fee);
     if (quote.xlm_amount) quote.xlm_amount = Number(quote.xlm_amount);
     if (quote.user_rate) quote.user_rate = Number(quote.user_rate);
+    if (quote.market_rate) quote.market_rate = Number(quote.market_rate);
+    if (quote.rate_ugx) quote.rate_ugx = Number(quote.rate_ugx);
+    if (quote.fee_ugx) quote.fee_ugx = Number(quote.fee_ugx);
     return quote;
   }
 
@@ -178,13 +181,15 @@ async function getQuoteByMemo(memo) {
   if (!result.rows[0]) return null;
   
   const quote = result.rows[0];
-  // ── CRITICAL FIX: PostgreSQL NUMERIC columns return as strings ──
+  // ── CRITICAL FIX: PostgreSQL NUMERIC and BIGINT columns return as strings ──
   // Explicitly convert to numbers before returning
   if (quote.fiat_amount) quote.fiat_amount = Number(quote.fiat_amount);
   if (quote.platform_fee) quote.platform_fee = Number(quote.platform_fee);
   if (quote.xlm_amount) quote.xlm_amount = Number(quote.xlm_amount);
   if (quote.user_rate) quote.user_rate = Number(quote.user_rate);
   if (quote.market_rate) quote.market_rate = Number(quote.market_rate);
+  if (quote.rate_ugx) quote.rate_ugx = Number(quote.rate_ugx);
+  if (quote.fee_ugx) quote.fee_ugx = Number(quote.fee_ugx);
   
   return quote;
 }
