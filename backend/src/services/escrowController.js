@@ -42,6 +42,16 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     await redis.del(lockKey);
     return;
   }
+
+  // ── AUDIT: Log quote values and their types ──
+  logger.info(`[Escrow] 📋 Quote retrieved from DB:`);
+  logger.info(`  - id: ${quote.id}`);
+  logger.info(`  - fiat_amount: ${quote.fiat_amount} (type: ${typeof quote.fiat_amount}, isFinite: ${Number.isFinite(quote.fiat_amount)})`);
+  logger.info(`  - platform_fee: ${quote.platform_fee} (type: ${typeof quote.platform_fee}, isFinite: ${Number.isFinite(quote.platform_fee)})`);
+  logger.info(`  - fiat_currency: ${quote.fiat_currency}`);
+  logger.info(`  - xlm_amount: ${quote.xlm_amount}`);
+  logger.info(`  - user_rate: ${quote.user_rate}`);
+  
   
   logger.info(`[Escrow] 📋 Quote retrieved from DB:`);
   logger.info(`  - id: ${quote.id}`);

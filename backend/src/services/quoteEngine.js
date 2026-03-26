@@ -119,6 +119,16 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
   const rateUgx = Math.round(xlmToUsdc * usdcToUgx); // XLM price in UGX
   const feeUgx = Math.round(fiatToUgxRate(platformFee, fiatCurrency));
 
+  // ── AUDIT FIX: Pass numeric values, not strings from .toFixed() ──
+  const fiatAmountNum = parseFloat(fiatAmount.toFixed(2));
+  const platformFeeNum = parseFloat(platformFee.toFixed(2));
+  
+  logger.info(`[QuoteEngine] Amount validation: fiatAmount=${fiatAmountNum} (type: ${typeof fiatAmountNum}, finite: ${Number.isFinite(fiatAmountNum)}), platformFee=${platformFeeNum} (type: ${typeof platformFeeNum}, finite: ${Number.isFinite(platformFeeNum)})`);
+  
+  if (!Number.isFinite(fiatAmountNum) || !Number.isFinite(platformFeeNum)) {
+    throw new Error(`Invalid amounts calculated: fiatAmount=${fiatAmount}, platformFee=${platformFee}`);
+  }
+
   const result = await db.query(
     `INSERT INTO quotes
        (user_id, xlm_amount, fiat_currency, market_rate, user_rate, fiat_amount,
@@ -128,7 +138,7 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
      RETURNING *`,
     [
       userId, xlmAmount, fiatCurrency, marketRate, userRate,
-      fiatAmount.toFixed(2), platformFee.toFixed(2),
+      fiatAmountNum, platformFeeNum,
       network, phoneHash, memo,
       config.stellar.escrowPublicKey, expiresAt,
       rateUgx, feeUgx,
