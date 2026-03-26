@@ -45,7 +45,7 @@ export default function CashoutConfirm() {
         />
       </div>
 
-      <QuoteSummary quote={quote} />
+      <QuoteSummary quote={quote} phone={phone} />
 
       <div className="bg-rowan-surface rounded-xl p-4 mt-4 flex items-start gap-3">
         <ShieldCheck size={20} className="text-rowan-green shrink-0 mt-0.5" />

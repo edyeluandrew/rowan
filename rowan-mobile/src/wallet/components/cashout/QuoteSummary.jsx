@@ -1,11 +1,11 @@
-import { Star, Coins, Smartphone, ArrowLeftRight, Hash } from 'lucide-react'
+import { Star, Smartphone, ArrowLeftRight, Hash } from 'lucide-react'
 import { NETWORKS, ESTIMATED_DELIVERY } from '../../utils/constants'
 import { maskPhoneNumber } from '../../utils/crypto'
 
 /**
  * Full quote breakdown card showing the exchange visualization.
  */
-export default function QuoteSummary({ quote }) {
+export default function QuoteSummary({ quote, phone }) {
   const network = NETWORKS[quote.network] || {}
 
   return (
@@ -25,22 +25,7 @@ export default function QuoteSummary({ quote }) {
         <ArrowLeftRight size={14} className="text-rowan-muted" />
       </div>
 
-      {/* Row 2 — Swap via DEX */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-rowan-surface border border-rowan-border flex items-center justify-center">
-          <Coins size={20} className="text-rowan-muted" />
-        </div>
-        <div>
-          <p className="text-rowan-muted text-xs">Swap via DEX</p>
-          <p className="text-rowan-muted text-lg tabular-nums">{quote.usdcAmount} USDC</p>
-        </div>
-      </div>
-
-      <div className="flex justify-center my-2">
-        <ArrowLeftRight size={14} className="text-rowan-muted" />
-      </div>
-
-      {/* Row 3 — You receive */}
+      {/* Row 2 — You receive */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-rowan-green/20 flex items-center justify-center">
           <Smartphone size={20} className="text-rowan-green" />
@@ -48,21 +33,18 @@ export default function QuoteSummary({ quote }) {
         <div>
           <p className="text-rowan-muted text-xs">You receive</p>
           <p className="text-rowan-green text-2xl font-bold tabular-nums">
-            {Number(quote.fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {quote.currency}
+            {Number(quote.fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {quote.fiatCurrency}
           </p>
         </div>
       </div>
 
       {/* Details */}
       <div className="border-t border-rowan-border mt-4 pt-4 space-y-2">
-        <DetailRow label="Rate" value={`1 XLM = ${quote.currency} ${Number(quote.rate).toLocaleString('en-US', { maximumFractionDigits: 2 })}`} />
-        <DetailRow label="Platform fee" value={`${quote.fee} XLM`} />
-        {quote.spread && (
-          <DetailRow label="Spread" value={`${(Number(quote.spread) * 100).toFixed(2)}%`} />
-        )}
+        <DetailRow label="Rate" value={`1 XLM = ${quote.fiatCurrency} ${quote.userRate ? Number(quote.userRate).toLocaleString('en-US', { maximumFractionDigits: 2 }) : 'N/A'}`} />
+        <DetailRow label="Platform fee" value={`${quote.platformFee ? Number(quote.platformFee).toFixed(6) : '0'} XLM`} />
         <DetailRow label="Network" value={network.label || quote.network} />
         <DetailRow label="Estimated delivery" value={ESTIMATED_DELIVERY} />
-        <DetailRow label="Phone" value={maskPhoneNumber(quote.phone || '')} />
+        {phone && <DetailRow label="Phone" value={maskPhoneNumber(phone)} />}
       </div>
 
       {/* Total deductions summary */}
@@ -70,7 +52,7 @@ export default function QuoteSummary({ quote }) {
         <div className="flex justify-between py-1">
           <span className="text-rowan-muted text-sm font-medium">You receive</span>
           <span className="text-rowan-green text-sm font-bold tabular-nums">
-            {Number(quote.fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {quote.currency}
+            {Number(quote.fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {quote.fiatCurrency}
           </span>
         </div>
       </div>
