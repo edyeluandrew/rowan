@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { AlertTriangle, X, QrCode } from 'lucide-react'
+import { AlertTriangle, X, QrCode, Clock } from 'lucide-react'
 import { buildAndSignPayment, submitTransaction } from '../utils/stellar'
 import { confirmQuote } from '../api/cashout'
 import { getSecure } from '../utils/storage'
+import CountdownTimer from '../components/ui/CountdownTimer'
 import MemoBox from '../components/cashout/MemoBox'
 import QRCodeDisplay from '../components/wallet/QRCodeDisplay'
 import Button from '../components/ui/Button'
@@ -17,6 +18,7 @@ export default function CashoutSend() {
   const [error, setError] = useState(null)
   const [showExitWarning, setShowExitWarning] = useState(false)
   const [qrTab, setQrTab] = useState('address') // 'address' | 'memo'
+  const [quoteExpired, setQuoteExpired] = useState(false)
 
   if (!quote) {
     navigate('/wallet/cashout', { replace: true })
@@ -26,7 +28,7 @@ export default function CashoutSend() {
   const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL
 
   const handleSendNow = async () => {
-    if (!allChecked) return
+    if (!allChecked || quoteExpired) return
     setLoading(true)
     setError(null)
     try {
@@ -47,17 +49,31 @@ export default function CashoutSend() {
       const stellarTxHash = txResult.id
 
       // Confirm quote on backend with the txHash
-      const transaction = await confirmQuote({
+      const response = await confirmQuote({
         quoteId: quote.quoteId,
         stellarTxHash,
       })
 
-      navigate(`/wallet/transaction/${transaction.id}`, { replace: true })
+      // Navigate to transaction status (use quoteId as fallback ID)
+      navigate(`/wallet/transaction/${quote.quoteId}`, { 
+        state: { quoteId: quote.quoteId, stellarTxHash },
+        replace: true 
+      })
     } catch (err) {
-      setError(err.message)
+      // Handle quote expiry (410 Gone)
+      if (err.response?.status === 410) {
+        setError('Quote expired. Please get a new quote.')
+        setQuoteExpired(true)
+      } else {
+        setError(err.message)
+      }
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleGetNewQuote = () => {
+    navigate('/wallet/cashout', { replace: true })
   }
 
   const handleSendManually = () => {
@@ -82,6 +98,18 @@ export default function CashoutSend() {
         >
           <X size={24} />
         </button>
+      </div>
+
+      {/* Quote expiry countdown */}
+      <div className="flex items-center justify-between mb-4 bg-rowan-surface rounded-lg p-3 border border-rowan-border">
+        <div className="flex items-center gap-2">
+          <Clock size={16} className="text-rowan-yellow" />
+          <span className="text-rowan-muted text-xs">Quote expires in</span>
+        </div>
+        <CountdownTimer
+          expiresAt={quote.expiresAt}
+          onExpire={() => setQuoteExpired(true)}
+        />
       </div>
 
       {showExitWarning && (
@@ -151,10 +179,35 @@ export default function CashoutSend() {
         </div>
       </div>
 
-      {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
+      {error && (
+        <div className={`rounded-xl p-4 mt-4 flex items-start gap-3 ${
+          quoteExpired 
+            ? 'bg-rowan-yellow/10 border border-rowan-yellow/30' 
+            : 'bg-rowan-red/10 border border-rowan-red/30'
+        }`}>
+          <AlertTriangle size={20} className={quoteExpired ? 'text-rowan-yellow' : 'text-rowan-red'} />
+          <div className="flex-1">
+            <p className={`text-sm font-medium ${quoteExpired ? 'text-rowan-yellow' : 'text-rowan-red'}`}>
+              {error}
+            </p>
+            {quoteExpired && (
+              <Button 
+                onClick={handleGetNewQuote}
+                className="mt-3 text-xs"
+              >
+                Get New Quote
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 space-y-3">
-        <Button onClick={handleSendNow} loading={loading} disabled={!allChecked}>
+        <Button 
+          onClick={handleSendNow} 
+          loading={loading} 
+          disabled={!allChecked || quoteExpired}
+        >
           Send Now
         </Button>
         <button
