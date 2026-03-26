@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { AlertTriangle, X, QrCode } from 'lucide-react'
 import { buildAndSignPayment, submitTransaction } from '../utils/stellar'
+import { confirmQuote } from '../api/cashout'
 import { getSecure } from '../utils/storage'
 import MemoBox from '../components/cashout/MemoBox'
 import QRCodeDisplay from '../components/wallet/QRCodeDisplay'
@@ -10,14 +11,14 @@ import Button from '../components/ui/Button'
 export default function CashoutSend() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { transaction, network, phone } = location.state || {}
+  const { quote, network, phone } = location.state || {}
   const [allChecked, setAllChecked] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [showExitWarning, setShowExitWarning] = useState(false)
   const [qrTab, setQrTab] = useState('address') // 'address' | 'memo'
 
-  if (!transaction) {
+  if (!quote) {
     navigate('/wallet/cashout', { replace: true })
     return null
   }
@@ -37,12 +38,20 @@ export default function CashoutSend() {
 
       const signedXdr = await buildAndSignPayment({
         sourceSecretKey: kp.secretKey,
-        destinationAddress: transaction.escrowAddress,
-        xlmAmount: transaction.xlmAmount,
-        memo: transaction.memo,
+        destinationAddress: quote.escrowAddress,
+        xlmAmount: quote.xlmAmount,
+        memo: quote.memo,
         horizonUrl,
       })
-      await submitTransaction(signedXdr, horizonUrl)
+      const txResult = await submitTransaction(signedXdr, horizonUrl)
+      const stellarTxHash = txResult.id
+
+      // Confirm quote on backend with the txHash
+      const transaction = await confirmQuote({
+        quoteId: quote.quoteId,
+        stellarTxHash,
+      })
+
       navigate(`/wallet/transaction/${transaction.id}`, { replace: true })
     } catch (err) {
       setError(err.message)
@@ -52,7 +61,7 @@ export default function CashoutSend() {
   }
 
   const handleSendManually = () => {
-    navigate(`/wallet/transaction/${transaction.id}`, { replace: true })
+    navigate('/wallet/cashout', { replace: true })
   }
 
   const handleClose = () => {
@@ -91,9 +100,9 @@ export default function CashoutSend() {
       )}
 
       <MemoBox
-        escrowAddress={transaction.escrowAddress}
-        amount={transaction.xlmAmount}
-        memo={transaction.memo}
+        escrowAddress={quote.escrowAddress}
+        amount={quote.xlmAmount}
+        memo={quote.memo}
         onAllChecked={setAllChecked}
       />
 
@@ -129,9 +138,9 @@ export default function CashoutSend() {
         </div>
 
         {qrTab === 'address' ? (
-          <QRCodeDisplay value={transaction.escrowAddress} label="Escrow address — scan in your Stellar wallet" />
+          <QRCodeDisplay value={quote.escrowAddress} label="Escrow address — scan in your Stellar wallet" />
         ) : (
-          <QRCodeDisplay value={transaction.memo} label="Transaction memo — paste as memo text" />
+          <QRCodeDisplay value={quote.memo} label="Transaction memo — paste as memo text" />
         )}
 
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-lg p-3 mt-4 flex items-start gap-2">

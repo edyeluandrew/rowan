@@ -8,8 +8,8 @@ export function getQuote({ xlmAmount, network, phoneHash }) {
   }).then(res => res.data)
 }
 
-export function confirmQuote(quoteId) {
-  return client.post('/api/v1/cashout/confirm', { quoteId }).then(res => res.data)
+export function confirmQuote({ quoteId, stellarTxHash }) {
+  return client.post('/api/v1/cashout/confirm', { quoteId, stellarTxHash }).then(res => res.data)
 }
 
 export function getTransactionStatus(transactionId) {

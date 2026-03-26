@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, ShieldCheck, AlertTriangle } from 'lucide-react'
-import { confirmQuote } from '../api/cashout'
 import QuoteSummary from '../components/cashout/QuoteSummary'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import Button from '../components/ui/Button'
@@ -10,8 +9,6 @@ export default function CashoutConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
   const { quote, network, phone } = location.state || {}
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
   const [expired, setExpired] = useState(false)
 
   if (!quote) {
@@ -19,25 +16,16 @@ export default function CashoutConfirm() {
     return null
   }
 
-  const handleConfirm = async () => {
+  const handleConfirm = () => {
     if (expired) return
-    setLoading(true)
-    setError(null)
-    try {
-      const confirmed = await confirmQuote(quote.id)
-      navigate('/wallet/cashout/send', {
-        state: {
-          transaction: confirmed,
-          network,
-          phone,
-        },
-        replace: true,
-      })
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    navigate('/wallet/cashout/send', {
+      state: {
+        quote,
+        network,
+        phone,
+      },
+      replace: true,
+    })
   }
 
   return (
@@ -80,11 +68,9 @@ export default function CashoutConfirm() {
         </div>
       )}
 
-      {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
-
       {!expired && (
         <div className="mt-8">
-          <Button onClick={handleConfirm} loading={loading}>
+          <Button onClick={handleConfirm}>
             Confirm and Proceed
           </Button>
         </div>
