@@ -61,6 +61,7 @@ async function startWatcher() {
     .stream({
       onmessage: (payment) => {
         lastPaymentAt = Date.now();
+        logger.info(`[Horizon] ⭐ Payment event: ${payment.from} → ${payment.to} (${payment.amount} XLM)`);
         handlePayment(payment);
       },
       onerror: (err) => {
@@ -120,14 +121,20 @@ async function handlePayment(payment) {
     // Only process native XLM payments (not USDC receipts)
     if (payment.asset_type !== 'native') return;
 
+    logger.info(`[Horizon] ✅ Processing XLM payment: ${payment.from} → ${payment.to} (${payment.amount} XLM)`);
+
     // Fetch the parent transaction to get the memo
     const tx = await payment.transaction();
     const memo = tx.memo || '';
 
+    logger.info(`[Horizon] 📋 Transaction memo: "${memo}"`);
+
     if (!memo.startsWith('ROWAN-qt_')) {
-      logger.warn(`[Horizon] Payment without Rowan memo — ignoring (memo: "${memo}")`);
+      logger.warn(`[Horizon] ⚠️  Payment without Rowan memo — ignoring (memo: "${memo}")`);
       return;
     }
+
+    logger.info(`[Horizon] 🎯 Valid Rowan payment detected! Creating transaction record...`);
 
     await escrowController.handleDeposit({
       memo,
@@ -136,12 +143,15 @@ async function handlePayment(payment) {
       txHash: tx.hash,
     });
 
+    logger.info(`[Horizon] ✨ Transaction record created successfully for memo: ${memo}`);
+
     // ── C8 FIX: Persist cursor after successful processing ──
     if (payment.paging_token) {
       await redis.set(CURSOR_KEY, payment.paging_token);
     }
   } catch (err) {
-    logger.error('[Horizon] Error processing payment:', err.message);
+    logger.error('[Horizon] ❌ Error processing payment:', err.message);
+    if (err.response?.data) logger.error('[Horizon] Response:', err.response.data);
   }
 }
 
