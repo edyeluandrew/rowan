@@ -60,7 +60,11 @@ ORG_TWITTER = "rowan_app"
 
 [[CURRENCIES]]
 code = "USDC"
-issuer = "${config.usdcIssuerMainnet}"
+issuer = "${
+    isMainnet
+      ? config.usdcIssuerMainnet
+      : config.usdcIssuerTestnet
+  }"
 status = "live"
 is_asset_anchored = false
 desc = "USD Coin used for OTC trader escrow settlement"

@@ -7,12 +7,13 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import StellarSdk from '@stellar/stellar-sdk';
+import config from '../src/config/index.js';
 
 async function main() {
-  const network = process.env.STELLAR_NETWORK || 'testnet';
-  const horizonUrl = process.env.HORIZON_URL || 'https://horizon-testnet.stellar.org';
-  const escrowPub = process.env.ESCROW_PUBLIC_KEY;
-  const escrowSecret = process.env.ESCROW_SECRET_KEY;
+  const network = config.stellar.network;
+  const horizonUrl = config.stellar.horizonUrl;
+  const escrowPub = config.stellar.escrowPublicKey;
+  const escrowSecret = config.stellar.escrowSecretKey;
 
   if (!escrowPub || !escrowSecret) {
     console.error('Set ESCROW_PUBLIC_KEY and ESCROW_SECRET_KEY in .env');
@@ -20,12 +21,8 @@ async function main() {
   }
 
   const server = new StellarSdk.Horizon.Server(horizonUrl);
-  const usdcAsset = new StellarSdk.Asset(
-    'USDC',
-    network === 'testnet'
-      ? 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5' // testnet USDC issuer
-      : 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'  // mainnet Circle USDC
-  );
+  const usdcIssuer = network === 'testnet' ? config.usdcIssuerTestnet : config.usdcIssuerMainnet;
+  const usdcAsset = new StellarSdk.Asset('USDC', usdcIssuer);
 
   const account = await server.loadAccount(escrowPub);
   const hasTrustline = account.balances.some(

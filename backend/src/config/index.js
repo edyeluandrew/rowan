@@ -32,7 +32,7 @@ const config = {
   platform: {
     feePercent: parseFloat(process.env.PLATFORM_FEE_PERCENT) || 1,
     spreadPercent: parseFloat(process.env.PLATFORM_SPREAD_PERCENT) || 1.25,
-    maxSlippagePercent: parseFloat(process.env.MAX_SLIPPAGE_PERCENT) || 0.5,
+    maxSlippagePercent: parseFloat(process.env.MAX_SLIPPAGE_PERCENT) || 5,
     quoteTtlSeconds: parseInt(process.env.QUOTE_TTL_SECONDS, 10) || 180,
     traderAcceptTimeoutSeconds: parseInt(process.env.TRADER_ACCEPT_TIMEOUT_SECONDS, 10) || 180,
     traderConfirmTimeoutSeconds: parseInt(process.env.TRADER_CONFIRM_TIMEOUT_SECONDS, 10) || 300,
