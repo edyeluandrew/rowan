@@ -138,11 +138,16 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
   // 5. Immediately swap XLM → USDC inside the escrow
   try {
     const swapResult = await swapXlmToUsdc(receivedXlm, quote);
+    logger.info(`[Escrow] Swap result: amount=${swapResult.amount} (type: ${typeof swapResult.amount}), txHash=${swapResult.txHash}`);
+    
+    const usdcToInsert = parseFloat(swapResult.amount);
+    logger.info(`[Escrow] About to insert usdc_amount: ${usdcToInsert} (parsed from: ${swapResult.amount})`);
+    
     await db.query(
       `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
-      [swapResult.amount, swapResult.txHash, transaction.id]
+      [usdcToInsert, swapResult.txHash, transaction.id]
     );
-    logger.info(`[Escrow] Swap complete — ${swapResult.amount} USDC, tx: ${swapResult.txHash}`);
+    logger.info(`[Escrow] ✅ Swap complete — ${usdcToInsert} USDC, tx: ${swapResult.txHash}`);
 
     // 6. Trigger trader matching
     await matchingEngine.matchTrader(transaction.id);
@@ -174,15 +179,25 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
  *      or the tx fails entirely. The amount stored in DB is the requested destAmount.
  */
 async function swapXlmToUsdc(xlmAmount, quote) {
+  logger.info(`[Escrow] Starting swap: xlmAmount=${xlmAmount}, fiat_amount=${quote.fiat_amount}, platform_fee=${quote.platform_fee}, fiat_currency=${quote.fiat_currency}`);
+  
   const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
 
   // Calculate expected USDC amount based on the locked rate
   const usdcToFiat = quoteEngine.getUsdcToFiatRate(quote.fiat_currency);
-  const expectedUsdc = (parseFloat(quote.fiat_amount) + parseFloat(quote.platform_fee)) / usdcToFiat;
+  logger.info(`[Escrow] usdcToFiat rate: ${usdcToFiat}`);
+  
+  const fiatAmountNum = parseFloat(quote.fiat_amount);
+  const platformFeeNum = parseFloat(quote.platform_fee);
+  logger.info(`[Escrow] Parsed fiatAmount=${fiatAmountNum}, platformFee=${platformFeeNum}`);
+  
+  const expectedUsdc = (fiatAmountNum + platformFeeNum) / usdcToFiat;
+  logger.info(`[Escrow] Calculated expectedUsdc: ${expectedUsdc} (type: ${typeof expectedUsdc})`);
 
   // Allow max slippage on the send side (from config)
   const slippageMultiplier = 1 + (config.platform.maxSlippagePercent / 100);
   const sendMax = (xlmAmount * slippageMultiplier).toFixed(7);
+  logger.info(`[Escrow] sendMax after slippage: ${sendMax}`);
 
   const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
     fee: config.stellarMaxFee,
@@ -217,7 +232,10 @@ async function swapXlmToUsdc(xlmAmount, quote) {
     logger.warn('[Escrow] Could not parse swap result XDR, using expected amount:', parseErr.message);
   }
 
-  return { amount: actualUsdc.toFixed(7), txHash: result.hash };
+  const returnAmount = actualUsdc.toFixed(7);
+  logger.info(`[Escrow] 🎯 Swap returning: ${returnAmount} (type: ${typeof returnAmount})`);
+  
+  return { amount: returnAmount, txHash: result.hash };
 }
 
 /**
