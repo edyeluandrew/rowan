@@ -43,7 +43,13 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     return;
   }
   
-  logger.info(`[Escrow] Quote retrieved: id=${quote.id}, fiat_amount=${quote.fiat_amount} (type: ${typeof quote.fiat_amount}), platform_fee=${quote.platform_fee} (type: ${typeof quote.platform_fee}), fiat_currency=${quote.fiat_currency}`);
+  logger.info(`[Escrow] 📋 Quote retrieved from DB:`);
+  logger.info(`  - id: ${quote.id}`);
+  logger.info(`  - fiat_amount: ${quote.fiat_amount} (type: ${typeof quote.fiat_amount})`);
+  logger.info(`  - platform_fee: ${quote.platform_fee} (type: ${typeof quote.platform_fee})`);
+  logger.info(`  - fiat_currency: ${quote.fiat_currency}`);
+  logger.info(`  - xlm_amount: ${quote.xlm_amount}`);
+  logger.info(`  - user_rate: ${quote.user_rate}`);
 
   // ── B5 FIX: Always refund to user's registered Stellar address ──
   const userResult = await db.query(
@@ -142,14 +148,21 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     const swapResult = await swapXlmToUsdc(receivedXlm, quote);
     logger.info(`[Escrow] Swap result: amount=${swapResult.amount} (type: ${typeof swapResult.amount}), txHash=${swapResult.txHash}`);
     
-    const usdcToInsert = parseFloat(swapResult.amount);
+    let usdcToInsert = swapResult.amount;
     
-    // Validate the usdc amount before inserting
-    if (isNaN(usdcToInsert) || usdcToInsert <= 0) {
-      throw new Error(`Invalid USDC amount calculated: ${swapResult.amount} (parsed: ${usdcToInsert})`);
+    // If it's a string, parse it
+    if (typeof usdcToInsert === 'string') {
+      usdcToInsert = parseFloat(usdcToInsert);
+      logger.info(`[Escrow] Parsed string to number: ${swapResult.amount} → ${usdcToInsert}`);
     }
     
-    logger.info(`[Escrow] About to insert usdc_amount: ${usdcToInsert} (parsed from: ${swapResult.amount})`);
+    // Defensive check: if still not a number, use a fallback
+    if (!Number.isFinite(usdcToInsert)) {
+      logger.error(`[Escrow] ❌ INVALID USDC AMOUNT: ${swapResult.amount} (type: ${typeof swapResult.amount}), cannot insert!`);
+      throw new Error(`Invalid USDC amount: ${swapResult.amount}`);
+    }
+    
+    logger.info(`[Escrow] Inserting usdc_amount: ${usdcToInsert} (type: ${typeof usdcToInsert}, finite: ${Number.isFinite(usdcToInsert)})`);
     
     await db.query(
       `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
@@ -187,39 +200,48 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
  *      or the tx fails entirely. The amount stored in DB is the requested destAmount.
  */
 async function swapXlmToUsdc(xlmAmount, quote) {
-  logger.info(`[Escrow] Starting swap: xlmAmount=${xlmAmount} (type: ${typeof xlmAmount}), fiat_amount=${quote.fiat_amount} (type: ${typeof quote.fiat_amount}), platform_fee=${quote.platform_fee} (type: ${typeof quote.platform_fee}), fiat_currency=${quote.fiat_currency}`);
+  logger.info(`[Escrow] 🔄 SWAP START: xlmAmount=${xlmAmount} (type: ${typeof xlmAmount})`);
+  logger.info(`[Escrow] Quote data: fiat_amount=${quote.fiat_amount} (type: ${typeof quote.fiat_amount}), platform_fee=${quote.platform_fee} (type: ${typeof quote.platform_fee}), fiat_currency=${quote.fiat_currency}`);
   
   const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
 
-  // Calculate expected USDC amount based on the locked rate
+  // Get the rate
   const usdcToFiat = quoteEngine.getUsdcToFiatRate(quote.fiat_currency);
   logger.info(`[Escrow] usdcToFiat rate: ${usdcToFiat}`);
   
-  // Ensure all values are numeric before calculation
-  const fiatAmountNum = typeof quote.fiat_amount === 'string' 
-    ? parseFloat(quote.fiat_amount) 
-    : Number(quote.fiat_amount);
-  const platformFeeNum = typeof quote.platform_fee === 'string' 
-    ? parseFloat(quote.platform_fee) 
-    : Number(quote.platform_fee);
-  const xlmNum = typeof xlmAmount === 'string' 
-    ? parseFloat(xlmAmount) 
-    : Number(xlmAmount);
+  // Parse values carefully - NEVER concatenate strings!
+  const fiatAmount = quote.fiat_amount;
+  const platformFee = quote.platform_fee;
   
-  logger.info(`[Escrow] After parsing: fiatAmount=${fiatAmountNum} (valid: ${!isNaN(fiatAmountNum)}), platformFee=${platformFeeNum} (valid: ${!isNaN(platformFeeNum)}), xlm=${xlmNum} (valid: ${!isNaN(xlmNum)})`);
+  logger.info(`[Escrow] Raw values: fiatAmount="${fiatAmount}", platformFee="${platformFee}"`);
   
-  // Validate all are numbers
-  if (isNaN(fiatAmountNum)) throw new Error(`Invalid fiat_amount: ${quote.fiat_amount}`);
-  if (isNaN(platformFeeNum)) throw new Error(`Invalid platform_fee: ${quote.platform_fee}`);
-  if (isNaN(xlmNum)) throw new Error(`Invalid xlmAmount: ${xlmAmount}`);
+  // Convert to number
+  const fiatNum = Number(fiatAmount);
+  const feeNum = Number(platformFee);
   
-  const expectedUsdc = (fiatAmountNum + platformFeeNum) / usdcToFiat;
-  logger.info(`[Escrow] Calculated expectedUsdc: (${fiatAmountNum} + ${platformFeeNum}) / ${usdcToFiat} = ${expectedUsdc} (valid: ${!isNaN(expectedUsdc) && expectedUsdc > 0})`);
+  logger.info(`[Escrow] After Number(): fiatNum=${fiatNum}, feeNum=${feeNum}`);
+  logger.info(`[Escrow] Validation: fiatNum valid=${Number.isFinite(fiatNum)}, feeNum valid=${Number.isFinite(feeNum)}`);
+  
+  if (!Number.isFinite(fiatNum) || !Number.isFinite(feeNum)) {
+    throw new Error(`Failed to parse quote amounts: fiatAmount="${fiatAmount}", platformFee="${platformFee}"`);
+  }
+  
+  // ADD (don't concatenate!)
+  const totalFiat = fiatNum + feeNum;
+  logger.info(`[Escrow] Addition: ${fiatNum} + ${feeNum} = ${totalFiat}`);
+  
+  // Divide
+  const expectedUsdc = totalFiat / usdcToFiat;
+  logger.info(`[Escrow] Division: ${totalFiat} / ${usdcToFiat} = ${expectedUsdc}`);
 
   // Allow max slippage on the send side (from config)
   const slippageMultiplier = 1 + (config.platform.maxSlippagePercent / 100);
+  const xlmNum = Number(xlmAmount);
   const sendMax = (xlmNum * slippageMultiplier).toFixed(7);
-  logger.info(`[Escrow] sendMax after slippage: ${sendMax}`);
+  logger.info(`[Escrow] Slippage: ${xlmNum} * ${slippageMultiplier} = ${xlmNum * slippageMultiplier} → toFixed(7) = ${sendMax}`);
+
+  const destAmount = expectedUsdc.toFixed(7);
+  logger.info(`[Escrow] Building swap tx: sendMax=${sendMax}, destAmount=${destAmount}`);
 
   const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
     fee: config.stellarMaxFee,
@@ -231,31 +253,30 @@ async function swapXlmToUsdc(xlmAmount, quote) {
         sendMax: sendMax,
         destination: config.stellar.escrowPublicKey, // self-swap
         destAsset: USDC_ASSET,
-        destAmount: expectedUsdc.toFixed(7),
+        destAmount: destAmount,
       })
     )
     .setTimeout(30)
     .build();
 
+  logger.info(`[Escrow] Submitting swap to Horizon...`);
   tx.sign(escrowKeypair);
   const result = await horizon.submitTransaction(tx);
+  logger.info(`[Escrow] ✅ Swap broadcast successful: ${result.hash}`);
 
   // pathPaymentStrictReceive guarantees destAmount is received or tx fails.
-  // Parse result XDR for the actual amount to be safe.
   let actualUsdc = expectedUsdc;
   try {
     const txResult = StellarSdk.xdr.TransactionResult.fromXDR(result.result_xdr, 'base64');
     const opResult = txResult.result().results()[0].tr().pathPaymentStrictReceiveResult();
-    // The last element in the path is the dest amount
-    const claimedOffers = opResult.success?.offers?.() || [];
-    // For strict receive, destAmount is guaranteed — use it directly
+    // For strict receive, destAmount is guaranteed
     actualUsdc = expectedUsdc;
   } catch (parseErr) {
     logger.warn('[Escrow] Could not parse swap result XDR, using expected amount:', parseErr.message);
   }
 
   const returnAmount = actualUsdc.toFixed(7);
-  logger.info(`[Escrow] 🎯 Swap returning: ${returnAmount} (type: ${typeof returnAmount})`);
+  logger.info(`[Escrow] 🎯 Preparing to return: ${returnAmount} (type: ${typeof returnAmount})`);
   
   return { amount: returnAmount, txHash: result.hash };
 }
