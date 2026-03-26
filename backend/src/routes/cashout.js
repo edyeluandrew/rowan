@@ -128,20 +128,45 @@ router.post(
 /**
  * GET /api/v1/cashout/status/:id
  * Poll transaction state.
+ * Accepts either transactionId OR quoteId
  */
 router.get('/status/:id', authUser, async (req, res, next) => {
   try {
-    const result = await db.query(
+    const id = req.params.id;
+    
+    logger.info(`[Cashout] status query for id: ${id}, userId: ${req.userId}`);
+
+    // Try to find by transaction ID first
+    let result = await db.query(
       `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
               network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
               locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
               fiat_sent_at, completed_at, failed_at, failure_reason, created_at
        FROM transactions WHERE id = $1 AND user_id = $2`,
-      [req.params.id, req.userId]
+      [id, req.userId]
     );
 
+    // If not found, try by quote_id
+    if (result.rows.length === 0) {
+      logger.info(`[Cashout] Transaction not found by ID, trying quote_id: ${id}`);
+      result = await db.query(
+        `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
+                network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
+                locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
+                fiat_sent_at, completed_at, failed_at, failure_reason, created_at
+         FROM transactions WHERE quote_id = $1 AND user_id = $2`,
+        [id, req.userId]
+      );
+    }
+
     const tx = result.rows[0];
-    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (!tx) {
+      logger.warn(`[Cashout] Transaction not found for id: ${id}, userId: ${req.userId}`);
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    
+    logger.info(`[Cashout] ✅ Status found for tx ${tx.id}, state: ${tx.state}`);
+
 
     res.json(tx);
   } catch (err) {

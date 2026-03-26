@@ -111,6 +111,10 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     );
     transaction = txResult.rows[0];
     logger.info(`[Escrow] ✅ Transaction record created: ${transaction.id} (quote: ${quote.id})`);
+    
+    // Cache transactionId by quoteId for fast lookup
+    await redis.set(`quote:${quote.id}:tx`, transaction.id, 'EX', 86400);
+    logger.info(`[Escrow] Cached tx lookup: quote ${quote.id} → tx ${transaction.id}`);
 
     await client.query('COMMIT');
   } catch (err) {
