@@ -1,11 +1,19 @@
 import client from './client'
 
 export function getQuote({ xlmAmount, network, phoneHash }) {
+  console.log('[API] getQuote called with:', { xlmAmount, network, phoneHash, xlmType: typeof xlmAmount })
+  
   return client.post('/api/v1/cashout/quote', {
-    xlmAmount,
+    xlmAmount: Number(xlmAmount),  // Ensure it's a number
     network,
     phoneHash,
-  }).then(res => res.data)
+  }).then(res => {
+    console.log('[API] ✅ getQuote response:', res.data)
+    return res.data
+  }).catch(err => {
+    console.error('[API] ❌ getQuote error:', err.response?.data || err.message)
+    throw err
+  })
 }
 
 export function confirmQuote({ quoteId, stellarTxHash }) {

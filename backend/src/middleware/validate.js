@@ -40,13 +40,17 @@ export function validateTypes(schema) {
 
       switch (rule) {
         case 'positiveNumber':
-          if (typeof val !== 'number' || !isFinite(val) || val <= 0) {
-            errors.push(`${field} must be a positive number`);
+          // Accept both number and numeric string
+          const numVal = typeof val === 'string' ? parseFloat(val) : val;
+          if (!Number.isFinite(numVal) || numVal <= 0) {
+            errors.push(`${field} must be a positive number (got: ${val})`);
           }
           break;
         case 'nonNegativeNumber':
-          if (typeof val !== 'number' || !isFinite(val) || val < 0) {
-            errors.push(`${field} must be a non-negative number`);
+          // Accept both number and numeric string
+          const nnVal = typeof val === 'string' ? parseFloat(val) : val;
+          if (!Number.isFinite(nnVal) || nnVal < 0) {
+            errors.push(`${field} must be a non-negative number (got: ${val})`);
           }
           break;
         case 'stellarAddress':

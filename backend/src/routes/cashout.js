@@ -24,9 +24,20 @@ router.post(
   async (req, res, next) => {
     try {
       const { xlmAmount, network, phoneHash } = req.body;
+      
+      logger.info(`[Cashout] getQuote called: xlmAmount=${xlmAmount} (type: ${typeof xlmAmount}), network=${network}, phoneHash=${phoneHash?.slice(0, 8)}...`);
 
       // ── [H-5 FIX] Enforce minimum XLM amount ──
-      if (parseFloat(xlmAmount) < config.platform.minXlmAmount) {
+      const xlmNum = typeof xlmAmount === 'string' ? parseFloat(xlmAmount) : xlmAmount;
+      if (!Number.isFinite(xlmNum) || xlmNum <= 0) {
+        logger.warn(`[Cashout] Invalid xlmAmount: ${xlmAmount} (parsed: ${xlmNum}, finite: ${Number.isFinite(xlmNum)})`);
+        return res.status(400).json({
+          error: `XLM amount must be a positive number (got: ${xlmAmount}, type: ${typeof xlmAmount})`,
+        });
+      }
+      
+      if (xlmNum < config.platform.minXlmAmount) {
+        logger.warn(`[Cashout] xlmAmount below minimum: ${xlmNum} < ${config.platform.minXlmAmount}`);
         return res.status(400).json({
           error: `Minimum cash-out amount is ${config.platform.minXlmAmount} XLM`,
         });
@@ -36,15 +47,18 @@ router.post(
       // [AUDIT FIX] Use actual rate from quoteEngine instead of hardcoded * 4000
       const fiatCurrency = quoteEngine.networkToFiat(network);
       const currentRate = await quoteEngine.getXlmRate(fiatCurrency);
-      const fiatEstimate = parseFloat(xlmAmount) * currentRate;
+      const fiatEstimate = xlmNum * currentRate;
       const fraudCheck = await fraudMonitor.checkTransaction(req.userId, fiatEstimate, fiatCurrency);
       if (!fraudCheck.allowed) {
+        logger.warn(`[Cashout] Fraud check failed: ${fraudCheck.reason}`);
         return res.status(403).json({ error: fraudCheck.reason });
       }
 
+      logger.info(`[Cashout] Creating quote: xlmAmount=${xlmNum}, network=${network}`);
+      
       const quote = await quoteEngine.createQuote({
         userId: req.userId,
-        xlmAmount: parseFloat(xlmAmount),
+        xlmAmount: xlmNum,
         network,
         phoneHash,
       });
@@ -91,22 +105,35 @@ router.post(
       
       logger.info(`[Cashout] confirmQuote called: quoteId=${quoteId}, userId=${req.userId}, txHash=${stellarTxHash}`);
 
-      // Verify quote belongs to user and isn't expired
-      const quoteResult = await db.query(
-        `SELECT * FROM quotes WHERE id = $1 AND user_id = $2 AND is_used = FALSE`,
+      // Try to find by quote ID first
+      let quoteResult = await db.query(
+        `SELECT id, is_used, expires_at FROM quotes WHERE id = $1 AND user_id = $2`,
         [quoteId, req.userId]
       );
-      const quote = quoteResult.rows[0];
+      
+      let quote = quoteResult.rows[0];
       
       if (!quote) {
-        logger.warn(`[Cashout] Quote not found - quoteId: ${quoteId}, userId: ${req.userId}, rows found: ${quoteResult.rows.length}`);
+        logger.warn(`[Cashout] Quote not found by ID: quoteId=${quoteId}, userId=${req.userId}`);
+        // Check if the quote exists at all (maybe wrong user?)
+        const allQuotes = await db.query(`SELECT id, user_id FROM quotes WHERE id = $1`, [quoteId]);
+        if (allQuotes.rows.length > 0) {
+          logger.warn(`[Cashout] Quote EXISTS but wrong user! Quote belongs to userId: ${allQuotes.rows[0].user_id}`);
+        } else {
+          logger.warn(`[Cashout] Quote DOES NOT EXIST in database`);
+        }
         return res.status(404).json({ error: 'Quote not found or already used' });
       }
       
-      logger.info(`[Cashout] Quote found: ${quote.id}, expires: ${quote.expires_at}, now: ${new Date().toISOString()}`);
+      logger.info(`[Cashout] Quote found: id=${quote.id}, is_used=${quote.is_used}, expires_at=${quote.expires_at}`);
+      
+      if (quote.is_used) {
+        logger.warn(`[Cashout] Quote already used: ${quote.id}`);
+        return res.status(404).json({ error: 'Quote has already been used' });
+      }
       
       if (new Date(quote.expires_at) < new Date()) {
-        logger.warn(`[Cashout] Quote expired: ${quote.id}`);
+        logger.warn(`[Cashout] Quote expired: ${quote.id}, expired at ${quote.expires_at}`);
         return res.status(410).json({ error: 'Quote expired' });
       }
 
