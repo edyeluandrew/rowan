@@ -159,14 +159,34 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
 async function getQuoteByMemo(memo) {
   // Try Redis first
   const cached = await redis.get(`quote:${memo}`);
-  if (cached) return JSON.parse(cached);
+  if (cached) {
+    const quote = JSON.parse(cached);
+    // Ensure amounts are numbers (in case Redis stored them as strings)
+    if (quote.fiat_amount) quote.fiat_amount = Number(quote.fiat_amount);
+    if (quote.platform_fee) quote.platform_fee = Number(quote.platform_fee);
+    if (quote.xlm_amount) quote.xlm_amount = Number(quote.xlm_amount);
+    if (quote.user_rate) quote.user_rate = Number(quote.user_rate);
+    return quote;
+  }
 
   // Fall back to DB
   const result = await db.query(
     `SELECT * FROM quotes WHERE memo = $1 AND is_used = FALSE AND expires_at > NOW()`,
     [memo]
   );
-  return result.rows[0] || null;
+  
+  if (!result.rows[0]) return null;
+  
+  const quote = result.rows[0];
+  // ── CRITICAL FIX: PostgreSQL NUMERIC columns return as strings ──
+  // Explicitly convert to numbers before returning
+  if (quote.fiat_amount) quote.fiat_amount = Number(quote.fiat_amount);
+  if (quote.platform_fee) quote.platform_fee = Number(quote.platform_fee);
+  if (quote.xlm_amount) quote.xlm_amount = Number(quote.xlm_amount);
+  if (quote.user_rate) quote.user_rate = Number(quote.user_rate);
+  if (quote.market_rate) quote.market_rate = Number(quote.market_rate);
+  
+  return quote;
 }
 
 /**
