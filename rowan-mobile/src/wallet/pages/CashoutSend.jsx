@@ -32,12 +32,25 @@ export default function CashoutSend() {
     setLoading(true)
     setError(null)
     try {
+      // Debug: Log quote object structure to diagnose undefined values
+      console.log('[CashoutSend] 📋 Quote object:', quote)
+      if (!quote.quoteId) {
+        throw new Error(`Quote object missing quoteId. Quote: ${JSON.stringify(quote)}`)
+      }
+      if (!quote.escrowAddress) {
+        throw new Error(`Quote object missing escrowAddress. Quote: ${JSON.stringify(quote)}`)
+      }
+      if (!quote.memo) {
+        throw new Error(`Quote object missing memo. Quote: ${JSON.stringify(quote)}`)
+      }
+
       // Read secret key from secure storage on-demand — never held in React state
       const stored = await getSecure('rowan_stellar_keypair')
       if (!stored) throw new Error('Wallet not found. Please re-import your wallet.')
       const kp = JSON.parse(stored)
       if (!kp.secretKey) throw new Error('Wallet key data is corrupted. Please re-import your wallet.')
 
+      console.log('[CashoutSend] ✍️  Signing payment...')
       const signedXdr = await buildAndSignPayment({
         sourceSecretKey: kp.secretKey,
         destinationAddress: quote.escrowAddress,
@@ -45,16 +58,21 @@ export default function CashoutSend() {
         memo: quote.memo,
         horizonUrl,
       })
+      console.log('[CashoutSend] 📡 Broadcasting transaction...')
       const txResult = await submitTransaction(signedXdr, horizonUrl)
       const stellarTxHash = txResult.id
+      console.log('[CashoutSend] ✅ Transaction broadcast successful! TxHash:', stellarTxHash)
 
       // Confirm quote on backend with the txHash
+      console.log('[CashoutSend] 🔗 Confirming quote on backend...', { quoteId: quote.quoteId, stellarTxHash })
       const response = await confirmQuote({
         quoteId: quote.quoteId,
         stellarTxHash,
       })
+      console.log('[CashoutSend] ✅ confirmQuote response:', response)
 
       // Navigate to transaction status (use quoteId as fallback ID)
+      console.log('[CashoutSend] 🚀 Navigating to transaction status page for quoteId:', quote.quoteId)
       navigate(`/wallet/transaction/${quote.quoteId}`, { 
         state: { quoteId: quote.quoteId, stellarTxHash },
         replace: true 

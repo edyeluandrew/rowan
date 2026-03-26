@@ -98,17 +98,31 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
        VALUES ($1,$2,$3,$4,$5,$6,$7,'ESCROW_LOCKED',$8,$9,NOW())
        RETURNING *`,
       [
-        quote.id, quote.user_id, receivedXlm, quote.fiat_amount,
-        quote.fiat_currency, quote.network, quote.phone_hash,
-        txHash, quote.user_rate,
+        quote.id, 
+        quote.user_id, 
+        parseFloat(receivedXlm),      // Ensure numeric
+        parseFloat(quote.fiat_amount),  // Ensure numeric  
+        quote.fiat_currency, 
+        quote.network, 
+        quote.phone_hash,
+        txHash, 
+        parseFloat(quote.user_rate),   // Ensure numeric
       ]
     );
     transaction = txResult.rows[0];
+    logger.info(`[Escrow] ✅ Transaction record created: ${transaction.id} (quote: ${quote.id})`);
 
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
-    logger.error(`[Escrow] DB error during deposit handling:`, err.message);
+    logger.error(`[Escrow] ❌ DB error during deposit handling:`, err.message);
+    logger.error(`[Escrow] Values that were being inserted:`, {
+      quoteId: quote.id,
+      userId: quote.user_id,
+      xlmAmount: receivedXlm,
+      fiatAmount: quote.fiat_amount,
+      userRate: quote.user_rate,
+    });
     await redis.del(lockKey);
     throw err;
   } finally {

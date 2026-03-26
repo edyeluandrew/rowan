@@ -88,6 +88,8 @@ router.post(
   async (req, res, next) => {
     try {
       const { quoteId, stellarTxHash } = req.body;
+      
+      logger.info(`[Cashout] confirmQuote called: quoteId=${quoteId}, userId=${req.userId}, txHash=${stellarTxHash}`);
 
       // Verify quote belongs to user and isn't expired
       const quoteResult = await db.query(
@@ -95,12 +97,20 @@ router.post(
         [quoteId, req.userId]
       );
       const quote = quoteResult.rows[0];
+      
       if (!quote) {
+        logger.warn(`[Cashout] Quote not found - quoteId: ${quoteId}, userId: ${req.userId}, rows found: ${quoteResult.rows.length}`);
         return res.status(404).json({ error: 'Quote not found or already used' });
       }
+      
+      logger.info(`[Cashout] Quote found: ${quote.id}, expires: ${quote.expires_at}, now: ${new Date().toISOString()}`);
+      
       if (new Date(quote.expires_at) < new Date()) {
+        logger.warn(`[Cashout] Quote expired: ${quote.id}`);
         return res.status(410).json({ error: 'Quote expired' });
       }
+
+      logger.info(`[Cashout] ✅ confirmQuote successful for quote ${quote.id}, tx: ${stellarTxHash}`);
 
       res.json({
         status: 'PENDING_DEPOSIT',
@@ -109,6 +119,7 @@ router.post(
         stellarTxHash,
       });
     } catch (err) {
+      logger.error(`[Cashout] confirmQuote error:`, err.message);
       next(err);
     }
   }
