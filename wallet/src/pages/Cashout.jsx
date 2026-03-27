@@ -74,6 +74,17 @@ export default function Cashout() {
         <h1 className="text-rowan-text text-lg font-bold">Cash Out</h1>
       </div>
 
+      {/* Available Balance Display */}
+      <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-6">
+        <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Available Balance</p>
+        <div className="flex items-baseline gap-2">
+          <span className="text-rowan-text text-2xl font-bold">
+            {balance !== null ? Number(balance).toFixed(2) : '0.00'}
+          </span>
+          <span className="text-rowan-muted">XLM</span>
+        </div>
+      </div>
+
       <AmountInput
         xlmAmount={amount}
         onAmountChange={setAmount}
@@ -97,6 +108,24 @@ export default function Cashout() {
       </div>
 
       {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
+
+      {/* Validation feedback */}
+      {!canProceed && (
+        <div className="mt-6 p-3 bg-rowan-surface rounded-lg border border-rowan-border">
+          <p className="text-rowan-muted text-xs font-medium mb-2">To proceed, you need:</p>
+          <ul className="text-xs space-y-1">
+            <li className={xlmAmount >= MIN_XLM_AMOUNT && xlmAmount <= maxAmount ? 'text-rowan-green' : 'text-rowan-muted'}>
+              {xlmAmount >= MIN_XLM_AMOUNT && xlmAmount <= maxAmount ? '✓' : '✗'} Amount: {MIN_XLM_AMOUNT}–{maxAmount} XLM
+            </li>
+            <li className={network ? 'text-rowan-green' : 'text-rowan-muted'}>
+              {network ? '✓' : '✗'} Mobile money provider selected
+            </li>
+            <li className={phone.length >= 7 ? 'text-rowan-green' : 'text-rowan-muted'}>
+              {phone.length >= 7 ? '✓' : '✗'} Phone number: {phone.length}/7+ digits
+            </li>
+          </ul>
+        </div>
+      )}
 
       <div className="mt-8">
         <Button onClick={handleGetQuote} loading={loading} disabled={!canProceed}>

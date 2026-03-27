@@ -7,6 +7,7 @@ import db from '../db/index.js';
 import bcrypt from 'bcryptjs';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
+import { stroopsToUsdc } from '../utils/financial.js';
 
 const router = Router();
 
@@ -93,7 +94,14 @@ router.get('/requests', authTrader, async (req, res, next) => {
        ORDER BY trader_matched_at DESC`,
       [req.traderId]
     );
-    res.json({ requests: result.rows });
+    
+    // Convert stroops to decimal USDC
+    const requests = result.rows.map(tx => ({
+      ...tx,
+      usdc_amount: stroopsToUsdc(tx.usdc_amount),
+    }));
+    
+    res.json({ requests });
   } catch (err) {
     next(err);
   }
@@ -204,7 +212,13 @@ router.get('/history', authTrader, async (req, res, next) => {
       [req.traderId, limit, offset]
     );
 
-    res.json({ transactions: result.rows });
+    // Convert stroops to decimal USDC
+    const transactions = result.rows.map(tx => ({
+      ...tx,
+      usdc_amount: stroopsToUsdc(tx.usdc_amount),
+    }));
+
+    res.json({ transactions });
   } catch (err) {
     next(err);
   }
@@ -231,12 +245,24 @@ router.get('/stats', authTrader, async (req, res, next) => {
       [req.traderId]
     );
 
+    // Convert stroops to decimal USDC for history items
+    const recentTransactions = historyResult.rows.map(tx => ({
+      ...tx,
+      usdc_amount: stroopsToUsdc(tx.usdc_amount),
+    }));
+
     const todayResult = await db.query(
       `SELECT COUNT(*) as tx_count, COALESCE(SUM(usdc_amount), 0) as total_usdc
        FROM transactions
        WHERE trader_id = $1 AND state = 'COMPLETE' AND completed_at >= CURRENT_DATE`,
       [req.traderId]
     );
+
+    // Convert total_usdc from stroops to decimal
+    const todayStats = {
+      ...todayResult.rows[0],
+      total_usdc: stroopsToUsdc(todayResult.rows[0].total_usdc),
+    };
 
     // Lifetime stats for History page header
     const lifetimeResult = await db.query(
@@ -250,8 +276,8 @@ router.get('/stats', authTrader, async (req, res, next) => {
 
     res.json({
       ...traderResult.rows[0],
-      today: todayResult.rows[0],
-      recentTransactions: historyResult.rows,
+      today: todayStats,
+      recentTransactions,
       ...lifetimeResult.rows[0],
     });
   } catch (err) {

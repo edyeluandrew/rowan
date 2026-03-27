@@ -36,7 +36,7 @@ async function main() {
   console.log('🚀 Setting up testnet liquidity...');
   console.log('   Network:', network);
   console.log('   Horizon:', horizonUrl);
-  console.log('   USDC Issuer:', usdcIssuer);
+  console.log('   USDC Issuera:', usdcIssuer);
   console.log('   Exchange Rate: 1 XLM = ', EXCHANGE_RATE, 'USDC\n');
 
   // Step 1: Get or create market maker keypair
@@ -108,12 +108,16 @@ async function main() {
   // since the account doesn't have USDC yet to create a sell offer.
   // The buy offer is what enables the pathPaymentStrictReceive swap to work.
   
-  const buySellAmount = '900'; // Buy up to 900 USDC per offer
-  const buyXlmAmount = '9000'; // Sell 9000 XLM (leaving buffer for fees)
+  // Use conservative amounts to avoid hitting XLM balance limits
+  const buySellAmount = '100'; // Buy up to 100 USDC per offer
+  const buyXlmAmount = '1000'; // Sell 1000 XLM (safer with fees)
 
   // Price for buy offer: amount of receiving asset per unit of selling asset
   // Buy offer: sell XLM (native), receive USDC → price = USDC/XLM = 0.10
-  const buyPrice = EXCHANGE_RATE.toString();
+  const buyPrice = {
+    n: 1,
+    d: 10
+  }; // Exact fraction: 1/10 = 0.1
 
   const txBuilder = new StellarSdk.TransactionBuilder(account, {
     fee: StellarSdk.BASE_FEE,
@@ -122,12 +126,18 @@ async function main() {
 
   // Buy offer: Market maker buys USDC with XLM
   // This offer enables: "I'll sell you XLM for USDC"
+  // Price: 1/10 = 0.1 USDC per XLM
+  // Use string representation of decimal price
+  const price = '0.1';
+  
+  console.log('   Price for offer:', price);
+  
   txBuilder.addOperation(
     StellarSdk.Operation.manageSellOffer({
       selling: xlmAsset,
       buying: usdcAsset,
       amount: buyXlmAmount,
-      price: buyPrice,
+      price: price,
       offerId: 0, // 0 = create new offer
     })
   );
@@ -146,8 +156,8 @@ async function main() {
     if (err.response?.data?.extras?.result_codes?.operations) {
       console.error('   Operation codes:', err.response.data.extras.result_codes.operations);
     }
-    if (err.response?.data) {
-      console.error('   Full error:', JSON.stringify(err.response.data, null, 2));
+    if (err.response?.data?.extras) {
+      console.error('   Full error extras:', JSON.stringify(err.response.data.extras, null, 2));
     }
     process.exit(1);
   }

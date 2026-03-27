@@ -43,4 +43,34 @@ export function getFloatColumn(fiatCurrency) {
   return 'float_ugx';
 }
 
-export default { fiatToUgx, getFiatToUgxRate, getFloatColumn };
+/**
+ * Convert USDC stroops (integer) to decimal representation.
+ * USDC has 6 decimal places, so 1 USDC = 1,000,000 stroops.
+ *
+ * @param {number|string|null} stroops - amount in stroops (smallest unit)
+ * @returns {number} decimal USDC amount, or 0 if input is null/falsy
+ *
+ * Example: stroopsToUsdc(5497660000) = 5497.66
+ */
+export function stroopsToUsdc(stroops) {
+  if (!stroops) return 0;
+  const stroupsNum = typeof stroops === 'string' ? parseFloat(stroops) : stroops;
+  return stroupsNum / 1_000_000;
+}
+
+/**
+ * Convert decimal USDC to stroops (integer representation).
+ * USDC has 6 decimal places, so 1 USDC = 1,000,000 stroops.
+ *
+ * @param {number|string} usdc - decimal USDC amount
+ * @returns {number} integer stroops amount
+ *
+ * Example: usdcToStroops(5497.66) = 5497660000
+ */
+export function usdcToStroops(usdc) {
+  if (!usdc) return 0;
+  const usdcNum = typeof usdc === 'string' ? parseFloat(usdc) : usdc;
+  return Math.round(usdcNum * 1_000_000);
+}
+
+export default { fiatToUgx, getFiatToUgxRate, getFloatColumn, stroopsToUsdc, usdcToStroops };

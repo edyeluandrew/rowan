@@ -13,6 +13,7 @@ import matchingEngine from './matchingEngine.js';
 import fraudMonitor from './fraudMonitor.js';
 import stateMachine from './transactionStateMachine.js';
 import logger from '../utils/logger.js';
+import { stroopsToUsdc } from '../utils/financial.js';
 
 /**
  * Verify an incoming deposit against a locked quote.
@@ -158,27 +159,34 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     const swapResult = await swapXlmToUsdc(receivedXlm, quote);
     logger.info(`[Escrow] Swap result: amount=${swapResult.amount} (type: ${typeof swapResult.amount}), txHash=${swapResult.txHash}`);
     
-    let usdcToInsert = swapResult.amount;
+    let usdcDecimal = swapResult.amount;
     
     // If it's a string, parse it
-    if (typeof usdcToInsert === 'string') {
-      usdcToInsert = parseFloat(usdcToInsert);
-      logger.info(`[Escrow] Parsed string to number: ${swapResult.amount} → ${usdcToInsert}`);
+    if (typeof usdcDecimal === 'string') {
+      usdcDecimal = parseFloat(usdcDecimal);
+      logger.info(`[Escrow] Parsed string to number: ${swapResult.amount} → ${usdcDecimal}`);
     }
     
     // Defensive check: if still not a number, use a fallback
-    if (!Number.isFinite(usdcToInsert)) {
+    if (!Number.isFinite(usdcDecimal)) {
       logger.error(`[Escrow] ❌ INVALID USDC AMOUNT: ${swapResult.amount} (type: ${typeof swapResult.amount}), cannot insert!`);
       throw new Error(`Invalid USDC amount: ${swapResult.amount}`);
     }
     
-    logger.info(`[Escrow] Inserting usdc_amount: ${usdcToInsert} (type: ${typeof usdcToInsert}, finite: ${Number.isFinite(usdcToInsert)})`);
+    // Convert to stroops (integer) for bigint storage: USDC has 6 decimals
+    // Example: 5497.66 USDC → 5497660000 stroops
+    const usdcStroops = Math.round(usdcDecimal * 1_000_000);
+    logger.info(`[Escrow] Converted USDC: ${usdcDecimal} → ${usdcStroops} stroops (bigint)`);
+    
+    if (!Number.isInteger(usdcStroops)) {
+      throw new Error(`USDC stroops conversion failed: ${usdcDecimal} → ${usdcStroops} (not an integer)`);
+    }
     
     await db.query(
       `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
-      [usdcToInsert, swapResult.txHash, transaction.id]
+      [usdcStroops, swapResult.txHash, transaction.id]
     );
-    logger.info(`[Escrow] ✅ Swap complete — ${usdcToInsert} USDC, tx: ${swapResult.txHash}`);
+    logger.info(`[Escrow] ✅ Swap complete — ${usdcDecimal} USDC (${usdcStroops} stroops), tx: ${swapResult.txHash}`);
 
     // 6. Trigger trader matching
     await matchingEngine.matchTrader(transaction.id);
@@ -199,6 +207,67 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
         failure_reason: 'Swap failed + refund failed: ' + err.message,
       });
     }
+  }
+}
+
+/**
+ * Attempt to fillXLM → USDC conversion from market maker offers.
+ * Uses manageBuyOffer to create a buy order that fills against market maker's sell offers.
+ * Returns { success: true, amount, txHash } if successful, else { success: false, reason }.
+ *
+ * [MM-1] Priority strategy: Try market maker first; if fails, caller will fallback to DEX.
+ */
+async function tryMarketMakerFill(xlmAmount, expectedUsdc) {
+  if (!config.stellar.marketMakerPublicKey) {
+    logger.info('[Escrow] Market maker not configured, skipping MM fill attempt');
+    return { success: false, reason: 'Market maker not configured' };
+  }
+
+  try {
+    logger.info(`[Escrow] 🎯 Attempting market maker fill: buy ${expectedUsdc} USDC with max ${xlmAmount} XLM`);
+
+    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+
+    // Create a buy offer: we want to buy USDC, selling XLM
+    // Price is in terms of selling asset (XLM), so price = XLM per USDC we're buying
+    const price = (xlmAmount / expectedUsdc).toFixed(7); // XLM per USDC
+
+    const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.manageBuyOffer({
+          selling: StellarSdk.Asset.native(), // Selling XLM
+          buying: USDC_ASSET,                   // Buying USDC
+          buyAmount: expectedUsdc.toFixed(7),   // Exact USDC we want
+          price: price,                         // Max XLM per USDC we'll pay
+          offerId: '0',                         // 0 = create new offer (not update)
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    logger.info(`[Escrow] Submitting market maker buy offer: buyAmount=${expectedUsdc}, price=${price}`);
+    tx.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(tx);
+    logger.info(`[Escrow] ✅ Market maker fill successful: ${result.hash}`);
+
+    // Parse the result to confirm how much USDC we actually got
+    let actualUsdc = expectedUsdc;
+    try {
+      const txResult = StellarSdk.xdr.TransactionResult.fromXDR(result.result_xdr, 'base64');
+      const opResult = txResult.result().results()[0].tr().manageBuyOfferResult();
+      // Extract the offered amount (should be the buyAmount we requested)
+      actualUsdc = expectedUsdc;
+    } catch (parseErr) {
+      logger.warn('[Escrow] Could not parse MM buy offer result XDR:', parseErr.message);
+    }
+
+    return { success: true, amount: actualUsdc.toFixed(7), txHash: result.hash };
+  } catch (err) {
+    logger.warn(`[Escrow] Market maker fill failed: ${err.message}`);
+    return { success: false, reason: err.message };
   }
 }
 
@@ -253,6 +322,19 @@ async function swapXlmToUsdc(xlmAmount, quote) {
   const destAmount = expectedUsdc.toFixed(7);
   logger.info(`[Escrow] Building swap tx: sendMax=${sendMax}, destAmount=${destAmount}`);
 
+  // [MM-1] Try market maker fill first
+  logger.info(`[Escrow] Step 1: Attempting market maker fill...`);
+  const mmFill = await tryMarketMakerFill(xlmNum, expectedUsdc);
+  
+  if (mmFill.success) {
+    logger.info(`[Escrow] ✅ Market maker fill succeeded: ${mmFill.amount} USDC`);
+    return { amount: mmFill.amount, txHash: mmFill.txHash, source: 'market_maker' };
+  }
+
+  logger.info(`[Escrow] ⚠️ Market maker fill failed (${mmFill.reason}), falling back to DEX...`);
+
+  // Fallback: Use DEX pathPaymentStrictReceive
+  logger.info(`[Escrow] Step 2: Attempting DEX pathPaymentStrictReceive...`);
   const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
     fee: config.stellarMaxFee,
     networkPassphrase,
@@ -269,10 +351,10 @@ async function swapXlmToUsdc(xlmAmount, quote) {
     .setTimeout(30)
     .build();
 
-  logger.info(`[Escrow] Submitting swap to Horizon...`);
+  logger.info(`[Escrow] Submitting DEX swap to Horizon...`);
   tx.sign(escrowKeypair);
   const result = await horizon.submitTransaction(tx);
-  logger.info(`[Escrow] ✅ Swap broadcast successful: ${result.hash}`);
+  logger.info(`[Escrow] ✅ DEX swap broadcast successful: ${result.hash}`);
 
   // pathPaymentStrictReceive guarantees destAmount is received or tx fails.
   let actualUsdc = expectedUsdc;
@@ -282,13 +364,13 @@ async function swapXlmToUsdc(xlmAmount, quote) {
     // For strict receive, destAmount is guaranteed
     actualUsdc = expectedUsdc;
   } catch (parseErr) {
-    logger.warn('[Escrow] Could not parse swap result XDR, using expected amount:', parseErr.message);
+    logger.warn('[Escrow] Could not parse DEX swap result XDR, using expected amount:', parseErr.message);
   }
 
   const returnAmount = actualUsdc.toFixed(7);
   logger.info(`[Escrow] 🎯 Preparing to return: ${returnAmount} (type: ${typeof returnAmount})`);
   
-  return { amount: returnAmount, txHash: result.hash };
+  return { amount: returnAmount, txHash: result.hash, source: 'dex' };
 }
 
 /**
@@ -344,6 +426,10 @@ async function releaseToTrader(transactionId) {
 
     const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
 
+    // Convert stroops to decimal USDC for Stellar operation
+    const usdcDecimal = stroopsToUsdc(transaction.usdc_amount);
+    logger.info(`[Escrow] Converting usdc_amount for release: ${transaction.usdc_amount} stroops → ${usdcDecimal} USDC`);
+
     const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
       fee: config.stellarMaxFee,
       networkPassphrase,
@@ -352,7 +438,7 @@ async function releaseToTrader(transactionId) {
         StellarSdk.Operation.payment({
           destination: transaction.trader_stellar,
           asset: USDC_ASSET,
-          amount: parseFloat(transaction.usdc_amount).toFixed(7),
+          amount: usdcDecimal.toFixed(7),
         })
       )
       .setTimeout(30)

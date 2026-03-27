@@ -17,6 +17,8 @@ const config = {
     horizonUrl: process.env.HORIZON_URL || 'https://horizon-testnet.stellar.org',
     escrowPublicKey: process.env.ESCROW_PUBLIC_KEY,
     escrowSecretKey: process.env.ESCROW_SECRET_KEY,
+    marketMakerPublicKey: process.env.MARKET_MAKER_PUBLIC_KEY,
+    marketMakerSecretKey: process.env.MARKET_MAKER_SECRET_KEY,
   },
 
   // JWT

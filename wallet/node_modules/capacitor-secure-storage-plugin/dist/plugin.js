@@ -59,8 +59,6 @@ var capacitorSecureStoragePlugin = (function (exports, core) {
 
     exports.SecureStoragePlugin = SecureStoragePlugin;
 
-    Object.defineProperty(exports, '__esModule', { value: true });
-
     return exports;
 
 })({}, capacitorExports);

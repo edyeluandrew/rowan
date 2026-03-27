@@ -3,6 +3,7 @@ import { authUser } from '../middleware/auth.js';
 import quoteEngine from '../services/quoteEngine.js';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
+import { stroopsToUsdc } from '../utils/financial.js';
 
 const router = Router();
 
@@ -29,6 +30,12 @@ router.get('/history', authUser, async (req, res, next) => {
       [req.userId, parseInt(limit), parseInt(offset)]
     );
 
+    // Convert stroops to decimal USDC for each transaction
+    const transactions = result.rows.map(tx => ({
+      ...tx,
+      usdc_amount: stroopsToUsdc(tx.usdc_amount),
+    }));
+
     // Also get summary stats
     const statsResult = await db.query(
       `SELECT
@@ -42,7 +49,7 @@ router.get('/history', authUser, async (req, res, next) => {
     );
 
     res.json({
-      transactions: result.rows,
+      transactions,
       stats: statsResult.rows[0],
     });
   } catch (err) {

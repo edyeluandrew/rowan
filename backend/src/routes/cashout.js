@@ -7,6 +7,7 @@ import notificationService from '../services/notificationService.js';
 import config from '../config/index.js';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
+import { stroopsToUsdc } from '../utils/financial.js';
 
 const router = Router();
 
@@ -194,8 +195,13 @@ router.get('/status/:id', authUser, async (req, res, next) => {
     
     logger.info(`[Cashout] ✅ Status found for tx ${tx.id}, state: ${tx.state}`);
 
+    // Convert stroops to decimal USDC
+    const response = {
+      ...tx,
+      usdc_amount: stroopsToUsdc(tx.usdc_amount),
+    };
 
-    res.json(tx);
+    res.json(response);
   } catch (err) {
     next(err);
   }
