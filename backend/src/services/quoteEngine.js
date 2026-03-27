@@ -8,12 +8,62 @@ import logger from '../utils/logger.js';
 // ── N7 FIX: Top-level Asset reference instead of dynamic import ──
 const NativeAsset = StellarSdk.Asset.native();
 
+/**
+ * Fetch the best XLM→USDC rate from the market maker's active offers.
+ * Queries Horizon for all offers from the market maker account, finds the best ask price.
+ * Returns null if no offers available or if market maker not configured.
+ */
+async function getMarketMakerRate() {
+  if (!config.stellar.marketMakerPublicKey) {
+    logger.debug('[QuoteEngine] Market maker not configured, skipping');
+    return null;
+  }
+
+  try {
+    const offers = await horizon
+      .offers()
+      .forAccount(config.stellar.marketMakerPublicKey)
+      .call();
+
+    // Filter for XLM→USDC offers (selling XLM, asking USDC)
+    // In Stellar offers, selling_asset is what they're parting with, buying_asset is what they want
+    const xlmToUsdcOffers = offers.records.filter(offer => {
+      const sellingIsNative = offer.selling.asset_type === 'native';
+      const buyingIsUsdc = offer.buying.asset_code === 'USDC' &&
+                           offer.buying.asset_issuer === USDC_ASSET.issuer;
+      return sellingIsNative && buyingIsUsdc;
+    });
+
+    if (xlmToUsdcOffers.length === 0) {
+      logger.warn('[QuoteEngine] No XLM→USDC offers from market maker');
+      return null;
+    }
+
+    // Find the best (lowest) price for us as a buyer
+    // Price = what they're asking for 1 unit of what they're selling
+    const bestOffer = xlmToUsdcOffers.reduce((best, current) => {
+      const currentPrice = parseFloat(current.price);
+      const bestPrice = parseFloat(best.price);
+      return currentPrice < bestPrice ? current : best;
+    });
+
+    const bestRate = parseFloat(bestOffer.price);
+    logger.info(`[QuoteEngine] Market maker best rate: ${bestRate} USDC/XLM (offer ID: ${bestOffer.id})`);
+    return bestRate;
+  } catch (err) {
+    logger.warn('[QuoteEngine] Failed to fetch market maker offers:', err.message);
+    return null;
+  }
+}
+
 const { quoteTtlSeconds, feePercent, spreadPercent, rateCacheTtlSeconds } = config.platform;
 
 /**
  * Fetch the live XLM rate for a given fiat currency.
- * Primary: Stellar DEX (XLM → USDC → fiat estimate).
- * Fallback: CoinGecko API.
+ * Priority:
+ * 1. Market Maker offers (if available and better/comparable)
+ * 2. Stellar DEX (XLM → USDC → fiat estimate)
+ * 3. Fallback: CoinGecko API
  * Cached in Redis for 30 seconds.
  */
 async function getXlmRate(fiatCurrency = 'UGX') {
@@ -24,26 +74,43 @@ async function getXlmRate(fiatCurrency = 'UGX') {
   let rate;
 
   try {
-    // Primary: Stellar DEX — get XLM/USDC mid-market price
-    const orderbook = await horizon
-      .orderbook(NativeAsset, USDC_ASSET)
-      .call();
-
-    if (orderbook.asks.length > 0 && orderbook.bids.length > 0) {
-      const bestAsk = parseFloat(orderbook.asks[0].price);
-      const bestBid = parseFloat(orderbook.bids[0].price);
-      const xlmUsdcMid = (bestAsk + bestBid) / 2; // XLM price in USDC
-
-      // Convert USDC → fiat using static rates (later: live FX feed)
+    // Priority 1: Market Maker offers
+    const mmRate = await getMarketMakerRate();
+    if (mmRate) {
+      // Convert market maker rate (USDC/XLM) to fiat currency
       const usdcToFiat = getUsdcToFiatRate(fiatCurrency);
-      rate = xlmUsdcMid * usdcToFiat;
+      rate = mmRate * usdcToFiat;
+      logger.info(`[QuoteEngine] Using market maker rate: ${mmRate} USDC/XLM → ${rate} ${fiatCurrency}/XLM`);
     }
   } catch (err) {
-    logger.warn('[QuoteEngine] Stellar DEX fetch failed, falling back to CoinGecko:', err.message);
+    logger.warn('[QuoteEngine] Market maker rate fetch failed:', err.message);
+  }
+
+  // Fallback to DEX if market maker unavailable
+  if (!rate) {
+    try {
+      // Priority 2: Stellar DEX — get XLM/USDC mid-market price
+      const orderbook = await horizon
+        .orderbook(NativeAsset, USDC_ASSET)
+        .call();
+
+      if (orderbook.asks.length > 0 && orderbook.bids.length > 0) {
+        const bestAsk = parseFloat(orderbook.asks[0].price);
+        const bestBid = parseFloat(orderbook.bids[0].price);
+        const xlmUsdcMid = (bestAsk + bestBid) / 2; // XLM price in USDC
+
+        // Convert USDC → fiat using static rates (later: live FX feed)
+        const usdcToFiat = getUsdcToFiatRate(fiatCurrency);
+        rate = xlmUsdcMid * usdcToFiat;
+        logger.info(`[QuoteEngine] Using DEX rate: ${xlmUsdcMid} USDC/XLM → ${rate} ${fiatCurrency}/XLM`);
+      }
+    } catch (err) {
+      logger.warn('[QuoteEngine] Stellar DEX fetch failed, falling back to CoinGecko:', err.message);
+    }
   }
 
   if (!rate) {
-    // Fallback: CoinGecko
+    // Priority 3: Fallback: CoinGecko
     try {
       const fiatLower = fiatCurrency.toLowerCase();
       const res = await fetch(
@@ -51,6 +118,7 @@ async function getXlmRate(fiatCurrency = 'UGX') {
       );
       const data = await res.json();
       rate = data?.stellar?.[fiatLower];
+      logger.info(`[QuoteEngine] Using CoinGecko rate: ${rate} ${fiatCurrency}/XLM`);
     } catch (err) {
       logger.error('[QuoteEngine] CoinGecko fallback also failed:', err.message);
       throw new Error('Unable to fetch XLM rate from any source');
@@ -209,6 +277,7 @@ function networkToFiat(network) {
 }
 
 export default {
+  getMarketMakerRate,
   getXlmRate,
   createQuote,
   getQuoteByMemo,
