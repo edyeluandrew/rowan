@@ -40,6 +40,7 @@ app.set('trust proxy', 1);
 app.use(helmet());
 
 // [AUDIT FIX] Validate critical env vars before proceeding
+// [STROOPS FIX] USDC amounts stored as stroops (integers) to avoid bigint conversion errors
 const requiredEnvVars = [
   { key: 'JWT_SECRET', label: 'JWT signing secret' },
   { key: 'DATABASE_URL', label: 'PostgreSQL connection string' },
