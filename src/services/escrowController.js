@@ -13,6 +13,7 @@ import matchingEngine from './matchingEngine.js';
 import fraudMonitor from './fraudMonitor.js';
 import stateMachine from './transactionStateMachine.js';
 import logger from '../utils/logger.js';
+import { stroopsToUsdc } from '../utils/financial.js';
 
 /**
  * Verify an incoming deposit against a locked quote.
@@ -120,11 +121,24 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
   // 5. Immediately swap XLM → USDC inside the escrow
   try {
     const swapResult = await swapXlmToUsdc(receivedXlm, quote);
+    
+    // Convert to stroops (integer) for bigint storage: USDC has 6 decimals
+    // Example: 5497.66 USDC → 5497660000 stroops
+    let usdcDecimal = swapResult.amount;
+    if (typeof usdcDecimal === 'string') {
+      usdcDecimal = parseFloat(usdcDecimal);
+    }
+    if (!Number.isFinite(usdcDecimal)) {
+      throw new Error(`Invalid USDC amount: ${swapResult.amount}`);
+    }
+    const usdcStroops = Math.round(usdcDecimal * 1_000_000);
+    logger.info(`[Escrow] Converted USDC: ${usdcDecimal} → ${usdcStroops} stroops (bigint)`);
+    
     await db.query(
       `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
-      [swapResult.amount, swapResult.txHash, transaction.id]
+      [usdcStroops, swapResult.txHash, transaction.id]
     );
-    logger.info(`[Escrow] Swap complete — ${swapResult.amount} USDC, tx: ${swapResult.txHash}`);
+    logger.info(`[Escrow] Swap complete — ${usdcDecimal} USDC (${usdcStroops} stroops), tx: ${swapResult.txHash}`);
 
     // 6. Trigger trader matching
     await matchingEngine.matchTrader(transaction.id);
@@ -199,7 +213,9 @@ async function swapXlmToUsdc(xlmAmount, quote) {
     logger.warn('[Escrow] Could not parse swap result XDR, using expected amount:', parseErr.message);
   }
 
-  return { amount: actualUsdc.toFixed(7), txHash: result.hash };
+  // Return amount as number for stroops conversion
+  logger.info(`[Escrow] Swap result: amount=${actualUsdc} (type: ${typeof actualUsdc})`);
+  return { amount: actualUsdc, txHash: result.hash };
 }
 
 /**
