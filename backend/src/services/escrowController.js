@@ -264,7 +264,7 @@ async function tryMarketMakerFill(xlmAmount, expectedUsdc) {
       logger.warn('[Escrow] Could not parse MM buy offer result XDR:', parseErr.message);
     }
 
-    return { success: true, amount: actualUsdc.toFixed(7), txHash: result.hash };
+    return { success: true, amount: actualUsdc, txHash: result.hash };
   } catch (err) {
     logger.warn(`[Escrow] Market maker fill failed: ${err.message}`);
     return { success: false, reason: err.message };
@@ -367,10 +367,9 @@ async function swapXlmToUsdc(xlmAmount, quote) {
     logger.warn('[Escrow] Could not parse DEX swap result XDR, using expected amount:', parseErr.message);
   }
 
-  const returnAmount = actualUsdc.toFixed(7);
-  logger.info(`[Escrow] 🎯 Preparing to return: ${returnAmount} (type: ${typeof returnAmount})`);
+  logger.info(`[Escrow] 🎯 Preparing to return: ${actualUsdc} (type: ${typeof actualUsdc})`);
   
-  return { amount: returnAmount, txHash: result.hash, source: 'dex' };
+  return { amount: actualUsdc, txHash: result.hash, source: 'dex' };
 }
 
 /**
