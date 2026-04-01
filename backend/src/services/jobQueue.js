@@ -8,7 +8,8 @@ import logger from '../utils/logger.js';
 
 /**
  * Bull job queues for async/deferred tasks.
- * Backed by Redis (Upstash).
+ * Backed by Render Key Value (Redis-compatible Valkey).
+ * Migrated from Upstash to avoid request quota limits.
  */
 
 // Parse Redis URL into an options object so Bull's internal ioredis client

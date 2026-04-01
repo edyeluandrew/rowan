@@ -1,0 +1,30 @@
+{
+  "testEnvironment": "jsdom",
+  "roots": ["<rootDir>/src"],
+  "testMatch": ["**/__tests__/**/*.js", "**/?(*.)+(spec|test).js"],
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/src/$1"
+  },
+  "transform": {
+    "^.+\\.(js|jsx)$": "babel-jest"
+  },
+  "setupFilesAfterEnv": ["<rootDir>/src/test/setup.js"],
+  "collectCoverageFrom": [
+    "src/**/*.{js,jsx}",
+    "!src/main.jsx",
+    "!src/**/*.test.{js,jsx}",
+    "!src/test/**"
+  ],
+  "coverageThreshold": {
+    "global": {
+      "branches": 0,
+      "functions": 0,
+      "lines": 0,
+      "statements": 0
+    }
+  },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(axios|socket.io-client)/)"
+  ]
+}
+

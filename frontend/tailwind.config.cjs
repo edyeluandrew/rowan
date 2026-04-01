@@ -4,11 +4,11 @@ module.exports = {
     extend: {
       colors: {
         rowan: {
-          bg:      '#0B0E11',
-          surface: '#1E2329',
-          border:  '#2B3139',
-          text:    '#EAECEF',
-          muted:   '#848E9C',
+          bg:      '#000000',
+          surface: '#1a1a1a',
+          border:  '#333333',
+          text:    '#FFFFFF',
+          muted:   '#999999',
           yellow:  '#F0B90B',
           green:   '#0ECB81',
           red:     '#F6465D',

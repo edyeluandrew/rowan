@@ -1,5 +1,4 @@
-import client from './client'
-
-export function getOverview() {
-  return client.get('/api/v1/admin/overview')
-}
+/**
+ * Backward compatibility re-export
+ */
+export { getOverview } from '../shared/services/api/overview'

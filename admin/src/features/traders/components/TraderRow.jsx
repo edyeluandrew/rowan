@@ -1,0 +1,22 @@
+import { useNavigate } from 'react-router-dom'
+import { formatAddress, formatCurrency } from '../../../shared/utils/format'
+import TraderStatusBadge from './TraderStatusBadge'
+import FloatBar from './FloatBar'
+
+export default function TraderRow({ trader }) {
+  const navigate = useNavigate()
+
+  return (
+    <tr
+      onClick={() => navigate(`/traders/${trader.id}`)}
+      className="border-b border-rowan-border hover:bg-rowan-surface/50 cursor-pointer transition-colors"
+    >
+      <td className="px-4 py-3 text-sm text-rowan-text font-medium">{trader.name || formatAddress(trader.id)}</td>
+      <td className="px-4 py-3 text-sm text-rowan-muted">{trader.email || '-'}</td>
+      <td className="px-4 py-3"><TraderStatusBadge status={trader.status} /></td>
+      <td className="px-4 py-3 text-sm text-rowan-text">{formatCurrency(trader.daily_volume || 0)}</td>
+      <td className="px-4 py-3 text-sm text-rowan-text">{trader.trust_score ? `${trader.trust_score}%` : '-'}</td>
+      <td className="px-4 py-3 w-32"><FloatBar current={trader.float_ugx} limit={trader.daily_limit_ugx} /></td>
+    </tr>
+  )
+}
