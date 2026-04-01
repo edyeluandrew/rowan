@@ -1,1 +1,0 @@
-﻿export { default } from '../features/trader-detail/pages/TraderDetailPage'
