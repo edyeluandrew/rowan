@@ -1,19 +1,32 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getDisputes } from '../../../shared/services/api/disputes'
 import { handleDataError } from '../../../shared/hooks/useDataFetch'
+import { useDisputeStream } from '../../../shared/hooks/useAdminRealTime'
 
 export default function useDisputes(filters = {}) {
-  const [data, setData] = useState([])
+  const [httpData, setHttpData] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 })
+  const { disputes: streamData, isConnected } = useDisputeStream()
+
+  // Use real-time stream if connected
+  const data = useMemo(() => {
+    if (isConnected && streamData.length > 0) {
+      return streamData.filter((dispute) => {
+        if (filters.status && dispute.status !== filters.status) return false
+        return true
+      })
+    }
+    return httpData
+  }, [streamData, httpData, filters, isConnected])
 
   const refresh = useCallback(async (pageNum = pagination.page) => {
     try {
       setLoading(true)
       setError(null)
       const result = await getDisputes({ ...filters, page: pageNum })
-      setData(result.disputes || result.data || [])
+      setHttpData(result.disputes || result.data || [])
       setPagination({
         page: result.page || pageNum,
         pages: result.pages || 1,
@@ -44,5 +57,6 @@ export default function useDisputes(filters = {}) {
     setPage,
     refresh,
     pagination,
+    isRealTime: isConnected,
   }
 }

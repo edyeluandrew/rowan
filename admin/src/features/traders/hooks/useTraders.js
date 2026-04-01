@@ -1,19 +1,37 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getTraders } from '../../../shared/services/api/traders'
 import { handleDataError } from '../../../shared/hooks/useDataFetch'
+import { useTraderStream } from '../../../shared/hooks/useAdminRealTime'
 
 export default function useTraders(filters = {}) {
-  const [data, setData] = useState([])
+  const [httpData, setHttpData] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 })
+  const { traders: streamData, isConnected } = useTraderStream()
+
+  // Use real-time stream if connected, otherwise use HTTP
+  const data = useMemo(() => {
+    if (isConnected && streamData.length > 0) {
+      // Filter real-time stream based on filters
+      return streamData.filter((trader) => {
+        if (filters.status && trader.verification_status !== filters.status && trader.status !== filters.status) return false
+        if (filters.search) {
+          const s = filters.search.toLowerCase()
+          if (!trader.name?.toLowerCase().includes(s) && !trader.email?.toLowerCase().includes(s)) return false
+        }
+        return true
+      })
+    }
+    return httpData
+  }, [streamData, httpData, filters, isConnected])
 
   const refresh = useCallback(async (pageNum = pagination.page) => {
     try {
       setLoading(true)
       setError(null)
       const result = await getTraders({ ...filters, page: pageNum })
-      setData(result.traders || result.data || [])
+      setHttpData(result.traders || result.data || [])
       setPagination({
         page: result.page || pageNum,
         pages: result.pages || 1,
@@ -44,5 +62,6 @@ export default function useTraders(filters = {}) {
     setPage,
     refresh,
     pagination,
+    isRealTime: isConnected,
   }
 }

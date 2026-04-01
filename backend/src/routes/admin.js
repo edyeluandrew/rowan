@@ -4,6 +4,7 @@ import { validate } from '../middleware/validate.js';
 import escrowController from '../services/escrowController.js';
 import verificationService from '../services/traderVerificationService.js';
 import stateMachine from '../services/transactionStateMachine.js';
+import notificationService from '../services/notificationService.js';
 import db from '../db/index.js';
 import bcrypt from 'bcryptjs';
 import logger from '../utils/logger.js';
@@ -48,20 +49,34 @@ router.get('/transactions', authAdmin, async (req, res, next) => {
 router.put('/traders/:id/suspend', authAdmin, async (req, res, next) => {
   try {
     const { suspended, reason } = req.body;
+    let trader;
+
     if (suspended !== false) {
       await verificationService.adminSuspendVerified(req.params.id, req.adminId, reason || 'Admin suspension');
+      // Fetch updated trader for broadcast
+      const result = await db.query(`SELECT * FROM traders WHERE id = $1`, [req.params.id]);
+      trader = result.rows[0];
     } else {
-      await db.query(
-        `UPDATE traders SET status = 'ACTIVE', verification_status = 'VERIFIED', is_active = TRUE, is_suspended = FALSE WHERE id = $1`,
+      const result = await db.query(
+        `UPDATE traders SET status = 'ACTIVE', verification_status = 'VERIFIED', is_active = TRUE, is_suspended = FALSE WHERE id = $1 RETURNING *`,
         [req.params.id]
       );
-      await db.query(
-        `UPDATE trader_verifications SET verification_status = 'VERIFIED' WHERE trader_id = $1`,
-        [req.params.id]
+      const updateResult = await db.query(
+        `UPDATE trader_verifications SET verification_status = 'VERIFIED' WHERE trader_id = $1`
       );
+      trader = result.rows[0];
     }
 
     logger.info(`[Admin] Trader ${req.params.id} ${suspended ? 'suspended' : 'unsuspended'}: ${reason || 'No reason'}`);
+
+    // Broadcast trader update to all admins
+    notificationService.notifyAdminTraderUpdate(trader, suspended ? 'trader_suspended' : 'trader_reactivated');
+    // Log admin action
+    notificationService.notifyAdminAction(req.adminId, `trader_${suspended ? 'suspended' : 'reactivated'}`, {
+      traderId: req.params.id,
+      reason: reason || 'No reason',
+    });
+
     res.json({ success: true, traderId: req.params.id, suspended });
   } catch (err) {
     next(err);
@@ -273,10 +288,20 @@ router.put('/disputes/:id/resolve', authAdmin, async (req, res, next) => {
       return res.status(400).json({ error: `Resolution must be one of: ${validResolutions.join(', ')}` });
     }
 
-    await db.query(
-      `UPDATE disputes SET status = $1, admin_notes = $2, resolved_at = NOW() WHERE id = $3`,
+    const result = await db.query(
+      `UPDATE disputes SET status = $1, admin_notes = $2, resolved_at = NOW() WHERE id = $3 RETURNING *`,
       [resolution, adminNotes || null, req.params.id]
     );
+    const dispute = result.rows[0];
+
+    // Broadcast dispute update to all admins
+    notificationService.notifyAdminDisputeUpdate(dispute, 'dispute_resolved');
+    // Log admin action
+    notificationService.notifyAdminAction(req.adminId, 'dispute_resolved', {
+      disputeId: req.params.id,
+      resolution,
+      notes: adminNotes,
+    });
 
     res.json({ success: true, disputeId: req.params.id, resolution });
   } catch (err) {

@@ -12,3 +12,15 @@ export { useAutoRefresh, useSocketRefresh, useRetry, useCache } from './useDataU
 
 // Real-time transaction streaming
 export { useTransactionStream, useTransactionDetailStream } from './useTransactionStream'
+
+// Real-time admin features (traders, disputes, escrow, analytics, system, rates)
+export {
+  useTraderStream,
+  useDisputeStream,
+  useEscrowStream,
+  useAnalyticsStream,
+  useSystemHealthStream,
+  useRatesStream,
+  useOverviewStream,
+  useAdminActionStream,
+} from './useAdminRealTime'

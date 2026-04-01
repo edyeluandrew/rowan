@@ -1,11 +1,13 @@
 import { useState, useCallback } from 'react'
 import { getRevenue, getVolume, getTraderPerformance, getUserAnalytics } from '../../../shared/services/api/analytics'
 import { handleDataError } from '../../../shared/hooks/useDataFetch'
+import { useAnalyticsStream } from '../../../shared/hooks/useAdminRealTime'
 
 function useRevenue(period) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const { metrics, isConnected } = useAnalyticsStream()
 
   const refresh = useCallback(async () => {
     try {
@@ -20,13 +22,14 @@ function useRevenue(period) {
     }
   }, [period])
 
-  return { data, loading, error, refresh }
+  return { data: data || { revenue_today: metrics.revenue_today }, loading, error, refresh, isRealTime: isConnected }
 }
 
 function useVolume(period, groupBy) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const { metrics, isConnected } = useAnalyticsStream()
 
   const refresh = useCallback(async () => {
     try {
@@ -41,7 +44,7 @@ function useVolume(period, groupBy) {
     }
   }, [period, groupBy])
 
-  return { data, loading, error, refresh }
+  return { data: data || { volume_today: metrics.volume_today }, loading, error, refresh, isRealTime: isConnected }
 }
 
 function useTraderPerformance() {

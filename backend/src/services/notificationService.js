@@ -238,6 +238,112 @@ function notifyAdminTransactionUpdate(transaction, event = 'transaction_update')
 }
 
 /**
+ * Broadcast trader updates to all admins for real-time dashboard
+ */
+function notifyAdminTraderUpdate(trader, event = 'trader_update') {
+  websocket.broadcast('admin', event, {
+    id: trader.id,
+    email: trader.email,
+    name: trader.name,
+    status: trader.status,
+    verification_status: trader.verification_status,
+    trust_score: trader.trust_score,
+    usdc_float: trader.usdc_float,
+    is_suspended: trader.is_suspended,
+    created_at: trader.created_at,
+    updated_at: trader.updated_at,
+    timestamp: new Date().toISOString(),
+  });
+  logger.info(`[Notify] Admin — trader ${trader.id} update: ${event}`);
+}
+
+/**
+ * Broadcast dispute updates to all admins
+ */
+function notifyAdminDisputeUpdate(dispute, event = 'dispute_update') {
+  websocket.broadcast('admin', event, {
+    id: dispute.id,
+    transaction_id: dispute.transaction_id,
+    user_id: dispute.user_id,
+    trader_id: dispute.trader_id,
+    reason: dispute.reason,
+    status: dispute.status,
+    created_at: dispute.created_at,
+    updated_at: dispute.updated_at,
+    timestamp: new Date().toISOString(),
+  });
+  logger.info(`[Notify] Admin — dispute ${dispute.id} update: ${event}`);
+}
+
+/**
+ * Broadcast escrow updates to all admins
+ */
+function notifyAdminEscrowUpdate(escrowData, event = 'escrow_update') {
+  websocket.broadcast('admin', event, {
+    ...escrowData,
+    timestamp: new Date().toISOString(),
+  });
+  logger.info(`[Notify] Admin — escrow update: ${event}`);
+}
+
+/**
+ * Broadcast metrics/analytics updates to all admins
+ */
+function notifyAdminAnalyticsUpdate(metrics, event = 'analytics_update') {
+  websocket.broadcast('admin', event, {
+    ...metrics,
+    timestamp: new Date().toISOString(),
+  });
+  logger.info(`[Notify] Admin — analytics update: ${event}`);
+}
+
+/**
+ * Broadcast system health updates to all admins
+ */
+function notifyAdminSystemHealth(health, event = 'system_health_update') {
+  websocket.broadcast('admin', event, {
+    ...health,
+    timestamp: new Date().toISOString(),
+  });
+  logger.info(`[Notify] Admin — system health update: ${event}`);
+}
+
+/**
+ * Broadcast rates updates to all admins
+ */
+function notifyAdminRatesUpdate(rates, event = 'rates_update') {
+  websocket.broadcast('admin', event, {
+    ...rates,
+    timestamp: new Date().toISOString(),
+  });
+  logger.info(`[Notify] Admin — rates update: ${event}`);
+}
+
+/**
+ * Broadcast overview stats update to all admins
+ */
+function notifyAdminStatsUpdate(stats, event = 'stats_update') {
+  websocket.broadcast('admin', event, {
+    ...stats,
+    timestamp: new Date().toISOString(),
+  });
+  logger.info(`[Notify] Admin — stats update: ${event}`);
+}
+
+/**
+ * Broadcast admin action for audit log
+ */
+function notifyAdminAction(adminId, action, details = {}) {
+  websocket.broadcast('admin', 'admin_action', {
+    adminId,
+    action,
+    details,
+    timestamp: new Date().toISOString(),
+  });
+  logger.info(`[Notify] Admin action: ${action}`);
+}
+
+/**
  * Phase 2: Send SMS via aggregator API.
  * Placeholder for Flutterwave / Africa's Talking integration.
  */
@@ -256,6 +362,14 @@ export default {
   notifyAdminNewSubmission,
   notifyTraderVerificationResult,
   notifyAdminTransactionUpdate,
+  notifyAdminTraderUpdate,
+  notifyAdminDisputeUpdate,
+  notifyAdminEscrowUpdate,
+  notifyAdminAnalyticsUpdate,
+  notifyAdminSystemHealth,
+  notifyAdminRatesUpdate,
+  notifyAdminStatsUpdate,
+  notifyAdminAction,
   cacheUserPhoneNumber,
   getCachedPhoneNumber,
 };
