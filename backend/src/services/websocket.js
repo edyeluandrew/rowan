@@ -45,7 +45,18 @@ function init(httpServer) {
     } else if (socket.role === 'trader') {
       socket.join(`trader:${socket.userId}`);
       logger.info(`[WS] Trader ${socket.userId} connected`);
+    } else if (socket.role === 'admin') {
+      socket.join('admin');
+      logger.info(`[WS] Admin ${socket.userId} connected`);
     }
+
+    // Handle explicit admin room join (from frontend)
+    socket.on('join-admin-room', () => {
+      if (socket.role === 'admin') {
+        socket.join('admin');
+        logger.info(`[WS] Admin ${socket.userId} joined admin room`);
+      }
+    });
 
     socket.on('disconnect', () => {
       logger.info(`[WS] ${socket.role} ${socket.userId} disconnected`);

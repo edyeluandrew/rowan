@@ -5,12 +5,12 @@ import TransactionRow from '../components/TransactionRow'
 import Pagination from '../../../shared/components/ui/Pagination'
 import LoadingSpinner from '../../../shared/components/ui/LoadingSpinner'
 import EmptyState from '../../../shared/components/ui/EmptyState'
-import { ArrowLeftRight } from 'lucide-react'
+import { ArrowLeftRight, Wifi } from 'lucide-react'
 import useTransactions from '../hooks/useTransactions'
 
 export default function TransactionsPage() {
   const [filters, setFilters] = useState({})
-  const { data, loading, error, pages, page, setPage, refresh } = useTransactions(filters)
+  const { data, loading, error, pages, page, setPage, refresh, isRealTime } = useTransactions(filters)
   const [refreshing, setRefreshing] = useState(false)
 
   const handleRefresh = useCallback(async () => {
@@ -26,6 +26,12 @@ export default function TransactionsPage() {
     <>
       <TopBar title="Transactions" onRefresh={handleRefresh} refreshing={refreshing} />
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {isRealTime && (
+          <div className="bg-rowan-bg/50 border border-rowan-accent/30 rounded-xl px-4 py-2 flex items-center gap-2 text-rowan-accent text-sm">
+            <Wifi size={16} className="animate-pulse" />
+            <span>Live: Real-time transaction updates enabled</span>
+          </div>
+        )}
         <TransactionFilters filters={filters} onChange={setFilters} />
 
         {error && (

@@ -1,5 +1,6 @@
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
+import websocket from './websocket.js';
 
 /**
  * TransactionStateMachine — centralizes ALL state transitions.
@@ -94,6 +95,25 @@ async function transition(transactionId, fromState, toState, extra = {}) {
   }
 
   logger.info(`[StateMachine] tx ${transactionId}: ${fromState} → ${toState}`);
+
+  // Broadcast transaction update to all admins for real-time dashboard
+  try {
+    websocket.broadcast('admin', 'transaction_state_changed', {
+      id: row.id,
+      state: row.state,
+      trader_id: row.trader_id,
+      user_id: row.user_id,
+      usdc_amount: row.usdc_amount,
+      fiat_amount: row.fiat_amount,
+      fiat_currency: row.fiat_currency,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      ...extra,
+    });
+  } catch (err) {
+    logger.error(`[StateMachine] Failed to broadcast transaction update: ${err.message}`);
+  }
+
   return row;
 }
 

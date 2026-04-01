@@ -24,6 +24,8 @@ export function SocketProvider({ children }) {
     socket.on('connect', () => {
       setIsConnected(true)
       socket.emit('join', 'admin')
+      // Explicitly join admin room for transaction broadcasting
+      socket.emit('join-admin-room')
     })
 
     socket.on('disconnect', () => setIsConnected(false))

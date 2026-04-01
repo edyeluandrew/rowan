@@ -9,3 +9,6 @@ export { useFilters, useSearch, useTabState, useModal, useFormState } from './us
 
 // Data utilities
 export { useAutoRefresh, useSocketRefresh, useRetry, useCache } from './useDataUtils'
+
+// Real-time transaction streaming
+export { useTransactionStream, useTransactionDetailStream } from './useTransactionStream'

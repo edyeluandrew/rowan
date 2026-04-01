@@ -218,6 +218,26 @@ function notifyTraderVerificationResult(traderId, status, message) {
 }
 
 /**
+ * Notify all admin users of a transaction update for real-time dashboard.
+ * Broadcast to the admin role (all connected admin sockets).
+ */
+function notifyAdminTransactionUpdate(transaction, event = 'transaction_update') {
+  websocket.broadcast('admin', event, {
+    id: transaction.id,
+    state: transaction.state,
+    trader_id: transaction.trader_id,
+    user_id: transaction.user_id,
+    usdc_amount: transaction.usdc_amount,
+    fiat_amount: transaction.fiat_amount,
+    fiat_currency: transaction.fiat_currency,
+    created_at: transaction.created_at,
+    updated_at: transaction.updated_at,
+    timestamp: new Date().toISOString(),
+  });
+  logger.info(`[Notify] Admin — transaction ${transaction.id} update: ${event}`);
+}
+
+/**
  * Phase 2: Send SMS via aggregator API.
  * Placeholder for Flutterwave / Africa's Talking integration.
  */
@@ -235,6 +255,7 @@ export default {
   notifyRefund,
   notifyAdminNewSubmission,
   notifyTraderVerificationResult,
+  notifyAdminTransactionUpdate,
   cacheUserPhoneNumber,
   getCachedPhoneNumber,
 };
