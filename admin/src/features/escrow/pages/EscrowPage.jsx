@@ -1,27 +1,33 @@
 import { useState, useCallback } from 'react'
 import TopBar from '../../../shared/components/layout/TopBar'
 import EscrowBalanceCard from '../components/EscrowBalanceCard'
+import PendingRefundsTable from '../components/PendingRefundsTable'
 import LoadingSpinner from '../../../shared/components/ui/LoadingSpinner'
 import EmptyState from '../../../shared/components/ui/EmptyState'
-import { Lock } from 'lucide-react'
+import { Lock, AlertTriangle } from 'lucide-react'
 import useEscrow from '../hooks/useEscrow'
+import usePendingRefunds from '../hooks/usePendingRefunds'
 import { formatUsdc, formatDateTime, formatAddress } from '../../../shared/utils/format'
 import TransactionStateTag from '../../transactions/components/TransactionStateTag'
 
 export default function EscrowPage() {
   const { status: escrowStatus, transactions: escrowTxs, loading, error, refresh } = useEscrow()
+  const { refunds: pendingRefunds, loading: refundsLoading, error: refundsError, refresh: refreshRefunds } = usePendingRefunds()
   const [refreshing, setRefreshing] = useState(false)
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
-    await refresh()
+    await Promise.all([refresh(), refreshRefunds()])
     setRefreshing(false)
-  }, [refresh])
+  }, [refresh, refreshRefunds])
 
   const status = escrowStatus || {}
   const transactions = escrowTxs || []
   const lockedTxs = transactions
-  const refundTxs = []
+
+  // Summary stats for pending refunds
+  const failedCount = pendingRefunds.filter(r => r.state === 'FAILED').length
+  const totalRefundAmount = pendingRefunds.reduce((sum, r) => sum + (parseFloat(r.usdc_amount) || 0), 0)
 
   return (
     <>
@@ -72,32 +78,33 @@ export default function EscrowPage() {
 
         {/* Pending Refunds */}
         <div className="bg-rowan-surface rounded-xl border border-rowan-border p-4">
-          <h3 className="text-rowan-text font-bold mb-4">Pending Refunds</h3>
-          {loading ? (
-            <div className="flex items-center justify-center py-8"><LoadingSpinner size={24} /></div>
-          ) : refundTxs.length === 0 ? (
-            <EmptyState icon={Lock} title="No pending refunds" />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-rowan-border text-rowan-muted text-xs uppercase tracking-wider">
-                    <th className="text-left px-4 py-2 font-medium">TX ID</th>
-                    <th className="text-left px-4 py-2 font-medium">Amount</th>
-                    <th className="text-left px-4 py-2 font-medium">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {refundTxs.map((tx) => (
-                    <tr key={tx.id} className="border-b border-rowan-border/50">
-                      <td className="px-4 py-2 text-sm text-rowan-muted font-mono">{formatAddress(tx.id || tx.transaction_id)}</td>
-                      <td className="px-4 py-2 text-sm text-rowan-text">{formatUsdc(tx.usdc_amount || tx.amount)} USDC</td>
-                      <td className="px-4 py-2 text-sm text-rowan-muted">{formatDateTime(tx.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <h3 className="text-rowan-text font-bold">Pending Refunds</h3>
+              {failedCount > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-rowan-red/20 text-rowan-red rounded font-bold text-sm">
+                  <AlertTriangle size={14} />
+                  {failedCount} Failed
+                </span>
+              )}
             </div>
+            {pendingRefunds.length > 0 && (
+              <div className="text-sm text-rowan-muted">
+                Total: {formatUsdc(totalRefundAmount)} USDC
+              </div>
+            )}
+          </div>
+
+          {refundsLoading ? (
+            <div className="flex items-center justify-center py-8"><LoadingSpinner size={24} /></div>
+          ) : refundsError ? (
+            <div className="bg-rowan-red/10 border border-rowan-red/30 text-rowan-red rounded-xl px-4 py-3 text-sm">
+              {refundsError}
+            </div>
+          ) : pendingRefunds.length === 0 ? (
+            <EmptyState icon={Lock} title="No pending refunds" description="All refunds processed successfully" />
+          ) : (
+            <PendingRefundsTable refunds={pendingRefunds} onRetry={refreshRefunds} />
           )}
         </div>
       </div>

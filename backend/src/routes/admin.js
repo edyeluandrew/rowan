@@ -579,6 +579,70 @@ router.post('/refund/:quoteId', authAdmin, async (req, res, next) => {
 });
 
 /**
+ * POST /api/v1/admin/escrow/refund-retry/:transactionId
+ * Retry a failed refund for a transaction
+ */
+router.post('/escrow/refund-retry/:transactionId', authAdmin, async (req, res, next) => {
+  try {
+    const txResult = await db.query(
+      `SELECT * FROM transactions WHERE id = $1`,
+      [req.params.transactionId]
+    );
+    const tx = txResult.rows[0];
+    if (!tx) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    // Only allow retry for FAILED transactions that haven't been successfully refunded
+    if (tx.state !== 'FAILED' && !(tx.state === 'REFUNDED' && !tx.stellar_refund_tx)) {
+      return res.status(400).json({ error: `Cannot retry refund for transaction in ${tx.state} state` });
+    }
+
+    // Get user's stellar address
+    const userResult = await db.query(
+      `SELECT stellar_address FROM users WHERE id = $1`,
+      [tx.user_id]
+    );
+    const userStellarAddress = userResult.rows[0]?.stellar_address;
+    if (!userStellarAddress) {
+      return res.status(400).json({ error: 'User has no registered Stellar address' });
+    }
+
+    // Attempt refund
+    const refundHash = await escrowController.refundXlm(
+      userStellarAddress,
+      tx.xlm_amount,
+      `Admin retry refund: ${req.body.reason || 'Retry'}`
+    );
+
+    // Transition to REFUNDED if not already
+    if (tx.state === 'FAILED') {
+      await stateMachine.transition(tx.id, 'FAILED', 'REFUNDED', {
+        stellar_refund_tx: refundHash,
+        failure_reason: `Admin refund retry: ${req.body.reason || 'Retry'}`,
+      });
+    } else {
+      // Update stellar_refund_tx for already REFUNDED transactions
+      await db.query(
+        `UPDATE transactions SET stellar_refund_tx = $1 WHERE id = $2`,
+        [refundHash, tx.id]
+      );
+    }
+
+    // Log admin action
+    await auditLogService.logAdminAction(req.adminId, 'transaction_refund_retry', {
+      transaction_id: tx.id,
+      reason: req.body.reason || 'Retry',
+      refund_tx_hash: refundHash,
+    });
+
+    res.json({ success: true, refundTxHash: refundHash, transactionId: tx.id });
+  } catch (err) { 
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/admin/revenue
  */
 router.get('/revenue', authAdmin, async (req, res, next) => {
@@ -686,6 +750,58 @@ router.get('/escrow/transactions', authAdmin, async (req, res, next) => {
     `);
     res.json({ transactions: result.rows });
   } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/v1/admin/escrow/pending-refunds
+ * Retrieve transactions pending refund (FAILED state or awaiting retry)
+ */
+router.get('/escrow/pending-refunds', authAdmin, async (req, res, next) => {
+  try {
+    const { limit = 50, offset = 0 } = req.query;
+    
+    // Fetch transactions in FAILED state (potential refunds) or REFUNDED recently
+    // Also include transactions that may need refund retry
+    const result = await db.query(`
+      SELECT 
+        t.id, 
+        t.state, 
+        t.usdc_amount, 
+        t.fiat_amount, 
+        t.fiat_currency,
+        t.created_at, 
+        t.failed_at,
+        t.refunded_at,
+        t.failure_reason,
+        t.stellar_refund_tx,
+        EXTRACT(EPOCH FROM (NOW() - COALESCE(t.failed_at, t.created_at)))::int as age_seconds,
+        tr.name as trader_name,
+        u.phone_hash
+      FROM transactions t
+      LEFT JOIN traders tr ON tr.id = t.trader_id
+      LEFT JOIN users u ON u.id = t.user_id
+      WHERE t.state IN ('FAILED', 'REFUNDED')
+      ORDER BY COALESCE(t.failed_at, t.refunded_at) DESC
+      LIMIT $1 OFFSET $2
+    `, [parseInt(limit), parseInt(offset)]);
+
+    // Count total
+    const countResult = await db.query(`
+      SELECT COUNT(*) as total FROM transactions 
+      WHERE state IN ('FAILED', 'REFUNDED')
+    `);
+    const total = parseInt(countResult.rows[0]?.total || 0);
+
+    res.json({ 
+      refunds: result.rows,
+      total,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      pages: Math.ceil(total / parseInt(limit))
+    });
+  } catch (err) { 
+    next(err); 
+  }
 });
 
 /* ═══════════════════════════════════════════════════════════
