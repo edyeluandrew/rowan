@@ -8,6 +8,7 @@ import notificationService from '../services/notificationService.js';
 import db from '../db/index.js';
 import bcrypt from 'bcryptjs';
 import logger from '../utils/logger.js';
+import auditLogService from '../services/auditLogService.js';
 
 const router = Router();
 
@@ -1070,7 +1071,50 @@ router.post('/disputes/:id/note', authAdmin, async (req, res, next) => {
 router.post('/audit-log', authAdmin, async (req, res) => {
   const { action, details } = req.body;
   logger.info(`[AuditLog] Admin ${req.adminId}: ${action}`, details);
+  try {
+    await auditLogService.logAdminAction(req.adminId, action, details);
+  } catch (err) {
+    logger.error('Failed to log admin action:', err);
+  }
   res.json({ logged: true });
+});
+
+/**
+ * GET /api/v1/admin/audit-logs
+ * Retrieve audit logs with optional filters.
+ */
+router.get('/audit-logs', authAdmin, async (req, res, next) => {
+  try {
+    const filters = {
+      page: parseInt(req.query.page) || 1,
+      limit: parseInt(req.query.limit) || 50,
+      action: req.query.action,
+      entity_type: req.query.entity_type,
+      search: req.query.search,
+      date_from: req.query.date_from,
+    };
+
+    const result = await auditLogService.getAuditLogs(filters);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/admin/audit-logs/:id
+ * Retrieve a single audit log entry.
+ */
+router.get('/audit-logs/:id', authAdmin, async (req, res, next) => {
+  try {
+    const log = await auditLogService.getAuditLog(req.params.id);
+    if (!log) {
+      return res.status(404).json({ error: 'Audit log not found' });
+    }
+    res.json(log);
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../shared/context/AuthContext'
-import { LogOut, BarChart3, DollarSign, Users, AlertCircle, Settings, TrendingUp, Zap } from 'lucide-react'
+import { LogOut, BarChart3, DollarSign, Users, AlertCircle, Settings, TrendingUp, Zap, FileText } from 'lucide-react'
 
 /**
  * Sidebar navigation component
@@ -21,6 +21,7 @@ export default function Sidebar() {
     { path: '/escrow', icon: Zap, label: 'Escrow' },
     { path: '/rates', icon: BarChart3, label: 'Rates' },
     { path: '/health', icon: Settings, label: 'Health' },
+    { path: '/audit-logs', icon: FileText, label: 'Audit Logs' },
   ]
 
   const handleLogout = () => {

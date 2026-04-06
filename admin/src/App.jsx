@@ -13,6 +13,7 @@ import AnalyticsPage from './features/analytics/pages/AnalyticsPage'
 import EscrowPage from './features/escrow/pages/EscrowPage'
 import RateManagementPage from './features/rates/pages/RateManagementPage'
 import SystemHealthPage from './features/system-health/pages/SystemHealthPage'
+import AuditLogsPage from './features/audit-logs/pages/AuditLogsPage'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, isLoading } = useAuth()
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="escrow" element={<EscrowPage />} />
           <Route path="rates" element={<RateManagementPage />} />
           <Route path="health" element={<SystemHealthPage />} />
+          <Route path="audit-logs" element={<AuditLogsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
