@@ -12,6 +12,7 @@ import History from './pages/History';
 import Profile from './pages/Profile';
 import Notifications from './pages/Notifications';
 import Earnings from './pages/Earnings';
+import Disputes from './pages/Disputes';
 import DisputeDetail from './pages/DisputeDetail';
 import StellarWallet from './pages/StellarWallet';
 import SlaTracker from './pages/SlaTracker';
@@ -144,6 +145,7 @@ export default function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/earnings" element={<Earnings />} />
+        <Route path="/disputes" element={<Disputes />} />
         <Route path="/disputes/:id" element={<DisputeDetail />} />
         <Route path="/wallet" element={<StellarWallet />} />
         <Route path="/sla" element={<SlaTracker />} />

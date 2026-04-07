@@ -63,7 +63,12 @@ export default function Notifications() {
 
   const handleTap = (n) => {
     markRead([n.id]);
-    if (n.linkedTransactionId || n.transaction_id) {
+    // Navigate to dispute if it's a dispute notification
+    if (n.linkedDisputeId || n.dispute_id) {
+      navigate(`/disputes/${n.linkedDisputeId || n.dispute_id}`);
+    }
+    // Navigate to request/transaction
+    else if (n.linkedTransactionId || n.transaction_id) {
       navigate(`/requests/${n.linkedTransactionId || n.transaction_id}`);
     }
   };
