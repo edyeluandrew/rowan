@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { signToken, authAdmin } from '../middleware/auth.js';
+import { signToken, authAdmin, authTrader } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import db from '../db/index.js';
 import redis from '../db/redis.js';
@@ -421,5 +421,203 @@ async function verifyLegacyChallenge(stellarAddress, signatureBase64) {
     return false;
   }
 }
+
+/**
+ * POST /api/v1/trader/auth/change-password
+ * Change trader password.
+ * Body: { currentPassword, newPassword, confirmPassword }
+ */
+router.post(
+  '/trader/auth/change-password',
+  authTrader,
+  validate(['currentPassword', 'newPassword', 'confirmPassword']),
+  async (req, res, next) => {
+    try {
+      const { currentPassword, newPassword, confirmPassword } = req.body;
+      const traderId = req.user.id;
+
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ error: 'New passwords do not match' });
+      }
+
+      const result = await db.query(
+        `SELECT password_hash FROM traders WHERE id = $1`,
+        [traderId]
+      );
+      const trader = result.rows[0];
+      if (!trader) return res.status(404).json({ error: 'Trader not found' });
+
+      if (!(await bcrypt.compare(currentPassword, trader.password_hash))) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      const newPasswordHash = await bcrypt.hash(newPassword, 12);
+      await db.query(
+        `UPDATE traders SET password_hash = $1 WHERE id = $2`,
+        [newPasswordHash, traderId]
+      );
+
+      res.json({ message: 'Password changed successfully' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/v1/trader/auth/forgot-password
+ * Initiate password reset flow.
+ * Body: { email }
+ */
+router.post(
+  '/trader/auth/forgot-password',
+  validate(['email']),
+  async (req, res, next) => {
+    try {
+      const { email } = req.body;
+
+      const result = await db.query(
+        `SELECT id FROM traders WHERE email = $1`,
+        [email]
+      );
+      const trader = result.rows[0];
+
+      if (!trader) {
+        // Don't leak that email exists or not
+        return res.json({ message: 'If email exists, password reset link has been sent' });
+      }
+
+      const otp = crypto.randomBytes(3).toString('hex').toUpperCase();
+      const otpKey = `trader:otp:${email}`;
+      await redis.setex(otpKey, 900, otp); // 15 minutes
+
+      // TODO: Send OTP via email
+      logger.info(`[Auth] Password reset OTP for ${email}: ${otp}`);
+
+      res.json({ message: 'If email exists, password reset link has been sent' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/v1/trader/auth/reset-password
+ * Reset password with OTP.
+ * Body: { email, otp, newPassword, confirmPassword }
+ */
+router.post(
+  '/trader/auth/reset-password',
+  validate(['email', 'otp', 'newPassword', 'confirmPassword']),
+  async (req, res, next) => {
+    try {
+      const { email, otp, newPassword, confirmPassword } = req.body;
+
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ error: 'New passwords do not match' });
+      }
+
+      const otpKey = `trader:otp:${email}`;
+      const storedOtp = await redis.get(otpKey);
+
+      if (!storedOtp || storedOtp !== otp.toUpperCase()) {
+        return res.status(401).json({ error: 'Invalid or expired OTP' });
+      }
+
+      const result = await db.query(
+        `SELECT id FROM traders WHERE email = $1`,
+        [email]
+      );
+      const trader = result.rows[0];
+      if (!trader) return res.status(404).json({ error: 'Trader not found' });
+
+      const newPasswordHash = await bcrypt.hash(newPassword, 12);
+      await db.query(
+        `UPDATE traders SET password_hash = $1 WHERE id = $2`,
+        [newPasswordHash, trader.id]
+      );
+
+      await redis.del(otpKey);
+
+      res.json({ message: 'Password reset successfully' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/v1/trader/auth/sessions
+ * Get active sessions for trader.
+ */
+router.get(
+  '/trader/auth/sessions',
+  authTrader,
+  async (req, res, next) => {
+    try {
+      const traderId = req.user.id;
+
+      const result = await db.query(
+        `SELECT id, device_id, created_at, last_seen_at FROM trader_sessions WHERE trader_id = $1 ORDER BY last_seen_at DESC`,
+        [traderId]
+      );
+
+      res.json({ sessions: result.rows });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * DELETE /api/v1/trader/auth/sessions/:sessionId
+ * Revoke a specific session.
+ */
+router.delete(
+  '/trader/auth/sessions/:sessionId',
+  authTrader,
+  async (req, res, next) => {
+    try {
+      const traderId = req.user.id;
+      const { sessionId } = req.params;
+
+      const result = await db.query(
+        `DELETE FROM trader_sessions WHERE id = $1 AND trader_id = $2`,
+        [sessionId, traderId]
+      );
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+
+      res.json({ message: 'Session revoked' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * DELETE /api/v1/trader/auth/sessions/all
+ * Revoke all sessions for trader.
+ */
+router.delete(
+  '/trader/auth/sessions/all',
+  authTrader,
+  async (req, res, next) => {
+    try {
+      const traderId = req.user.id;
+
+      await db.query(
+        `DELETE FROM trader_sessions WHERE trader_id = $1`,
+        [traderId]
+      );
+
+      res.json({ message: 'All sessions revoked' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 export default router;
