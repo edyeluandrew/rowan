@@ -55,6 +55,14 @@ export async function setPreference(key, value) {
   }
 }
 
+export async function removePreference(key) {
+  try {
+    await Preferences.remove({ key });
+  } catch {
+    /* key may not exist — safe to ignore */
+  }
+}
+
 export async function clearPreferences() {
   try {
     await Preferences.clear();

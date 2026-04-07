@@ -331,7 +331,29 @@ function enqueueReMatch(transactionId, currentTraderId, delaySeconds) {
 function enqueueTrustDecay(traderId, amount = 2) {
   return trustDecayQueue.add({ traderId, amount });
 }
+/**
+ * Enqueue a dispute refund job.
+ * Called when dispute is resolved in user's favor.
+ */
+function enqueueDisputeRefund(transactionId, userId) {
+  logger.info(`[JobQueue] Enqueuing dispute refund for tx ${transactionId}`);
+  return refundQueue.add(
+    { transactionId, dispute: true, userId },
+    { priority: 10 } // High priority
+  );
+}
 
+/**
+ * Enqueue a dispute USDC release job.
+ * Called when dispute is resolved in trader's favor.
+ */
+function enqueueDisputeRelease(transactionId, traderId) {
+  logger.info(`[JobQueue] Enqueuing dispute release for tx ${transactionId}`);
+  return releaseQueue.add(
+    { transactionId, dispute: true, traderId },
+    { priority: 10 } // High priority
+  );
+}
 export default {
   refundQueue,
   releaseQueue,
@@ -343,4 +365,6 @@ export default {
   enqueueRelease,
   enqueueReMatch,
   enqueueTrustDecay,
+  enqueueDisputeRefund,
+  enqueueDisputeRelease,
 };

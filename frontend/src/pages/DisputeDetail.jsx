@@ -6,6 +6,7 @@ import {
   AlertTriangle, Hourglass, Upload, ShieldCheck,
 } from 'lucide-react';
 import { getDispute, respondToDispute } from '../api/disputes';
+import { useToast } from '../hooks/useToast';
 import DisputeStatusBadge from '../components/disputes/DisputeStatusBadge';
 import ProofUploader from '../components/disputes/ProofUploader';
 import Button from '../components/ui/Button';
@@ -16,13 +17,12 @@ import Badge from '../components/ui/Badge';
 export default function DisputeDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { success: successToast, error: errorToast } = useToast();
   const [dispute, setDispute] = useState(null);
   const [loading, setLoading] = useState(true);
   const [responseText, setResponseText] = useState('');
   const [proofData, setProofData] = useState({ base64: null, fileName: null, ext: null });
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState(null);
   const [countdown, setCountdown] = useState(null);
   const timerRef = useRef(null);
 
@@ -62,9 +62,8 @@ export default function DisputeDetail() {
   }, [dispute]);
 
   const handleSubmit = async () => {
-    setError(null);
-    if (!proofData.base64) { setError('Proof of payment is required'); return; }
-    if (!responseText.trim()) { setError('Please describe the payment you made'); return; }
+    if (!proofData.base64) { errorToast('Missing Proof', 'Proof of payment is required'); return; }
+    if (!responseText.trim()) { errorToast('Missing Response', 'Please describe the payment you made'); return; }
 
     setSubmitting(true);
     try {
@@ -76,10 +75,10 @@ export default function DisputeDetail() {
       const file = new File([blob], proofData.fileName || 'proof.jpeg', { type: blob.type });
 
       await respondToDispute(id, responseText.trim(), file);
-      setSuccess(true);
+      successToast('Dispute Response Submitted', 'Our team will review your response');
       setDispute((prev) => ({ ...prev, status: 'UNDER_REVIEW', traderResponse: responseText.trim(), respondedAt: new Date().toISOString() }));
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to submit response');
+      errorToast('Submission Failed', err.response?.data?.error || 'Failed to submit response');
     } finally {
       setSubmitting(false);
     }

@@ -3,6 +3,7 @@ import { getAgreement, confirmAgreement, submitOnboarding } from '../../../api/o
 import AgreementViewer from '../../../components/onboarding/AgreementViewer';
 import LoadingSpinner from '../../../components/ui/LoadingSpinner';
 import Button from '../../../components/ui/Button';
+import { normalizeAgreementResponse } from '../../../utils/agreementNormalizer';
 
 /**
  * Convert a base64 + ext to a File object for multipart upload.
@@ -18,9 +19,9 @@ function base64ToFile(base64, fileName, mimeType) {
 
 /**
  * Step5_Agreement — Read, agree, and submit the full application.
- * Props: formData, goNext
+ * Props: formData, goNext, onSubmissionComplete (callback when submitted)
  */
-export default function Step5_Agreement({ formData, goNext }) {
+export default function Step5_Agreement({ formData, goNext, onSubmissionComplete }) {
   const [content, setContent] = useState(null);
   const [agreementVersion, setAgreementVersion] = useState('');
   const [fetchLoading, setFetchLoading] = useState(true);
@@ -33,8 +34,9 @@ export default function Step5_Agreement({ formData, goNext }) {
     (async () => {
       try {
         const data = await getAgreement();
-        setContent(data.content || data.agreement || '');
-        setAgreementVersion(data.version || data.agreementVersion || '1.0');
+        const normalized = normalizeAgreementResponse(data);
+        setContent(normalized.content);
+        setAgreementVersion(normalized.version);
       } catch {
         setError('Failed to load agreement. Please try again.');
       } finally {
@@ -94,6 +96,12 @@ export default function Step5_Agreement({ formData, goNext }) {
 
       /* 3. Submit */
       await submitOnboarding(fd);
+      
+      // Clear draft on successful submission
+      if (onSubmissionComplete) {
+        await onSubmissionComplete();
+      }
+      
       goNext();
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Submission failed. Please try again.');

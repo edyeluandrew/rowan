@@ -1,73 +1,50 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Smartphone, ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Smartphone } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { getSessions, revokeSession, revokeAllSessions } from '../../api/security';
-import { formatTimeAgo } from '../../utils/format';
+import { useToast } from '../../hooks/useToast';
+import { useSessions } from '../../hooks/useSessions';
+import SessionCard from '../../components/sessions/SessionCard';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 /**
- * Parse a user agent string into a readable device name.
- */
-function parseDevice(ua) {
-  if (!ua) return 'Unknown Device';
-  if (/Chrome/.test(ua) && /Android/.test(ua)) return 'Chrome on Android';
-  if (/Safari/.test(ua) && /iPhone|iPad/.test(ua)) return 'Safari on iOS';
-  if (/Firefox/.test(ua)) return 'Firefox';
-  if (/Chrome/.test(ua)) return 'Chrome on Desktop';
-  if (/Safari/.test(ua)) return 'Safari on macOS';
-  if (/Edge/.test(ua)) return 'Edge on Desktop';
-  return 'Unknown Browser';
-}
-
-/**
  * ActiveSessions — view and revoke logged-in sessions.
+ * Allows traders to manage devices and secure their accounts.
  */
 export default function ActiveSessions() {
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { success: successToast, error: errorToast } = useToast();
+  const { sessions, loading, error, revoking, revoke, revokeAll } = useSessions();
   const [confirmId, setConfirmId] = useState(null);
-  const [revoking, setRevoking] = useState(false);
-  const [showRevokeAll, setShowRevokeAll] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await getSessions();
-        setSessions(data.sessions || data || []);
-      } catch { /* non-critical — empty list shown */ } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const [revokeAllId, setRevokeAllId] = useState(null);
 
   const handleRevoke = async (sessionId) => {
-    setRevoking(true);
-    try {
-      await revokeSession(sessionId);
-      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-    } catch { /* revoke failed — session stays in list */ } finally {
-      setRevoking(false);
-      setConfirmId(null);
+    const success = await revoke(sessionId);
+    if (success) {
+      successToast('Session Revoked', 'Device has been signed out');
+    } else {
+      errorToast('Failed to Revoke', 'Could not revoke this session');
     }
+    setConfirmId(null);
   };
 
   const handleRevokeAll = async () => {
-    setRevoking(true);
-    try {
-      await revokeAllSessions();
-      await logout();
-      navigate('/login', { replace: true });
-    } catch { /* revoke-all failed — user stays on page */ } finally {
-      setRevoking(false);
-      setShowRevokeAll(false);
+    const success = await revokeAll();
+    if (success) {
+      successToast('Logging Out', 'Signing out from all devices...');
+      setTimeout(() => {
+        logout();
+        navigate('/login', { replace: true });
+      }, 1500);
+    } else {
+      errorToast('Failed to Logout', 'Could not revoke all sessions');
     }
+    setRevokeAllId(null);
   };
 
   return (
-    <div className="bg-rowan-bg min-h-screen">
+    <div className="bg-rowan-bg min-h-screen pb-24">
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-rowan-border">
         <button onClick={() => navigate(-1)} className="text-rowan-text">
@@ -83,92 +60,91 @@ export default function ActiveSessions() {
           </div>
         ) : (
           <>
+            {/* Page description */}
+            <p className="text-rowan-muted text-sm mb-6">
+              Manage devices currently signed into your Rowan account.
+            </p>
+
             {/* Current device banner */}
-            <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-md p-3 mb-4 flex items-center gap-3">
-              <Smartphone size={20} className="text-rowan-yellow" />
-              <div>
+            <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-lg p-4 mb-6 flex items-center gap-3">
+              <Smartphone size={20} className="text-rowan-yellow flex-shrink-0" />
+              <div className="flex-1">
                 <p className="text-rowan-yellow font-bold text-sm">This device</p>
                 <p className="text-rowan-muted text-xs">Currently active</p>
               </div>
             </div>
 
             {/* Session list */}
-            {sessions.map((session) => (
-              <div
-                key={session.id}
-                className="bg-rowan-surface border border-rowan-border rounded-md p-4 mb-3"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-rowan-text text-sm font-medium flex-1">
-                    {parseDevice(session.userAgent || session.user_agent)}
-                  </span>
-                  {session.isCurrent && (
-                    <span className="bg-rowan-green/15 text-rowan-green text-xs px-2 py-0.5 rounded">
-                      Current
-                    </span>
-                  )}
+            {sessions && sessions.length > 0 ? (
+              <>
+                <div className="mb-4">
+                  <p className="text-rowan-muted text-xs uppercase tracking-wider mb-3">
+                    Active Sessions ({sessions.length})
+                  </p>
+                  {sessions.map((session) => (
+                    <SessionCard
+                      key={session.id}
+                      session={session}
+                      isCurrent={session.isCurrent}
+                      onRevoke={() => setConfirmId(session.id)}
+                      loading={revoking}
+                    />
+                  ))}
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-rowan-muted text-xs font-mono">
-                    {session.ipAddress || session.ip_address || session.ip || '—'}
-                  </span>
-                  <span className="text-rowan-muted text-xs">
-                    {session.lastActive || session.last_active_at
-                      ? formatTimeAgo(session.lastActive || session.last_active_at)
-                      : '—'}
-                  </span>
-                  {!session.isCurrent && (
-                    <button
-                      onClick={() => setConfirmId(session.id)}
-                      className="text-rowan-red text-xs font-medium ml-auto"
-                    >
-                      Revoke
-                    </button>
-                  )}
-                </div>
+
+                {/* Revoke All Others button */}
+                {sessions.filter((s) => !s.isCurrent).length > 0 && (
+                  <button
+                    onClick={() => setRevokeAllId(true)}
+                    disabled={revoking}
+                    className="w-full py-3 rounded-lg border border-rowan-red/50 text-rowan-red text-sm font-medium hover:bg-rowan-red/5 active:bg-rowan-red/10 transition-colors disabled:opacity-50"
+                  >
+                    Revoke All Other Sessions
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20">
+                <Smartphone size={48} className="text-rowan-muted mb-4 opacity-30" />
+                <p className="text-rowan-muted text-sm text-center">
+                  No active sessions found
+                </p>
               </div>
-            ))}
-
-            {sessions.length === 0 && (
-              <p className="text-rowan-muted text-sm text-center py-10">No sessions found</p>
-            )}
-
-            {/* Revoke All Others */}
-            {sessions.length >= 2 && (
-              <button
-                onClick={() => setShowRevokeAll(true)}
-                className="w-full py-3 rounded-md border border-rowan-red text-rowan-red text-sm font-medium mt-4 active:bg-rowan-red/10 transition-colors"
-              >
-                Revoke All Others
-              </button>
             )}
           </>
         )}
       </div>
 
-      {/* Single session revoke confirmation */}
+      {/* Single session revoke confirmation modal */}
       {confirmId && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={() => setConfirmId(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
+          onClick={() => setConfirmId(null)}
+        >
           <div
-            className="bg-rowan-surface w-full max-w-md rounded-t-2xl p-6"
+            className="bg-rowan-surface w-full max-w-md rounded-t-3xl p-6 border-t border-rowan-border"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-rowan-text font-semibold text-base mb-2">Revoke Session?</h3>
+            <h3 className="text-rowan-text font-semibold text-base mb-2">
+              Revoke Session?
+            </h3>
             <p className="text-rowan-muted text-sm mb-6">
-              Are you sure you want to revoke this session?
+              You will be signed out of this device. You can sign back in anytime.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmId(null)}
-                className="flex-1 py-3 rounded-xl bg-rowan-border text-rowan-text text-sm font-medium"
+                disabled={revoking}
+                className="flex-1 py-3 rounded-lg bg-rowan-border text-rowan-text text-sm font-medium active:bg-rowan-border/80 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleRevoke(confirmId)}
                 disabled={revoking}
-                className="flex-1 py-3 rounded-xl bg-rowan-red text-white text-sm font-medium disabled:opacity-50"
+                className="flex-1 py-3 rounded-lg bg-rowan-red text-white text-sm font-medium active:bg-rowan-red/80 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
+                {revoking && <LoadingSpinner size={16} />}
                 Revoke
               </button>
             </div>
@@ -176,29 +152,36 @@ export default function ActiveSessions() {
         </div>
       )}
 
-      {/* Revoke All confirmation */}
-      {showRevokeAll && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={() => setShowRevokeAll(false)}>
+      {/* Revoke All confirmation modal */}
+      {revokeAllId && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
+          onClick={() => setRevokeAllId(null)}
+        >
           <div
-            className="bg-rowan-surface w-full max-w-md rounded-t-2xl p-6"
+            className="bg-rowan-surface w-full max-w-md rounded-t-3xl p-6 border-t border-rowan-border"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-rowan-text font-semibold text-base mb-2">Revoke All Sessions?</h3>
+            <h3 className="text-rowan-text font-semibold text-base mb-2">
+              Revoke All Other Sessions?
+            </h3>
             <p className="text-rowan-muted text-sm mb-6">
-              This will log you out of all devices including this one.
+              This will sign you out of all devices except this one. You'll stay signed in here.
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => setShowRevokeAll(false)}
-                className="flex-1 py-3 rounded-xl bg-rowan-border text-rowan-text text-sm font-medium"
+                onClick={() => setRevokeAllId(null)}
+                disabled={revoking}
+                className="flex-1 py-3 rounded-lg bg-rowan-border text-rowan-text text-sm font-medium active:bg-rowan-border/80 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleRevokeAll}
                 disabled={revoking}
-                className="flex-1 py-3 rounded-xl bg-rowan-red text-white text-sm font-medium disabled:opacity-50"
+                className="flex-1 py-3 rounded-lg bg-rowan-red text-white text-sm font-medium active:bg-rowan-red/80 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
+                {revoking && <LoadingSpinner size={16} />}
                 Revoke All
               </button>
             </div>

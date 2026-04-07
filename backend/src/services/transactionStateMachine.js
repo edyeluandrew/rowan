@@ -125,9 +125,61 @@ function isValidTransition(fromState, toState) {
   return allowed ? allowed.includes(toState) : false;
 }
 
+/**
+ * Handle dispute-related transaction state updates.
+ * Disputes can change transaction state based on resolution.
+ *
+ * @param {string} transactionId - transaction in dispute
+ * @param {string} action - 'DISPUTE_OPENED', 'DISPUTE_WON_USER', 'DISPUTE_WON_TRADER'
+ * @param {object} extra - additional data
+ */
+async function transitionForDispute(transactionId, action, extra = {}) {
+  let targetState = null;
+
+  // Determine target state based on dispute action
+  switch (action) {
+    case 'DISPUTE_OPENED':
+      // Hold transaction state (don't change it, just record dispute_id)
+      logger.info(`[StateMachine] Dispute opened for tx ${transactionId}, holding state`);
+      await db.query(
+        `UPDATE transactions 
+         SET dispute_id = $1, dispute_started_at = NOW(), updated_at = NOW() 
+         WHERE id = $2`,
+        [extra.dispute_id, transactionId]
+      );
+      return;
+
+    case 'DISPUTE_WON_USER':
+      // User won dispute - initiate refund
+      targetState = 'DISPUTE_REFUND_PENDING';
+      break;
+
+    case 'DISPUTE_WON_TRADER':
+      // Trader won dispute - initiate release
+      targetState = 'DISPUTE_RELEASE_PENDING';
+      break;
+
+    default:
+      throw new Error(`Unknown dispute action: ${action}`);
+  }
+
+  if (targetState) {
+    logger.info(`[StateMachine] Dispute resolution: tx ${transactionId} → ${targetState}`);
+    
+    // Update transaction state and timestamp
+    await db.query(
+      `UPDATE transactions 
+       SET state = $1, dispute_resolved_at = NOW(), updated_at = NOW()
+       WHERE id = $2`,
+      [targetState, transactionId]
+    );
+  }
+}
+
 export default {
   transition,
   isValidTransition,
+  transitionForDispute,
   VALID_TRANSITIONS,
   STATE_TIMESTAMPS,
 };

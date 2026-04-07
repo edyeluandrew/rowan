@@ -344,6 +344,29 @@ function notifyAdminAction(adminId, action, details = {}) {
 }
 
 /**
+ * Notify all admins with a generic event
+ * Used for broadcast notifications about disputes, transactions, etc.
+ */
+async function notifyAdmins(event, data) {
+  websocket.broadcast('admin', event, {
+    ...data,
+    timestamp: new Date().toISOString(),
+  });
+  logger.info(`[Notify] Admins — event: ${event}`);
+}
+
+/**
+ * Notify a specific trader with an event
+ */
+async function notifyTrader(traderId, event, data) {
+  websocket.emitToTrader(traderId, event, {
+    ...data,
+    timestamp: new Date().toISOString(),
+  });
+  logger.info(`[Notify] Trader ${traderId} — event: ${event}`);
+}
+
+/**
  * Phase 2: Send SMS via aggregator API.
  * Placeholder for Flutterwave / Africa's Talking integration.
  */
@@ -370,6 +393,8 @@ export default {
   notifyAdminRatesUpdate,
   notifyAdminStatsUpdate,
   notifyAdminAction,
+  notifyAdmins,
+  notifyTrader,
   cacheUserPhoneNumber,
   getCachedPhoneNumber,
 };

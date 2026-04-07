@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MailCheck } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import { getOnboardingStatus } from '../../../api/onboarding';
+import { ONBOARDING_VERIFIED_REDIRECT_MS } from '../../../utils/constants';
 
 /**
  * Step6_Submitted — Application submitted confirmation screen.

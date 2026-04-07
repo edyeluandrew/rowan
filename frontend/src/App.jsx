@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import LoadingSpinner from './components/ui/LoadingSpinner';
+import ToastContainer from './components/ui/ToastContainer';
 import AppShell from './components/layout/AppShell';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -53,7 +54,9 @@ function PublicRoute({ children }) {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <ToastContainer />
+      <Routes>
       {/* Public routes */}
       <Route
         path="/login"
@@ -148,5 +151,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
+    </>
   );
 }

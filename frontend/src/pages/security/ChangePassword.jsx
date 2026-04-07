@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { changePassword } from '../../api/security';
+import { useToast } from '../../hooks/useToast';
 import Button from '../../components/ui/Button';
+import { CHANGE_PASSWORD_REDIRECT_MS } from '../../utils/constants';
 
 /**
  * ChangePassword — change current password with strength indicator.
  */
 export default function ChangePassword() {
   const navigate = useNavigate();
+  const { success: successToast, error: errorToast } = useToast();
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
@@ -16,8 +19,6 @@ export default function ChangePassword() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(false);
 
   const hasLength = newPw.length >= 8;
   const hasUpper = /[A-Z]/.test(newPw);
@@ -35,21 +36,20 @@ export default function ChangePassword() {
   const strength = getStrength();
 
   const handleSubmit = async () => {
-    setError(null);
-    if (!currentPw) { setError('Current password is required'); return; }
-    if (!allMet) { setError('New password must meet all requirements'); return; }
-    if (newPw !== confirmPw) { setError('Passwords do not match'); return; }
+    if (!currentPw) { errorToast('Validation', 'Current password is required'); return; }
+    if (!allMet) { errorToast('Weak Password', 'New password must meet all requirements'); return; }
+    if (newPw !== confirmPw) { errorToast('Mismatch', 'Passwords do not match'); return; }
 
     setLoading(true);
     try {
       await changePassword(currentPw, newPw, confirmPw);
-      setSuccess(true);
+      successToast('Password Changed', 'Your password has been updated successfully');
       setCurrentPw('');
       setNewPw('');
       setConfirmPw('');
       setTimeout(() => navigate(-1), CHANGE_PASSWORD_REDIRECT_MS);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to change password');
+      errorToast('Password Change Failed', err.response?.data?.error || 'Failed to change password');
     } finally {
       setLoading(false);
     }
@@ -75,12 +75,6 @@ export default function ChangePassword() {
       </div>
 
       <div className="px-4 pt-6">
-        {success && (
-          <div className="bg-rowan-green/15 border border-rowan-green/30 rounded-md p-3 mb-4">
-            <p className="text-rowan-green text-sm font-medium">Password changed successfully!</p>
-          </div>
-        )}
-
         {/* Current password */}
         <label className="block mb-1 text-rowan-muted text-xs">Current Password</label>
         <div className="relative mb-4">

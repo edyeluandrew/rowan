@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, Globe, Fingerprint, Copy, CopyCheck,
-  KeyRound, AlertTriangle, Wallet, TrendingUp,
+  ChevronLeft, Globe, Fingerprint, Copy,
+  KeyRound, Wallet, TrendingUp,
 } from 'lucide-react';
 import { getWallet, verifyWalletAddress } from '../api/wallet';
+import { useToast } from '../hooks/useToast';
 import { COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants';
 import WalletTransactionRow from '../components/wallet/WalletTransactionRow';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -12,21 +13,21 @@ import Button from '../components/ui/Button';
 
 export default function StellarWallet() {
   const navigate = useNavigate();
+  const { success: successToast, error: errorToast, info: infoToast } = useToast();
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
   const [showVerify, setShowVerify] = useState(false);
   const [newAddress, setNewAddress] = useState('');
   const [verifying, setVerifying] = useState(false);
-  const [verifyErr, setVerifyErr] = useState(null);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
     (async () => {
       try {
         const data = await getWallet();
         setWallet(data);
-      } catch { setError('Failed to load wallet'); } finally {
+      } catch { 
+        errorToast('Failed to Load', 'Could not load wallet data');
+      } finally {
         setLoading(false);
       }
     })();
@@ -36,14 +37,12 @@ export default function StellarWallet() {
     const addr = wallet?.stellarAddress || wallet?.stellar_address || '';
     if (!addr) return;
     navigator.clipboard.writeText(addr).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), COPY_FEEDBACK_TIMEOUT_MS);
+      successToast('Copied', 'Address copied to clipboard');
     });
   };
 
   const handleVerify = async () => {
-    setVerifyErr(null);
-    if (!newAddress.trim()) { setVerifyErr('Enter a Stellar address'); return; }
+    if (!newAddress.trim()) { errorToast('Required', 'Enter a Stellar address'); return; }
     setVerifying(true);
     try {
       await verifyWalletAddress(newAddress.trim());
@@ -52,10 +51,11 @@ export default function StellarWallet() {
         stellarAddress: newAddress.trim(),
         stellar_address: newAddress.trim(),
       }));
+      successToast('Address Verified', 'Wallet address updated successfully');
       setShowVerify(false);
       setNewAddress('');
     } catch (err) {
-      setVerifyErr(err.response?.data?.error || 'Verification failed');
+      errorToast('Verification Failed', err.response?.data?.error || 'Could not verify address');
     } finally {
       setVerifying(false);
     }
@@ -84,10 +84,6 @@ export default function StellarWallet() {
         <h1 className="text-rowan-text font-semibold text-lg">Stellar Wallet</h1>
       </div>
 
-      {error && (
-        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mx-4 mt-4 text-rowan-red text-sm">{error}</div>
-      )}
-
       <div className="px-4">
         {/* Address card */}
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mt-4">
@@ -102,11 +98,8 @@ export default function StellarWallet() {
               onClick={copyAddress}
               className="flex-1 flex items-center justify-center gap-1.5 border border-rowan-border text-rowan-muted py-2.5 rounded-lg text-sm active:bg-rowan-border/50 transition-colors"
             >
-              {copied ? (
-                <><CopyCheck size={15} className="text-rowan-green" /><span className="text-rowan-green">Copied!</span></>
-              ) : (
-                <><Copy size={15} />Copy Address</>
-              )}
+              <Copy size={15} />
+              Copy Address
             </button>
             <button
               onClick={() => setShowVerify(true)}
@@ -176,8 +169,6 @@ export default function StellarWallet() {
               placeholder="G..."
               className="bg-rowan-bg border border-rowan-border text-rowan-text rounded-lg px-4 py-3 w-full text-sm font-mono focus:outline-none focus:border-rowan-yellow placeholder-rowan-muted mb-3"
             />
-
-            {verifyErr && <p className="text-rowan-red text-sm mb-3">{verifyErr}</p>}
 
             <Button variant="primary" size="lg" onClick={handleVerify} loading={verifying}>
               Confirm

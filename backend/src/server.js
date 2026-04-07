@@ -19,6 +19,7 @@ import traderOnboardingRoutes from './routes/traderOnboarding.js';
 import adminRoutes from './routes/admin.js';
 import userRoutes from './routes/user.js';
 import ratesRoutes from './routes/rates.js';
+import disputesRoutes from './routes/disputes.js';
 
 // Services
 import websocket from './services/websocket.js';
@@ -135,6 +136,7 @@ app.get('/health', async (req, res) => {
 // ─── API Routes ─────────────────────────────────────────────
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/cashout', cashoutRoutes);
+app.use('/api/v1/disputes', disputesRoutes);
 app.use('/api/v1/trader', traderRoutes);
 app.use('/api/v1/trader/onboarding', traderOnboardingRoutes);
 app.use('/api/v1/admin', adminRoutes);
