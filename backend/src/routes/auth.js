@@ -644,12 +644,12 @@ router.delete(
 /* ────────────────── 2FA ENDPOINTS ────────────────── */
 
 /**
- * POST /api/v1/trader/auth/2fa/setup
+ * POST /api/v1/auth/2fa/setup
  * Initiate 2FA setup - generate TOTP secret and return QR code
  * Requires: authenticated trader
  */
 router.post(
-  '/trader/auth/2fa/setup',
+  '/2fa/setup',
   authTrader,
   async (req, res, next) => {
     try {
@@ -699,12 +699,12 @@ router.post(
 );
 
 /**
- * POST /api/v1/trader/auth/2fa/verify-setup
+ * POST /api/v1/auth/2fa/verify-setup
  * Verify 2FA setup code and finalize 2FA enabling
  * Body: { code } - 6-digit TOTP code
  */
 router.post(
-  '/trader/auth/2fa/verify-setup',
+  '/2fa/verify-setup',
   authTrader,
   validate(['code']),
   async (req, res, next) => {
@@ -775,11 +775,11 @@ router.post(
 );
 
 /**
- * GET /api/v1/trader/auth/2fa/status
+ * GET /api/v1/auth/2fa/status
  * Check if 2FA is enabled for this trader
  */
 router.get(
-  '/trader/auth/2fa/status',
+  '/2fa/status',
   authTrader,
   async (req, res, next) => {
     try {
@@ -807,14 +807,14 @@ router.get(
 );
 
 /**
- * POST /api/v1/trader/auth/2fa/verify-login
+ * POST /api/v1/auth/2fa/verify-login
  * Verify 2FA code during login (TOTP or backup code)
  * This is called after password verification succeeds and 2FA is enabled
  * Body: { traderId, code }
  * Rate limited to 15 attempts per 15 minutes per IP
  */
 router.post(
-  '/trader/auth/2fa/verify-login',
+  '/2fa/verify-login',
   twoFactorVerifyLimiter,
   validate(['traderId', 'code']),
   async (req, res, next) => {
@@ -898,12 +898,12 @@ router.post(
 );
 
 /**
- * POST /api/v1/trader/auth/2fa/disable
+ * POST /api/v1/auth/2fa/disable
  * Disable 2FA (requires current TOTP code or backup code for confirmation)
  * Body: { code } - current TOTP code or backup code
  */
 router.post(
-  '/trader/auth/2fa/disable',
+  '/2fa/disable',
   authTrader,
   validate(['code']),
   async (req, res, next) => {
