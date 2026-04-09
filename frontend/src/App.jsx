@@ -24,6 +24,7 @@ import ChangePassword from './pages/security/ChangePassword';
 import ActiveSessions from './pages/security/ActiveSessions';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
+import TwoFactorVerify from './pages/TwoFactorVerify';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -88,6 +89,14 @@ export default function App() {
         element={
           <PublicRoute>
             <ResetPassword />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/verify-2fa"
+        element={
+          <PublicRoute>
+            <TwoFactorVerify />
           </PublicRoute>
         }
       />

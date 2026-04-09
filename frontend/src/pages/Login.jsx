@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { loginTrader } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 
@@ -17,6 +18,18 @@ export default function Login() {
     setLoading(true);
     setError(null);
     try {
+      const response = await loginTrader(email, password);
+      
+      // Handle 2FA requirement
+      if (response.requiresTwoFactor) {
+        navigate('/verify-2fa', {
+          state: { traderId: response.traderId },
+          replace: true,
+        });
+        return;
+      }
+      
+      // Normal login - authenticate context will be set
       await login(email, password);
       navigate('/home', { replace: true });
     } catch (err) {

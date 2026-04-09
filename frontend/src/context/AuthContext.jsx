@@ -63,8 +63,24 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(false);
   }, []);
 
+  const setTokenDirect = useCallback(async (jwt) => {
+    await setSecure('rowan_trader_token', jwt);
+    setClientToken(jwt);
+    setToken(jwt);
+  }, []);
+
+  const setTraderDirect = useCallback(async (profile) => {
+    await setSecure('rowan_trader_profile', JSON.stringify(profile));
+    await setSecure('rowan_trader_id', String(profile.id));
+    if (profile.stellar_address) {
+      await setSecure('rowan_stellar_address', profile.stellar_address);
+    }
+    setTrader(profile);
+    setIsAuthenticated(true);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ trader, token, isAuthenticated, loading, login, logout }}>
+    <AuthContext.Provider value={{ trader, token, isAuthenticated, loading, login, logout, setToken: setTokenDirect, setTrader: setTraderDirect }}>
       {children}
     </AuthContext.Provider>
   );

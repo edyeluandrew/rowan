@@ -4,6 +4,7 @@ import { ChevronLeft } from 'lucide-react';
 import { changePassword } from '../../api/security';
 import { useToast } from '../../hooks/useToast';
 import Button from '../../components/ui/Button';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { CHANGE_PASSWORD_REDIRECT_MS } from '../../utils/constants';
 
 /**
@@ -19,6 +20,7 @@ export default function ChangePassword() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const hasLength = newPw.length >= 8;
   const hasUpper = /[A-Z]/.test(newPw);
@@ -35,11 +37,14 @@ export default function ChangePassword() {
 
   const strength = getStrength();
 
-  const handleSubmit = async () => {
+  const handleValidate = () => {
     if (!currentPw) { errorToast('Validation', 'Current password is required'); return; }
     if (!allMet) { errorToast('Weak Password', 'New password must meet all requirements'); return; }
     if (newPw !== confirmPw) { errorToast('Mismatch', 'Passwords do not match'); return; }
+    setShowConfirmModal(true);
+  };
 
+  const handleConfirmChange = async () => {
     setLoading(true);
     try {
       await changePassword(currentPw, newPw, confirmPw);
@@ -52,6 +57,7 @@ export default function ChangePassword() {
       errorToast('Password Change Failed', err.response?.data?.error || 'Failed to change password');
     } finally {
       setLoading(false);
+      setShowConfirmModal(false);
     }
   };
 
@@ -148,14 +154,49 @@ export default function ChangePassword() {
           </button>
         </div>
 
-        {error && <p className="text-rowan-red text-sm text-center mb-3">{error}</p>}
-
         <div className="mt-6">
-          <Button variant="primary" size="lg" onClick={handleSubmit} loading={loading}>
+          <Button variant="primary" size="lg" onClick={handleValidate} loading={loading}>
             Update Password
           </Button>
         </div>
       </div>
+
+      {/* Confirmation modal */}
+      {showConfirmModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
+          onClick={() => !loading && setShowConfirmModal(false)}
+        >
+          <div
+            className="bg-rowan-surface w-full max-w-md rounded-t-3xl p-6 border-t border-rowan-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-rowan-text font-semibold text-base mb-2">
+              Change Password?
+            </h3>
+            <p className="text-rowan-muted text-sm mb-6">
+              Are you sure you want to update your password? You may need to sign in again on other devices.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                disabled={loading}
+                className="flex-1 py-3 rounded-lg bg-rowan-border text-rowan-text text-sm font-medium active:bg-rowan-border/80 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmChange}
+                disabled={loading}
+                className="flex-1 py-3 rounded-lg bg-rowan-yellow text-rowan-bg text-sm font-medium active:bg-rowan-yellow/80 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading && <LoadingSpinner size={16} />}
+                Confirm Change
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

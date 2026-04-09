@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import { signToken, authAdmin, authTrader } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
@@ -7,8 +8,28 @@ import redis from '../db/redis.js';
 import bcrypt from 'bcryptjs';
 import { StellarSdk, networkPassphrase } from '../config/stellar.js';
 import logger from '../utils/logger.js';
+import {
+  generateTotpSecret,
+  verifyTotpCode,
+  generateBackupCodes,
+  hashBackupCode,
+  verifyAndUseBackupCode,
+  storeBackupCodes,
+  getBackupCodeCount,
+  log2faVerification,
+} from '../handlers/totp.js';
 
 const router = Router();
+
+/* ── Rate limiters for security-critical endpoints ── */
+const twoFactorVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // 15 requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many 2FA verification attempts. Please try again later.' },
+  skip: (req) => process.env.NODE_ENV === 'development', // Skip in development
+});
 
 /* ── SEP-10 server signing keypair (loaded once at startup) ────────── */
 const sep10Keypair = process.env.SEP10_SIGNING_SECRET
@@ -614,6 +635,385 @@ router.delete(
       );
 
       res.json({ message: 'All sessions revoked' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/* ────────────────── 2FA ENDPOINTS ────────────────── */
+
+/**
+ * POST /api/v1/trader/auth/2fa/setup
+ * Initiate 2FA setup - generate TOTP secret and return QR code
+ * Requires: authenticated trader
+ */
+router.post(
+  '/trader/auth/2fa/setup',
+  authTrader,
+  async (req, res, next) => {
+    try {
+      const traderId = req.traderId;
+
+      // Check if 2FA is already enabled
+      const existing = await db.query(
+        `SELECT id FROM trader_2fa_settings WHERE trader_id = $1 AND is_enabled = TRUE`,
+        [traderId]
+      );
+      if (existing.rows.length > 0) {
+        return res.status(409).json({ error: '2FA is already enabled on this account' });
+      }
+
+      // Get trader email for TOTP label
+      const traderResult = await db.query(
+        `SELECT email FROM traders WHERE id = $1`,
+        [traderId]
+      );
+      const trader = traderResult.rows[0];
+      if (!trader) return res.status(404).json({ error: 'Trader not found' });
+
+      // Generate TOTP secret
+      const { secret, qrCode, manualEntry } = await generateTotpSecret(traderId, trader.email);
+
+      // Generate backup codes
+      const { codes, codesHash } = await generateBackupCodes();
+
+      // Store setup attempt in Redis (temporary, valid for 10 minutes)
+      const setupKey = `trader:2fa_setup:${traderId}`;
+      await redis.setex(
+        setupKey,
+        600,
+        JSON.stringify({ secret, codesHash, codes })
+      );
+
+      // Return QR code and manual entry option to frontend
+      res.json({
+        qrCode,
+        manualEntry,
+        setupId: traderId, // Frontend will use this to track the setup session
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/v1/trader/auth/2fa/verify-setup
+ * Verify 2FA setup code and finalize 2FA enabling
+ * Body: { code } - 6-digit TOTP code
+ */
+router.post(
+  '/trader/auth/2fa/verify-setup',
+  authTrader,
+  validate(['code']),
+  async (req, res, next) => {
+    try {
+      const traderId = req.traderId;
+      const { code } = req.body;
+
+      // Retrieve setup data from Redis
+      const setupKey = `trader:2fa_setup:${traderId}`;
+      const setupData = await redis.get(setupKey);
+      if (!setupData) {
+        return res.status(400).json({ error: 'Setup session expired. Please restart 2FA setup.' });
+      }
+
+      const { secret, codesHash, codes } = JSON.parse(setupData);
+
+      // Verify the TOTP code
+      const isValid = verifyTotpCode(secret, code);
+      if (!isValid) {
+        await log2faVerification(db, traderId, 'setup', 'failed', 'Invalid TOTP code');
+        return res.status(401).json({ error: 'Invalid verification code. Please try again.' });
+      }
+
+      // Check/create 2FA settings record
+      const existing = await db.query(
+        `SELECT id FROM trader_2fa_settings WHERE trader_id = $1`,
+        [traderId]
+      );
+
+      if (existing.rows.length > 0) {
+        // Update existing record
+        await db.query(
+          `UPDATE trader_2fa_settings
+           SET totp_secret = $1, is_enabled = TRUE, enabled_at = NOW(), 
+               backup_codes_remaining = $2, updated_at = NOW()
+           WHERE trader_id = $3`,
+          [secret, 10, traderId]
+        );
+      } else {
+        // Create new record
+        await db.query(
+          `INSERT INTO trader_2fa_settings
+           (trader_id, totp_secret, is_enabled, enabled_at, backup_codes_remaining)
+           VALUES ($1, $2, TRUE, NOW(), $3)`,
+          [traderId, secret, 10]
+        );
+      }
+
+      // Store backup codes individually (per-code storage)
+      await storeBackupCodes(db, traderId, codes);
+
+      // Log success
+      await log2faVerification(db, traderId, 'setup', 'success');
+
+      // Clear setup data
+      await redis.del(setupKey);
+
+      // Return backup codes to user (one-time display)
+      res.json({
+        message: '2FA successfully enabled',
+        backupCodes: codes,
+        warning: 'Save these backup codes in a safe place. Each code can only be used once.',
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/v1/trader/auth/2fa/status
+ * Check if 2FA is enabled for this trader
+ */
+router.get(
+  '/trader/auth/2fa/status',
+  authTrader,
+  async (req, res, next) => {
+    try {
+      const traderId = req.traderId;
+
+      const result = await db.query(
+        `SELECT is_enabled, enabled_at, backup_codes_remaining FROM trader_2fa_settings WHERE trader_id = $1`,
+        [traderId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.json({ is2faEnabled: false });
+      }
+
+      const settings = result.rows[0];
+      res.json({
+        is2faEnabled: settings.is_enabled,
+        enabledAt: settings.enabled_at,
+        backupCodesRemaining: settings.backup_codes_remaining,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/v1/trader/auth/2fa/verify-login
+ * Verify 2FA code during login (TOTP or backup code)
+ * This is called after password verification succeeds and 2FA is enabled
+ * Body: { traderId, code }
+ * Rate limited to 15 attempts per 15 minutes per IP
+ */
+router.post(
+  '/trader/auth/2fa/verify-login',
+  twoFactorVerifyLimiter,
+  validate(['traderId', 'code']),
+  async (req, res, next) => {
+    try {
+      const { traderId, code } = req.body;
+
+      // Get 2FA settings
+      const result = await db.query(
+        `SELECT totp_secret, is_enabled FROM trader_2fa_settings WHERE trader_id = $1`,
+        [traderId]
+      );
+
+      if (result.rows.length === 0 || !result.rows[0].is_enabled) {
+        return res.status(400).json({ error: '2FA not enabled for this account' });
+      }
+
+      const { totp_secret } = result.rows[0];
+
+      // Try TOTP code first
+      let isValid = verifyTotpCode(totp_secret, code);
+      let verificationMethod = 'totp';
+
+      // If TOTP fails, try backup code
+      if (!isValid) {
+        const backupResult = await verifyAndUseBackupCode(db, traderId, code);
+        if (backupResult.valid) {
+          isValid = true;
+          verificationMethod = 'backup_code';
+          // Decrement backup code count
+          await db.query(
+            `UPDATE trader_2fa_settings 
+             SET backup_codes_remaining = backup_codes_remaining - 1 
+             WHERE trader_id = $1`,
+            [traderId]
+          );
+        }
+      }
+
+      if (!isValid) {
+        await log2faVerification(db, traderId, 'login', 'failed', 'Invalid TOTP or backup code');
+        return res.status(401).json({ error: 'Invalid code. Please try again.' });
+      }
+
+      // Code verified - issue login session token
+      const token = signToken(traderId, 'trader');
+      
+      // Update trader last active
+      await db.query(
+        `UPDATE traders SET last_active_at = NOW(), is_active = TRUE WHERE id = $1`,
+        [traderId]
+      );
+
+      // Log success
+      await log2faVerification(db, traderId, 'login', 'success');
+
+      // Return trader info and token
+      const traderResult = await db.query(
+        `SELECT id, name, stellar_address, usdc_float, daily_limit, daily_volume, trust_score, verification_status
+         FROM traders WHERE id = $1`,
+        [traderId]
+      );
+      const trader = traderResult.rows[0];
+
+      res.json({
+        token,
+        trader: {
+          id: trader.id,
+          name: trader.name,
+          stellarAddress: trader.stellar_address,
+          usdcFloat: trader.usdc_float,
+          dailyLimit: trader.daily_limit,
+          dailyVolume: trader.daily_volume,
+          trustScore: trader.trust_score,
+          verificationStatus: trader.verification_status,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/v1/trader/auth/2fa/disable
+ * Disable 2FA (requires current TOTP code or backup code for confirmation)
+ * Body: { code } - current TOTP code or backup code
+ */
+router.post(
+  '/trader/auth/2fa/disable',
+  authTrader,
+  validate(['code']),
+  async (req, res, next) => {
+    try {
+      const traderId = req.traderId;
+      const { code } = req.body;
+
+      // Get 2FA settings
+      const result = await db.query(
+        `SELECT totp_secret, is_enabled FROM trader_2fa_settings WHERE trader_id = $1`,
+        [traderId]
+      );
+
+      if (result.rows.length === 0 || !result.rows[0].is_enabled) {
+        return res.status(400).json({ error: '2FA is not enabled on this account' });
+      }
+
+      const { totp_secret } = result.rows[0];
+
+      // Try TOTP code first
+      let isValid = verifyTotpCode(totp_secret, code);
+
+      // If TOTP fails, try backup code
+      if (!isValid) {
+        const backupResult = await verifyAndUseBackupCode(db, traderId, code);
+        if (backupResult.valid) {
+          isValid = true;
+          // Mark backup code as used
+          // (already done in verifyAndUseBackupCode)
+        }
+      }
+
+      if (!isValid) {
+        await log2faVerification(db, traderId, 'disable', 'failed', 'Invalid code');
+        return res.status(401).json({ error: 'Invalid code. 2FA not disabled.' });
+      }
+
+      // Disable 2FA and clear all backup codes
+      await db.query(
+        `UPDATE trader_2fa_settings SET is_enabled = FALSE, updated_at = NOW() WHERE trader_id = $1`,
+        [traderId]
+      );
+
+      // Clear all backup codes for this trader
+      await db.query(
+        `DELETE FROM trader_backup_codes WHERE trader_id = $1`,
+        [traderId]
+      );
+
+      // Log the disabling
+      await log2faVerification(db, traderId, 'disable', 'success');
+
+      res.json({ message: '2FA has been disabled successfully' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/v1/trader/auth/2fa/backup-codes/regenerate
+ * Regenerate backup codes (requires current TOTP code for confirmation)
+ * Body: { code } - current TOTP code
+ */
+router.post(
+  '/trader/auth/2fa/backup-codes/regenerate',
+  authTrader,
+  validate(['code']),
+  async (req, res, next) => {
+    try {
+      const traderId = req.traderId;
+      const { code } = req.body;
+
+      // Get 2FA settings
+      const result = await db.query(
+        `SELECT totp_secret, is_enabled FROM trader_2fa_settings WHERE trader_id = $1`,
+        [traderId]
+      );
+
+      if (result.rows.length === 0 || !result.rows[0].is_enabled) {
+        return res.status(400).json({ error: '2FA is not enabled on this account' });
+      }
+
+      const { totp_secret } = result.rows[0];
+
+      // Verify TOTP code
+      const isValid = verifyTotpCode(totp_secret, code);
+      if (!isValid) {
+        return res.status(401).json({ error: 'Invalid code. Backup codes not regenerated.' });
+      }
+
+      // Generate new backup codes
+      const { codes, codesHash } = await generateBackupCodes();
+
+      // Update database
+      await db.query(
+        `UPDATE trader_2fa_settings 
+         SET backup_codes_hash = $1, backup_codes_remaining = $2, updated_at = NOW()
+         WHERE trader_id = $3`,
+        [codesHash, 10, traderId]
+      );
+
+      // Log the action
+      await log2faVerification(db, traderId, 'backup_codes_regenerated', 'success');
+
+      res.json({
+        message: 'Backup codes regenerated successfully',
+        backupCodes: codes,
+        warning: 'Your old backup codes are no longer valid.',
+      });
     } catch (err) {
       next(err);
     }

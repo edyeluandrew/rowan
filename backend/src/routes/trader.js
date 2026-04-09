@@ -24,6 +24,7 @@ async function getJobQueue() {
  * POST /api/v1/trader/login
  * Trader authentication.
  * Body: { email, password }
+ * Returns: token (if no 2FA) or 2faRequired: true (if 2FA enabled)
  */
 router.post(
   '/login',
@@ -53,6 +54,24 @@ router.post(
         // Paused traders can still log in, they just won't receive matches
       }
 
+      // === NEW: CHECK IF 2FA IS ENABLED ===
+      const twoFaResult = await db.query(
+        `SELECT is_enabled FROM trader_2fa_settings WHERE trader_id = $1`,
+        [trader.id]
+      );
+      const twoFaSettings = twoFaResult.rows[0];
+      const has2faEnabled = twoFaSettings && twoFaSettings.is_enabled === true;
+
+      if (has2faEnabled) {
+        // Return 2FA challenge required response (do not issue full token yet)
+        return res.json({
+          requiresTwoFactor: true,
+          traderId: trader.id,
+          message: 'Enter your authentication code to continue',
+        });
+      }
+
+      // === NO 2FA: Proceed with normal login ===
       const token = signToken(trader.id, 'trader');
 
       // Update last active

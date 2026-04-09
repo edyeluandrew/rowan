@@ -29,12 +29,15 @@ export function useSessions() {
 
   const revoke = useCallback(async (sessionId) => {
     setRevoking(true);
+    setError(null);
     try {
       await revokeSession(sessionId);
+      // Only remove from list after backend confirms success
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
       return true;
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to revoke session');
+      // Session remains in list on failure
       return false;
     } finally {
       setRevoking(false);
