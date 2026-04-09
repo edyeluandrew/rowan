@@ -5,10 +5,10 @@ import {
   verifyTwoFactorSetup,
   disableTwoFactor,
   regenerateBackupCodes,
-} from '../../api/twoFactor';
-import Button from '../../components/ui/Button';
-import OtpInput from '../../components/ui/OtpInput';
-import Modal from '../../components/ui/Modal';
+} from '../api/twoFactor';
+import Button from '../components/ui/Button';
+import OtpInput from '../components/ui/OtpInput';
+import Modal from '../components/ui/Modal';
 
 /**
  * TwoFactorSettings — Enable/disable 2FA in account settings

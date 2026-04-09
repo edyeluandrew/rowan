@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import { verifyTwoFactorLogin } from '../../api/twoFactor';
-import { useAuth } from '../../context/AuthContext';
-import OtpInput from '../../components/ui/OtpInput';
-import Button from '../../components/ui/Button';
-import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { verifyTwoFactorLogin } from '../api/twoFactor';
+import { useAuth } from '../context/AuthContext';
+import OtpInput from '../components/ui/OtpInput';
+import Button from '../components/ui/Button';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 /**
  * TwoFactorVerify — Handle 2FA verification during login
