@@ -4,6 +4,9 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import StellarSdk from '@stellar/stellar-sdk';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import config from './config/index.js';
 import { USDC_ASSET } from './config/stellar.js';
 import db from './db/index.js';
@@ -29,6 +32,10 @@ import logger from './utils/logger.js';
 
 const app = express();
 const httpServer = createServer(app);
+
+// Get __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // express-rate-limit and req.ip read the real client IP from the X-Forwarded-For
 // header when the server runs behind Railway, Render, or Cloudflare. Without this
@@ -233,6 +240,54 @@ async function seedAdminAccount() {
   logger.info('[Bootstrap] Admin account seeded');
 }
 
+/**
+ * Run pending database migrations
+ * Ensures all schema updates are applied before the server starts
+ */
+async function runMigrations() {
+  try {
+    // Ensure migration tracking table exists
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    const migrationsDir = path.join(__dirname, '../db/migrations');
+    const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+
+    // Get already-applied migrations
+    const applied = await db.query(`SELECT filename FROM schema_migrations`);
+    const appliedSet = new Set(applied.rows.map(r => r.filename));
+
+    let ranCount = 0;
+    for (const file of files) {
+      if (appliedSet.has(file)) {
+        logger.debug(`[Migration] Skipping (already applied): ${file}`);
+        continue;
+      }
+
+      logger.info(`[Migration] Running: ${file}`);
+      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
+      try {
+        await db.query(sql);
+        await db.query(`INSERT INTO schema_migrations (filename) VALUES ($1)`, [file]);
+        logger.info(`[Migration] ✓ ${file}`);
+        ranCount++;
+      } catch (err) {
+        logger.error(`[Migration] ✗ ${file}: ${err.message}`);
+        throw err;
+      }
+    }
+
+    logger.info(`[Migration] Complete — ${ranCount} new, ${files.length - ranCount} skipped`);
+  } catch (err) {
+    logger.error('[Migration] Failed', { error: err.message });
+    throw err;
+  }
+}
+
 // ─── Boot ───────────────────────────────────────────────────
 async function start() {
   try {
@@ -254,6 +309,9 @@ async function start() {
     // Verify Redis
     await redis.ping();
     logger.info('[Redis] Connected');
+
+    // Run database migrations
+    await runMigrations();
 
     // Bootstrap: seed admin + ensure USDC trustline + ensure storage bucket
     await seedAdminAccount();
