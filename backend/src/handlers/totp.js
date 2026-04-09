@@ -158,6 +158,8 @@ export default {
   verifyTotpCode,
   generateBackupCodes,
   hashBackupCode,
-  verifyBackupCode,
+  verifyAndUseBackupCode,
+  storeBackupCodes,
+  getBackupCodeCount,
   log2faVerification,
 };
