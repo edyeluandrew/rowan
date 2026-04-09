@@ -254,7 +254,7 @@ async function runMigrations() {
       )
     `);
 
-    const migrationsDir = path.join(__dirname, '../db/migrations');
+    const migrationsDir = path.join(__dirname, 'db/migrations');
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
     // Get already-applied migrations
