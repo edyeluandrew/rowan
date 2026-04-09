@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LockKeyhole, Smartphone, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getSessions, revokeAllSessions } from '../../api/security';
+import TwoFactorSettings from '../TwoFactorSettings';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 /**
@@ -83,15 +84,9 @@ export default function SecuritySettings() {
           <ChevronRight size={16} className="text-rowan-muted" />
         </button>
 
-        {/* 2FA - Coming Soon */}
-        <div className="flex items-center gap-3 py-4 border-b border-rowan-border opacity-60">
-          <ShieldCheck size={20} className="text-rowan-muted shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-rowan-text text-sm">Two-Factor Authentication</p>
-          </div>
-          <span className="bg-rowan-surface border border-rowan-border text-rowan-muted text-xs px-2 py-0.5 rounded">
-            Coming Soon
-          </span>
+        {/* 2FA - Two-Factor Authentication */}
+        <div className="py-4 border-b border-rowan-border">
+          <TwoFactorSettings currentTwoFactorEnabled={false} />
         </div>
 
         {/* Danger Zone */}
