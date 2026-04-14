@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- Allow cleartext (HTTP) for local dev only -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">10.15.1.41</domain>
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+    <!-- Allow HTTPS for all external domains (Render backend) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">rowan-1-9crb.onrender.com</domain>
+        <domain includeSubdomains="true">horizon-testnet.stellar.org</domain>
     </domain-config>
 </network-security-config>
