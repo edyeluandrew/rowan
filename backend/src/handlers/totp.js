@@ -137,7 +137,7 @@ export async function getBackupCodeCount(db, traderId) {
 }
 
 /**
- * Log 2FA verification for audit trail
+ * Log 2FA verification for audit trail (traders)
  */
 export async function log2faVerification(db, traderId, type, result, failureReason = null, ipAddress = null) {
   try {
@@ -153,6 +153,94 @@ export async function log2faVerification(db, traderId, type, result, failureReas
   }
 }
 
+/**
+ * Log 2FA verification for wallet users
+ */
+export async function log2faVerificationUser(db, userId, type, result, failureReason = null, ipAddress = null, userAgent = null) {
+  try {
+    await db.query(
+      `INSERT INTO user_2fa_verification_logs
+       (user_id, verification_type, result, failure_reason, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [userId, type, result, failureReason, ipAddress, userAgent]
+    );
+  } catch (err) {
+    console.error('[2FA] User audit log write failed:', err.message);
+    // Don't throw - logging failure shouldn't break the flow
+  }
+}
+
+/**
+ * Verify and use a backup code for wallet users
+ * Same logic as traders but uses user_backup_codes table
+ */
+export async function verifyAndUseBackupCodeUser(db, userId, providedCode) {
+  try {
+    const result = await db.query(
+      `SELECT id, code_hash FROM user_2fa_backup_codes 
+       WHERE user_id = $1 AND used_at IS NULL 
+       ORDER BY created_at ASC 
+       LIMIT 100`,
+      [userId]
+    );
+
+    for (const row of result.rows) {
+      const isMatch = await bcrypt.compare(providedCode, row.code_hash);
+      if (isMatch) {
+        await db.query(
+          `UPDATE user_2fa_backup_codes SET used_at = NOW() WHERE id = $1`,
+          [row.id]
+        );
+        return { valid: true, codeId: row.id };
+      }
+    }
+
+    return { valid: false, reason: 'Invalid backup code' };
+  } catch (err) {
+    throw new Error(`Backup code verification failed: ${err.message}`);
+  }
+}
+
+/**
+ * Store backup codes for wallet users
+ */
+export async function storeBackupCodesUser(db, userId, codes) {
+  try {
+    // Delete any existing unused backup codes
+    await db.query(
+      `DELETE FROM user_2fa_backup_codes WHERE user_id = $1 AND used_at IS NULL`,
+      [userId]
+    );
+
+    // Hash and store each code
+    for (const code of codes) {
+      const codeHash = await hashBackupCode(code);
+      await db.query(
+        `INSERT INTO user_2fa_backup_codes (user_id, code_hash) VALUES ($1, $2)`,
+        [userId, codeHash]
+      );
+    }
+  } catch (err) {
+    throw new Error(`Failed to store backup codes: ${err.message}`);
+  }
+}
+
+/**
+ * Get count of unused backup codes for wallet users
+ */
+export async function getBackupCodeCountUser(db, userId) {
+  try {
+    const result = await db.query(
+      `SELECT COUNT(*) as count FROM user_2fa_backup_codes 
+       WHERE user_id = $1 AND used_at IS NULL`,
+      [userId]
+    );
+    return parseInt(result.rows[0].count);
+  } catch (err) {
+    return 0;
+  }
+}
+
 export default {
   generateTotpSecret,
   verifyTotpCode,
@@ -162,4 +250,8 @@ export default {
   storeBackupCodes,
   getBackupCodeCount,
   log2faVerification,
+  log2faVerificationUser,
+  verifyAndUseBackupCodeUser,
+  storeBackupCodesUser,
+  getBackupCodeCountUser,
 };

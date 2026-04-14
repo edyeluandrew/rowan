@@ -124,6 +124,12 @@ router.post(
  * POST /api/v1/auth/submit
  * SEP-10 login — submit a signed challenge XDR for an existing user.
  * Body: { transaction: <signed XDR>, deviceId? }
+ * 
+ * Response (2FA disabled):
+ *   { token, user: { id, stellarAddress, kycLevel, dailyLimit, perTxLimit } }
+ * 
+ * Response (2FA enabled):
+ *   { requiresTwoFactorVerification: true, userId, token }
  */
 router.post(
   '/submit',
@@ -146,6 +152,27 @@ router.post(
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (!user.is_active) return res.status(403).json({ error: 'Account disabled' });
 
+      // === NEW: CHECK IF 2FA IS ENABLED ===
+      const twoFaResult = await db.query(
+        `SELECT is_enabled FROM user_2fa_settings WHERE user_id = $1`,
+        [user.id]
+      );
+      const twoFaSettings = twoFaResult.rows[0];
+      const has2faEnabled = twoFaSettings && twoFaSettings.is_enabled === true;
+
+      if (has2faEnabled) {
+        // Issue token anyway but indicate 2FA verification is required
+        // Frontend will show 2FA modal before proceeding
+        const token = signToken(user.id, 'user', deviceId);
+        return res.json({
+          requiresTwoFactorVerification: true,
+          userId: user.id,
+          token,
+          message: 'Please verify your 2FA code to continue',
+        });
+      }
+
+      // === NO 2FA: Proceed with normal login ===
       const token = signToken(user.id, 'user', deviceId);
 
       res.json({

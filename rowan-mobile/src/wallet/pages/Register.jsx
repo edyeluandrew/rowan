@@ -3,19 +3,27 @@ import { useNavigate } from 'react-router-dom'
 import { Hash } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { maskPhoneNumber } from '../utils/crypto'
+import { getSecure } from '../../shared/utils/storage'
+import { verifyTwoFactorLogin } from '../api/twoFactor'
 import { COUNTRY_CODES } from '../utils/constants'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import WalletTwoFactorLoginModal from './WalletTwoFactorLoginModal'
 
 const countries = Object.entries(COUNTRY_CODES)
 
 export default function Register() {
   const navigate = useNavigate()
-  const { registerWithWallet, loginWithWallet } = useAuth()
+  const { registerWithWallet, loginWithWallet, setWalletAuthAfter2FA } = useAuth()
   const [countryCode, setCountryCode] = useState('+256')
   const [phone, setPhone] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+
+  // 2FA modal state
+  const [show2faModal, setShow2faModal] = useState(false)
+  const [tempUserId, setTempUserId] = useState(null)
+  const [tempAuthData, setTempAuthData] = useState(null)
 
   const fullPhone = `${countryCode}${phone}`
   const masked = phone.length >= 4 ? maskPhoneNumber(fullPhone) : ''
@@ -25,8 +33,22 @@ export default function Register() {
     setLoading(true)
     setError(null)
     try {
-      await registerWithWallet(fullPhone)
-      navigate('/wallet/home', { replace: true })
+      const response = await registerWithWallet(fullPhone)
+      
+      // Check if 2FA is required
+      if (response?.requiresTwoFactorVerification === true) {
+        // Store temp auth data and show 2FA modal
+        // response has: { requiresTwoFactorVerification: true, userId, token, message? }
+        setTempUserId(response.userId)
+        setTempAuthData({
+          token: response.token,
+          userId: response.userId,
+        })
+        setShow2faModal(true)
+      } else {
+        // No 2FA needed, navigate directly
+        navigate('/wallet/home', { replace: true })
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -38,13 +60,76 @@ export default function Register() {
     setLoading(true)
     setError(null)
     try {
-      await loginWithWallet()
-      navigate('/wallet/home', { replace: true })
+      const response = await loginWithWallet()
+      
+      // Check if 2FA is required
+      if (response?.requiresTwoFactorVerification === true) {
+        // Store temp auth data and show 2FA modal
+        // response has: { requiresTwoFactorVerification: true, userId, token, message? }
+        setTempUserId(response.userId)
+        setTempAuthData({
+          token: response.token,
+          userId: response.userId,
+        })
+        setShow2faModal(true)
+      } else {
+        // No 2FA needed, navigate directly
+        navigate('/wallet/home', { replace: true })
+      }
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
+  }
+
+  /**
+   * Handle successful 2FA verification from modal
+   * Modal verifies the code and passes back the token that was issued during SEP-10 auth
+   */
+  const handleAfter2FA = async (verifyCode) => {
+    setLoading(true)
+    setError(null)
+    try {
+      // Verify the 2FA code with backend
+      // This just validates the TOTP/backup code
+      await verifyTwoFactorLogin(tempUserId, verifyCode)
+      
+      // If verification succeeds, we can now use the token issued during SEP-10
+      // Fetch the full user profile using the token
+      const keypair = await getSecure('rowan_stellar_keypair')
+      const kpData = keypair ? JSON.parse(keypair) : null
+      
+      // Complete wallet auth with the token issued before 2FA
+      await setWalletAuthAfter2FA(
+        tempAuthData.token,
+        { id: tempUserId }, // Minimal user object - will be updated after this
+        kpData
+      )
+      
+      // Close modal and clear temporary state
+      setShow2faModal(false)
+      setTempUserId(null)
+      setTempAuthData(null)
+      
+      // Redirect to wallet home
+      navigate('/wallet/home', { replace: true })
+    } catch (err) {
+      setError(err.message || 'Verification failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  /**
+   * Handle 2FA modal cancel/failure
+   * Clear temporary state and go back
+   */
+  const handle2faCancel = () => {
+    setShow2faModal(false)
+    setTempUserId(null)
+    setTempAuthData(null)
+    setError('Authentication cancelled. Please try again.')
   }
 
   return (
@@ -102,6 +187,14 @@ export default function Register() {
       >
         Already have an account?
       </button>
+
+      {/* 2FA Modal */}
+      <WalletTwoFactorLoginModal
+        isVisible={show2faModal}
+        userId={tempUserId}
+        onSuccess={handleAfter2FA}
+        onCancel={handle2faCancel}
+      />
     </div>
   )
 }

@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Star, Lock, Smartphone, ArrowRight } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
+import { loginTrader as apiLoginTrader } from './trader/api/auth';
 
 const SLIDES = [
   { Icon: Star, title: 'Your Stellar Wallet', desc: 'Send, receive, and cash out XLM directly from your phone.' },
@@ -35,8 +36,20 @@ export default function Login() {
     setLoading(true);
     setError(null);
     try {
-      await loginAsTrader(email, password);
-      navigate('/trader/home', { replace: true });
+      const response = await apiLoginTrader(email, password);
+
+      // Check if 2FA is required
+      if (response.requiresTwoFactor) {
+        // Navigate to 2FA verification page with traderId
+        navigate('/trader/2fa-verify', {
+          replace: true,
+          state: { traderId: response.traderId },
+        });
+      } else {
+        // No 2FA: Proceed with normal login
+        await loginAsTrader(email, password);
+        navigate('/trader/home', { replace: true });
+      }
     } catch (err) {
       setError(err.message || 'Login failed');
     } finally {

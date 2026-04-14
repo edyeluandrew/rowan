@@ -24,6 +24,7 @@ import NetworkPerformance from './pages/NetworkPerformance';
 import SecuritySettings from './pages/security/SecuritySettings';
 import ChangePassword from './pages/security/ChangePassword';
 import ActiveSessions from './pages/security/ActiveSessions';
+import TwoFactorSettings from './pages/security/TwoFactorSettings';
 
 export default function TraderApp() {
   return (
@@ -55,6 +56,7 @@ export default function TraderApp() {
           <Route path="security" element={<SecuritySettings />} />
           <Route path="security/change-password" element={<ChangePassword />} />
           <Route path="security/sessions" element={<ActiveSessions />} />
+          <Route path="security/2fa" element={<TwoFactorSettings />} />
         </Route>
 
         {/* Catch-all within trader */}

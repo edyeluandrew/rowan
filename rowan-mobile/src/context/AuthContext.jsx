@@ -211,6 +211,42 @@ export function AuthProvider({ children }) {
     return profile;
   }, []);
 
+  /**
+   * setTraderAuthAfter2FA — Used after successful 2FA verification.
+   * Called from TwoFactorVerify page to complete trader authentication
+   * without going through loginTrader again.
+   */
+  const setTraderAuthAfter2FA = useCallback((token, trader) => {
+    setClientToken(token);
+    setToken(token);
+    setTrader(trader);
+    setRole(ROLE_TRADER);
+    setIsAuthenticated(true);
+  }, []);
+
+  /**
+   * setWalletAuthAfter2FA — Used after successful 2FA verification for wallet users.
+   * Called from WalletTwoFactorLoginModal to complete wallet authentication
+   * without going through loginWithWallet again.
+   * For wallet: token and user are already issued, just need to complete final auth
+   */
+  const setWalletAuthAfter2FA = useCallback(async (token, user, keypair) => {
+    // Persist to secure storage (wallet sessions survive app restart)
+    await setSecure('rowan_token', token);
+    await setSecure('rowan_user', JSON.stringify(user || {}));
+    if (keypair?.publicKey) {
+      await setSecure('rowan_stellar_keypair', JSON.stringify(keypair));
+    }
+    
+    // Update in-memory state
+    setClientToken(token);
+    setToken(token);
+    setUser(user);
+    setKeypair({ publicKey: keypair?.publicKey });
+    setRole(ROLE_WALLET);
+    setIsAuthenticated(true);
+  }, []);
+
   /* ═══════════════════════════════════════════════════════
    *  LOGOUT — works for both roles
    * ═══════════════════════════════════════════════════════ */
@@ -244,9 +280,11 @@ export function AuthProvider({ children }) {
         // Wallet auth
         registerWithWallet,
         loginWithWallet,
+        setWalletAuthAfter2FA,
         // Trader auth
         loginAsTrader,
         signupAsTrader,
+        setTraderAuthAfter2FA,
         // Shared
         logout,
       }}

@@ -21,11 +21,13 @@ import CreateWallet from './wallet/pages/CreateWallet';
 import BackupWallet from './wallet/pages/BackupWallet';
 import ImportWallet from './wallet/pages/ImportWallet';
 import Register from './wallet/pages/Register';
+import WalletTwoFactorVerify from './wallet/pages/WalletTwoFactorVerify';
 
 /* ── Trader pre-auth pages ── */
 import Signup from './trader/pages/Signup';
 import ForgotPassword from './trader/pages/auth/ForgotPassword';
 import ResetPassword from './trader/pages/auth/ResetPassword';
+import TwoFactorVerify from './trader/pages/security/TwoFactorVerify';
 
 /* ── Authenticated sub-routers (lazy-loaded for code-splitting) ── */
 const WalletApp = lazy(() => import('./wallet/WalletApp'));
@@ -68,6 +70,10 @@ export default function App() {
         path="/register"
         element={<PublicOnly redirectTo="/wallet/home"><Register /></PublicOnly>}
       />
+      <Route
+        path="/wallet-2fa-verify"
+        element={<PublicOnly redirectTo="/wallet/home"><WalletTwoFactorVerify /></PublicOnly>}
+      />
 
       {/* ── Trader pre-auth routes ── */}
       <Route
@@ -81,6 +87,10 @@ export default function App() {
       <Route
         path="/trader/reset-password"
         element={<PublicOnly redirectTo="/trader/home"><ResetPassword /></PublicOnly>}
+      />
+      <Route
+        path="/trader/2fa-verify"
+        element={<PublicOnly redirectTo="/trader/home"><TwoFactorVerify /></PublicOnly>}
       />
 
       {/* ── Authenticated sub-routers (lazy-loaded) ── */}

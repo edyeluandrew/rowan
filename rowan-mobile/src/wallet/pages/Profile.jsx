@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   UserCircle, Star, Shield, Copy, CopyCheck, LogOut, Volume2, VolumeX,
-  Vibrate, ShieldCheck, Clock, Fingerprint, Bell, ChevronRight
+  Vibrate, ShieldCheck, Clock, Fingerprint, Bell, ChevronRight, Lock
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import useWallet from '../hooks/useWallet'
@@ -146,6 +146,16 @@ export default function Profile() {
           <div className="flex items-center gap-3">
             <Fingerprint size={18} className="text-rowan-muted" />
             <span className="text-rowan-text text-sm">Biometric Unlock</span>
+          </div>
+          <ChevronRight size={16} className="text-rowan-muted" />
+        </button>
+        <button
+          onClick={() => navigate('/wallet/security/2fa')}
+          className="flex items-center justify-between w-full px-4 py-3 min-h-11"
+        >
+          <div className="flex items-center gap-3">
+            <Lock size={18} className="text-rowan-muted" />
+            <span className="text-rowan-text text-sm">Two-Factor Auth</span>
           </div>
           <ChevronRight size={16} className="text-rowan-muted" />
         </button>

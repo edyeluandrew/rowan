@@ -30,6 +30,7 @@ import Profile from './pages/Profile';
 import DisputeForm from './pages/DisputeForm';
 import BiometricSetup from './pages/BiometricSetup';
 import RateAlerts from './pages/RateAlerts';
+import TwoFactorSettings from './pages/security/TwoFactorSettings';
 
 /** Initialize push notifications once on first authenticated render */
 function PushNotificationInit() {
@@ -67,6 +68,7 @@ export default function WalletApp() {
             <Route path="dispute/:id" element={<DisputeForm />} />
             <Route path="biometric-setup" element={<BiometricSetup />} />
             <Route path="rate-alerts" element={<RateAlerts />} />
+            <Route path="security/2fa" element={<TwoFactorSettings />} />
             <Route path="receipt/:transactionId" element={<TransactionReceipt />} />
 
             {/* Catch-all within wallet */}

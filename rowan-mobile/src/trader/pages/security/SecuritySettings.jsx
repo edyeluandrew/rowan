@@ -83,16 +83,18 @@ export default function SecuritySettings() {
           <ChevronRight size={16} className="text-rowan-muted" />
         </button>
 
-        {/* 2FA - Coming Soon */}
-        <div className="flex items-center gap-3 py-4 border-b border-rowan-border opacity-60">
-          <ShieldCheck size={20} className="text-rowan-muted shrink-0" />
+        {/* Two-Factor Authentication */}
+        <button
+          onClick={() => navigate('/trader/security/2fa')}
+          className="w-full flex items-center gap-3 py-4 border-b border-rowan-border text-left"
+        >
+          <ShieldCheck size={20} className="text-rowan-yellow shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-rowan-text text-sm">Two-Factor Authentication</p>
+            <p className="text-rowan-muted text-xs">Protect your account with an authenticator app</p>
           </div>
-          <span className="bg-rowan-surface border border-rowan-border text-rowan-muted text-xs px-2 py-0.5 rounded">
-            Coming Soon
-          </span>
-        </div>
+          <ChevronRight size={16} className="text-rowan-muted" />
+        </button>
 
         {/* Danger Zone */}
         <div className="mt-8">
