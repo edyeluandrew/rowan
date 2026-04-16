@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ArrowDownToLine } from 'lucide-react'
 import useRates from '../hooks/useRates'
 import useWallet from '../hooks/useWallet'
+import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
+import BiometricLock from '../../shared/components/BiometricLock'
 import { getQuote } from '../api/cashout'
 import { hashPhoneNumber } from '../utils/crypto'
 import { MIN_XLM_AMOUNT, NETWORKS, COUNTRY_CODES } from '../utils/constants'
@@ -13,6 +15,7 @@ import Button from '../components/ui/Button'
 
 export default function Cashout() {
   const navigate = useNavigate()
+  const { isLocked } = useBiometricProtection()
   const { rates, allRates } = useRates()
   const { balance } = useWallet()
   const [amount, setAmount] = useState('')
@@ -43,6 +46,9 @@ export default function Cashout() {
     xlmAmount <= maxAmount &&
     network &&
     phone.length >= 7
+
+  // Show biometric lock if app requires re-entry authentication
+  if (isLocked) return <BiometricLock />
 
   const handleGetQuote = async () => {
     if (!canProceed) return

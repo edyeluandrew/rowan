@@ -4,6 +4,8 @@ import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import useTransactions from '../hooks/useTransactions'
 import usePushNotifications from '../hooks/usePushNotifications'
+import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
+import BiometricLock from '../../shared/components/BiometricLock'
 import BalanceCard from '../components/wallet/BalanceCard'
 import RateDisplay from '../components/wallet/RateDisplay'
 import ConnectionDot from '../components/ui/ConnectionDot'
@@ -12,6 +14,7 @@ import Button from '../components/ui/Button'
 
 export default function Home() {
   const navigate = useNavigate()
+  const { isLocked } = useBiometricProtection()
   const { balance, loading: balanceLoading, refresh: refreshBalance, publicKey } = useWallet()
   const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates()
   const { transactions, loading: txLoading } = useTransactions()
@@ -22,6 +25,9 @@ export default function Home() {
   const fiatEquivalent = balance != null && rates?.xlmToUgx
     ? parseFloat(balance) * rates.xlmToUgx
     : null
+
+  // Show biometric lock if app requires re-entry authentication
+  if (isLocked) return <BiometricLock />
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
