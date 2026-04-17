@@ -162,28 +162,38 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     const swapResult = await swapXlmToUsdc(receivedXlm, quote);
     logger.info(`[Escrow] Swap result: amount=${swapResult.amount} (type: ${typeof swapResult.amount}), txHash=${swapResult.txHash}`);
     
+    // Ensure USDC amount is a number
     let usdcDecimal = swapResult.amount;
-    
-    // If it's a string, parse it
     if (typeof usdcDecimal === 'string') {
       usdcDecimal = parseFloat(usdcDecimal);
-      logger.info(`[Escrow] Parsed string to number: ${swapResult.amount} → ${usdcDecimal}`);
     }
     
-    // Defensive check: if still not a number, use a fallback
-    if (!Number.isFinite(usdcDecimal)) {
-      logger.error(`[Escrow] ❌ INVALID USDC AMOUNT: ${swapResult.amount} (type: ${typeof swapResult.amount}), cannot insert!`);
-      throw new Error(`Invalid USDC amount: ${swapResult.amount}`);
+    logger.info(`[Escrow] USDC value parsed: ${swapResult.amount} → ${usdcDecimal} (finite: ${Number.isFinite(usdcDecimal)}, type: ${typeof usdcDecimal})`);
+    
+    // Defensive check: if still not a valid number, throw
+    if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+      logger.error(`[Escrow] ❌ INVALID USDC AMOUNT: ${swapResult.amount} (type: ${typeof swapResult.amount}, finite: ${Number.isFinite(usdcDecimal)}, value: ${usdcDecimal})`);
+      throw new Error(`Invalid USDC amount from swap: ${swapResult.amount} (type: ${typeof swapResult.amount})`);
+    }
+    
+    // Sanity check: USDC should be within reasonable bounds
+    // For a 3-5 XLM deposit, should be roughly 0.8-1.2 USDC (given 0.27 USD/XLM and 3750 UGX/USDC)
+    if (usdcDecimal < 0.1 || usdcDecimal > 1000) {
+      logger.warn(`[Escrow] ⚠️  USDC amount seems unusual: ${usdcDecimal} (expected reasonable bounds for ${receivedXlm} XLM)`);
     }
     
     // Convert to stroops (integer) for bigint storage: USDC has 6 decimals
-    // Example: 5497.66 USDC → 5497660000 stroops
+    // Example: 5.497 USDC → 5497000 stroops
     const usdcStroops = Math.round(usdcDecimal * 1_000_000);
-    logger.info(`[Escrow] Converted USDC: ${usdcDecimal} → ${usdcStroops} stroops (bigint)`);
+    logger.info(`[Escrow] Converting to stroops: ${usdcDecimal} USDC × 1,000,000 = ${usdcStroops} stroops`);
     
+    // Final validation: must be an integer
     if (!Number.isInteger(usdcStroops)) {
+      logger.error(`[Escrow] ❌ Stroops not integer: ${usdcStroops} (from ${usdcDecimal})`);
       throw new Error(`USDC stroops conversion failed: ${usdcDecimal} → ${usdcStroops} (not an integer)`);
     }
+    
+    logger.info(`[Escrow] ✅ Stroops validated: ${usdcStroops} (is safe integer: ${Number.isSafeInteger(usdcStroops)})`);
     
     await db.query(
       `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
@@ -290,16 +300,19 @@ async function tryMarketMakerFill(xlmAmount, expectedUsdc) {
  */
 async function swapXlmToUsdc(xlmAmount, quote) {
   logger.info(`[Escrow] 🔄 [PHASE 4] SWAP START (quote-aligned): xlmAmount=${xlmAmount}`);
-  logger.info(`[Escrow] Quote source: ${quote.quote_source}, path_xlm_needed=${quote.path_xlm_needed}, path_usdc_received=${quote.path_usdc_received}`);
+  logger.info(`[Escrow] Quote data: id=${quote.id}, path_xlm_needed=${quote.path_xlm_needed} (type: ${typeof quote.path_xlm_needed}), path_usdc_received=${quote.path_usdc_received} (type: ${typeof quote.path_usdc_received})`);
   
   const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
 
   // ── Step 1: Use quote path data as baseline ──
-  let targetUsdc = quote.path_usdc_received;
-  let xlmSendMax = quote.path_xlm_needed;
+  // PostgreSQL NUMERIC columns can return as strings, so convert explicitly
+  let targetUsdc = quote.path_usdc_received ? Number(quote.path_usdc_received) : null;
+  let xlmSendMax = quote.path_xlm_needed ? Number(quote.path_xlm_needed) : null;
   
-  if (!quote.path_xlm_needed || !quote.path_usdc_received) {
-    logger.warn('[Escrow] Quote missing path data, falling back to legacy calculation');
+  logger.info(`[Escrow] Converted to numbers: targetUsdc=${targetUsdc} (type: ${typeof targetUsdc}), xlmSendMax=${xlmSendMax} (type: ${typeof xlmSendMax})`);
+  
+  if (!targetUsdc || !xlmSendMax || !Number.isFinite(targetUsdc) || !Number.isFinite(xlmSendMax)) {
+    logger.warn('[Escrow] Quote missing valid path data, falling back to legacy calculation');
     // Fallback for quotes that don't have path data (legacy compat)
     const usdcToFiat = quoteEngine.getUsdcToFiatRate(quote.fiat_currency);
     const fiatAmount = Number(quote.fiat_amount);
@@ -307,6 +320,8 @@ async function swapXlmToUsdc(xlmAmount, quote) {
     const totalFiat = fiatAmount + platformFee;
     targetUsdc = totalFiat / usdcToFiat;
     xlmSendMax = xlmAmount;
+    
+    logger.warn(`[Escrow] Fallback calculation: totalFiat=${totalFiat}, usdcToFiat=${usdcToFiat} → targetUsdc=${targetUsdc}`);
   }
 
   logger.info(`[Escrow] 📊 Swap plan: send ${xlmSendMax} XLM → receive ${targetUsdc} USDC`);
@@ -315,9 +330,9 @@ async function swapXlmToUsdc(xlmAmount, quote) {
   // [PHASE 1] REMOVED double slippage: quote uses 0.3%, execution now uses same 0.3%
   // sendMax comes directly from quote (already includes slippage)
   const sendMax = parseFloat(xlmSendMax).toFixed(7);
-  const destAmount = targetUsdc.toFixed(7);
+  const destAmount = parseFloat(targetUsdc).toFixed(7);
   
-  logger.info(`[Escrow] 📐 Execution uses quote slippage (unified): sendMax ${sendMax} (no extra multiply)`);
+  logger.info(`[Escrow] 📐 Execution values: sendMax ${sendMax} (from xlmSendMax ${xlmSendMax}), destAmount ${destAmount} (from targetUsdc ${targetUsdc})`);
 
   // ── Step 3: Execute manageBuyOffer to buy USDC from market maker ──
   // [FIX] Use manageBuyOffer instead of pathPaymentStrictReceive with self-destination
