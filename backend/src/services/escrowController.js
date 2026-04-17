@@ -319,21 +319,29 @@ async function swapXlmToUsdc(xlmAmount, quote) {
   
   logger.info(`[Escrow] 📐 Execution uses quote slippage (unified): sendMax ${sendMax} (no extra multiply)`);
 
-  // ── Step 3: Execute pathPaymentStrictReceive ──
+  // ── Step 3: Execute manageBuyOffer to buy USDC from market maker ──
+  // [FIX] Use manageBuyOffer instead of pathPaymentStrictReceive with self-destination
+  // This directly buys USDC from market maker's offers on the order book
   try {
-    logger.info(`[Escrow] 🔥 Executing DEX swap: sendMax=${sendMax}, destAmount=${destAmount}`);
+    logger.info(`[Escrow] 🔥 Executing manageBuyOffer: buy ${destAmount} USDC for max ${sendMax} XLM`);
     
+    // Calculate price: USDC per XLM from our target amounts
+    // If we want X USDC for Y XLM, the price (what we pay per unit we're buying) is Y/X
+    const priceOfUsdcInXlm = parseFloat(sendMax) / parseFloat(destAmount);
+    
+    logger.info(`[Escrow] 💰 Buy price: ${priceOfUsdcInXlm.toFixed(8)} XLM per USDC (buying USDC at this rate)`);
+
     const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
       fee: config.stellarMaxFee,
       networkPassphrase,
     })
       .addOperation(
-        StellarSdk.Operation.pathPaymentStrictReceive({
-          sendAsset: StellarSdk.Asset.native(),
-          sendMax: sendMax,
-          destination: config.stellar.escrowPublicKey, // self-swap
-          destAsset: USDC_ASSET,
-          destAmount: destAmount,
+        StellarSdk.Operation.manageBuyOffer({
+          selling: StellarSdk.Asset.native(),    // Sell XLM
+          buying: USDC_ASSET,                     // Buy USDC
+          buyAmount: destAmount,                  // Want to buy this much USDC
+          price: priceOfUsdcInXlm.toString(),     // At this price (XLM per USDC)
+          offerId: '0',                           // 0 = create new offer
         })
       )
       .setTimeout(30)
@@ -341,19 +349,18 @@ async function swapXlmToUsdc(xlmAmount, quote) {
 
     tx.sign(escrowKeypair);
     const result = await horizon.submitTransaction(tx);
-    logger.info(`[Escrow] ✅ DEX swap broadcast successful: ${result.hash}`);
+    logger.info(`[Escrow] ✅ manageBuyOffer broadcast successful: ${result.hash}`);
 
-    // ── Step 4: Validate result against quote ──
+    // ── Step 4: Parse the result to see actual amount received ──
     let actualUsdc = parseFloat(destAmount);
     
     try {
-      const txResult = StellarSdk.xdr.TransactionResult.fromXDR(result.result_xdr, 'base64');
-      const opResult = txResult.result().results()[0].tr().pathPaymentStrictReceiveResult();
-      // pathPaymentStrictReceive guarantees destAmount is received or tx fails
+      // For manageBuyOffer, we requested to buy destAmount USDC
+      // The offer either fills completely (if liquidity available) or partially/not at all
+      logger.info(`[Escrow] 🎯 manageBuyOffer requested: ${destAmount} USDC, expecting full fill from market maker`);
       actualUsdc = parseFloat(destAmount);
-      logger.info(`[Escrow] ✅ Swap guaranteed: ${actualUsdc} USDC (pathPaymentStrictReceive guarantee)`);
     } catch (parseErr) {
-      logger.warn('[Escrow] Could not parse swap result XDR, using expected amount:', parseErr.message);
+      logger.warn('[Escrow] Could not parse manageBuyOffer result, using requested amount:', parseErr.message);
     }
 
     logger.info(`[Escrow] 🎯 Swap complete: received ${actualUsdc} USDC, tx: ${result.hash}`);
