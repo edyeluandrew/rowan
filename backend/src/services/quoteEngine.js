@@ -31,22 +31,42 @@ async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
     const destAddr = config.stellar.escrowPublicKey; // self-swap
     
     logger.info(`[QuoteEngine] 🔄 Discovering strict-receive path: receive ${usdcTarget} USDC`);
+    logger.info(`[QuoteEngine] Path params: source=${sourceAddr}, dest=${destAddr}, asset=USDC/${USDC_ASSET.issuer}, amount=${usdcTarget}`);
 
-    // Use Horizon path discovery API
-    const pathResponse = await horizon
-      .paths()
-      .forStrictReceive(sourceAddr, destAddr, USDC_ASSET, usdcTarget.toFixed(7))
-      .call();
+    // [FIX] Use Horizon REST API directly for path discovery
+    // The Stellar SDK v12 Server object doesn't expose .paths() method
+    // Instead, we construct the URL and call the endpoint directly
+    const horizonUrl = config.stellar.horizonUrl;
+    const pathUrl = `${horizonUrl}/paths/strict-receive?` +
+      `source_account=${encodeURIComponent(sourceAddr)}&` +
+      `destination_account=${encodeURIComponent(destAddr)}&` +
+      `destination_asset_type=credit_alphanum4&` +
+      `destination_asset_code=${USDC_ASSET.code}&` +
+      `destination_asset_issuer=${encodeURIComponent(USDC_ASSET.issuer)}&` +
+      `destination_amount=${usdcTarget.toFixed(7)}`;
+
+    logger.debug(`[QuoteEngine] Calling Horizon: ${pathUrl.split('?')[0]}...`);
+
+    const response = await fetch(pathUrl);
+    
+    if (!response.ok) {
+      const errorBody = await response.text();
+      logger.error(`[QuoteEngine] Horizon path API error: HTTP ${response.status}`, { body: errorBody.substring(0, 200) });
+      return null;
+    }
+
+    const pathResponse = await response.json();
 
     if (!pathResponse.records || pathResponse.records.length === 0) {
-      logger.warn('[QuoteEngine] No valid path found for strict-receive');
+      logger.warn('[QuoteEngine] No valid path found for strict-receive (empty records)');
+      logger.info(`[QuoteEngine] Checked: source=${sourceAddr}, dest=${destAddr}, asset=USDC`);
       return null;
     }
 
     // Take the first (best) path
     const path = pathResponse.records[0];
     
-    // Extract source amount
+    // Extract source amount (XLM needed) and destination amount (USDC received)
     const xlmNeeded = parseFloat(path.source_amount);
     const usdcReceived = parseFloat(path.destination_amount);
     
@@ -55,6 +75,7 @@ async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
       sourceAmount: xlmNeeded,
       destAmount: usdcReceived,
       pathLength: path.path ? path.path.length : 0,
+      pathAssets: path.path ? path.path.map(a => `${a.asset_code || 'XLM'}/${a.asset_issuer || 'native'}`).join(' → ') : 'direct',
     });
 
     return {
@@ -64,7 +85,14 @@ async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
       source: 'horizon-path',
     };
   } catch (err) {
-    logger.warn('[QuoteEngine] Horizon path discovery failed:', err.message);
+    logger.error('[QuoteEngine] ❌ Horizon path discovery failed:', { 
+      message: err.message, 
+      type: err.name,
+      code: err.code 
+    });
+    if (err.message.includes('fetch') || err.message.includes('network')) {
+      logger.error('[QuoteEngine] Network error — Horizon may be unreachable');
+    }
     return null;
   }
 }
