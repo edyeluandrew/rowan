@@ -45,7 +45,8 @@ function setIo(socketIo) {
 async function matchTrader(transactionId) {
   // ── C3 FIX: Redis lock prevents concurrent matching for same tx ──
   const lockKey = `lock:match:${transactionId}`;
-  const lockAcquired = await redis.set(lockKey, '1', 'EX', 30, 'NX');
+  // [PHASE 4] Use config-driven lock TTL for trader matching
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', config.platform.redisLockTtlMatchSeconds, 'NX');
   if (!lockAcquired) {
     logger.warn(`[Matching] Lock held for tx ${transactionId} — skipping duplicate match attempt`);
     return null;
@@ -164,7 +165,8 @@ async function matchTrader(transactionId) {
     return trader;
   } finally {
     // Release lock after a short delay to prevent rapid re-entry
-    setTimeout(() => redis.del(lockKey), 2000);
+    // [PHASE 4] Use config-driven cleanup delay
+    setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
   }
 }
 

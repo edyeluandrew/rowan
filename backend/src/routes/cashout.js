@@ -45,9 +45,16 @@ router.post(
       }
 
       // Run fraud checks before creating quote
-      // [AUDIT FIX] Use actual rate from quoteEngine instead of hardcoded * 4000
+      // [PHASE 2 UPGRADE] Use legacy rate for fraud estimate (real path will be discovered during quote creation)
       const fiatCurrency = quoteEngine.networkToFiat(network);
-      const currentRate = await quoteEngine.getXlmRate(fiatCurrency);
+      let currentRate;
+      try {
+        currentRate = await quoteEngine.getLegacyXlmRate(fiatCurrency);
+      } catch (err) {
+        logger.warn(`[Cashout] Legacy rate fetch for fraud check failed:`, err.message);
+        return res.status(503).json({ error: 'Unable to fetch rates. Please try again.' });
+      }
+      
       const fiatEstimate = xlmNum * currentRate;
       const fraudCheck = await fraudMonitor.checkTransaction(req.userId, fiatEstimate, fiatCurrency);
       if (!fraudCheck.allowed) {
@@ -55,14 +62,30 @@ router.post(
         return res.status(403).json({ error: fraudCheck.reason });
       }
 
-      logger.info(`[Cashout] Creating quote: xlmAmount=${xlmNum}, network=${network}`);
+      logger.info(`[Cashout] ✅ Fraud check passed. Creating quote: xlmAmount=${xlmNum}, network=${network}`);
       
-      const quote = await quoteEngine.createQuote({
-        userId: req.userId,
-        xlmAmount: xlmNum,
-        network,
-        phoneHash,
-      });
+      // [PHASE 2] Create quote using real Horizon path discovery
+      // This will throw if no valid path is found
+      let quote;
+      try {
+        quote = await quoteEngine.createQuote({
+          userId: req.userId,
+          xlmAmount: xlmNum,
+          network,
+          phoneHash,
+        });
+      } catch (quoteErr) {
+        logger.error(`[Cashout] Quote creation failed:`, quoteErr.message);
+        // Return 503 for transient errors (no liquidity) or 400 for permanent errors
+        if (quoteErr.message.includes('No valid path') || quoteErr.message.includes('No liquidity')) {
+          return res.status(503).json({ 
+            error: 'Liquidity unavailable right now. Please try again later.' 
+          });
+        }
+        return res.status(503).json({ 
+          error: 'Unable to generate quote. Please try again.' 
+        });
+      }
 
       // [SMS Integration] Cache the phone number for SMS fallback notifications
       // Phone number comes from the request body — store in Redis for later retrieval

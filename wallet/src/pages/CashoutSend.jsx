@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { AlertTriangle, X, QrCode } from 'lucide-react'
 import { buildAndSignPayment, submitTransaction } from '../utils/stellar'
+import { getUserFriendlyError } from '../utils/errorMessages'
 import { getSecure } from '../utils/storage'
 import MemoBox from '../components/cashout/MemoBox'
 import QRCodeDisplay from '../components/wallet/QRCodeDisplay'
@@ -45,7 +46,9 @@ export default function CashoutSend() {
       await submitTransaction(signedXdr, horizonUrl)
       navigate(`/transaction/${transaction.id}`, { replace: true })
     } catch (err) {
-      setError(err.message)
+      // [PHASE 4] Use user-friendly error messages
+      const friendlyError = getUserFriendlyError(err.message)
+      setError(friendlyError)
     } finally {
       setLoading(false)
     }
@@ -86,6 +89,17 @@ export default function CashoutSend() {
               You can still send XLM manually using the details above.
               Tap X again to exit.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* [PHASE 4] Improved error display */}
+      {error && (
+        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mb-4 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-rowan-red shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-rowan-red font-semibold text-sm mb-1">Transaction failed</p>
+            <p className="text-rowan-muted text-xs leading-relaxed">{error}</p>
           </div>
         </div>
       )}

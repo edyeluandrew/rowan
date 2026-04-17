@@ -20,7 +20,8 @@ router.get('/current', async (req, res, next) => {
       });
     }
 
-    const rate = await quoteEngine.getXlmRate(currency);
+    // [PHASE 2 UPGRADE] Use legacy rate endpoint (indicative only)
+    const rate = await quoteEngine.getLegacyXlmRate(currency);
 
     res.json({
       currency,
@@ -46,7 +47,8 @@ router.get('/all', async (req, res, next) => {
 
     for (const currency of currencies) {
       try {
-        rates[currency] = await quoteEngine.getXlmRate(currency);
+        // [PHASE 2 UPGRADE] Use legacy rate endpoint for batch retrieval
+        rates[currency] = await quoteEngine.getLegacyXlmRate(currency);
       } catch {
         rates[currency] = null;
       }

@@ -108,7 +108,8 @@ export async function checkUserLimits(req, res, next) {
     const quoteEngine = (await import('../services/quoteEngine.js')).default;
     const network = req.body.network;
     const fiatCurrency = quoteEngine.networkToFiat(network);
-    const currentRate = await quoteEngine.getXlmRate(fiatCurrency);
+    // [PHASE 2 UPGRADE] Use legacy rate for daily limit check
+    const currentRate = await quoteEngine.getLegacyXlmRate(fiatCurrency);
     const estimatedFiat = xlmAmount * currentRate;
     const estimatedUgx = fiatToUgx(estimatedFiat, fiatCurrency);
 

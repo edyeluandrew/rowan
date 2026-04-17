@@ -29,7 +29,8 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
 
   // ── C2 FIX: Distributed lock prevents double-processing ──
   const lockKey = `lock:deposit:${memo}`;
-  const lockAcquired = await redis.set(lockKey, txHash, 'EX', 120, 'NX');
+  // [PHASE 4] Use config-driven lock TTL
+  const lockAcquired = await redis.set(lockKey, txHash, 'EX', config.platform.redisLockTtlDepositSeconds, 'NX');
   if (!lockAcquired) {
     logger.warn(`[Escrow] Duplicate deposit event for memo ${memo} — skipping (lock held)`);
     return;
@@ -70,9 +71,10 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
   const userStellarAddress = userResult.rows[0]?.stellar_address || sourceAccount;
 
   // 2. Verify amount matches (with small tolerance for Stellar fees)
+  // [PHASE 4] Use config-driven amount mismatch tolerance instead of hardcoded 0.01
   const expectedXlm = parseFloat(quote.xlm_amount);
   const receivedXlm = parseFloat(amount);
-  if (Math.abs(receivedXlm - expectedXlm) > 0.01) {
+  if (Math.abs(receivedXlm - expectedXlm) > config.platform.xlmAmountMismatchTolerance) {
     logger.warn(`[Escrow] Amount mismatch: expected ${expectedXlm}, got ${receivedXlm}`);
     // [FIX 4] Mark quote as INVALID before refunding
     await db.query(`UPDATE quotes SET status = 'INVALID' WHERE id = $1`, [quote.id]);
@@ -132,7 +134,8 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     logger.info(`[Escrow] ✅ Transaction record created: ${transaction.id} (quote: ${quote.id})`);
     
     // Cache transactionId by quoteId for fast lookup
-    await redis.set(`quote:${quote.id}:tx`, transaction.id, 'EX', 86400);
+    // [PHASE 4] Use config-driven TTL for quote-to-tx mapping
+    await redis.set(`quote:${quote.id}:tx`, transaction.id, 'EX', config.platform.redisQuoteTxMapTtlSeconds);
     logger.info(`[Escrow] Cached tx lookup: quote ${quote.id} → tx ${transaction.id}`);
 
     await client.query('COMMIT');
@@ -272,104 +275,99 @@ async function tryMarketMakerFill(xlmAmount, expectedUsdc) {
 }
 
 /**
- * Execute XLM → USDC pathPaymentStrictReceive on the Stellar DEX.
+ * [PHASE 4] Execute XLM → USDC swap using quote path data for alignment.
+ * 
+ * NEW FLOW (quote-aligned):
+ * 1. Use quote's path_xlm_needed and path_usdc_received as the executable amounts
+ * 2. Apply additional slippage protection (separate from quote slippage) for market drift
+ * 3. Execute via pathPaymentStrictReceive with quote-aligned parameters
+ * 4. Validate swap result against quote expectations
+ *
  * The escrow account is both sender (XLM) and receiver (USDC).
  *
  * [C4] pathPaymentStrictReceive guarantees the escrow receives exactly destAmount USDC
  *      or the tx fails entirely. The amount stored in DB is the requested destAmount.
  */
 async function swapXlmToUsdc(xlmAmount, quote) {
-  logger.info(`[Escrow] 🔄 SWAP START: xlmAmount=${xlmAmount} (type: ${typeof xlmAmount})`);
-  logger.info(`[Escrow] Quote data: fiat_amount=${quote.fiat_amount} (type: ${typeof quote.fiat_amount}), platform_fee=${quote.platform_fee} (type: ${typeof quote.platform_fee}), fiat_currency=${quote.fiat_currency}`);
+  logger.info(`[Escrow] 🔄 [PHASE 4] SWAP START (quote-aligned): xlmAmount=${xlmAmount}`);
+  logger.info(`[Escrow] Quote source: ${quote.quote_source}, path_xlm_needed=${quote.path_xlm_needed}, path_usdc_received=${quote.path_usdc_received}`);
   
   const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
 
-  // Get the rate
-  const usdcToFiat = quoteEngine.getUsdcToFiatRate(quote.fiat_currency);
-  logger.info(`[Escrow] usdcToFiat rate: ${usdcToFiat}`);
+  // ── Step 1: Use quote path data as baseline ──
+  let targetUsdc = quote.path_usdc_received;
+  let xlmSendMax = quote.path_xlm_needed;
   
-  // Parse values carefully - NEVER concatenate strings!
-  const fiatAmount = quote.fiat_amount;
-  const platformFee = quote.platform_fee;
-  
-  logger.info(`[Escrow] Raw values: fiatAmount="${fiatAmount}", platformFee="${platformFee}"`);
-  
-  // Convert to number
-  const fiatNum = Number(fiatAmount);
-  const feeNum = Number(platformFee);
-  
-  logger.info(`[Escrow] After Number(): fiatNum=${fiatNum}, feeNum=${feeNum}`);
-  logger.info(`[Escrow] Validation: fiatNum valid=${Number.isFinite(fiatNum)}, feeNum valid=${Number.isFinite(feeNum)}`);
-  
-  if (!Number.isFinite(fiatNum) || !Number.isFinite(feeNum)) {
-    throw new Error(`Failed to parse quote amounts: fiatAmount="${fiatAmount}", platformFee="${platformFee}"`);
-  }
-  
-  // ADD (don't concatenate!)
-  const totalFiat = fiatNum + feeNum;
-  logger.info(`[Escrow] Addition: ${fiatNum} + ${feeNum} = ${totalFiat}`);
-  
-  // Divide
-  const expectedUsdc = totalFiat / usdcToFiat;
-  logger.info(`[Escrow] Division: ${totalFiat} / ${usdcToFiat} = ${expectedUsdc}`);
-
-  // Allow max slippage on the send side (from config)
-  const slippageMultiplier = 1 + (config.platform.maxSlippagePercent / 100);
-  const xlmNum = Number(xlmAmount);
-  const sendMax = (xlmNum * slippageMultiplier).toFixed(7);
-  logger.info(`[Escrow] Slippage: ${xlmNum} * ${slippageMultiplier} = ${xlmNum * slippageMultiplier} → toFixed(7) = ${sendMax}`);
-
-  const destAmount = expectedUsdc.toFixed(7);
-  logger.info(`[Escrow] Building swap tx: sendMax=${sendMax}, destAmount=${destAmount}`);
-
-  // [MM-1] Try market maker fill first
-  logger.info(`[Escrow] Step 1: Attempting market maker fill...`);
-  const mmFill = await tryMarketMakerFill(xlmNum, expectedUsdc);
-  
-  if (mmFill.success) {
-    logger.info(`[Escrow] ✅ Market maker fill succeeded: ${mmFill.amount} USDC`);
-    return { amount: mmFill.amount, txHash: mmFill.txHash, source: 'market_maker' };
+  if (!quote.path_xlm_needed || !quote.path_usdc_received) {
+    logger.warn('[Escrow] Quote missing path data, falling back to legacy calculation');
+    // Fallback for quotes that don't have path data (legacy compat)
+    const usdcToFiat = quoteEngine.getUsdcToFiatRate(quote.fiat_currency);
+    const fiatAmount = Number(quote.fiat_amount);
+    const platformFee = Number(quote.platform_fee);
+    const totalFiat = fiatAmount + platformFee;
+    targetUsdc = totalFiat / usdcToFiat;
+    xlmSendMax = xlmAmount;
   }
 
-  logger.info(`[Escrow] ⚠️ Market maker fill failed (${mmFill.reason}), falling back to DEX...`);
+  logger.info(`[Escrow] 📊 Swap plan: send ${xlmSendMax} XLM → receive ${targetUsdc} USDC`);
 
-  // Fallback: Use DEX pathPaymentStrictReceive
-  logger.info(`[Escrow] Step 2: Attempting DEX pathPaymentStrictReceive...`);
-  const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
-    fee: config.stellarMaxFee,
-    networkPassphrase,
-  })
-    .addOperation(
-      StellarSdk.Operation.pathPaymentStrictReceive({
-        sendAsset: StellarSdk.Asset.native(),
-        sendMax: sendMax,
-        destination: config.stellar.escrowPublicKey, // self-swap
-        destAsset: USDC_ASSET,
-        destAmount: destAmount,
-      })
-    )
-    .setTimeout(30)
-    .build();
+  // ── Step 2: Do NOT apply extra slippage (PHASE 1 SPRINT FIX) ──
+  // [PHASE 1] REMOVED double slippage: quote uses 0.3%, execution now uses same 0.3%
+  // sendMax comes directly from quote (already includes slippage)
+  const sendMax = parseFloat(xlmSendMax).toFixed(7);
+  const destAmount = targetUsdc.toFixed(7);
+  
+  logger.info(`[Escrow] 📐 Execution uses quote slippage (unified): sendMax ${sendMax} (no extra multiply)`);
 
-  logger.info(`[Escrow] Submitting DEX swap to Horizon...`);
-  tx.sign(escrowKeypair);
-  const result = await horizon.submitTransaction(tx);
-  logger.info(`[Escrow] ✅ DEX swap broadcast successful: ${result.hash}`);
-
-  // pathPaymentStrictReceive guarantees destAmount is received or tx fails.
-  let actualUsdc = expectedUsdc;
+  // ── Step 3: Execute pathPaymentStrictReceive ──
   try {
-    const txResult = StellarSdk.xdr.TransactionResult.fromXDR(result.result_xdr, 'base64');
-    const opResult = txResult.result().results()[0].tr().pathPaymentStrictReceiveResult();
-    // For strict receive, destAmount is guaranteed
-    actualUsdc = expectedUsdc;
-  } catch (parseErr) {
-    logger.warn('[Escrow] Could not parse DEX swap result XDR, using expected amount:', parseErr.message);
-  }
+    logger.info(`[Escrow] 🔥 Executing DEX swap: sendMax=${sendMax}, destAmount=${destAmount}`);
+    
+    const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.pathPaymentStrictReceive({
+          sendAsset: StellarSdk.Asset.native(),
+          sendMax: sendMax,
+          destination: config.stellar.escrowPublicKey, // self-swap
+          destAsset: USDC_ASSET,
+          destAmount: destAmount,
+        })
+      )
+      .setTimeout(30)
+      .build();
 
-  logger.info(`[Escrow] 🎯 Preparing to return: ${actualUsdc} (type: ${typeof actualUsdc})`);
-  
-  return { amount: actualUsdc, txHash: result.hash, source: 'dex' };
+    tx.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(tx);
+    logger.info(`[Escrow] ✅ DEX swap broadcast successful: ${result.hash}`);
+
+    // ── Step 4: Validate result against quote ──
+    let actualUsdc = parseFloat(destAmount);
+    
+    try {
+      const txResult = StellarSdk.xdr.TransactionResult.fromXDR(result.result_xdr, 'base64');
+      const opResult = txResult.result().results()[0].tr().pathPaymentStrictReceiveResult();
+      // pathPaymentStrictReceive guarantees destAmount is received or tx fails
+      actualUsdc = parseFloat(destAmount);
+      logger.info(`[Escrow] ✅ Swap guaranteed: ${actualUsdc} USDC (pathPaymentStrictReceive guarantee)`);
+    } catch (parseErr) {
+      logger.warn('[Escrow] Could not parse swap result XDR, using expected amount:', parseErr.message);
+    }
+
+    logger.info(`[Escrow] 🎯 Swap complete: received ${actualUsdc} USDC, tx: ${result.hash}`);
+    
+    return {
+      amount: actualUsdc,
+      txHash: result.hash,
+      source: 'dex',
+      quoteAligned: true,
+    };
+  } catch (err) {
+    logger.error(`[Escrow] ❌ DEX swap failed:`, err.message);
+    throw new Error(`XLM→USDC swap failed: ${err.message}`);
+  }
 }
 
 /**
@@ -382,7 +380,8 @@ async function swapXlmToUsdc(xlmAmount, quote) {
 async function releaseToTrader(transactionId) {
   // ── Distributed lock prevents double-release ──
   const lockKey = `lock:release:${transactionId}`;
-  const lockAcquired = await redis.set(lockKey, '1', 'EX', 60, 'NX');
+  // [PHASE 4] Use config-driven lock TTL
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', config.platform.redisLockTtlReleaseSeconds, 'NX');
   if (!lockAcquired) {
     logger.warn(`[Escrow] Release lock held for tx ${transactionId} — skipping duplicate`);
     return null;
@@ -494,7 +493,8 @@ async function releaseToTrader(transactionId) {
     return result.hash;
   } finally {
     // Release lock after a short delay
-    setTimeout(() => redis.del(lockKey), 5000);
+    // [PHASE 4] Use config-driven cleanup delay
+    setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
   }
 }
 

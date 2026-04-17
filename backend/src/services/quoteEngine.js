@@ -8,10 +8,73 @@ import logger from '../utils/logger.js';
 // ── N7 FIX: Top-level Asset reference instead of dynamic import ──
 const NativeAsset = StellarSdk.Asset.native();
 
+// ── PHASE 1 (SPRINT): Slippage now centralized in config ──
+// Do NOT hardcode slippage here — always read from config
+// const QUOTE_SLIPPAGE_PERCENT = 0.3; ← MOVED TO config.platform.quoteSlippagePercent
+
+/**
+ * [PHASE 2] Discover actual executable XLM → USDC path using Horizon strict-receive.
+ * This returns real path data that matches what `pathPaymentStrictReceive` will actually execute.
+ *
+ * Returns: { path, xlmNeeded, usdcReceived, source: 'horizon-path' } or null if no path found.
+ *
+ * This is the NEW source of truth for quote generation.
+ */
+async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
+  if (!usdcTarget || usdcTarget <= 0) {
+    logger.warn('[QuoteEngine] Invalid USDC target:', usdcTarget);
+    return null;
+  }
+
+  try {
+    const sourceAddr = sourceAccount || config.stellar.escrowPublicKey;
+    const destAddr = config.stellar.escrowPublicKey; // self-swap
+    
+    logger.info(`[QuoteEngine] 🔄 Discovering strict-receive path: receive ${usdcTarget} USDC`);
+
+    // Use Horizon path discovery API
+    const pathResponse = await horizon
+      .paths()
+      .forStrictReceive(sourceAddr, destAddr, USDC_ASSET, usdcTarget.toFixed(7))
+      .call();
+
+    if (!pathResponse.records || pathResponse.records.length === 0) {
+      logger.warn('[QuoteEngine] No valid path found for strict-receive');
+      return null;
+    }
+
+    // Take the first (best) path
+    const path = pathResponse.records[0];
+    
+    // Extract source amount
+    const xlmNeeded = parseFloat(path.source_amount);
+    const usdcReceived = parseFloat(path.destination_amount);
+    
+    logger.info(`[QuoteEngine] ✅ Path found: send ${xlmNeeded} XLM → receive ${usdcReceived} USDC`);
+    logger.info(`[QuoteEngine] Path details:`, {
+      sourceAmount: xlmNeeded,
+      destAmount: usdcReceived,
+      pathLength: path.path ? path.path.length : 0,
+    });
+
+    return {
+      path: path.path || [],  // Array of intermediate assets (may be empty for direct swap)
+      xlmNeeded,
+      usdcReceived,
+      source: 'horizon-path',
+    };
+  } catch (err) {
+    logger.warn('[QuoteEngine] Horizon path discovery failed:', err.message);
+    return null;
+  }
+}
+
 /**
  * Fetch the best XLM→USDC rate from the market maker's active offers.
  * Queries Horizon for all offers from the market maker account, finds the best ask price.
  * Returns null if no offers available or if market maker not configured.
+ * 
+ * [DEPRECATED] Now used as fallback only. Strict-receive path is primary.
  */
 async function getMarketMakerRate() {
   if (!config.stellar.marketMakerPublicKey) {
@@ -48,7 +111,7 @@ async function getMarketMakerRate() {
     });
 
     const bestRate = parseFloat(bestOffer.price);
-    logger.info(`[QuoteEngine] Market maker best rate: ${bestRate} USDC/XLM (offer ID: ${bestOffer.id})`);
+    logger.info(`[QuoteEngine] Market maker fallback rate: ${bestRate} USDC/XLM (offer ID: ${bestOffer.id})`);
     return bestRate;
   } catch (err) {
     logger.warn('[QuoteEngine] Failed to fetch market maker offers:', err.message);
@@ -59,28 +122,59 @@ async function getMarketMakerRate() {
 const { quoteTtlSeconds, feePercent, spreadPercent, rateCacheTtlSeconds } = config.platform;
 
 /**
- * Fetch the live XLM rate for a given fiat currency.
+ * [PHASE 2] Compute the XLM→USDC rate from a real strict-receive path.
+ * This is the NEW source of truth for XLM pricing in quotes.
+ * 
+ * @param {number} usdcTarget - Target USDC amount needed (e.g., from fiat conversion)
+ * @returns {object} { xlmRate: XLM/USDC, pathData: {...} } or null if path not found
+ */
+async function getXlmRateFromPath(usdcTarget) {
+  try {
+    const pathData = await getStrictReceivePath(usdcTarget);
+    if (!pathData) {
+      logger.warn('[QuoteEngine] No executable path found for USDC target:', usdcTarget);
+      return null;
+    }
+
+    // Calculate the XLM/USDC rate from the path
+    const xlmRate = pathData.xlmNeeded / pathData.usdcReceived;
+    logger.info(`[QuoteEngine] ✅ Path-based rate: ${xlmRate} XLM/USDC (from path with ${pathData.xlmNeeded} XLM → ${pathData.usdcReceived} USDC)`);
+
+    return {
+      xlmRate,        // XLM per USDC
+      pathData,       // Full path info for execution alignment
+      source: 'horizon-path',
+    };
+  } catch (err) {
+    logger.warn('[QuoteEngine] Path-based rate fetch failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * [DEPRECATED - FALLBACK ONLY] Fetch the live XLM rate for a given fiat currency using legacy methods.
+ * ONLY called if strict-receive path discovery fails.
  * Priority:
  * 1. Market Maker offers (if available and better/comparable)
  * 2. Stellar DEX (XLM → USDC → fiat estimate)
  * 3. Fallback: CoinGecko API
  * Cached in Redis for 30 seconds.
  */
-async function getXlmRate(fiatCurrency = 'UGX') {
-  const cacheKey = `rate:xlm:${fiatCurrency}`;
+async function getLegacyXlmRate(fiatCurrency = 'UGX') {
+  const cacheKey = `rate:xlm:legacy:${fiatCurrency}`;
   const cached = await redis.get(cacheKey);
   if (cached) return parseFloat(cached);
 
   let rate;
 
   try {
-    // Priority 1: Market Maker offers
+    // Fallback 1: Market Maker offers
     const mmRate = await getMarketMakerRate();
     if (mmRate) {
       // Convert market maker rate (USDC/XLM) to fiat currency
       const usdcToFiat = getUsdcToFiatRate(fiatCurrency);
       rate = mmRate * usdcToFiat;
-      logger.info(`[QuoteEngine] Using market maker rate: ${mmRate} USDC/XLM → ${rate} ${fiatCurrency}/XLM`);
+      logger.info(`[QuoteEngine] [FALLBACK] Using market maker rate: ${mmRate} USDC/XLM → ${rate} ${fiatCurrency}/XLM`);
     }
   } catch (err) {
     logger.warn('[QuoteEngine] Market maker rate fetch failed:', err.message);
@@ -89,7 +183,7 @@ async function getXlmRate(fiatCurrency = 'UGX') {
   // Fallback to DEX if market maker unavailable
   if (!rate) {
     try {
-      // Priority 2: Stellar DEX — get XLM/USDC mid-market price
+      // Fallback 2: Stellar DEX — get XLM/USDC mid-market price
       const orderbook = await horizon
         .orderbook(NativeAsset, USDC_ASSET)
         .call();
@@ -102,7 +196,7 @@ async function getXlmRate(fiatCurrency = 'UGX') {
         // Convert USDC → fiat using static rates (later: live FX feed)
         const usdcToFiat = getUsdcToFiatRate(fiatCurrency);
         rate = xlmUsdcMid * usdcToFiat;
-        logger.info(`[QuoteEngine] Using DEX rate: ${xlmUsdcMid} USDC/XLM → ${rate} ${fiatCurrency}/XLM`);
+        logger.info(`[QuoteEngine] [FALLBACK] Using DEX rate: ${xlmUsdcMid} USDC/XLM → ${rate} ${fiatCurrency}/XLM`);
       }
     } catch (err) {
       logger.warn('[QuoteEngine] Stellar DEX fetch failed, falling back to CoinGecko:', err.message);
@@ -110,7 +204,7 @@ async function getXlmRate(fiatCurrency = 'UGX') {
   }
 
   if (!rate) {
-    // Priority 3: Fallback: CoinGecko
+    // Fallback 3: CoinGecko
     try {
       const fiatLower = fiatCurrency.toLowerCase();
       const res = await fetch(
@@ -118,7 +212,7 @@ async function getXlmRate(fiatCurrency = 'UGX') {
       );
       const data = await res.json();
       rate = data?.stellar?.[fiatLower];
-      logger.info(`[QuoteEngine] Using CoinGecko rate: ${rate} ${fiatCurrency}/XLM`);
+      logger.info(`[QuoteEngine] [FALLBACK] Using CoinGecko rate: ${rate} ${fiatCurrency}/XLM`);
     } catch (err) {
       logger.error('[QuoteEngine] CoinGecko fallback also failed:', err.message);
       throw new Error('Unable to fetch XLM rate from any source');
@@ -154,62 +248,122 @@ function fiatToUgxRate(amount, fiatCurrency) {
 }
 
 /**
- * Create a locked quote.
+ * [PHASE 2] Create a locked quote using REAL EXECUTABLE STELLAR PATHS.
+ * 
+ * NEW FLOW:
+ * 1. User specifies XLM amount
+ * 2. Calculate fiat equivalent using legacy estimates (for display)
+ * 3. Convert fiat back to USDC target (what swap must achieve)
+ * 4. Discover actual XLM→USDC path (strict-receive) — THIS IS THE TRUTH
+ * 5. Apply 0.3% slippage tolerance to XLM amount
+ * 6. Calculate actual user-facing fiat based on REAL path
+ * 7. Store path data in quote for execution alignment
+ * 
  * Returns the quote object with a 60-second TTL.
  */
 async function createQuote({ userId, xlmAmount, network, phoneHash }) {
+  logger.info(`[QuoteEngine] 🔄 Creating quote: xlmAmount=${xlmAmount}, network=${network}`);
+
   const fiatCurrency = networkToFiat(network);
-  const marketRate = await getXlmRate(fiatCurrency);
+  const usdcToFiat = getUsdcToFiatRate(fiatCurrency);
 
-  // ── B2 FIX: traderRate is the wholesale rate (spread below market).
-  // [AUDIT FIX] Spread from config instead of hardcoded 0.9875 (1.25%).
-  // The USER receives fiat based on traderRate (not raw market rate).
-  // The spread between marketRate and traderRate is platform revenue.
+  // ── Step 1: Estimate USDC needed based on user's XLM ──
+  // First, get a rough rate to understand ordering of magnitude
+  let estimatedSpread = 3.0; // Default XLM/USDC rate (can be ~1-5)
+  try {
+    const legacyRate = await getLegacyXlmRate(fiatCurrency);
+    estimatedSpread = legacyRate / usdcToFiat; // Rough XLM/USDC estimate
+    logger.info(`[QuoteEngine] Legacy rate estimate: ${estimatedSpread} USDC/XLM`);
+  } catch (err) {
+    logger.warn('[QuoteEngine] Legacy rate fetch failed, using default estimate:', err.message);
+  }
+
+  // ── Step 2: Calculate USDC target needed ──
   const spreadMultiplier = 1 - (spreadPercent / 100);
-  const traderRate = marketRate * spreadMultiplier;
-  const userRate = traderRate; // user sees the post-spread rate
+  let estimatedUsdcTarget = xlmAmount * estimatedSpread; // Rough estimate
+  const grossFiatEstimate = estimatedUsdcTarget * usdcToFiat;
+  const platformFee = grossFiatEstimate * (feePercent / 100);
+  
+  // Adjust USDC target to account for fee
+  const totalFiatNeeded = grossFiatEstimate / spreadMultiplier; // Undo spread to get gross
+  const usdcTargetForPath = totalFiatNeeded / usdcToFiat;
+  
+  logger.info(`[QuoteEngine]📊 Planning path discovery: estimatedUsdcTarget=${estimatedUsdcTarget}, usdcTargetForPath=${usdcTargetForPath}`);
 
-  // Fiat the user receives = XLM × userRate × (1 - platformFee)
-  const grossFiat = xlmAmount * userRate;
-  const platformFee = grossFiat * (feePercent / 100);
-  const fiatAmount = grossFiat - platformFee;
+  // ── Step 3: DISCOVER ACTUAL EXECUTABLE PATH ──
+  const pathResult = await getXlmRateFromPath(usdcTargetForPath);
+  
+  if (!pathResult) {
+    logger.error('[QuoteEngine] ❌ CRITICAL: No valid XLM→USDC path found — cannot quote');
+    throw new Error('No valid path available: unable to convert XLM to USDC on Stellar network');
+  }
 
-  // Platform revenue = spread revenue + explicit fee
-  const spreadRevenue = xlmAmount * (marketRate - traderRate);
+  const { xlmRate, pathData } = pathResult;
+  
+  // ── Step 4: Apply configured SLIPPAGE TOLERANCE (PHASE 1 SPRINT) ──
+  // [PHASE 1] Use slippage from config, not hardcoded constant
+  const slippageMultiplier = 1 + (config.platform.quoteSlippagePercent / 100);
+  const xlmWithSlippage = pathData.xlmNeeded * slippageMultiplier;
+  
+  logger.info(`[QuoteEngine] 📐 Slippage calculation: xlmNeeded=${pathData.xlmNeeded}, slippage=${config.platform.quoteSlippagePercent}%, xlmWithSlippage=${xlmWithSlippage}`);
 
+  // ── Step 5: Derive actual fiat from REAL path ──
+  const actualUsdcReceived = pathData.usdcReceived;
+  const userRate = actualUsdcReceived * usdcToFiat; // XLM → fiat rate (before spread)
+  
+  // Apply spread to user-facing rate
+  const spreadMultiplierUser = 1 - (spreadPercent / 100);
+  const userRateAfterSpread = userRate * spreadMultiplierUser;
+  
+  // Calculate user's actual fiat
+  const grossFiatActual = pathData.xlmNeeded * userRateAfterSpread;
+  const platformFeeActual = grossFiatActual * (feePercent / 100);
+  const fiatAmountActual = grossFiatActual - platformFeeActual;
+  
+  logger.info(`[QuoteEngine]💰 Fiat breakdown:`);
+  logger.info(`  - USDC received (from path): ${actualUsdcReceived}`);
+  logger.info(`  - Gross fiat (before spread): ${grossFiatActual}`);
+  logger.info(`  - Platform fee: ${platformFeeActual}`);
+  logger.info(`  - Net fiat to user: ${fiatAmountActual}`);
+
+  // ── Step 6: Build memo and expiry ──
   const memo = `ROWAN-qt_${nanoid(8)}`;
   const expiresAt = new Date(Date.now() + quoteTtlSeconds * 1000);
 
-  // Persist to DB
-  // ── [L-5 FIX] Also write rate_ugx, fee_ugx for multi-currency normalization ──
+  // ── Step 7: Normalize amounts for DB ──
   const usdcToUgx = config.usdcFiatRates.UGX;
-  const xlmToUsdc = marketRate / getUsdcToFiatRate(fiatCurrency);
+  const xlmToUsdc = pathData.xlmNeeded / pathData.usdcReceived; // Actual rate from path
   const rateUgx = Math.round(xlmToUsdc * usdcToUgx); // XLM price in UGX
-  const feeUgx = Math.round(fiatToUgxRate(platformFee, fiatCurrency));
+  const feeUgx = Math.round(fiatToUgxRate(platformFeeActual, fiatCurrency));
 
-  // ── AUDIT FIX: Pass numeric values, not strings from .toFixed() ──
-  const fiatAmountNum = parseFloat(fiatAmount.toFixed(2));
-  const platformFeeNum = parseFloat(platformFee.toFixed(2));
+  // ── Step 8: Ensure numeric values ──
+  const fiatAmountNum = parseFloat(fiatAmountActual.toFixed(2));
+  const platformFeeNum = parseFloat(platformFeeActual.toFixed(2));
   
-  logger.info(`[QuoteEngine] Amount validation: fiatAmount=${fiatAmountNum} (type: ${typeof fiatAmountNum}, finite: ${Number.isFinite(fiatAmountNum)}), platformFee=${platformFeeNum} (type: ${typeof platformFeeNum}, finite: ${Number.isFinite(platformFeeNum)})`);
+  logger.info(`[QuoteEngine] ✅ Amount validation: fiatAmount=${fiatAmountNum}, platformFee=${platformFeeNum}`);
   
   if (!Number.isFinite(fiatAmountNum) || !Number.isFinite(platformFeeNum)) {
-    throw new Error(`Invalid amounts calculated: fiatAmount=${fiatAmount}, platformFee=${platformFee}`);
+    throw new Error(`Invalid amounts calculated: fiatAmount=${fiatAmountActual}, platformFee=${platformFeeActual}`);
   }
 
+  // ── Step 9: PERSIST TO DB with path data (PHASE 5) ──
   const result = await db.query(
     `INSERT INTO quotes
        (user_id, xlm_amount, fiat_currency, market_rate, user_rate, fiat_amount,
         platform_fee, network, phone_hash, memo, escrow_address, expires_at,
-        rate_ugx, fee_ugx, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING')
+        rate_ugx, fee_ugx, status, path_xlm_needed, path_usdc_received, quote_source)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,'horizon-path')
      RETURNING *`,
     [
-      userId, xlmAmount, fiatCurrency, marketRate, userRate,
+      userId, xlmAmount, fiatCurrency, 
+      xlmRate,              // market_rate = XLM/USDC from path
+      userRateAfterSpread,  // user_rate = fiat rate after spread
       fiatAmountNum, platformFeeNum,
       network, phoneHash, memo,
       config.stellar.escrowPublicKey, expiresAt,
       rateUgx, feeUgx,
+      pathData.xlmNeeded,        // path_xlm_needed (for execution)
+      pathData.usdcReceived,     // path_usdc_received (for execution)
     ]
   );
 
@@ -218,11 +372,14 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
   // Also cache in Redis for fast lookup by memo
   await redis.set(`quote:${memo}`, JSON.stringify(quote), 'EX', quoteTtlSeconds);
 
+  logger.info(`[QuoteEngine] ✨ Quote created: ${quote.id} (memo: ${memo})`);
+
   return quote;
 }
 
 /**
- * Look up a cached quote by its memo string.
+ * [PHASE 5] Look up a cached quote by its memo string.
+ * Ensures all numeric fields are properly converted from potential strings.
  */
 async function getQuoteByMemo(memo) {
   // Try Redis first
@@ -237,6 +394,8 @@ async function getQuoteByMemo(memo) {
     if (quote.market_rate) quote.market_rate = Number(quote.market_rate);
     if (quote.rate_ugx) quote.rate_ugx = Number(quote.rate_ugx);
     if (quote.fee_ugx) quote.fee_ugx = Number(quote.fee_ugx);
+    if (quote.path_xlm_needed) quote.path_xlm_needed = Number(quote.path_xlm_needed);
+    if (quote.path_usdc_received) quote.path_usdc_received = Number(quote.path_usdc_received);
     return quote;
   }
 
@@ -258,7 +417,10 @@ async function getQuoteByMemo(memo) {
   if (quote.market_rate) quote.market_rate = Number(quote.market_rate);
   if (quote.rate_ugx) quote.rate_ugx = Number(quote.rate_ugx);
   if (quote.fee_ugx) quote.fee_ugx = Number(quote.fee_ugx);
+  if (quote.path_xlm_needed) quote.path_xlm_needed = Number(quote.path_xlm_needed);
+  if (quote.path_usdc_received) quote.path_usdc_received = Number(quote.path_usdc_received);
   
+  logger.info(`[QuoteEngine] Retrieved quote from DB: ${quote.id} (source: ${quote.quote_source})`);
   return quote;
 }
 
@@ -277,8 +439,10 @@ function networkToFiat(network) {
 }
 
 export default {
+  getStrictReceivePath,
+  getXlmRateFromPath,
   getMarketMakerRate,
-  getXlmRate,
+  getLegacyXlmRate,
   createQuote,
   getQuoteByMemo,
   networkToFiat,

@@ -65,6 +65,8 @@ export const COUNTRY_CODES = {
 }
 
 export const MIN_XLM_AMOUNT = 1
+// [PHASE 2] NOTE: This now syncs with backend via config endpoint (see useWallet hook)
+// If backend config.platform.minXlmAmount differs, config endpoint returns real value
 export const QUOTE_REFRESH_INTERVAL = 30000
 export const SOCKET_RECONNECT_ATTEMPTS = 5
 export const SOCKET_RECONNECT_DELAY = 1000

@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ArrowDownToLine } from 'lucide-react'
+import { ChevronLeft, ArrowDownToLine, AlertCircle } from 'lucide-react'
 import useRates from '../hooks/useRates'
 import useWallet from '../hooks/useWallet'
 import { getQuote } from '../api/cashout'
 import { hashPhoneNumber } from '../utils/crypto'
+import { getUserFriendlyError } from '../utils/errorMessages'
 import { MIN_XLM_AMOUNT, NETWORKS, COUNTRY_CODES } from '../utils/constants'
 import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
@@ -59,7 +60,9 @@ export default function Cashout() {
       const quote = await getQuote({ xlmAmount, network, phoneHash })
       navigate('/cashout/confirm', { state: { quote, network, phone: fullPhone } })
     } catch (err) {
-      setError(err.message)
+      // [PHASE 4] Convert backend error to user-friendly message
+      const friendlyError = getUserFriendlyError(err.message)
+      setError(friendlyError)
     } finally {
       setLoading(false)
     }
@@ -107,7 +110,13 @@ export default function Cashout() {
         />
       </div>
 
-      {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
+      {/* [PHASE 4] Improved error display */}
+      {error && (
+        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-lg p-3 mt-4 flex items-start gap-2">
+          <AlertCircle size={16} className="text-rowan-red shrink-0 mt-0.5" />
+          <p className="text-rowan-red text-xs leading-relaxed">{error}</p>
+        </div>
+      )}
 
       {/* Validation feedback */}
       {!canProceed && (

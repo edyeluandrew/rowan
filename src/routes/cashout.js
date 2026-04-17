@@ -33,9 +33,16 @@ router.post(
       }
 
       // Run fraud checks before creating quote
-      // [AUDIT FIX] Use actual rate from quoteEngine instead of hardcoded * 4000
+      // [PHASE 2 UPGRADE] Use legacy rate for fraud estimate (real path will be discovered during quote creation)
       const fiatCurrency = quoteEngine.networkToFiat(network);
-      const currentRate = await quoteEngine.getXlmRate(fiatCurrency);
+      let currentRate;
+      try {
+        currentRate = await quoteEngine.getLegacyXlmRate(fiatCurrency);
+      } catch (err) {
+        logger.warn(`[Cashout] Legacy rate fetch for fraud check failed:`, err.message);
+        return res.status(503).json({ error: 'Unable to fetch rates. Please try again.' });
+      }
+      
       const fiatEstimate = parseFloat(xlmAmount) * currentRate;
       const fraudCheck = await fraudMonitor.checkTransaction(req.userId, fiatEstimate, fiatCurrency);
       if (!fraudCheck.allowed) {

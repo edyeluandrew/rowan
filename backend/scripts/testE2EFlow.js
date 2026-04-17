@@ -121,14 +121,14 @@ async function main() {
     // ─────────────────────────────────────────────────────────────
     // STEP 4: Test Quote Engine getLive XLM Rate
     // ─────────────────────────────────────────────────────────────
-    log('\n📍 STEP 4: Testing Quote Engine getXlmRate()...');
+    log('\n📍 STEP 4: Testing Quote Engine getLegacyXlmRate()...');
     try {
-      const xlmRate = await quoteEngine.getXlmRate('UGX');
+      const xlmRate = await quoteEngine.getLegacyXlmRate('UGX');
       success(`XLM rate fetched (should prioritize MM): ${xlmRate} UGX/XLM`);
       
       // Test KES and TZS as well
-      const xlmRateKes = await quoteEngine.getXlmRate('KES');
-      const xlmRateTzs = await quoteEngine.getXlmRate('TZS');
+      const xlmRateKes = await quoteEngine.getLegacyXlmRate('KES');
+      const xlmRateTzs = await quoteEngine.getLegacyXlmRate('TZS');
       log(`  - KES/XLM: ${xlmRateKes}`);
       log(`  - TZS/XLM: ${xlmRateTzs}`);
     } catch (err) {
@@ -141,7 +141,7 @@ async function main() {
     // ─────────────────────────────────────────────────────────────
     log('\n📍 STEP 5: Simulating Quote Creation...');
     try {
-      const xlmRate = await quoteEngine.getXlmRate('UGX');
+      const xlmRate = await quoteEngine.getLegacyXlmRate('UGX');
       const fiatAmount = 100000; // 100k UGX
       
       // Simulate quote logic (from quoteEngine.createQuote)

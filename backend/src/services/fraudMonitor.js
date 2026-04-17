@@ -7,14 +7,9 @@ import logger from '../utils/logger.js';
  * FraudMonitor — L2 internal module.
  * Enforces per-user daily limits and per-transaction caps (scaling with KYC level),
  * flags admin alerts for suspicious patterns, and triggers auto-refunds.
+ * 
+ * [PHASE 4] KYC limits and fraud thresholds now sourced from config.
  */
-
-// KYC-tiered limits (in UGX equivalent)
-const KYC_LIMITS = {
-  NONE:     { perTx: 200000,   daily: 500000   },  // ~$53 / ~$133
-  BASIC:    { perTx: 1000000,  daily: 3000000  },  // ~$267 / ~$800
-  VERIFIED: { perTx: 5000000,  daily: 15000000 },  // ~$1,333 / ~$4,000
-};
 
 /**
  * Check if a user's requested cash-out violates any fraud rules.
@@ -26,7 +21,8 @@ async function checkTransaction(userId, fiatAmount, fiatCurrency) {
   if (!user) return { allowed: false, reason: 'User not found' };
   if (!user.is_active) return { allowed: false, reason: 'Account disabled' };
 
-  const limits = KYC_LIMITS[user.kyc_level] || KYC_LIMITS.NONE;
+  // [PHASE 4] Get KYC limits from config instead of hardcoding
+  const limits = config.kycLimits[user.kyc_level] || config.kycLimits.NONE;
   const amount = parseFloat(fiatAmount);
 
   // [F-3 FIX] Normalize fiat amount to UGX for limit comparison (limits are in UGX)
@@ -63,6 +59,7 @@ async function checkTransaction(userId, fiatAmount, fiatCurrency) {
   }
 
   // 3. Concurrent quote check — flag users requesting multiple simultaneous quotes
+  // [PHASE 4] Use config-driven threshold instead of hardcoded 3
   const concurrentResult = await db.query(
     `SELECT COUNT(*) as open_quotes
      FROM quotes
@@ -70,14 +67,15 @@ async function checkTransaction(userId, fiatAmount, fiatCurrency) {
     [userId]
   );
   const openQuotes = parseInt(concurrentResult.rows[0].open_quotes);
-  if (openQuotes >= 3) {
+  if (openQuotes >= config.fraud.maxConcurrentQuotes) {
     await logAlert(userId, 'CONCURRENT_QUOTES', `User has ${openQuotes} open quotes simultaneously`);
     return { allowed: false, reason: 'Too many open quotes. Please wait for existing quotes to expire.' };
   }
 
-  // 4. Flag unusually large transactions (above 80% of limit)
-  if (amountUgx > limits.perTx * 0.8) {
-    await logAlert(userId, 'LARGE_TX', `Transaction of ${amount} ${fiatCurrency} (${Math.round(amountUgx)} UGX) is above 80% of per-tx limit`);
+  // 4. Flag unusually large transactions (above threshold % of limit)
+  // [PHASE 4] Use config-driven threshold instead of hardcoded 0.8
+  if (amountUgx > limits.perTx * config.fraud.largeTransactionAlertThreshold) {
+    await logAlert(userId, 'LARGE_TX', `Transaction of ${amount} ${fiatCurrency} (${Math.round(amountUgx)} UGX) is above ${Math.round(config.fraud.largeTransactionAlertThreshold * 100)}% of per-tx limit`);
     // Allow but flag — admin can review
   }
 
@@ -86,6 +84,7 @@ async function checkTransaction(userId, fiatAmount, fiatCurrency) {
 
 /**
  * Check if a trader has repeated failed confirmations — potential fraud signal.
+ * [PHASE 4] Uses config-driven thresholds instead of hardcoded values.
  */
 async function checkTraderHealth(traderId) {
   // Failed confirmations in last 24 hours
@@ -99,7 +98,8 @@ async function checkTraderHealth(traderId) {
   );
   const failedCount = parseInt(failedResult.rows[0].failed_count);
 
-  if (failedCount >= 5) {
+  // [PHASE 4] Use config-driven threshold instead of hardcoded 5
+  if (failedCount >= config.fraud.traderFailureThreshold) {
     await logAlert(null, 'TRADER_REPEATED_FAILURES', `Trader ${traderId} has ${failedCount} failures in 24h`, traderId);
     // ── P2 FIX: Use status enum instead of is_active boolean ──
     await db.query(
@@ -116,7 +116,8 @@ async function checkTraderHealth(traderId) {
      WHERE trader_id = $1 AND status IN ('OPEN', 'RESOLVED_FOR_USER')`,
     [traderId]
   );
-  if (parseInt(disputeResult.rows[0].dispute_count) >= 3) {
+  // [PHASE 4] Use config-driven threshold instead of hardcoded 3
+  if (parseInt(disputeResult.rows[0].dispute_count) >= config.fraud.traderDisputeThreshold) {
     // ── P2 FIX: Use status enum instead of is_suspended boolean ──
     await db.query(
       `UPDATE traders SET status = 'SUSPENDED', is_suspended = TRUE WHERE id = $1`,
@@ -160,5 +161,4 @@ export default {
   checkTransaction,
   checkTraderHealth,
   logAlert,
-  KYC_LIMITS,
 };
