@@ -28,6 +28,7 @@ import configRoutes from './routes/config.js';
 // Services
 import websocket from './services/websocket.js';
 import horizonWatcher from './services/horizonWatcher.js';
+import ensureMarketMakerOffers from './services/offerMonitor.js';
 import './services/jobQueue.js'; // self-initializing (registers cron jobs)
 import logger from './utils/logger.js';
 
@@ -347,6 +348,9 @@ async function start() {
 
     // Start Horizon escrow watcher
     await horizonWatcher.startWatcher();
+
+    // Ensure market maker offers exist (recreate if missing)
+    await ensureMarketMakerOffers();
 
     // Start HTTP server — bind to 0.0.0.0 so physical devices on the LAN can reach it
     httpServer.listen(config.port, '0.0.0.0', () => {

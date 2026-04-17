@@ -184,16 +184,22 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     
     // Convert to stroops (integer) for bigint storage: USDC has 6 decimals
     // Example: 5.497 USDC → 5497000 stroops
-    const usdcStroops = Math.round(usdcDecimal * 1_000_000);
+    let usdcStroops = Math.round(usdcDecimal * 1_000_000);
     logger.info(`[Escrow] Converting to stroops: ${usdcDecimal} USDC × 1,000,000 = ${usdcStroops} stroops`);
     
+    // CRITICAL: Ensure stroops is a safe integer (not a float string)
+    usdcStroops = Number.parseInt(usdcStroops.toString(), 10);
+    
     // Final validation: must be an integer
-    if (!Number.isInteger(usdcStroops)) {
-      logger.error(`[Escrow] ❌ Stroops not integer: ${usdcStroops} (from ${usdcDecimal})`);
-      throw new Error(`USDC stroops conversion failed: ${usdcDecimal} → ${usdcStroops} (not an integer)`);
+    if (!Number.isSafeInteger(usdcStroops)) {
+      logger.error(`[Escrow] ❌ Stroops not safe integer: ${usdcStroops} (from ${usdcDecimal}) - type: ${typeof usdcStroops}`);
+      throw new Error(`USDC stroops conversion failed: ${usdcDecimal} → ${usdcStroops} (not safe integer)`);
     }
     
-    logger.info(`[Escrow] ✅ Stroops validated: ${usdcStroops} (is safe integer: ${Number.isSafeInteger(usdcStroops)})`);
+    logger.info(`[Escrow] ✅ Stroops validated: ${usdcStroops} (type: ${typeof usdcStroops})`);
+    
+    // Double-check the parameter being passed
+    logger.debug(`[Escrow] About to UPDATE with usdc_amount=$1 where $1=${usdcStroops} (type: ${typeof usdcStroops})`);
     
     await db.query(
       `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
@@ -381,9 +387,10 @@ async function swapXlmToUsdc(xlmAmount, quote) {
     
     logger.info(`[Escrow] 🎯 Swap complete: ${actualUsdc} USDC (type: ${typeof actualUsdc}), tx: ${result.hash}`);
     
-    // Defensive check before returning
-    if (!Number.isFinite(actualUsdc)) {
-      throw new Error(`Invalid result USDC amount: ${actualUsdc}`);
+    // Defensive check before returning - MUST be a number
+    if (!Number.isFinite(actualUsdc) || typeof actualUsdc !== 'number') {
+      logger.error(`[Escrow] ❌ CRITICAL: actualUsdc is not a valid number: ${actualUsdc} (type: ${typeof actualUsdc})`);
+      throw new Error(`Invalid result USDC amount: ${actualUsdc} (type was ${typeof actualUsdc}, expected number)`);
     }
     
     return {
