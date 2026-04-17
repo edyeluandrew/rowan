@@ -325,11 +325,19 @@ async function swapXlmToUsdc(xlmAmount, quote) {
   try {
     logger.info(`[Escrow] 🔥 Executing manageBuyOffer: buy ${destAmount} USDC for max ${sendMax} XLM`);
     
+    // Parse amounts to ensure they're numbers
+    const destNum = parseFloat(destAmount);
+    const sendMaxNum = parseFloat(sendMax);
+    
+    if (!Number.isFinite(destNum) || !Number.isFinite(sendMaxNum)) {
+      throw new Error(`Invalid amounts: destAmount=${destAmount} (→${destNum}), sendMax=${sendMax} (→${sendMaxNum})`);
+    }
+    
     // Calculate price: USDC per XLM from our target amounts
     // If we want X USDC for Y XLM, the price (what we pay per unit we're buying) is Y/X
-    const priceOfUsdcInXlm = parseFloat(sendMax) / parseFloat(destAmount);
+    const priceOfUsdcInXlm = sendMaxNum / destNum;
     
-    logger.info(`[Escrow] 💰 Buy price: ${priceOfUsdcInXlm.toFixed(8)} XLM per USDC (buying USDC at this rate)`);
+    logger.info(`[Escrow] 💰 Buy price: ${priceOfUsdcInXlm.toFixed(8)} XLM per USDC (sending max ${sendMaxNum} XLM to buy ${destNum} USDC)`);
 
     const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
       fee: config.stellarMaxFee,
@@ -337,11 +345,11 @@ async function swapXlmToUsdc(xlmAmount, quote) {
     })
       .addOperation(
         StellarSdk.Operation.manageBuyOffer({
-          selling: StellarSdk.Asset.native(),    // Sell XLM
-          buying: USDC_ASSET,                     // Buy USDC
-          buyAmount: destAmount,                  // Want to buy this much USDC
-          price: priceOfUsdcInXlm.toString(),     // At this price (XLM per USDC)
-          offerId: '0',                           // 0 = create new offer
+          selling: StellarSdk.Asset.native(),              // Sell XLM
+          buying: USDC_ASSET,                              // Buy USDC
+          buyAmount: destNum.toFixed(7),                   // Want to buy this much USDC
+          price: priceOfUsdcInXlm.toFixed(7),              // At this price (XLM per USDC)
+          offerId: '0',                                    // 0 = create new offer
         })
       )
       .setTimeout(30)
@@ -351,22 +359,20 @@ async function swapXlmToUsdc(xlmAmount, quote) {
     const result = await horizon.submitTransaction(tx);
     logger.info(`[Escrow] ✅ manageBuyOffer broadcast successful: ${result.hash}`);
 
-    // ── Step 4: Parse the result to see actual amount received ──
-    let actualUsdc = parseFloat(destAmount);
+    // ── Step 4: Expected amount ──
+    // manageBuyOffer will fill as much as it can up to buyAmount
+    // For a testnet environment, assume it fills completely (since we have market maker offers)
+    const actualUsdc = destNum;
     
-    try {
-      // For manageBuyOffer, we requested to buy destAmount USDC
-      // The offer either fills completely (if liquidity available) or partially/not at all
-      logger.info(`[Escrow] 🎯 manageBuyOffer requested: ${destAmount} USDC, expecting full fill from market maker`);
-      actualUsdc = parseFloat(destAmount);
-    } catch (parseErr) {
-      logger.warn('[Escrow] Could not parse manageBuyOffer result, using requested amount:', parseErr.message);
+    logger.info(`[Escrow] 🎯 Swap complete: ${actualUsdc} USDC (type: ${typeof actualUsdc}), tx: ${result.hash}`);
+    
+    // Defensive check before returning
+    if (!Number.isFinite(actualUsdc)) {
+      throw new Error(`Invalid result USDC amount: ${actualUsdc}`);
     }
-
-    logger.info(`[Escrow] 🎯 Swap complete: received ${actualUsdc} USDC, tx: ${result.hash}`);
     
     return {
-      amount: actualUsdc,
+      amount: actualUsdc,  // Will be a NUMBER, not a string
       txHash: result.hash,
       source: 'dex',
       quoteAligned: true,

@@ -94,51 +94,32 @@ async function createOffers() {
     // USDC/UGX rate tells us USDC value. We need XLM/USDC price.
     // Assume 1 XLM ≈ 0.273 USD, and build from there
     const xlmUsdRate = 0.273;
-    const usdcToUgx = config.usdcFiatRates.UGX;
-    const xlmToUgx = xlmUsdRate * usdcToUgx;
     const xlmUsdcPrice = xlmUsdRate; // How much USDC you get per 1 XLM (roughly)
 
     console.log(`  Calculated XLM/USDC rate: ~${xlmUsdcPrice.toFixed(4)}`);
-
-    // Create a buy offer: selling USDC to get XLM
-    // This means: "I'll sell USDC if you give me XLM at this price"
-    // Price = how much USDC I want per 1 XLM I give
-    const buyOfferPrice = (1 / xlmUsdcPrice).toFixed(7); // USDC per XLM
-
-    console.log(`  Buy offer price (USDC per XLM): ${buyOfferPrice}`);
 
     const txBuilder = new StellarSdk.TransactionBuilder(account, {
       fee: StellarSdk.BASE_FEE,
       networkPassphrase: isTestnet ? StellarSdk.Networks.TESTNET : StellarSdk.Networks.PUBLIC,
     });
 
-    // Get actual USDC balance to size the buy offer properly
-    const usdcBalance = account.balances.find(b => b.asset_code === 'USDC' && b.asset_issuer === usdcIssuer);
-    const usableUSDC = usdcBalance ? parseFloat(usdcBalance.balance) * 0.9 : 500; // Leave 10% buffer
-
-    // Add buy offer: I'm willing to buy XLM (sell USDC for it)
-    txBuilder.addOperation(
-      StellarSdk.Operation.manageBuyOffer({
-        selling: USDC_ASSET,      // I'm selling USDC
-        buying: XLM_ASSET,        // To buy XLM
-        buyAmount: Math.min(1000, usableUSDC / parseFloat(buyOfferPrice)).toFixed(2), // Don't exceed available USDC
-        price: buyOfferPrice,     // At this price (USDC per XLM)
-        offerId: '0',             // New offer (offerId 0 = create)
-      })
-    );
-
-    // Also add a sell offer for completeness
-    // Sell offer: "I'll sell XLM if you give me USDC at this price"
+    // Get actual XLM balance to size the sell offer properly
     const xlmBalance = account.balances.find(b => !b.asset_code);
-    const usableXLM = xlmBalance ? parseFloat(xlmBalance.balance) * 0.8 : 1000; // Leave buffer for fees
+    const usableXLM = xlmBalance ? parseFloat(xlmBalance.balance) - 200 : 1000; // Leave 200 XLM buffer for fees & reserves
 
+    // Add ONLY a sell offer (XLM→USDC)
+    // This is what escrow needs: to sell 5 XLM received from user and get USDC
     const sellOfferPrice = xlmUsdcPrice.toFixed(7); // How much USDC per 1 XLM
+    const sellAmount = Math.min(500, Math.floor(usableXLM) - 10).toFixed(2); // Create smaller offer
+
+    console.log(`  Creating sell offer: ${sellAmount} XLM @ ${sellOfferPrice} USDC/XLM (buffer: ${200 + 10} XLM)`);
+
 
     txBuilder.addOperation(
       StellarSdk.Operation.manageSellOffer({
         selling: XLM_ASSET,       // I'm selling XLM
         buying: USDC_ASSET,       // To buy USDC
-        amount: Math.min(5000, usableXLM).toFixed(2), // Sell reasonable amount
+        amount: sellAmount,       // Sell this amount
         price: sellOfferPrice,    // At this price (in USDC per XLM)
         offerId: '0',             // New offer
       })
