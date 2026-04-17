@@ -12,7 +12,9 @@
     "script:seed-admin": "node scripts/seedAdmin.js",
     "script:test-db": "node scripts/testDb.mjs",
     "script:test-webauth": "node scripts/testDbDirect.mjs",
-    "script:check-schema": "node scripts/_check_schema.mjs"
+    "script:check-schema": "node scripts/_check_schema.mjs",
+    "script:check-escrow": "node scripts/checkEscrowAccount.mjs",
+    "script:setup-mm-offers": "node scripts/setupMarketMakerOffers.mjs"
   },
   "dependencies": {
     "express": "^5.2.1",

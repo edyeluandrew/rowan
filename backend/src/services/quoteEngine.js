@@ -14,10 +14,13 @@ const NativeAsset = StellarSdk.Asset.native();
 
 /**
  * [PHASE 2] Discover actual executable XLM → USDC path using Horizon strict-receive.
- * This returns real path data that matches what `pathPaymentStrictReceive` will actually execute.
- *
+ * 
+ * Strategy:
+ * 1. Use MARKET MAKER account as source (has XLM liquidity)
+ * 2. Destination is ESCROW account (where USDC is received)
+ * 3. This finds real paths through Stellar's DEX/orderbook
+ * 
  * Returns: { path, xlmNeeded, usdcReceived, source: 'horizon-path' } or null if no path found.
- *
  * This is the NEW source of truth for quote generation.
  */
 async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
@@ -27,11 +30,22 @@ async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
   }
 
   try {
-    const sourceAddr = sourceAccount || config.stellar.escrowPublicKey;
-    const destAddr = config.stellar.escrowPublicKey; // self-swap
+    // ── CRITICAL: Use market maker as SOURCE for path discovery ──
+    // Market maker holds XLM and can send real payment (not self-swap)
+    // Escrow is DESTINATION where USDC is received
+    const sourceAddr = sourceAccount || config.stellar.marketMakerPublicKey || config.stellar.escrowPublicKey;
+    const destAddr = config.stellar.escrowPublicKey;
     
     logger.info(`[QuoteEngine] 🔄 Discovering strict-receive path: receive ${usdcTarget} USDC`);
-    logger.info(`[QuoteEngine] Path params: source=${sourceAddr}, dest=${destAddr}, asset=USDC/${USDC_ASSET.issuer}, amount=${usdcTarget}`);
+    logger.info(`[QuoteEngine] 📍 Network: ${config.stellar.network}, Horizon: ${config.stellar.horizonUrl}`);
+    
+    if (!sourceAddr || !destAddr) {
+      logger.error('[QuoteEngine] ❌ Missing addresses: source or escrow not configured');
+      return null;
+    }
+    
+    logger.info(`[QuoteEngine] Path approach: ${sourceAccount ? 'custom' : config.stellar.marketMakerPublicKey ? 'market-maker' : 'escrow'} account`);
+    logger.info(`[QuoteEngine] Path params: source=${sourceAddr.slice(0, 8)}..., dest=${destAddr.slice(0, 8)}..., USDC issuer=${USDC_ASSET.issuer.slice(0, 8)}..., amount=${usdcTarget}`);
 
     // [FIX] Use Horizon REST API directly for path discovery
     // The Stellar SDK v12 Server object doesn't expose .paths() method
@@ -45,21 +59,35 @@ async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
       `destination_asset_issuer=${encodeURIComponent(USDC_ASSET.issuer)}&` +
       `destination_amount=${usdcTarget.toFixed(7)}`;
 
-    logger.debug(`[QuoteEngine] Calling Horizon: ${pathUrl.split('?')[0]}...`);
+    logger.debug(`[QuoteEngine] 🌐 Calling Horizon path endpoint...`);
 
-    const response = await fetch(pathUrl);
+    const response = await fetch(pathUrl, { timeout: 15000 });
     
     if (!response.ok) {
       const errorBody = await response.text();
-      logger.error(`[QuoteEngine] Horizon path API error: HTTP ${response.status}`, { body: errorBody.substring(0, 200) });
+      logger.error(`[QuoteEngine] ❌ Horizon path API error: HTTP ${response.status}`, { 
+        body: errorBody.substring(0, 300),
+        status: response.status,
+        network: config.stellar.network,
+        usdcCode: USDC_ASSET.code,
+      });
       return null;
     }
 
     const pathResponse = await response.json();
 
     if (!pathResponse.records || pathResponse.records.length === 0) {
-      logger.warn('[QuoteEngine] No valid path found for strict-receive (empty records)');
-      logger.info(`[QuoteEngine] Checked: source=${sourceAddr}, dest=${destAddr}, asset=USDC`);
+      logger.warn('[QuoteEngine] ⚠️  No valid path found for strict-receive (empty records)');
+      logger.warn(`[QuoteEngine] 🔍 Debug info:`, {
+        network: config.stellar.network,
+        source: sourceAddr.slice(0, 8) + '...',
+        dest: destAddr.slice(0, 8) + '...',
+        usdcCode: USDC_ASSET.code,
+        usdcIssuer: USDC_ASSET.issuer.slice(0, 8) + '...',
+        usdcTarget,
+        recordCount: pathResponse.records ? pathResponse.records.length : 'undefined',
+      });
+      logger.info(`[QuoteEngine] Possible causes: 1) No liquidity, 2) Market maker offline, 3) Wrong USDC issuer, 4) Accounts not funded`);
       return null;
     }
 
@@ -243,7 +271,20 @@ async function getLegacyXlmRate(fiatCurrency = 'UGX') {
       logger.info(`[QuoteEngine] [FALLBACK] Using CoinGecko rate: ${rate} ${fiatCurrency}/XLM`);
     } catch (err) {
       logger.error('[QuoteEngine] CoinGecko fallback also failed:', err.message);
-      throw new Error('Unable to fetch XLM rate from any source');
+    }
+  }
+
+  // Ultimate fallback: Hardcoded XLM rate for testnet/development with no liquidity
+  if (!rate) {
+    // 1 XLM ≈ $0.27 (historical average) — apply fiat multiplier from config
+    const xlmBaseUsdRate = 0.27;
+    const usdcToLocalFiat = config.usdcFiatRates[fiatCurrency];
+    
+    if (usdcToLocalFiat) {
+      rate = xlmBaseUsdRate * usdcToLocalFiat;
+      logger.warn(`[QuoteEngine] ⚠️  ULTIMATE FALLBACK: Using hardcoded XLM rate ${rate} ${fiatCurrency}/XLM — network has no available liquidity`);
+    } else {
+      throw new Error('Unable to fetch XLM rate from any source and fiat currency not configured');
     }
   }
 
@@ -301,9 +342,10 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
   try {
     const legacyRate = await getLegacyXlmRate(fiatCurrency);
     estimatedSpread = legacyRate / usdcToFiat; // Rough XLM/USDC estimate
-    logger.info(`[QuoteEngine] Legacy rate estimate: ${estimatedSpread} USDC/XLM`);
-  } catch (err) {
-    logger.warn('[QuoteEngine] Legacy rate fetch failed, using default estimate:', err.message);
+      logger.info(`[QuoteEngine] Legacy rate estimate: ${estimatedSpread} USDC/XLM (from market rates)`);
+    } catch (err) {
+      // Use default if market rates unavailable
+      logger.warn('[QuoteEngine] Market rate fetch failed, using default XLM/USDC estimate of ~3.0');
   }
 
   // ── Step 2: Calculate USDC target needed ──
@@ -319,11 +361,45 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
   logger.info(`[QuoteEngine]📊 Planning path discovery: estimatedUsdcTarget=${estimatedUsdcTarget}, usdcTargetForPath=${usdcTargetForPath}`);
 
   // ── Step 3: DISCOVER ACTUAL EXECUTABLE PATH ──
-  const pathResult = await getXlmRateFromPath(usdcTargetForPath);
+  // Attempt to use market maker's configured liquidity via Horizon path discovery
+  // This requires active offers in the market maker account (set up in Stellar Lab)
+  let pathResult = await getXlmRateFromPath(usdcTargetForPath);
   
   if (!pathResult) {
-    logger.error('[QuoteEngine] ❌ CRITICAL: No valid XLM→USDC path found — cannot quote');
-    throw new Error('No valid path available: unable to convert XLM to USDC on Stellar network');
+    logger.warn('[QuoteEngine] ⚠️  Path discovery failed (market maker has no active offers)');
+    logger.warn('[QuoteEngine] 💡 To enable path discovery:');
+    logger.warn('[QuoteEngine]    1. Go to https://laboratory.stellar.org/');
+    logger.warn('[QuoteEngine]    2. Create an offer: Sell XLM → Buy USDC');
+    logger.warn('[QuoteEngine]    3. Set price to match your configured rates');
+    logger.info('[QuoteEngine] 📌 Falling back to direct rate calculation (from config)...');
+    
+    // FALLBACK: Calculate quote using configured rates directly
+    // This is acceptable for controlled trading environments where rates are stable
+    try {
+      const legacyRate = await getLegacyXlmRate(fiatCurrency); // XLM/fiat rate
+      const xlmToUsdcRate = legacyRate / usdcToFiat; // Convert to XLM/USDC
+      
+      // Use direct rate calculation
+      const simulatedUsdcNeeded = usdcTargetForPath;
+      const simulatedXlmNeeded = simulatedUsdcNeeded * xlmToUsdcRate;
+      
+      pathResult = {
+        xlmRate: xlmToUsdcRate,
+        pathData: {
+          xlmNeeded: simulatedXlmNeeded,
+          usdcReceived: simulatedUsdcNeeded,
+          path: [],
+          source: 'legacy-fallback',
+        },
+        source: 'legacy-fallback',
+      };
+      
+      logger.warn('[QuoteEngine] ⚠️  Using FALLBACK legacy rate: ' + xlmToUsdcRate + ' XLM/USDC');
+      logger.warn('[QuoteEngine] ⚠️  Quotes may be less accurate than usual. Please restore Horizon path discovery.');
+    } catch (fallbackErr) {
+      logger.error('[QuoteEngine] ❌ Legacy rate fallback also failed:', fallbackErr.message);
+      throw new Error('Unable to generate quote: Path discovery failed and no legacy rate available. Please ensure escrow account is properly configured with USDC trustline.');
+    }
   }
 
   const { xlmRate, pathData } = pathResult;
