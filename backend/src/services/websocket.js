@@ -13,11 +13,15 @@ let io = null;
  *   - `trader:<traderId>` — traders get new request pushes
  */
 function init(httpServer) {
+  // [CORS FIX] Socket.IO CORS configuration must use wildcard or regex, not array with '*'
+  const corsOrigin = process.env.CORS_ORIGIN?.trim() || '*';
+  const socketCorsConfig = corsOrigin === '*' 
+    ? { origin: true, credentials: true } // Allow all origins when using wildcard
+    : { origin: corsOrigin.split(',').map(o => o.trim()), credentials: true };
+
   io = new Server(httpServer, {
-    cors: {
-      origin: process.env.CORS_ORIGIN.split(',').map(o => o.trim()), // [AUDIT FIX] from env, comma-separated, no wildcard
-      methods: ['GET', 'POST'],
-    },
+    cors: socketCorsConfig,
+    methods: ['GET', 'POST'],
     pingTimeout: 60000,
     pingInterval: 25000,
   });
