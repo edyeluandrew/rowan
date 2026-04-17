@@ -3,7 +3,7 @@ import { getAgreement, confirmAgreement, submitOnboarding } from '../../../api/o
 import AgreementViewer from '../../../components/onboarding/AgreementViewer';
 import LoadingSpinner from '../../../components/ui/LoadingSpinner';
 import Button from '../../../components/ui/Button';
-import { validateFile, getBase64SizeBytes, validateBase64Integrity } from '../../../trader/utils/fileValidation';
+import { validateFile, getBase64SizeBytes, validateBase64Integrity } from '../../../utils/fileValidation';
 import { AlertCircle, Check } from 'lucide-react';
 
 /**
@@ -417,39 +417,6 @@ export default function Step5_Agreement({ formData, goNext }) {
             Please wait while we upload your documents. This may take a few moments.
           </p>
         )}
-      </div>
-    </div>
-  );
-}
-        >
-          I have read and agree to the Rowan Trader Agreement
-        </span>
-      </div>
-
-      {!scrolledToBottom && (
-        <p className="text-rowan-muted text-xs mt-2">
-          Please scroll through the entire agreement to enable this checkbox.
-        </p>
-      )}
-
-      {agreementVersion && (
-        <p className="text-rowan-muted text-xs mt-2">
-          Version {agreementVersion} — {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-        </p>
-      )}
-
-      {error && <p className="text-rowan-red text-sm text-center mt-3">{error}</p>}
-
-      <div className="mt-6">
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={handleSubmit}
-          disabled={!agreed}
-          loading={submitting}
-        >
-          Submit Application
-        </Button>
       </div>
     </div>
   );

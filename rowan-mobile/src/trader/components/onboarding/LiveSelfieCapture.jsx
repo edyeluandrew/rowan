@@ -115,7 +115,7 @@ export default function LiveSelfieCapture({ onCapture, currentFile, onCancel }) 
       }, { level: 'info' });
 
       // Wait 1 second before second capture (to detect motion)
-      setProgress('Hold still...';
+      setProgress('Hold still...');
       setCountdown(1);
       await sleep(1000);
       setCountdown(0);

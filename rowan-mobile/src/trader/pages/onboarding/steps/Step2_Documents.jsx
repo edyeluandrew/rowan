@@ -3,7 +3,7 @@ import { Check, AlertCircle } from 'lucide-react';
 import DocumentUploader from '../../../components/onboarding/DocumentUploader';
 import LiveSelfieCapture from '../../../components/onboarding/LiveSelfieCapture';
 import Button from '../../../components/ui/Button';
-import { validateFile, getBase64SizeBytes, formatFileSize } from '../../../trader/utils/fileValidation';
+import { validateFile, getBase64SizeBytes, formatFileSize } from '../../../utils/fileValidation';
 
 /**
  * Step2_Documents — ID front, ID back, selfie uploads via Capacitor Camera.
