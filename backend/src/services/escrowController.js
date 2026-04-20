@@ -160,12 +160,27 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
   // 5. Immediately swap XLM → USDC inside the escrow
   try {
     const swapResult = await swapXlmToUsdc(receivedXlm, quote);
+    
+    logger.info(`[Escrow] 🔍 RAW SWAP RESULT:`);
+    logger.info(`[Escrow]   amount: ${swapResult.amount}`);
+    logger.info(`[Escrow]   amount type: ${typeof swapResult.amount}`);
+    logger.info(`[Escrow]   amount JSON: ${JSON.stringify(swapResult.amount)}`);
+    logger.info(`[Escrow]   amount toString: ${swapResult.amount.toString()}`);
+    logger.info(`[Escrow]   txHash: ${swapResult.txHash}`);
+    
     logger.info(`[Escrow] Swap result: amount=${swapResult.amount} (type: ${typeof swapResult.amount}), txHash=${swapResult.txHash}`);
     
     // Ensure USDC amount is a number
     let usdcDecimal = swapResult.amount;
     if (typeof usdcDecimal === 'string') {
+      logger.info(`[Escrow] Converting string to number: "${usdcDecimal}" → ${parseFloat(usdcDecimal)}`);
       usdcDecimal = parseFloat(usdcDecimal);
+    }
+    
+    // If it's a BigInt, convert to number
+    if (typeof usdcDecimal === 'bigint') {
+      logger.info(`[Escrow] Converting BigInt to number: ${usdcDecimal}`);
+      usdcDecimal = Number(usdcDecimal);
     }
     
     logger.info(`[Escrow] USDC value parsed: ${swapResult.amount} → ${usdcDecimal} (finite: ${Number.isFinite(usdcDecimal)}, type: ${typeof usdcDecimal})`);
@@ -213,17 +228,21 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
       throw new Error(`Final check failed: usdcStroops is not a safe integer (${usdcStroops} type: ${typeof usdcStroops})`);
     }
 
+    // Explicitly convert to integer one more time for safety
+    const finalStroops = parseInt(usdcStroops, 10);
+    logger.info(`[Escrow] Final stroops after parseInt: ${finalStroops} (type: ${typeof finalStroops})`);
+
     try {
       await db.query(
-        `UPDATE transactions SET usdc_amount = $1::bigint, stellar_swap_tx = $2 WHERE id = $3`,
-        [usdcStroops, swapResult.txHash, transaction.id]
+        `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
+        [finalStroops, swapResult.txHash, transaction.id]
       );
     } catch (dbErr) {
       logger.error(`[Escrow] ❌ DATABASE ERROR during swap insert:`);
       logger.error(`[Escrow]   Error: ${dbErr?.message}`);
       logger.error(`[Escrow]   Code: ${dbErr?.code}`);
       logger.error(`[Escrow]   Detail: ${dbErr?.detail}`);
-      logger.error(`[Escrow]   Attempted to insert usdc_amount=${usdcStroops} (type: ${typeof usdcStroops})`);
+      logger.error(`[Escrow]   Attempted to insert usdc_amount=${finalStroops} (type: ${typeof finalStroops})`);
       throw dbErr;
     }
     logger.info(`[Escrow] ✅ Swap complete — ${usdcDecimal} USDC (${usdcStroops} stroops), tx: ${swapResult.txHash}`);
