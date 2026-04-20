@@ -188,11 +188,11 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     let usdcStroops = Math.round(usdcDecimal * 1_000_000);
     logger.info(`[Escrow] After Math.round: ${usdcStroops} (type: ${typeof usdcStroops})`);
     
-    // CRITICAL: Ensure stroops is a safe integer (not a float string)
-    usdcStroops = Number.parseInt(usdcStroops.toString(), 10);
-    logger.info(`[Escrow] After parseInt: ${usdcStroops} (type: ${typeof usdcStroops})`);
+    // CRITICAL: Force to integer using Math.floor (in case round produced a float)
+    usdcStroops = Math.floor(usdcStroops);
+    logger.info(`[Escrow] After Math.floor: ${usdcStroops} (type: ${typeof usdcStroops})`);
     
-    // Final validation: must be an integer
+    // Final validation: must be a safe integer
     if (!Number.isSafeInteger(usdcStroops)) {
       logger.error(`[Escrow] ❌ Stroops not safe integer: ${usdcStroops} (from ${usdcDecimal}) - type: ${typeof usdcStroops}`);
       throw new Error(`USDC stroops conversion failed: ${usdcDecimal} → ${usdcStroops} (not safe integer)`);
@@ -203,9 +203,19 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     // Double-check the parameter being passed
     logger.info(`[Escrow] About to UPDATE with usdc_amount=$1 where $1=${usdcStroops} (type: ${typeof usdcStroops})`);
     
+    // Final sanity check before insert
+    if (typeof usdcStroops !== 'number' || !Number.isInteger(usdcStroops)) {
+      logger.error(`[Escrow] ❌ CRITICAL: usdcStroops failed final check`);
+      logger.error(`[Escrow]   Value: ${usdcStroops}`);
+      logger.error(`[Escrow]   Type: ${typeof usdcStroops}`);
+      logger.error(`[Escrow]   isInteger: ${Number.isInteger(usdcStroops)}`);
+      logger.error(`[Escrow]   isSafeInteger: ${Number.isSafeInteger(usdcStroops)}`);
+      throw new Error(`Final check failed: usdcStroops is not a safe integer (${usdcStroops} type: ${typeof usdcStroops})`);
+    }
+
     try {
       await db.query(
-        `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
+        `UPDATE transactions SET usdc_amount = $1::bigint, stellar_swap_tx = $2 WHERE id = $3`,
         [usdcStroops, swapResult.txHash, transaction.id]
       );
     } catch (dbErr) {
