@@ -199,50 +199,40 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     
     // Convert to stroops (integer) for bigint storage: USDC has 6 decimals
     // Example: 5.497 USDC → 5497000 stroops
-    logger.info(`[Escrow] Converting to stroops: ${usdcDecimal} USDC`);
+    logger.info(`[Escrow] Step 1 - Converting to stroops: ${usdcDecimal} USDC`);
+    
+    // Guarantee integer: (1) round, (2) floor, (3) parseInt, (4) verify
     let usdcStroops = Math.round(usdcDecimal * 1_000_000);
-    logger.info(`[Escrow] After Math.round: ${usdcStroops} (type: ${typeof usdcStroops})`);
-    
-    // CRITICAL: Force to integer using Math.floor (in case round produced a float)
     usdcStroops = Math.floor(usdcStroops);
-    logger.info(`[Escrow] After Math.floor: ${usdcStroops} (type: ${typeof usdcStroops})`);
+    usdcStroops = parseInt(usdcStroops, 10);  // Force integer parse
     
-    // Final validation: must be a safe integer
-    if (!Number.isSafeInteger(usdcStroops)) {
-      logger.error(`[Escrow] ❌ Stroops not safe integer: ${usdcStroops} (from ${usdcDecimal}) - type: ${typeof usdcStroops}`);
-      throw new Error(`USDC stroops conversion failed: ${usdcDecimal} → ${usdcStroops} (not safe integer)`);
+    logger.info(`[Escrow] Step 2 - After conversions: ${usdcStroops} (type: ${typeof usdcStroops}, isInteger: ${Number.isInteger(usdcStroops)})`);
+    
+    // If still not an integer, throw before database
+    if (!Number.isInteger(usdcStroops)) {
+      logger.error(`[Escrow] ❌ CONVERSION FAILED: usdcStroops is not an integer!`);
+      logger.error(`[Escrow]   Original: ${usdcDecimal}`);
+      logger.error(`[Escrow]   Result: ${usdcStroops} (type: ${typeof usdcStroops})`);
+      throw new Error(`Failed to convert USDC to stroops: ${usdcDecimal} → ${usdcStroops}`);
     }
     
-    logger.info(`[Escrow] ✅ Stroops validated: ${usdcStroops} (type: ${typeof usdcStroops})`);
+    logger.info(`[Escrow] Step 3 - ✅ Integer guaranteed: ${usdcStroops}`);
     
-    // Double-check the parameter being passed
-    logger.info(`[Escrow] About to UPDATE with usdc_amount=$1 where $1=${usdcStroops} (type: ${typeof usdcStroops})`);
-    
-    // Final sanity check before insert
-    if (typeof usdcStroops !== 'number' || !Number.isInteger(usdcStroops)) {
-      logger.error(`[Escrow] ❌ CRITICAL: usdcStroops failed final check`);
-      logger.error(`[Escrow]   Value: ${usdcStroops}`);
-      logger.error(`[Escrow]   Type: ${typeof usdcStroops}`);
-      logger.error(`[Escrow]   isInteger: ${Number.isInteger(usdcStroops)}`);
-      logger.error(`[Escrow]   isSafeInteger: ${Number.isSafeInteger(usdcStroops)}`);
-      throw new Error(`Final check failed: usdcStroops is not a safe integer (${usdcStroops} type: ${typeof usdcStroops})`);
-    }
-
     // Explicitly convert to integer one more time for safety
     const finalStroops = parseInt(usdcStroops, 10);
-    logger.info(`[Escrow] Final stroops after parseInt: ${finalStroops} (type: ${typeof finalStroops})`);
+    logger.info(`[Escrow] Step 4 - Final stroops before INSERT: ${finalStroops} (type: ${typeof finalStroops})`);
 
     try {
       await db.query(
         `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
         [finalStroops, swapResult.txHash, transaction.id]
       );
+      logger.info(`[Escrow] ✅ Database INSERT successful with usdc_amount=${finalStroops}`);
     } catch (dbErr) {
-      logger.error(`[Escrow] ❌ DATABASE ERROR during swap insert:`);
-      logger.error(`[Escrow]   Error: ${dbErr?.message}`);
+      logger.error(`[Escrow] ❌ DATABASE ERROR:`);
+      logger.error(`[Escrow]   Message: ${dbErr?.message}`);
       logger.error(`[Escrow]   Code: ${dbErr?.code}`);
-      logger.error(`[Escrow]   Detail: ${dbErr?.detail}`);
-      logger.error(`[Escrow]   Attempted to insert usdc_amount=${finalStroops} (type: ${typeof finalStroops})`);
+      logger.error(`[Escrow]   Tried to insert: usdc_amount=${finalStroops} (type: ${typeof finalStroops})`);
       throw dbErr;
     }
     logger.info(`[Escrow] ✅ Swap complete — ${usdcDecimal} USDC (${usdcStroops} stroops), tx: ${swapResult.txHash}`);
