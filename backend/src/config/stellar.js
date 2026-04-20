@@ -18,3 +18,5 @@ const usdcIssuer = isTestnet ? config.usdcIssuerTestnet : config.usdcIssuerMainn
 export const USDC_ASSET = new StellarSdk.Asset('USDC', usdcIssuer);
 
 export { StellarSdk };
+
+

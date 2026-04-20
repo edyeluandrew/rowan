@@ -36,7 +36,14 @@ async function ensureMarketMakerOffers() {
   console.log('[Offer Monitor] Checking market maker offers on startup...\n');
   
   if (!config.stellar.marketMakerPublicKey || !config.stellar.marketMakerSecretKey) {
-    console.warn('[Offer Monitor] ⚠️  Market maker not configured, skipping');
+    console.warn('[Offer Monitor] ⚠️  Market maker not configured:');
+    if (!config.stellar.marketMakerPublicKey) {
+      console.warn('[Offer Monitor]   ❌ MARKET_MAKER_PUBLIC_KEY is missing');
+    }
+    if (!config.stellar.marketMakerSecretKey) {
+      console.warn('[Offer Monitor]   ❌ MARKET_MAKER_SECRET_KEY is missing');
+    }
+    console.warn('[Offer Monitor]   Add these to your Render environment variables and redeploy');
     return;
   }
 

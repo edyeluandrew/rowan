@@ -64,6 +64,8 @@ const requiredEnvVars = [
   { key: 'API_URL', label: 'Public API URL (used in stellar.toml WEB_AUTH_ENDPOINT)' },
   { key: 'STELLAR_NETWORK', label: 'Stellar network (testnet or mainnet)' },
   { key: 'HORIZON_URL', label: 'Stellar Horizon API URL' },
+  { key: 'MARKET_MAKER_PUBLIC_KEY', label: 'Stellar market maker account public key (for path discovery)' },
+  { key: 'MARKET_MAKER_SECRET_KEY', label: 'Stellar market maker account secret key (for offer creation)' },
 ];
 const missingVars = requiredEnvVars.filter(v => !process.env[v.key]);
 if (missingVars.length > 0) {
