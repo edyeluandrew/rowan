@@ -184,11 +184,13 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     
     // Convert to stroops (integer) for bigint storage: USDC has 6 decimals
     // Example: 5.497 USDC → 5497000 stroops
+    logger.info(`[Escrow] Converting to stroops: ${usdcDecimal} USDC`);
     let usdcStroops = Math.round(usdcDecimal * 1_000_000);
-    logger.info(`[Escrow] Converting to stroops: ${usdcDecimal} USDC × 1,000,000 = ${usdcStroops} stroops`);
+    logger.info(`[Escrow] After Math.round: ${usdcStroops} (type: ${typeof usdcStroops})`);
     
     // CRITICAL: Ensure stroops is a safe integer (not a float string)
     usdcStroops = Number.parseInt(usdcStroops.toString(), 10);
+    logger.info(`[Escrow] After parseInt: ${usdcStroops} (type: ${typeof usdcStroops})`);
     
     // Final validation: must be an integer
     if (!Number.isSafeInteger(usdcStroops)) {
@@ -199,7 +201,7 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     logger.info(`[Escrow] ✅ Stroops validated: ${usdcStroops} (type: ${typeof usdcStroops})`);
     
     // Double-check the parameter being passed
-    logger.debug(`[Escrow] About to UPDATE with usdc_amount=$1 where $1=${usdcStroops} (type: ${typeof usdcStroops})`);
+    logger.info(`[Escrow] About to UPDATE with usdc_amount=$1 where $1=${usdcStroops} (type: ${typeof usdcStroops})`);
     
     try {
       await db.query(
