@@ -201,29 +201,45 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     // Double-check the parameter being passed
     logger.debug(`[Escrow] About to UPDATE with usdc_amount=$1 where $1=${usdcStroops} (type: ${typeof usdcStroops})`);
     
-    await db.query(
-      `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
-      [usdcStroops, swapResult.txHash, transaction.id]
-    );
+    try {
+      await db.query(
+        `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
+        [usdcStroops, swapResult.txHash, transaction.id]
+      );
+    } catch (dbErr) {
+      logger.error(`[Escrow] ❌ DATABASE ERROR during swap insert:`);
+      logger.error(`[Escrow]   Error: ${dbErr?.message}`);
+      logger.error(`[Escrow]   Code: ${dbErr?.code}`);
+      logger.error(`[Escrow]   Detail: ${dbErr?.detail}`);
+      logger.error(`[Escrow]   Attempted to insert usdc_amount=${usdcStroops} (type: ${typeof usdcStroops})`);
+      throw dbErr;
+    }
     logger.info(`[Escrow] ✅ Swap complete — ${usdcDecimal} USDC (${usdcStroops} stroops), tx: ${swapResult.txHash}`);
 
     // 6. Trigger trader matching
     await matchingEngine.matchTrader(transaction.id);
   } catch (err) {
-    logger.error(`[Escrow] Swap failed for tx ${transaction.id}:`, err.message);
+    logger.error(`[Escrow] Swap failed for tx ${transaction.id}:`);
+    logger.error(`[Escrow]   Error message: ${err?.message}`);
+    logger.error(`[Escrow]   Error code: ${err?.code}`);
+    logger.error(`[Escrow]   Error detail: ${err?.detail}`);
+    logger.error(`[Escrow]   Error toString: ${err?.toString()}`);
+    if (err?.response?.data?.extras?.result_codes) {
+      logger.error(`[Escrow]   Stellar result codes:`, err.response.data.extras.result_codes);
+    }
 
     // ── B3 FIX: Save refund hash and set state to REFUNDED ──
     try {
       const refundHash = await refundXlm(userStellarAddress, amount, 'Swap failed');
       await stateMachine.transition(transaction.id, 'ESCROW_LOCKED', 'REFUNDED', {
-        failure_reason: 'XLM→USDC swap failed: ' + err.message,
+        failure_reason: 'XLM→USDC swap failed: ' + (err?.message || 'Unknown error'),
         stellar_refund_tx: refundHash,
       });
     } catch (refundErr) {
       // If refund also fails, mark FAILED so Bull queue can retry
       logger.error(`[Escrow] REFUND ALSO FAILED for tx ${transaction.id}:`, refundErr.message);
       await stateMachine.transition(transaction.id, 'ESCROW_LOCKED', 'FAILED', {
-        failure_reason: 'Swap failed + refund failed: ' + err.message,
+        failure_reason: 'Swap failed + refund failed: ' + (err?.message || 'Unknown error'),
       });
     }
   }
