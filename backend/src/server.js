@@ -64,8 +64,6 @@ const requiredEnvVars = [
   { key: 'API_URL', label: 'Public API URL (used in stellar.toml WEB_AUTH_ENDPOINT)' },
   { key: 'STELLAR_NETWORK', label: 'Stellar network (testnet or mainnet)' },
   { key: 'HORIZON_URL', label: 'Stellar Horizon API URL' },
-  { key: 'MARKET_MAKER_PUBLIC_KEY', label: 'Stellar market maker account public key (for path discovery)' },
-  { key: 'MARKET_MAKER_SECRET_KEY', label: 'Stellar market maker account secret key (for offer creation)' },
 ];
 const missingVars = requiredEnvVars.filter(v => !process.env[v.key]);
 if (missingVars.length > 0) {
@@ -73,6 +71,14 @@ if (missingVars.length > 0) {
   missingVars.forEach(v => console.error(`  - ${v.key}: ${v.label}`));
   console.error('Refusing to start. See .env.example for reference.');
   process.exit(1);
+}
+
+// Market maker vars are OPTIONAL — if missing, path discovery is disabled but system continues
+const hasMarketMaker = process.env.MARKET_MAKER_PUBLIC_KEY && process.env.MARKET_MAKER_SECRET_KEY;
+if (!hasMarketMaker) {
+  console.warn('\n[Server] ⚠️  Market maker not configured — path discovery disabled');
+  console.warn('[Server]    Quotes will use fallback rates instead of Horizon path discovery');
+  console.warn('[Server]    To enable: set MARKET_MAKER_PUBLIC_KEY and MARKET_MAKER_SECRET_KEY\n');
 }
 
 // [SEP-10] Validate that SEP10_SIGNING_KEY is a valid Stellar public key
