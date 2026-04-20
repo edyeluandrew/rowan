@@ -199,40 +199,54 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     
     // Convert to stroops (integer) for bigint storage: USDC has 6 decimals
     // Example: 5.497 USDC → 5497000 stroops
-    logger.info(`[Escrow] Step 1 - Converting to stroops: ${usdcDecimal} USDC`);
+    logger.info(`[Escrow] 🔢 CONVERSION TRACE START`);
+    logger.info(`[Escrow]   Input: usdcDecimal=${usdcDecimal} (type: ${typeof usdcDecimal})`);
     
-    // Guarantee integer: (1) round, (2) floor, (3) parseInt, (4) verify
-    let usdcStroops = Math.round(usdcDecimal * 1_000_000);
+    // Step 1: Multiply by 1 million
+    const multiplyResult = usdcDecimal * 1_000_000;
+    logger.info(`[Escrow]   After × 1M: ${multiplyResult} (type: ${typeof multiplyResult})`);
+    
+    // Step 2: Round
+    let usdcStroops = Math.round(multiplyResult);
+    logger.info(`[Escrow]   After round(): ${usdcStroops} (type: ${typeof usdcStroops})`);
+    
+    // Step 3: Floor (redundant but safe)
     usdcStroops = Math.floor(usdcStroops);
-    usdcStroops = parseInt(usdcStroops, 10);  // Force integer parse
+    logger.info(`[Escrow]   After floor(): ${usdcStroops} (type: ${typeof usdcStroops})`);
     
-    logger.info(`[Escrow] Step 2 - After conversions: ${usdcStroops} (type: ${typeof usdcStroops}, isInteger: ${Number.isInteger(usdcStroops)})`);
+    // Step 4: Explicit parseInt
+    usdcStroops = parseInt(usdcStroops, 10);
+    logger.info(`[Escrow]   After parseInt(): ${usdcStroops} (type: ${typeof usdcStroops}, isInteger: ${Number.isInteger(usdcStroops)})`);
     
     // If still not an integer, throw before database
     if (!Number.isInteger(usdcStroops)) {
       logger.error(`[Escrow] ❌ CONVERSION FAILED: usdcStroops is not an integer!`);
-      logger.error(`[Escrow]   Original: ${usdcDecimal}`);
+      logger.error(`[Escrow]   Input: ${usdcDecimal} (type: ${typeof usdcDecimal})`);
+      logger.error(`[Escrow]   After multiply: ${multiplyResult}`);
       logger.error(`[Escrow]   Result: ${usdcStroops} (type: ${typeof usdcStroops})`);
       throw new Error(`Failed to convert USDC to stroops: ${usdcDecimal} → ${usdcStroops}`);
     }
     
-    logger.info(`[Escrow] Step 3 - ✅ Integer guaranteed: ${usdcStroops}`);
+    logger.info(`[Escrow] ✅ CONVERSION TRACE COMPLETE: ${usdcStroops} stroops`);
     
-    // Explicitly convert to integer one more time for safety
-    const finalStroops = parseInt(usdcStroops, 10);
-    logger.info(`[Escrow] Step 4 - Final stroops before INSERT: ${finalStroops} (type: ${typeof finalStroops})`);
+    // Final sanity: ensure it's not zero or negative
+    if (usdcStroops <= 0) {
+      logger.error(`[Escrow] ❌ ERROR: usdcStroops is zero or negative: ${usdcStroops}`);
+      throw new Error(`Invalid stroops amount: ${usdcStroops}`);
+    }
 
     try {
+      logger.info(`[Escrow] 💾 Attempting DB INSERT: usdc_amount=${usdcStroops} (type: ${typeof usdcStroops})`);
       await db.query(
         `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
-        [finalStroops, swapResult.txHash, transaction.id]
+        [usdcStroops, swapResult.txHash, transaction.id]
       );
-      logger.info(`[Escrow] ✅ Database INSERT successful with usdc_amount=${finalStroops}`);
+      logger.info(`[Escrow] ✅ Database INSERT successful with usdc_amount=${usdcStroops}`);
     } catch (dbErr) {
       logger.error(`[Escrow] ❌ DATABASE ERROR:`);
       logger.error(`[Escrow]   Message: ${dbErr?.message}`);
       logger.error(`[Escrow]   Code: ${dbErr?.code}`);
-      logger.error(`[Escrow]   Tried to insert: usdc_amount=${finalStroops} (type: ${typeof finalStroops})`);
+      logger.error(`[Escrow]   Tried to insert: usdc_amount=${usdcStroops} (type: ${typeof usdcStroops})`);
       throw dbErr;
     }
     logger.info(`[Escrow] ✅ Swap complete — ${usdcDecimal} USDC (${usdcStroops} stroops), tx: ${swapResult.txHash}`);
