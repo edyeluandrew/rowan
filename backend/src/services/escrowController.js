@@ -270,9 +270,17 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     logger.info(`[Escrow] ✅ Swap complete — ${usdcDecimal} USDC (${usdcStroops} stroops), tx: ${swapResult.txHash}`);
 
     // 6. Trigger trader matching
-    await matchingEngine.matchTrader(transaction.id);
+    logger.warn(`[Escrow] 🔴 BEFORE matchingEngine.matchTrader for tx ${transaction.id}`);
+    try {
+      await matchingEngine.matchTrader(transaction.id);
+      logger.warn(`[Escrow] 🟢 AFTER matchingEngine.matchTrader SUCCESS for tx ${transaction.id}`);
+    } catch (matchingErr) {
+      logger.warn(`[Escrow] 🔴 matchingEngine.matchTrader THREW ERROR for tx ${transaction.id}`);
+      logger.error(`[Escrow]   Matching error: ${matchingErr?.message}`);
+      throw matchingErr;
+    }
   } catch (err) {
-    logger.error(`[Escrow] Swap failed for tx ${transaction.id}:`);
+    logger.error(`[Escrow] ❌ Swap failed for tx ${transaction.id}:`);
     logger.error(`[Escrow]   Error message: ${err?.message}`);
     logger.error(`[Escrow]   Error code: ${err?.code}`);
     logger.error(`[Escrow]   Error detail: ${err?.detail}`);
