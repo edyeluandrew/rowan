@@ -13,7 +13,6 @@ import matchingEngine from './matchingEngine.js';
 import fraudMonitor from './fraudMonitor.js';
 import stateMachine from './transactionStateMachine.js';
 import logger from '../utils/logger.js';
-import { stroopsToUsdc } from '../utils/financial.js';
 
 /**
  * Verify an incoming deposit against a locked quote.
@@ -205,69 +204,34 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     
     // Sanity check: USDC should be within reasonable bounds
     // For a 3-5 XLM deposit, should be roughly 0.8-1.2 USDC (given 0.27 USD/XLM and 3750 UGX/USDC)
-    if (usdcDecimal < 0.1 || usdcDecimal > 1000) {
+    if (usdcDecimal < 0.01 || usdcDecimal > 1000) {
       logger.warn(`[Escrow] ⚠️  USDC amount seems unusual: ${usdcDecimal} (expected reasonable bounds for ${receivedXlm} XLM)`);
     }
     
-    
-    logger.info(`[Escrow] 🔢 CONVERSION TRACE START`);
-    logger.info(`[Escrow]   Input: usdcDecimal=${usdcDecimal} (type: ${typeof usdcDecimal})`);
-    
-    // Step 1: Multiply by 1 million
-    const multiplyResult = usdcDecimal * 1_000_000;
-    logger.info(`[Escrow]   After × 1M: ${multiplyResult} (type: ${typeof multiplyResult})`);
-    
-    // Step 2: Round
-    let usdcStroops = Math.round(multiplyResult);
-    logger.info(`[Escrow]   After round(): ${usdcStroops} (type: ${typeof usdcStroops})`);
-    
-    // Step 3: Floor (redundant but safe)
-    usdcStroops = Math.floor(usdcStroops);
-    logger.info(`[Escrow]   After floor(): ${usdcStroops} (type: ${typeof usdcStroops})`);
-    
-    // Step 4: Explicit parseInt
-    usdcStroops = parseInt(usdcStroops, 10);
-    logger.info(`[Escrow]   After parseInt(): ${usdcStroops} (type: ${typeof usdcStroops}, isInteger: ${Number.isInteger(usdcStroops)})`);
-    
-    // If still not an integer, throw before database
-    if (!Number.isInteger(usdcStroops)) {
-      logger.error(`[Escrow] ❌ CONVERSION FAILED: usdcStroops is not an integer!`);
-      logger.error(`[Escrow]   Input: ${usdcDecimal} (type: ${typeof usdcDecimal})`);
-      logger.error(`[Escrow]   After multiply: ${multiplyResult}`);
-      logger.error(`[Escrow]   Result: ${usdcStroops} (type: ${typeof usdcStroops})`);
-      throw new Error(`Failed to convert USDC to stroops: ${usdcDecimal} → ${usdcStroops}`);
-    }
-    
-    logger.info(`[Escrow] ✅ CONVERSION TRACE COMPLETE: ${usdcStroops} stroops`);
-    
-    // Final sanity: ensure it's not zero or negative
-    if (usdcStroops <= 0) {
-      logger.error(`[Escrow] ❌ ERROR: usdcStroops is zero or negative: ${usdcStroops}`);
-      throw new Error(`Invalid stroops amount: ${usdcStroops}`);
-    }
-
-    logger.warn(`[Escrow] 🔴 BEFORE DB INSERT: usdcStroops=${usdcStroops} (type: ${typeof usdcStroops}, isInteger: ${Number.isInteger(usdcStroops)})`);
+    // *** IMPORTANT: usdc_amount is NUMERIC, NOT BIGINT ***
+    // Store the decimal USDC amount directly
+    logger.warn(`[Escrow] 🔴 BEFORE DB INSERT: usdcDecimal=${usdcDecimal} (type: ${typeof usdcDecimal})`);
     logger.warn(`[Escrow] 🔴 BEFORE DB INSERT: txHash=${swapResult.txHash}`);
     logger.warn(`[Escrow] 🔴 BEFORE DB INSERT: transactionId=${transaction.id}`);
 
     try {
-      logger.warn(`[Escrow] 💾 Attempting DB INSERT: usdc_amount=${usdcStroops} (type: ${typeof usdcStroops})`);
+      logger.warn(`[Escrow] 💾 Attempting DB INSERT: usdc_amount=${usdcDecimal} (type: ${typeof usdcDecimal})`);
       await db.query(
         `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
-        [usdcStroops, swapResult.txHash, transaction.id]
+        [usdcDecimal, swapResult.txHash, transaction.id]
       );
       logger.warn(`[Escrow] ✅ AFTER DB INSERT: success!`);
-      logger.info(`[Escrow] ✅ Database INSERT successful with usdc_amount=${usdcStroops}`);
+      logger.info(`[Escrow] ✅ Database INSERT successful with usdc_amount=${usdcDecimal}`);
     } catch (dbErr) {
       logger.error(`[Escrow] ❌ DATABASE ERROR:`);
       logger.error(`[Escrow]   Message: ${dbErr?.message}`);
       logger.error(`[Escrow]   Code: ${dbErr?.code}`);
-      logger.error(`[Escrow]   Tried to insert: usdc_amount=${usdcStroops} (type: ${typeof usdcStroops})`);
+      logger.error(`[Escrow]   Tried to insert: usdc_amount=${usdcDecimal} (type: ${typeof usdcDecimal})`);
       logger.error(`[Escrow]   Tried to insert: stellar_swap_tx=${swapResult.txHash}`);
       logger.error(`[Escrow]   Tried to insert: id=${transaction.id}`);
       throw dbErr;
     }
-    logger.info(`[Escrow] ✅ Swap complete — ${usdcDecimal} USDC (${usdcStroops} stroops), tx: ${swapResult.txHash}`);
+    logger.info(`[Escrow] ✅ Swap complete — ${usdcDecimal} USDC, tx: ${swapResult.txHash}`);
 
     // 6. Trigger trader matching
     logger.warn(`[Escrow] 🔴 BEFORE matchingEngine.matchTrader for tx ${transaction.id}`);
@@ -537,7 +501,8 @@ async function releaseToTrader(transactionId) {
     const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
 
     // Convert stroops to decimal USDC for Stellar operation
-    const usdcDecimal = stroopsToUsdc(transaction.usdc_amount);
+    // NOTE: usdc_amount is already in USDC decimal format (not stroops)
+    const usdcDecimal = transaction.usdc_amount;
     logger.info(`[Escrow] Converting usdc_amount for release: ${transaction.usdc_amount} stroops → ${usdcDecimal} USDC`);
 
     const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
