@@ -552,9 +552,9 @@ async function releaseToTrader(transactionId) {
     const fiatCurrency = transaction.fiat_currency || 'UGX';
     const KES_TO_UGX = config.usdcFiatRates.UGX / config.usdcFiatRates.KES;
     const TZS_TO_UGX = config.usdcFiatRates.UGX / config.usdcFiatRates.TZS;
-    const ugxEquivalent = fiatCurrency === 'KES' ? fiatAmount * KES_TO_UGX
-                        : fiatCurrency === 'TZS' ? fiatAmount * TZS_TO_UGX
-                        : fiatAmount;
+    const ugxEquivalent = fiatCurrency === 'KES' ? Math.floor(fiatAmount * KES_TO_UGX)
+                        : fiatCurrency === 'TZS' ? Math.floor(fiatAmount * TZS_TO_UGX)
+                        : Math.floor(fiatAmount);
     await db.query(
       `UPDATE traders SET daily_volume = daily_volume + $1 WHERE id = $2`,
       [ugxEquivalent, transaction.trader_id]

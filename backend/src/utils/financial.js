@@ -15,9 +15,10 @@ import config from '../config/index.js';
  */
 export function fiatToUgx(amount, fiatCurrency) {
   if (!amount) return 0;
-  if (fiatCurrency === 'UGX' || !fiatCurrency) return amount;
+  if (fiatCurrency === 'UGX' || !fiatCurrency) return Math.floor(amount);
   const rate = config.usdcFiatRates.UGX / (config.usdcFiatRates[fiatCurrency] || config.usdcFiatRates.UGX);
-  return amount * rate;
+  // *** IMPORTANT: Return INTEGER for BIGINT columns ***
+  return Math.floor(amount * rate);
 }
 
 /**
