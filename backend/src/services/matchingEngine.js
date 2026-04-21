@@ -77,7 +77,7 @@ async function matchTrader(transactionId) {
 
     // ── C5 FIX: Filter by network + P2 FIX: Use status enum ──
     // [C-1 FIX] Compare daily_volume (UGX) + fiat-in-UGX against daily_limit_ugx
-    // [C-2 FIX] Only match traders whose float_{currency} >= fiatNeeded
+    // [C-2 FIX] Only match traders whose float_{currency} >= fiatAmountUgx (not fiatNeeded!)
     // [VERIFICATION GUARD] Only match VERIFIED traders
     const traderResult = await db.query(
       `SELECT t.*,
@@ -91,7 +91,7 @@ async function matchTrader(transactionId) {
          AND (t.daily_volume + $3) <= t.daily_limit_ugx
        ORDER BY t.trust_score DESC, active_load ASC
        LIMIT 1`,
-      [transaction.network, fiatNeeded, fiatAmountUgx]
+      [transaction.network, fiatAmountUgx, fiatAmountUgx]
     );
 
     const trader = traderResult.rows[0];
@@ -119,11 +119,12 @@ async function matchTrader(transactionId) {
     }
 
     // ── [C-2 FIX] Atomically decrement trader float after match ──
+    // Use fiatAmountUgx (integer) not fiatNeeded (decimal) for BIGINT column
     const floatDecrResult = await db.query(
       `UPDATE traders SET ${floatCol} = ${floatCol} - $1
        WHERE id = $2 AND ${floatCol} >= $1
        RETURNING id`,
-      [fiatNeeded, trader.id]
+      [fiatAmountUgx, trader.id]
     );
     if (floatDecrResult.rows.length === 0) {
       // Float was insufficient (race condition) — roll back the assignment
