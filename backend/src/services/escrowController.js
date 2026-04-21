@@ -159,29 +159,39 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
 
   // 5. Immediately swap XLM → USDC inside the escrow
   try {
+    logger.warn(`[Escrow] ⚠️  BEFORE swapXlmToUsdc call`);
     const swapResult = await swapXlmToUsdc(receivedXlm, quote);
+    logger.warn(`[Escrow] ⚠️  AFTER swapXlmToUsdc call, got result`);
     
-    logger.info(`[Escrow] 🔍 RAW SWAP RESULT:`);
-    logger.info(`[Escrow]   amount: ${swapResult.amount}`);
+    logger.info(`[Escrow] 🔍 RAW SWAP RESULT (VERBOSE):`);
+    logger.info(`[Escrow]   swapResult keys: ${Object.keys(swapResult).join(', ')}`);
+    logger.info(`[Escrow]   amount raw: ${swapResult.amount}`);
     logger.info(`[Escrow]   amount type: ${typeof swapResult.amount}`);
     logger.info(`[Escrow]   amount JSON: ${JSON.stringify(swapResult.amount)}`);
-    logger.info(`[Escrow]   amount toString: ${swapResult.amount.toString()}`);
+    logger.info(`[Escrow]   amount toString: ${swapResult.amount?.toString()}`);
+    logger.info(`[Escrow]   amount isFinite: ${Number.isFinite(swapResult.amount)}`);
+    logger.info(`[Escrow]   amount isInteger: ${Number.isInteger(swapResult.amount)}`);
     logger.info(`[Escrow]   txHash: ${swapResult.txHash}`);
     
+    logger.warn(`[Escrow] ✅ swapResult validated, proceeding to conversion`);
     logger.info(`[Escrow] Swap result: amount=${swapResult.amount} (type: ${typeof swapResult.amount}), txHash=${swapResult.txHash}`);
     
     // Ensure USDC amount is a number
     let usdcDecimal = swapResult.amount;
+    logger.warn(`[Escrow] 🔴 VALIDATION START: usdcDecimal = ${usdcDecimal} (type: ${typeof usdcDecimal}, isNumber: ${typeof usdcDecimal === 'number'})`);
+    
     if (typeof usdcDecimal === 'string') {
-      logger.info(`[Escrow] Converting string to number: "${usdcDecimal}" → ${parseFloat(usdcDecimal)}`);
+      logger.warn(`[Escrow] 🟡 Converting string to number: "${usdcDecimal}" → ${parseFloat(usdcDecimal)}`);
       usdcDecimal = parseFloat(usdcDecimal);
     }
     
     // If it's a BigInt, convert to number
     if (typeof usdcDecimal === 'bigint') {
-      logger.info(`[Escrow] Converting BigInt to number: ${usdcDecimal}`);
+      logger.warn(`[Escrow] 🟡 Converting BigInt to number: ${usdcDecimal}`);
       usdcDecimal = Number(usdcDecimal);
     }
+    
+    logger.warn(`[Escrow] 🟡 After type coercion: ${usdcDecimal} (type: ${typeof usdcDecimal})`);
     
     logger.info(`[Escrow] USDC value parsed: ${swapResult.amount} → ${usdcDecimal} (finite: ${Number.isFinite(usdcDecimal)}, type: ${typeof usdcDecimal})`);
     
@@ -191,14 +201,15 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
       throw new Error(`Invalid USDC amount from swap: ${swapResult.amount} (type: ${typeof swapResult.amount})`);
     }
     
+    logger.warn(`[Escrow] ✅ VALIDATION PASSED: usdcDecimal is a valid number: ${usdcDecimal}`);
+    
     // Sanity check: USDC should be within reasonable bounds
     // For a 3-5 XLM deposit, should be roughly 0.8-1.2 USDC (given 0.27 USD/XLM and 3750 UGX/USDC)
     if (usdcDecimal < 0.1 || usdcDecimal > 1000) {
       logger.warn(`[Escrow] ⚠️  USDC amount seems unusual: ${usdcDecimal} (expected reasonable bounds for ${receivedXlm} XLM)`);
     }
     
-    // Convert to stroops (integer) for bigint storage: USDC has 6 decimals
-    // Example: 5.497 USDC → 5497000 stroops
+    
     logger.info(`[Escrow] 🔢 CONVERSION TRACE START`);
     logger.info(`[Escrow]   Input: usdcDecimal=${usdcDecimal} (type: ${typeof usdcDecimal})`);
     
@@ -235,18 +246,25 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
       throw new Error(`Invalid stroops amount: ${usdcStroops}`);
     }
 
+    logger.warn(`[Escrow] 🔴 BEFORE DB INSERT: usdcStroops=${usdcStroops} (type: ${typeof usdcStroops}, isInteger: ${Number.isInteger(usdcStroops)})`);
+    logger.warn(`[Escrow] 🔴 BEFORE DB INSERT: txHash=${swapResult.txHash}`);
+    logger.warn(`[Escrow] 🔴 BEFORE DB INSERT: transactionId=${transaction.id}`);
+
     try {
-      logger.info(`[Escrow] 💾 Attempting DB INSERT: usdc_amount=${usdcStroops} (type: ${typeof usdcStroops})`);
+      logger.warn(`[Escrow] 💾 Attempting DB INSERT: usdc_amount=${usdcStroops} (type: ${typeof usdcStroops})`);
       await db.query(
         `UPDATE transactions SET usdc_amount = $1, stellar_swap_tx = $2 WHERE id = $3`,
         [usdcStroops, swapResult.txHash, transaction.id]
       );
+      logger.warn(`[Escrow] ✅ AFTER DB INSERT: success!`);
       logger.info(`[Escrow] ✅ Database INSERT successful with usdc_amount=${usdcStroops}`);
     } catch (dbErr) {
       logger.error(`[Escrow] ❌ DATABASE ERROR:`);
       logger.error(`[Escrow]   Message: ${dbErr?.message}`);
       logger.error(`[Escrow]   Code: ${dbErr?.code}`);
       logger.error(`[Escrow]   Tried to insert: usdc_amount=${usdcStroops} (type: ${typeof usdcStroops})`);
+      logger.error(`[Escrow]   Tried to insert: stellar_swap_tx=${swapResult.txHash}`);
+      logger.error(`[Escrow]   Tried to insert: id=${transaction.id}`);
       throw dbErr;
     }
     logger.info(`[Escrow] ✅ Swap complete — ${usdcDecimal} USDC (${usdcStroops} stroops), tx: ${swapResult.txHash}`);
