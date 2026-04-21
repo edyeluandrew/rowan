@@ -20,12 +20,10 @@ export default function TransactionStatus() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isWaiting, setIsWaiting] = useState(false)
-  const [waitTime, setWaitTime] = useState(0)
 
   useEffect(() => {
     let cancelled = false
     let pollTimer = null
-    let waitTimer = null
 
     const fetch = async () => {
       try {
@@ -34,23 +32,35 @@ export default function TransactionStatus() {
           setTransaction(tx)
           setIsWaiting(false)
           setLoading(false)
+
+          // ✅ FIX: Keep polling until transaction reaches terminal state
+          // so UI stays in sync with backend state changes
+          if (!TERMINAL_STATES.includes(tx.state)) {
+            console.log(`[TransactionStatus] Tx in state ${tx.state} — polling again in 3s`)
+            pollTimer = setTimeout(() => {
+              if (!cancelled) {
+                fetch() // Poll again
+              }
+            }, POLL_INTERVAL)
+          } else {
+            console.log(`[TransactionStatus] Transaction reached terminal state: ${tx.state}`)
+          }
         }
       } catch (err) {
         if (!cancelled) {
-          // 404 means transaction not yet recorded by Horizon watcher — this is normal, retry
-          if (err.response?.status === 404 && waitTime < MAX_WAIT_TIME) {
+          // 404 means transaction not yet recorded — this is normal, retry
+          if (err.response?.status === 404) {
             setIsWaiting(true)
             console.log('[TransactionStatus] Transaction not yet recorded, retrying in 3 seconds...')
             // Schedule next poll
             pollTimer = setTimeout(() => {
               if (!cancelled) {
-                setWaitTime((prev) => prev + POLL_INTERVAL)
                 fetch() // Retry
               }
             }, POLL_INTERVAL)
           } else {
-            // Real error or timeout
-            setError(err.response?.status === 404 ? 'Transaction timeout — check your history' : err.message)
+            // Real error
+            setError(err.message)
             setLoading(false)
           }
         }
@@ -61,9 +71,8 @@ export default function TransactionStatus() {
     return () => {
       cancelled = true
       if (pollTimer) clearTimeout(pollTimer)
-      if (waitTimer) clearTimeout(waitTimer)
     }
-  }, [id, waitTime])
+  }, [id])
 
   useSocketHook('transaction_update', (data) => {
     if (data.transactionId === id) {
@@ -155,9 +164,6 @@ export default function TransactionStatus() {
             Your transaction has been broadcast. The network is confirming it now.
             {stellarTxHash && <> Tx: {stellarTxHash.slice(0, 16)}...</>}
           </p>
-          <div className="text-rowan-yellow text-2xl font-bold">
-            {Math.round(waitTime / 1000)}s
-          </div>
           <p className="text-rowan-muted text-xs mt-2">
             This usually takes 10-60 seconds
           </p>
