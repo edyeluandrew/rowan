@@ -234,15 +234,27 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     logger.info(`[Escrow] ✅ Swap complete — ${usdcDecimal} USDC, tx: ${swapResult.txHash}`);
 
     // 6. Transition state to TRADER_MATCHED (swap complete, now waiting for trader assignment)
-    logger.info(`[Escrow] Transitioning ESCROW_LOCKED → TRADER_MATCHED for tx ${transaction.id}`);
-    const stateTransition = await stateMachine.transition(transaction.id, 'ESCROW_LOCKED', 'TRADER_MATCHED', {
-      trader_id: null, // Will be filled once trader is actually matched
-    });
-    if (!stateTransition) {
-      logger.warn(`[Escrow] State transition failed for tx ${transaction.id} — already advanced`);
-      return;
+    logger.warn(`[Escrow] ⚠️  CRITICAL: About to transition state for tx ${transaction.id}`);
+    logger.warn(`[Escrow] ⚠️  Current state from DB: ${transaction.state}`);
+    
+    try {
+      logger.info(`[Escrow] Transitioning ESCROW_LOCKED → TRADER_MATCHED for tx ${transaction.id}`);
+      const stateTransition = await stateMachine.transition(transaction.id, 'ESCROW_LOCKED', 'TRADER_MATCHED', {
+        trader_id: null, // Will be filled once trader is actually matched
+      });
+      
+      if (!stateTransition) {
+        logger.error(`[Escrow] ❌ STATE TRANSITION RETURNED NULL for tx ${transaction.id}`);
+        logger.error(`[Escrow] This means transaction is not in ESCROW_LOCKED state anymore`);
+        return;
+      }
+      logger.warn(`[Escrow] ✅✅ STATE TRANSITIONED TO TRADER_MATCHED: ${stateTransition.state}`);
+    } catch (transitionErr) {
+      logger.error(`[Escrow] ❌ STATE TRANSITION ERROR for tx ${transaction.id}:`);
+      logger.error(`[Escrow]   Error: ${transitionErr?.message}`);
+      logger.error(`[Escrow]   Full error:`, transitionErr);
+      throw transitionErr;
     }
-    logger.info(`[Escrow] ✅ State transitioned to TRADER_MATCHED for tx ${transaction.id}`);
 
     // 7. Trigger trader matching (will update trader_id when found)
     logger.warn(`[Escrow] 🔴 BEFORE matchingEngine.matchTrader for tx ${transaction.id}`);
