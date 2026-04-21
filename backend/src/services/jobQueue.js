@@ -259,7 +259,35 @@ orphanRecoveryQueue.process(async () => {
     await matchingEngine.matchTrader(tx.id);
   }
 
-  // 3. ESCROW_LOCKED with no match attempt for > 2× accept timeout → refund
+  // 3. TRADER_MATCHED with no trader_id for too long → refund (no trader available)
+  // [NEW] Handle early state transition to TRADER_MATCHED (swap complete, awaiting trader match)
+  const noTraderMinutes = 5; // Give 5 minutes to find a trader, then refund
+  const noTraderAvailable = await db.query(
+    `SELECT t.*, u.stellar_address as user_stellar
+     FROM transactions t
+     JOIN users u ON u.id = t.user_id
+     WHERE t.state = 'TRADER_MATCHED'
+       AND t.trader_id IS NULL
+       AND t.trader_matched_at < NOW() - INTERVAL '1 minute' * $1`,
+    [noTraderMinutes]
+  );
+  for (const tx of noTraderAvailable.rows) {
+    logger.warn(`[Job:orphan-recovery] TRADER_MATCHED no trader: tx ${tx.id} — auto-refunding (no trader available after 5 min)`);
+    try {
+      const refundHash = await escrowController.refundXlm(
+        tx.user_stellar, tx.xlm_amount, 'No trader available after swap'
+      );
+      await stateMachine.transition(tx.id, 'TRADER_MATCHED', 'REFUNDED', {
+        stellar_refund_tx: refundHash,
+        failure_reason: 'Auto-refund: no trader available',
+      });
+      await notificationService.notifyRefund(tx.user_id, tx, 'No trader available — XLM refunded to wallet');
+    } catch (err) {
+      logger.error(`[Job:orphan-recovery] Refund failed for tx ${tx.id}:`, err.message);
+    }
+  }
+
+  // 4. ESCROW_LOCKED with no match attempt for > 2× accept timeout → refund (old flow)
   const escrowStaleMinutes = Math.ceil((config.platform.traderAcceptTimeoutSeconds * 2) / 60);
   const stuckEscrow = await db.query(
     `SELECT t.*, u.stellar_address as user_stellar

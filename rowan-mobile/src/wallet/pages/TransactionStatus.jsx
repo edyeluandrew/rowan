@@ -8,7 +8,6 @@ import Button from '../components/ui/Button'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
 const POLL_INTERVAL = 3000 // Poll every 3 seconds while waiting
-const MAX_WAIT_TIME = 120000 // Wait up to 2 minutes
 
 export default function TransactionStatus() {
   const { id } = useParams()
@@ -20,6 +19,9 @@ export default function TransactionStatus() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isWaiting, setIsWaiting] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
+
+  const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
 
   useEffect(() => {
     let cancelled = false
@@ -32,6 +34,7 @@ export default function TransactionStatus() {
           setTransaction(tx)
           setIsWaiting(false)
           setLoading(false)
+          setRetryCount(0) // Reset retries on success
 
           // ✅ FIX: Keep polling until transaction reaches terminal state
           // so UI stays in sync with backend state changes
@@ -48,18 +51,26 @@ export default function TransactionStatus() {
         }
       } catch (err) {
         if (!cancelled) {
-          // 404 means transaction not yet recorded — this is normal, retry
+          // 404 means transaction not yet recorded — this is normal, retry (but with timeout)
           if (err.response?.status === 404) {
-            setIsWaiting(true)
-            console.log('[TransactionStatus] Transaction not yet recorded, retrying in 3 seconds...')
-            // Schedule next poll
-            pollTimer = setTimeout(() => {
-              if (!cancelled) {
-                fetch() // Retry
-              }
-            }, POLL_INTERVAL)
+            if (retryCount >= MAX_RETRIES_ON_404) {
+              // Timeout: give up after ~2 minutes
+              setError('Transaction confirmation timeout — check your history or contact support')
+              setLoading(false)
+              console.log(`[TransactionStatus] Transaction not found after ${retryCount} retries (~2 min)`)
+            } else {
+              setIsWaiting(true)
+              setRetryCount((prev) => prev + 1)
+              console.log(`[TransactionStatus] Transaction not yet recorded (attempt ${retryCount + 1}/${MAX_RETRIES_ON_404}), retrying in 3 seconds...`)
+              // Schedule next poll
+              pollTimer = setTimeout(() => {
+                if (!cancelled) {
+                  fetch() // Retry
+                }
+              }, POLL_INTERVAL)
+            }
           } else {
-            // Real error
+            // Real error (not 404)
             setError(err.message)
             setLoading(false)
           }
