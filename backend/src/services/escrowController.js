@@ -233,7 +233,18 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     }
     logger.info(`[Escrow] ✅ Swap complete — ${usdcDecimal} USDC, tx: ${swapResult.txHash}`);
 
-    // 6. Trigger trader matching
+    // 6. Transition state to TRADER_MATCHED (swap complete, now waiting for trader assignment)
+    logger.info(`[Escrow] Transitioning ESCROW_LOCKED → TRADER_MATCHED for tx ${transaction.id}`);
+    const stateTransition = await stateMachine.transition(transaction.id, 'ESCROW_LOCKED', 'TRADER_MATCHED', {
+      trader_id: null, // Will be filled once trader is actually matched
+    });
+    if (!stateTransition) {
+      logger.warn(`[Escrow] State transition failed for tx ${transaction.id} — already advanced`);
+      return;
+    }
+    logger.info(`[Escrow] ✅ State transitioned to TRADER_MATCHED for tx ${transaction.id}`);
+
+    // 7. Trigger trader matching (will update trader_id when found)
     logger.warn(`[Escrow] 🔴 BEFORE matchingEngine.matchTrader for tx ${transaction.id}`);
     try {
       await matchingEngine.matchTrader(transaction.id);

@@ -60,9 +60,9 @@ async function matchTrader(transactionId) {
     const transaction = txResult.rows[0];
     if (!transaction) throw new Error(`Transaction ${transactionId} not found`);
 
-    // Guard: only match from ESCROW_LOCKED
-    if (transaction.state !== 'ESCROW_LOCKED') {
-      logger.warn(`[Matching] Tx ${transactionId} in state ${transaction.state}, expected ESCROW_LOCKED — skipping`);
+    // Guard: accept both ESCROW_LOCKED (old flow) and TRADER_MATCHED (new flow with early state transition)
+    if (!['ESCROW_LOCKED', 'TRADER_MATCHED'].includes(transaction.state)) {
+      logger.warn(`[Matching] Tx ${transactionId} in state ${transaction.state}, expected ESCROW_LOCKED or TRADER_MATCHED — skipping`);
       return null;
     }
 
@@ -97,21 +97,32 @@ async function matchTrader(transactionId) {
     const trader = traderResult.rows[0];
 
     if (!trader) {
-      logger.warn(`[Matching] No available trader for tx ${transactionId} — enqueuing refund`);
-      await stateMachine.transition(transactionId, 'ESCROW_LOCKED', 'FAILED', {
-        failure_reason: 'No trader available',
-      });
-
-      // ── C6 FIX: Enqueue refund via Bull queue ──
+      logger.warn(`[Matching] No available trader for tx ${transactionId} — will retry via job queue`);
+      // Don't fail immediately — enqueue for retry and let the job queue retry later
       const jobQueue = await getJobQueue();
-      await jobQueue.enqueueRefund(transactionId);
+      await jobQueue.enqueueReMatch(transactionId, null, config.platform.traderRetryDelaySeconds || 30);
+      logger.info(`[Matching] Enqueued retry for tx ${transactionId} in 30 seconds`);
       return null;
     }
 
     // ── C3 FIX: Atomic state transition prevents double-assignment ──
-    const assignResult = await stateMachine.transition(transactionId, 'ESCROW_LOCKED', 'TRADER_MATCHED', {
-      trader_id: trader.id,
-    });
+    // Accept both ESCROW_LOCKED (old flow) and TRADER_MATCHED (new flow) as source
+    let assignResult = null;
+    if (transaction.state === 'ESCROW_LOCKED') {
+      assignResult = await stateMachine.transition(transactionId, 'ESCROW_LOCKED', 'TRADER_MATCHED', {
+        trader_id: trader.id,
+      });
+    } else if (transaction.state === 'TRADER_MATCHED' && !transaction.trader_id) {
+      // Already in TRADER_MATCHED (early transition from escrowController), just update trader_id
+      const updateResult = await db.query(
+        `UPDATE transactions 
+         SET trader_id = $1, trader_matched_at = NOW(), updated_at = NOW()
+         WHERE id = $2 AND trader_id IS NULL AND state = 'TRADER_MATCHED'
+         RETURNING *`,
+        [trader.id, transactionId]
+      );
+      assignResult = updateResult.rows[0] || null;
+    }
 
     if (!assignResult) {
       logger.warn(`[Matching] Atomic assign failed for tx ${transactionId} — already advanced`);
