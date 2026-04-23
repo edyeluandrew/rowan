@@ -27,11 +27,3 @@ services:
         sync: false
       - key: ENABLE_SMS_FALLBACK
         value: "false"
-      - key: TEST_TRADER_EMAIL
-        value: test.trader.flow@rowan.local
-      - key: TEST_TRADER_PASSWORD
-        value: TestFlow123!@#
-      - key: TEST_TRADER_PHONE
-        value: +256704888999
-      - key: TEST_TRADER_NAME
-        value: Test Trader Flow
