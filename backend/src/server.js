@@ -1,3 +1,5 @@
+// Rowan Backend v1.2.0 - Apr 23, 2026
+// Auto-deploy pipeline test
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
