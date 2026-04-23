@@ -159,7 +159,7 @@ async function matchTrader(transactionId) {
     });
 
     // Notify trader via notification service
-    notificationService.notifyTraderNewRequest(trader.id, {
+    await notificationService.notifyTraderNewRequest(trader.id, {
       transactionId: transaction.id,
       usdcAmount: transaction.usdc_amount,
       fiatAmount: transaction.fiat_amount,

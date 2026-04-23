@@ -137,11 +137,28 @@ async function notifyUser(userId, event, data) {
 /**
  * Notify a trader of a new incoming request.
  */
-function notifyTraderNewRequest(traderId, requestData) {
+async function notifyTraderNewRequest(traderId, requestData) {
   websocket.emitToTrader(traderId, 'new_request', {
     ...requestData,
     timestamp: new Date().toISOString(),
   });
+
+  // Also save to database for persistent access
+  try {
+    const db = (await import('../db/index.js')).default;
+    await db.query(
+      `INSERT INTO trader_notifications (trader_id, type, title, body)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        traderId,
+        'new_request',
+        `New cash-out request for ${requestData.fiatAmount} ${requestData.fiatCurrency}`,
+        `USDC Amount: ${requestData.usdcAmount}, Network: ${requestData.network}, Expires in: ${requestData.expiresIn}s`,
+      ]
+    );
+  } catch (err) {
+    logger.error(`[Notify] Failed to save notification to DB for trader ${traderId}:`, err.message);
+  }
 
   logger.info(`[Notify] Trader ${traderId} — new request: ${requestData.transactionId}`);
 }
@@ -149,11 +166,36 @@ function notifyTraderNewRequest(traderId, requestData) {
 /**
  * Notify a trader of a request update (expired, re-assigned, etc.).
  */
-function notifyTraderUpdate(traderId, event, data) {
+async function notifyTraderUpdate(traderId, event, data) {
   websocket.emitToTrader(traderId, event, {
     ...data,
     timestamp: new Date().toISOString(),
   });
+
+  // Also save to database for persistent access
+  try {
+    const db = (await import('../db/index.js')).default;
+    const eventTitles = {
+      'tx_complete': 'Transaction Complete',
+      'tx_failed': 'Transaction Failed',
+      'request_expired': 'Request Expired',
+      'request_reassigned': 'Request Reassigned',
+      'dispute_opened': 'Dispute Opened',
+    };
+    
+    await db.query(
+      `INSERT INTO trader_notifications (trader_id, type, title, body)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        traderId,
+        event,
+        eventTitles[event] || event,
+        JSON.stringify(data),
+      ]
+    );
+  } catch (err) {
+    logger.error(`[Notify] Failed to save ${event} notification to DB for trader ${traderId}:`, err.message);
+  }
 }
 
 /**
@@ -170,7 +212,7 @@ async function notifyTransactionComplete(userId, traderId, transaction, phoneNum
     message: `Cash-out complete! ${transaction.fiat_amount} ${transaction.fiat_currency} sent to your mobile money.`,
   });
 
-  notifyTraderUpdate(traderId, 'tx_complete', {
+  await notifyTraderUpdate(traderId, 'tx_complete', {
     transactionId: transaction.id,
     usdcAmount: transaction.usdc_amount,
     message: `USDC released to your wallet.`,
