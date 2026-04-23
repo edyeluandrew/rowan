@@ -588,4 +588,97 @@ router.get('/performance/networks', authTrader, async (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/v1/trader/notifications
+ * List trader notifications with pagination.
+ */
+router.get('/notifications', authTrader, async (req, res, next) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const unreadOnly = req.query.unreadOnly === 'true';
+    const offset = (page - 1) * limit;
+
+    const whereClause = unreadOnly ? 'AND is_read = FALSE' : '';
+    
+    const result = await db.query(
+      `SELECT id, type, title, body, is_read, created_at
+       FROM trader_notifications
+       WHERE trader_id = $1 ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [req.traderId, limit, offset]
+    );
+
+    const countResult = await db.query(
+      `SELECT COUNT(*) as total FROM trader_notifications
+       WHERE trader_id = $1 ${whereClause}`,
+      [req.traderId]
+    );
+
+    res.json({
+      notifications: result.rows,
+      total: parseInt(countResult.rows[0].total),
+      page,
+      limit,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/trader/float/health
+ * Show current float balance and health status.
+ */
+router.get('/float/health', authTrader, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT id, name, is_active, float_ugx, float_kes, float_tzs, 
+              daily_limit, daily_volume, trust_score, last_active_at
+       FROM traders
+       WHERE id = $1`,
+      [req.traderId]
+    );
+
+    const trader = result.rows[0];
+    if (!trader) {
+      return res.status(404).json({ error: 'Trader not found' });
+    }
+
+    // Calculate float health percentage
+    const minFloat = 100000; // Minimum expected float
+    const floatUgxHealth = Math.min(100, (trader.float_ugx / minFloat) * 100);
+    const floatKesHealth = Math.min(100, (trader.float_kes / minFloat) * 100);
+    const floatTzsHealth = Math.min(100, (trader.float_tzs / minFloat) * 100);
+
+    res.json({
+      traderId: trader.id,
+      name: trader.name,
+      isActive: trader.is_active,
+      floats: {
+        ugx: {
+          balance: parseFloat(trader.float_ugx),
+          health: Math.round(floatUgxHealth),
+        },
+        kes: {
+          balance: parseFloat(trader.float_kes),
+          health: Math.round(floatKesHealth),
+        },
+        tzs: {
+          balance: parseFloat(trader.float_tzs),
+          health: Math.round(floatTzsHealth),
+        },
+      },
+      dailyLimit: parseFloat(trader.daily_limit),
+      dailyVolume: parseFloat(trader.daily_volume),
+      remainingDaily: parseFloat(trader.daily_limit) - parseFloat(trader.daily_volume),
+      trustScore: parseFloat(trader.trust_score),
+      lastActiveAt: trader.last_active_at,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
