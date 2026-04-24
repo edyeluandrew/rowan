@@ -153,12 +153,14 @@ app.get('/health', async (req, res) => {
 });
 
 // ─── API Routes ─────────────────────────────────────────────
+// [FIX] Mount specific paths BEFORE general paths to avoid Express route shadowing
+// /api/v1/trader/onboarding must come before /api/v1/trader to work correctly
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/cashout', cashoutRoutes);
 app.use('/api/v1/config', configRoutes);
 app.use('/api/v1/disputes', disputesRoutes);
-app.use('/api/v1/trader', traderRoutes);
-app.use('/api/v1/trader/onboarding', traderOnboardingRoutes);
+app.use('/api/v1/trader/onboarding', traderOnboardingRoutes); // ← SPECIFIC path first
+app.use('/api/v1/trader', traderRoutes);                      // ← GENERAL path second
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/rates', ratesRoutes);
