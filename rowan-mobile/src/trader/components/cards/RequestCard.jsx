@@ -18,7 +18,15 @@ export default function RequestCard({ request, onRemove }) {
     try {
       await acceptRequest(request.id);
       navigate(`/trader/requests/${request.id}`);
-    } catch {
+    } catch (err) {
+      // Most common cause: request expired or was re-matched (HTTP 409/404).
+      // Drop the card from the list instead of leaving a stale entry.
+      const msg = err?.message || 'Could not accept request';
+      const expired = /expired|already|not found|wrong state/i.test(msg);
+      if (expired) {
+        onRemove?.(request.id);
+      }
+      alert(expired ? 'This request expired or was already accepted.' : msg);
       setAccepting(false);
     }
   };
@@ -28,7 +36,14 @@ export default function RequestCard({ request, onRemove }) {
     try {
       await declineRequest(request.id);
       onRemove?.(request.id);
-    } catch {
+    } catch (err) {
+      const msg = err?.message || 'Could not decline request';
+      const expired = /expired|already|not found|declinable/i.test(msg);
+      if (expired) {
+        onRemove?.(request.id);
+      } else {
+        alert(msg);
+      }
       setDeclining(false);
       setShowDeclineConfirm(false);
     }

@@ -200,7 +200,13 @@ async function acceptRequest(transactionId, traderId) {
   );
 
   const transaction = result.rows[0];
-  if (!transaction) throw new Error('Cannot accept — transaction not found, wrong state, or already accepted');
+  if (!transaction) {
+    // Most likely the request expired and was re-matched, or already accepted.
+    // Surface a 409 (Conflict) to the client so it doesn't appear as a server error.
+    const err = new Error('Request expired or already handled');
+    err.statusCode = 409;
+    throw err;
+  }
 
   const userResult = await db.query(
     `SELECT phone_hash FROM users WHERE id = $1`,

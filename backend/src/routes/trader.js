@@ -628,6 +628,51 @@ router.get('/notifications', authTrader, async (req, res, next) => {
 });
 
 /**
+ * POST /api/v1/trader/notifications/mark-read
+ * Mark specific trader notifications as read.
+ * Body: { notificationIds: [uuid, uuid, ...] }
+ */
+router.post('/notifications/mark-read', authTrader, async (req, res, next) => {
+  try {
+    const { notificationIds } = req.body;
+    if (!Array.isArray(notificationIds) || notificationIds.length === 0) {
+      return res.status(400).json({ error: 'notificationIds array required' });
+    }
+
+    await db.query(
+      `UPDATE trader_notifications
+         SET is_read = TRUE, updated_at = NOW()
+       WHERE trader_id = $1
+         AND id = ANY($2::uuid[])
+         AND is_read = FALSE`,
+      [req.traderId, notificationIds]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/trader/notifications/mark-all-read
+ * Mark all of the trader's unread notifications as read.
+ */
+router.post('/notifications/mark-all-read', authTrader, async (req, res, next) => {
+  try {
+    await db.query(
+      `UPDATE trader_notifications
+         SET is_read = TRUE, updated_at = NOW()
+       WHERE trader_id = $1 AND is_read = FALSE`,
+      [req.traderId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/trader/float/health
  * Show current float balance and health status.
  */
