@@ -60,6 +60,7 @@ async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
       `destination_amount=${usdcTarget.toFixed(7)}`;
 
     logger.debug(`[QuoteEngine] 🌐 Calling Horizon path endpoint...`);
+    logger.debug(`[QuoteEngine]    URL: ${pathUrl}`);
 
     const response = await fetch(pathUrl, { timeout: 15000 });
     

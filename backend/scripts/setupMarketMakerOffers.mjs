@@ -90,37 +90,37 @@ async function createOffers() {
     // Create offers
     console.log('\n📋 Creating trading offers...');
     
-    // Calculate prices from config
-    // USDC/UGX rate tells us USDC value. We need XLM/USDC price.
-    // Assume 1 XLM ≈ 0.273 USD, and build from there
-    const xlmUsdRate = 0.273;
-    const xlmUsdcPrice = xlmUsdRate; // How much USDC you get per 1 XLM (roughly)
-
-    console.log(`  Calculated XLM/USDC rate: ~${xlmUsdcPrice.toFixed(4)}`);
+    // [DIRECTION FIX] Escrow does pathPaymentStrictReceive (sends XLM, receives USDC).
+    // For that to cross, the MM must offer the OPPOSITE side: sell USDC, buy XLM.
+    // Old code created sell-XLM/buy-USDC which never crossed with escrow.
+    const xlmUsdRate = 0.273; // USDC per 1 XLM (rough testnet calibration)
 
     const txBuilder = new StellarSdk.TransactionBuilder(account, {
       fee: StellarSdk.BASE_FEE,
       networkPassphrase: isTestnet ? StellarSdk.Networks.TESTNET : StellarSdk.Networks.PUBLIC,
     });
 
-    // Get actual XLM balance to size the sell offer properly
-    const xlmBalance = account.balances.find(b => !b.asset_code);
-    const usableXLM = xlmBalance ? parseFloat(xlmBalance.balance) - 200 : 1000; // Leave 200 XLM buffer for fees & reserves
+    // Get USDC balance to size the sell offer
+    const usdcBalance = account.balances.find(b => b.asset_code === 'USDC' && b.asset_issuer === usdcIssuer);
+    if (!usdcBalance || parseFloat(usdcBalance.balance) <= 0) {
+      console.error('\n❌ Market maker has no USDC balance — fund it before creating offers.');
+      console.error('   Mint testnet USDC to:', config.stellar.marketMakerPublicKey);
+      process.exit(1);
+    }
+    const usableUSDC = Math.max(0, parseFloat(usdcBalance.balance) - 1); // 1 USDC buffer
 
-    // Add ONLY a sell offer (XLM→USDC)
-    // This is what escrow needs: to sell 5 XLM received from user and get USDC
-    const sellOfferPrice = xlmUsdcPrice.toFixed(7); // How much USDC per 1 XLM
-    const sellAmount = Math.min(500, Math.floor(usableXLM) - 10).toFixed(2); // Create smaller offer
+    // price = buying / selling = XLM per USDC. At ~0.273 USD/XLM, 1 USDC ≈ 3.663 XLM.
+    const sellOfferPrice = (1 / xlmUsdRate).toFixed(7);
+    const sellAmount = Math.min(100, usableUSDC).toFixed(2);
 
-    console.log(`  Creating sell offer: ${sellAmount} XLM @ ${sellOfferPrice} USDC/XLM (buffer: ${200 + 10} XLM)`);
-
+    console.log(`  Creating sell offer: ${sellAmount} USDC @ ${sellOfferPrice} XLM/USDC`);
 
     txBuilder.addOperation(
       StellarSdk.Operation.manageSellOffer({
-        selling: XLM_ASSET,       // I'm selling XLM
-        buying: USDC_ASSET,       // To buy USDC
-        amount: sellAmount,       // Sell this amount
-        price: sellOfferPrice,    // At this price (in USDC per XLM)
+        selling: USDC_ASSET,      // I'm selling USDC
+        buying: XLM_ASSET,        // To buy XLM
+        amount: sellAmount,       // Sell up to this much USDC
+        price: sellOfferPrice,    // At this price (XLM per USDC)
         offerId: '0',             // New offer
       })
     );

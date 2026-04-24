@@ -52,21 +52,25 @@ async function ensureMarketMakerOffers() {
 
   try {
     // Check if offers exist
+    // [DIRECTION FIX] Escrow does pathPaymentStrictReceive (sends XLM, receives USDC).
+    // To cross that order, the market maker must SELL USDC and BUY XLM — i.e.
+    // the OPPOSITE side of the book. Old code looked for selling=XLM/buying=USDC,
+    // which would never cross with escrow and produced empty /paths/strict-receive.
     const offersResponse = await server.offers().forAccount(config.stellar.marketMakerPublicKey).call();
     const activeOffers = offersResponse.records.filter(o => {
-      const sellingIsNative = o.selling.asset_type === 'native';
-      const buyingIsUsdc = o.buying.asset_code === 'USDC' && o.buying.asset_issuer === USDC_ASSET.issuer;
-      return sellingIsNative && buyingIsUsdc;
+      const sellingIsUsdc = o.selling.asset_code === 'USDC' && o.selling.asset_issuer === USDC_ASSET.issuer;
+      const buyingIsNative = o.buying.asset_type === 'native';
+      return sellingIsUsdc && buyingIsNative;
     });
 
-    console.log(`[Offer Monitor] Found ${activeOffers.length} active XLM→USDC offer(s)`);
+    console.log(`[Offer Monitor] Found ${activeOffers.length} active USDC→XLM offer(s)`);
 
     if (activeOffers.length > 0) {
       console.log('[Offer Monitor] ✅ Offers exist, no action needed\n');
       return;
     }
 
-    console.log('[Offer Monitor] ⚠️  No XLM→USDC offers found! Recreating...\n');
+    console.log('[Offer Monitor] ⚠️  No USDC→XLM offers found! Recreating...\n');
 
     // Load account
     let account = await server.loadAccount(config.stellar.marketMakerPublicKey);
@@ -77,20 +81,31 @@ async function ensureMarketMakerOffers() {
       networkPassphrase: isTestnet ? StellarSdk.Networks.TESTNET : StellarSdk.Networks.PUBLIC,
     });
 
-    // Get XLM balance
-    const xlmBalance = account.balances.find(b => !b.asset_code);
-    const usableXLM = xlmBalance ? parseFloat(xlmBalance.balance) - 200 : 1000;
-    const sellAmount = Math.min(500, Math.floor(usableXLM) - 10).toFixed(2);
+    // [DIRECTION FIX] MM sells USDC and buys XLM — the side escrow's path payment
+    // can actually consume. Need a USDC balance for this; if missing, log and bail.
+    const usdcBalance = account.balances.find(b => b.asset_code === 'USDC' && b.asset_issuer === USDC_ASSET.issuer);
+    if (!usdcBalance) {
+      console.warn('[Offer Monitor] ❌ Market maker has no USDC trustline/balance — cannot create USDC→XLM offer');
+      console.warn('[Offer Monitor]    Run: node backend/scripts/setupMarketMakerOffers.mjs to provision');
+      return;
+    }
+    const usableUSDC = Math.max(0, parseFloat(usdcBalance.balance) - 1); // 1 USDC buffer
+    if (usableUSDC <= 0) {
+      console.warn(`[Offer Monitor] ❌ Market maker USDC balance too low: ${usdcBalance.balance}`);
+      return;
+    }
+    const sellAmount = Math.min(100, usableUSDC).toFixed(2); // sell up to 100 USDC
 
+    // price = buying / selling = XLM per USDC. At ~0.273 USD/XLM, 1 USDC ≈ 3.663 XLM.
     const xlmUsdRate = 0.273;
-    const sellOfferPrice = xlmUsdRate.toFixed(7);
+    const sellOfferPrice = (1 / xlmUsdRate).toFixed(7);
 
-    console.log(`[Offer Monitor] Creating offer: Sell ${sellAmount} XLM @ ${sellOfferPrice} USDC/XLM`);
+    console.log(`[Offer Monitor] Creating offer: Sell ${sellAmount} USDC @ ${sellOfferPrice} XLM/USDC`);
 
     txBuilder.addOperation(
       StellarSdk.Operation.manageSellOffer({
-        selling: XLM_ASSET,
-        buying: USDC_ASSET,
+        selling: USDC_ASSET,   // MM gives USDC
+        buying: XLM_ASSET,     // MM takes XLM
         amount: sellAmount,
         price: sellOfferPrice,
         offerId: '0',
