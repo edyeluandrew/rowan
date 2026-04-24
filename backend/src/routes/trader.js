@@ -114,10 +114,11 @@ router.get('/requests', authTrader, async (req, res, next) => {
       [req.traderId]
     );
     
-    // Convert stroops to decimal USDC
+    // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal, not stroops — don't divide.
+    // pg returns NUMERIC as string; coerce to Number for the JSON payload.
     const requests = result.rows.map(tx => ({
       ...tx,
-      usdc_amount: stroopsToUsdc(tx.usdc_amount),
+      usdc_amount: Number(tx.usdc_amount) || 0,
     }));
     
     res.json({ requests });
@@ -148,11 +149,11 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
       return res.status(404).json({ error: 'Request not found or not assigned to you' });
     }
 
-    // Convert stroops to decimal USDC for frontend display
+    // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal, not stroops.
     res.json({
       data: {
         ...tx,
-        usdc_amount: stroopsToUsdc(tx.usdc_amount),
+        usdc_amount: Number(tx.usdc_amount) || 0,
       },
     });
   } catch (err) {
@@ -265,10 +266,10 @@ router.get('/history', authTrader, async (req, res, next) => {
       [req.traderId, limit, offset]
     );
 
-    // Convert stroops to decimal USDC
+    // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal, not stroops.
     const transactions = result.rows.map(tx => ({
       ...tx,
-      usdc_amount: stroopsToUsdc(tx.usdc_amount),
+      usdc_amount: Number(tx.usdc_amount) || 0,
     }));
 
     res.json({ transactions });
@@ -298,10 +299,10 @@ router.get('/stats', authTrader, async (req, res, next) => {
       [req.traderId]
     );
 
-    // Convert stroops to decimal USDC for history items
+    // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal, not stroops.
     const recentTransactions = historyResult.rows.map(tx => ({
       ...tx,
-      usdc_amount: stroopsToUsdc(tx.usdc_amount),
+      usdc_amount: Number(tx.usdc_amount) || 0,
     }));
 
     const todayResult = await db.query(
@@ -314,7 +315,7 @@ router.get('/stats', authTrader, async (req, res, next) => {
     // Convert total_usdc from stroops to decimal
     const todayStats = {
       ...todayResult.rows[0],
-      total_usdc: stroopsToUsdc(todayResult.rows[0].total_usdc),
+      total_usdc: Number(todayResult.rows[0].total_usdc) || 0,
     };
 
     // Lifetime stats for History page header

@@ -71,10 +71,10 @@ router.get('/history', authUser, async (req, res, next) => {
       [req.userId, parseInt(limit), parseInt(offset)]
     );
 
-    // Convert stroops to decimal USDC for each transaction
+    // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal in DB, not stroops.
     const transactions = result.rows.map(tx => ({
       ...tx,
-      usdc_amount: stroopsToUsdc(tx.usdc_amount),
+      usdc_amount: Number(tx.usdc_amount) || 0,
     }));
 
     // Also get summary stats
