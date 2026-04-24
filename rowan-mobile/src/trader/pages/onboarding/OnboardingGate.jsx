@@ -16,10 +16,19 @@ export default function OnboardingGate() {
   const checkStatus = useCallback(async () => {
     try {
       const data = await getOnboardingStatus();
-      setStatus(data.status || data);
-    } catch {
-      /* On error (e.g. endpoint not yet deployed), let trader through */
-      setStatus('VERIFIED');
+      // Backend returns { verificationStatus, ready, ... }. Treat `ready === true`
+      // as fully verified; otherwise surface the wizard. Fall back to legacy
+      // `status` field for backwards compatibility.
+      if (data?.ready === true || data?.verificationStatus === 'VERIFIED' || data?.status === 'VERIFIED') {
+        setStatus('VERIFIED');
+      } else {
+        setStatus(data?.verificationStatus || data?.status || 'NOT_STARTED');
+      }
+    } catch (err) {
+      // Network/auth failure — safer to send the trader through onboarding
+      // than to silently let an unverified trader into the dashboard.
+      console.warn('[OnboardingGate] status check failed, defaulting to wizard', err);
+      setStatus('NOT_STARTED');
     } finally {
       setLoading(false);
     }

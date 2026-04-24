@@ -225,7 +225,18 @@ router.get('/status', authTrader, async (req, res, next) => {
   try {
     const checklist = await verificationService.getPreActivationChecklist(req.traderId);
     if (!checklist) {
-      return res.status(404).json({ error: 'No verification record found. Contact admin.' });
+      // No verification record yet — trader hasn't started onboarding.
+      // Return 200 with NOT_STARTED so the frontend can route to the wizard
+      // without producing a misleading 404 in the console.
+      return res.json({
+        traderId: req.traderId,
+        verificationStatus: 'NOT_STARTED',
+        status: 'NOT_STARTED',
+        ready: false,
+        blocking: 0,
+        total: 0,
+        checklist: [],
+      });
     }
     res.json(checklist);
   } catch (err) {

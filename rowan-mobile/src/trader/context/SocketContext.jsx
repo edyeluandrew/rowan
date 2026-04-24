@@ -69,8 +69,15 @@ export function SocketProvider({ children }) {
     });
 
     return () => {
-      s.removeAllListeners();
-      s.disconnect();
+      // Defer disconnect to next tick so React 18 StrictMode's synchronous
+      // mount→unmount→remount cycle in dev doesn't tear down the socket
+      // mid-handshake (which produces a noisy "WebSocket is closed before
+      // the connection is established" warning).
+      const sock = s;
+      setTimeout(() => {
+        sock.removeAllListeners();
+        sock.disconnect();
+      }, 0);
       socketRef.current = null;
       setIsConnected(false);
     };
