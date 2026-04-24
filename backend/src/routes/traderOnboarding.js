@@ -6,6 +6,7 @@ import { validate } from '../middleware/validate.js';
 import verificationService from '../services/traderVerificationService.js';
 import otpService from '../services/otpService.js';
 import storageService from '../services/storageService.js';
+import db from '../db/index.js';
 
 const router = Router();
 
@@ -223,6 +224,25 @@ router.post(
  */
 router.get('/status', authTrader, async (req, res, next) => {
   try {
+    // [DEV/ADMIN BYPASS] If the trader's master verification_status on the
+    // traders table is already VERIFIED (set by admin or seed script),
+    // short-circuit and report ready — no need to walk the checklist.
+    const tRes = await db.query(
+      `SELECT verification_status FROM traders WHERE id = $1`,
+      [req.traderId]
+    );
+    if (tRes.rows[0]?.verification_status === 'VERIFIED') {
+      return res.json({
+        traderId: req.traderId,
+        verificationStatus: 'VERIFIED',
+        status: 'VERIFIED',
+        ready: true,
+        blocking: 0,
+        total: 0,
+        checklist: [],
+      });
+    }
+
     const checklist = await verificationService.getPreActivationChecklist(req.traderId);
     if (!checklist) {
       // No verification record yet — trader hasn't started onboarding.
