@@ -127,6 +127,40 @@ router.get('/requests', authTrader, async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/trader/requests/:id
+ * Get a single request assigned to this trader (full detail).
+ */
+router.get('/requests/:id', authTrader, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT t.id, t.usdc_amount, t.xlm_amount, t.fiat_amount, t.fiat_currency,
+              t.network, t.state, t.trader_matched_at, t.matched_at,
+              t.fiat_sent_at, t.created_at, t.user_id, t.trader_id,
+              u.phone_hash AS user_phone_hash
+       FROM transactions t
+       LEFT JOIN users u ON u.id = t.user_id
+       WHERE t.id = $1 AND t.trader_id = $2`,
+      [req.params.id, req.traderId]
+    );
+
+    const tx = result.rows[0];
+    if (!tx) {
+      return res.status(404).json({ error: 'Request not found or not assigned to you' });
+    }
+
+    // Convert stroops to decimal USDC for frontend display
+    res.json({
+      data: {
+        ...tx,
+        usdc_amount: stroopsToUsdc(tx.usdc_amount),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /api/v1/trader/requests/:id/accept
  * Trader accepts a cash-out request.
  */

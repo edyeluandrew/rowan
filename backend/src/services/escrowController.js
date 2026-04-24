@@ -636,7 +636,13 @@ async function refundXlm(userStellarAddress, xlmAmount, reason) {
  */
 async function restoreTraderFloat(transaction) {
   if (!transaction.trader_id) return;
-  const fiatAmount = parseFloat(transaction.fiat_amount);
+  // [BIGINT FIX] float_{currency} columns are bigint — round to whole units
+  // before adding. Quote-engine math can produce fractional fiat (e.g. 192.61).
+  const fiatAmount = Math.round(parseFloat(transaction.fiat_amount));
+  if (!Number.isFinite(fiatAmount) || fiatAmount <= 0) {
+    logger.warn(`[Escrow] restoreTraderFloat: skipping non-positive amount ${transaction.fiat_amount}`);
+    return;
+  }
   const fiatCurrency = transaction.fiat_currency || 'UGX';
   const floatCol = fiatCurrency === 'KES' ? 'float_kes'
                  : fiatCurrency === 'TZS' ? 'float_tzs'
