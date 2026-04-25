@@ -78,7 +78,7 @@ async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
     const pathResponse = await response.json();
 
     if (!pathResponse.records || pathResponse.records.length === 0) {
-      logger.warn('[QuoteEngine] ⚠️  No valid path found for strict-receive (empty records)');
+      logger.warn('[QuoteEngine] ⚠️  No valid path returned from Horizon (records: [])');
       logger.warn(`[QuoteEngine] 🔍 Debug info:`, {
         network: config.stellar.network,
         source: sourceAddr.slice(0, 8) + '...',
@@ -88,7 +88,7 @@ async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
         usdcTarget,
         recordCount: pathResponse.records ? pathResponse.records.length : 'undefined',
       });
-      logger.info(`[QuoteEngine] Possible causes: 1) No liquidity, 2) Market maker offline, 3) Wrong USDC issuer, 4) Accounts not funded`);
+      logger.info(`[QuoteEngine] Possible causes: 1) Insufficient orderbook depth, 2) Market maker has no offers in correct direction (sell USDC / buy XLM), 3) Issuer mismatch on USDC asset, 4) Source/destination accounts not funded or missing trustline`);
       return null;
     }
 
@@ -367,12 +367,12 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
   let pathResult = await getXlmRateFromPath(usdcTargetForPath);
   
   if (!pathResult) {
-    logger.warn('[QuoteEngine] ⚠️  Path discovery failed (market maker has no active offers)');
-    logger.warn('[QuoteEngine] 💡 To enable path discovery:');
-    logger.warn('[QuoteEngine]    1. Go to https://laboratory.stellar.org/');
-    logger.warn('[QuoteEngine]    2. Create an offer: Sell XLM → Buy USDC');
-    logger.warn('[QuoteEngine]    3. Set price to match your configured rates');
-    logger.info('[QuoteEngine] 📌 Falling back to direct rate calculation (from config)...');
+    logger.warn('[QuoteEngine] ⚠️  No valid path returned from Horizon');
+    logger.warn('[QuoteEngine] 💡 To restore executable quotes:');
+    logger.warn('[QuoteEngine]    1. Verify the market maker has resting offers (selling: USDC / buying: XLM)');
+    logger.warn('[QuoteEngine]    2. Verify the orderbook has sufficient depth for target USDC');
+    logger.warn('[QuoteEngine]    3. Verify USDC asset issuer matches Horizon path query');
+    logger.info('[QuoteEngine] 📌 Generating non-executable legacy-fallback quote (escrow swap will REFUSE this quote)...');
     
     // FALLBACK: Calculate quote using configured rates directly
     // This is acceptable for controlled trading environments where rates are stable
@@ -452,12 +452,17 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
   }
 
   // ── Step 9: PERSIST TO DB with path data (PHASE 5) ──
+  // [CORRECTNESS] quote_source MUST reflect reality. If pathData was synthesised
+  // from the legacy fallback (no Horizon path), stamp it 'legacy-fallback' so the
+  // escrow swap layer refuses to execute against it. Only quotes backed by a real
+  // Horizon-discovered path are marked 'horizon-path' and therefore executable.
+  const quoteSource = pathData.source === 'horizon-path' ? 'horizon-path' : 'legacy-fallback';
   const result = await db.query(
     `INSERT INTO quotes
        (user_id, xlm_amount, fiat_currency, market_rate, user_rate, fiat_amount,
         platform_fee, network, phone_hash, memo, escrow_address, expires_at,
         rate_ugx, fee_ugx, status, path_xlm_needed, path_usdc_received, quote_source)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,'horizon-path')
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17)
      RETURNING *`,
     [
       userId, xlmAmount, fiatCurrency, 
@@ -469,6 +474,7 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
       rateUgx, feeUgx,
       pathData.xlmNeeded,        // path_xlm_needed (for execution)
       pathData.usdcReceived,     // path_usdc_received (for execution)
+      quoteSource,                // 'horizon-path' (executable) | 'legacy-fallback' (non-executable)
     ]
   );
 

@@ -294,65 +294,12 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
 }
 
 /**
- * Attempt to fillXLM → USDC conversion from market maker offers.
- * Uses manageBuyOffer to create a buy order that fills against market maker's sell offers.
- * Returns { success: true, amount, txHash } if successful, else { success: false, reason }.
- *
- * [MM-1] Priority strategy: Try market maker first; if fails, caller will fallback to DEX.
+ * [REMOVED] tryMarketMakerFill used manageBuyOffer signed by the escrow account,
+ * which risked partial fills + leaving a resting offer on the escrow's books.
+ * The escrow now buys USDC exclusively via pathPaymentStrictReceive (atomic),
+ * which naturally crosses the market maker's resting sell offers without
+ * making the escrow itself a maker. See swapXlmToUsdc.
  */
-async function tryMarketMakerFill(xlmAmount, expectedUsdc) {
-  if (!config.stellar.marketMakerPublicKey) {
-    logger.info('[Escrow] Market maker not configured, skipping MM fill attempt');
-    return { success: false, reason: 'Market maker not configured' };
-  }
-
-  try {
-    logger.info(`[Escrow] 🎯 Attempting market maker fill: buy ${expectedUsdc} USDC with max ${xlmAmount} XLM`);
-
-    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
-
-    // Create a buy offer: we want to buy USDC, selling XLM
-    // Price is in terms of selling asset (XLM), so price = XLM per USDC we're buying
-    const price = (xlmAmount / expectedUsdc).toFixed(7); // XLM per USDC
-
-    const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
-      fee: config.stellarMaxFee,
-      networkPassphrase,
-    })
-      .addOperation(
-        StellarSdk.Operation.manageBuyOffer({
-          selling: StellarSdk.Asset.native(), // Selling XLM
-          buying: USDC_ASSET,                   // Buying USDC
-          buyAmount: expectedUsdc.toFixed(7),   // Exact USDC we want
-          price: price,                         // Max XLM per USDC we'll pay
-          offerId: '0',                         // 0 = create new offer (not update)
-        })
-      )
-      .setTimeout(30)
-      .build();
-
-    logger.info(`[Escrow] Submitting market maker buy offer: buyAmount=${expectedUsdc}, price=${price}`);
-    tx.sign(escrowKeypair);
-    const result = await horizon.submitTransaction(tx);
-    logger.info(`[Escrow] ✅ Market maker fill successful: ${result.hash}`);
-
-    // Parse the result to confirm how much USDC we actually got
-    let actualUsdc = expectedUsdc;
-    try {
-      const txResult = StellarSdk.xdr.TransactionResult.fromXDR(result.result_xdr, 'base64');
-      const opResult = txResult.result().results()[0].tr().manageBuyOfferResult();
-      // Extract the offered amount (should be the buyAmount we requested)
-      actualUsdc = expectedUsdc;
-    } catch (parseErr) {
-      logger.warn('[Escrow] Could not parse MM buy offer result XDR:', parseErr.message);
-    }
-
-    return { success: true, amount: actualUsdc, txHash: result.hash };
-  } catch (err) {
-    logger.warn(`[Escrow] Market maker fill failed: ${err.message}`);
-    return { success: false, reason: err.message };
-  }
-}
 
 /**
  * [PHASE 4] Execute XLM → USDC swap using quote path data for alignment.
@@ -369,72 +316,54 @@ async function tryMarketMakerFill(xlmAmount, expectedUsdc) {
  *      or the tx fails entirely. The amount stored in DB is the requested destAmount.
  */
 async function swapXlmToUsdc(xlmAmount, quote) {
-  logger.info(`[Escrow] 🔄 [PHASE 4] SWAP START (quote-aligned): xlmAmount=${xlmAmount}`);
-  logger.info(`[Escrow] Quote data: id=${quote.id}, path_xlm_needed=${quote.path_xlm_needed} (type: ${typeof quote.path_xlm_needed}), path_usdc_received=${quote.path_usdc_received} (type: ${typeof quote.path_usdc_received})`);
-  
-  const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+  logger.info(`[Escrow] 🔄 SWAP START (pathPaymentStrictReceive): xlmAmount=${xlmAmount}`);
+  logger.info(`[Escrow] Quote: id=${quote.id}, source=${quote.quote_source}, path_xlm_needed=${quote.path_xlm_needed}, path_usdc_received=${quote.path_usdc_received}`);
 
-  // ── Step 1: Use quote path data as baseline ──
-  // PostgreSQL NUMERIC columns can return as strings, so convert explicitly
-  let targetUsdc = quote.path_usdc_received ? Number(quote.path_usdc_received) : null;
-  let xlmSendMax = quote.path_xlm_needed ? Number(quote.path_xlm_needed) : null;
-  
-  logger.info(`[Escrow] Converted to numbers: targetUsdc=${targetUsdc} (type: ${typeof targetUsdc}), xlmSendMax=${xlmSendMax} (type: ${typeof xlmSendMax})`);
-  
-  if (!targetUsdc || !xlmSendMax || !Number.isFinite(targetUsdc) || !Number.isFinite(xlmSendMax)) {
-    logger.warn('[Escrow] Quote missing valid path data, falling back to legacy calculation');
-    // Fallback for quotes that don't have path data (legacy compat)
-    const usdcToFiat = quoteEngine.getUsdcToFiatRate(quote.fiat_currency);
-    const fiatAmount = Number(quote.fiat_amount);
-    const platformFee = Number(quote.platform_fee);
-    const totalFiat = fiatAmount + platformFee;
-    targetUsdc = totalFiat / usdcToFiat;
-    xlmSendMax = xlmAmount;
-    
-    logger.warn(`[Escrow] Fallback calculation: totalFiat=${totalFiat}, usdcToFiat=${usdcToFiat} → targetUsdc=${targetUsdc}`);
+  // ── Architectural guard: refuse to execute against fake/legacy quotes ──
+  // Path-payment swaps require Horizon-discovered, executable path data.
+  // If the quote was synthesised from a legacy rate fallback, fail fast so
+  // the caller's refund-on-error path triggers and the user is made whole.
+  if (quote.quote_source !== 'horizon-path') {
+    throw new Error(
+      `Refusing to swap against non-executable quote (quote_source='${quote.quote_source}'). ` +
+      `Path-payment swap requires a Horizon-discovered path.`
+    );
   }
 
-  logger.info(`[Escrow] 📊 Swap plan: send ${xlmSendMax} XLM → receive ${targetUsdc} USDC`);
+  const targetUsdc = Number(quote.path_usdc_received);
+  const xlmSendMax = Number(quote.path_xlm_needed);
 
-  // ── Step 2: Do NOT apply extra slippage (PHASE 1 SPRINT FIX) ──
-  // [PHASE 1] REMOVED double slippage: quote uses 0.3%, execution now uses same 0.3%
-  // sendMax comes directly from quote (already includes slippage)
-  const sendMax = parseFloat(xlmSendMax).toFixed(7);
-  const destAmount = parseFloat(targetUsdc).toFixed(7);
-  
-  logger.info(`[Escrow] 📐 Execution values: sendMax ${sendMax} (from xlmSendMax ${xlmSendMax}), destAmount ${destAmount} (from targetUsdc ${targetUsdc})`);
+  if (!Number.isFinite(targetUsdc) || targetUsdc <= 0 ||
+      !Number.isFinite(xlmSendMax) || xlmSendMax <= 0) {
+    throw new Error(
+      `Refusing to swap: quote missing executable path data ` +
+      `(path_xlm_needed=${quote.path_xlm_needed}, path_usdc_received=${quote.path_usdc_received})`
+    );
+  }
 
-  // ── Step 3: Execute manageBuyOffer to buy USDC from market maker ──
-  // [FIX] Use manageBuyOffer instead of pathPaymentStrictReceive with self-destination
-  // This directly buys USDC from market maker's offers on the order book
+  // ── sendMax / destAmount come straight from the quote ──
+  // Slippage is already baked in once at quote time (config.platform.quoteSlippagePercent).
+  // DO NOT multiply by slippage again here.
+  const sendMax = xlmSendMax.toFixed(7);
+  const destAmount = targetUsdc.toFixed(7);
+
+  logger.info(`[Escrow] 📐 Path payment plan: sendMax=${sendMax} XLM, destAmount=${destAmount} USDC, destination=ESCROW`);
+
+  const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+
   try {
-    logger.info(`[Escrow] 🔥 Executing manageBuyOffer: buy ${destAmount} USDC for max ${sendMax} XLM`);
-    
-    // Parse amounts to ensure they're numbers
-    const destNum = parseFloat(destAmount);
-    const sendMaxNum = parseFloat(sendMax);
-    
-    if (!Number.isFinite(destNum) || !Number.isFinite(sendMaxNum)) {
-      throw new Error(`Invalid amounts: destAmount=${destAmount} (→${destNum}), sendMax=${sendMax} (→${sendMaxNum})`);
-    }
-    
-    // Calculate price: USDC per XLM from our target amounts
-    // If we want X USDC for Y XLM, the price (what we pay per unit we're buying) is Y/X
-    const priceOfUsdcInXlm = sendMaxNum / destNum;
-    
-    logger.info(`[Escrow] 💰 Buy price: ${priceOfUsdcInXlm.toFixed(8)} XLM per USDC (sending max ${sendMaxNum} XLM to buy ${destNum} USDC)`);
-
     const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
       fee: config.stellarMaxFee,
       networkPassphrase,
     })
       .addOperation(
-        StellarSdk.Operation.manageBuyOffer({
-          selling: StellarSdk.Asset.native(),              // Sell XLM
-          buying: USDC_ASSET,                              // Buy USDC
-          buyAmount: destNum.toFixed(7),                   // Want to buy this much USDC
-          price: priceOfUsdcInXlm.toFixed(7),              // At this price (XLM per USDC)
-          offerId: '0',                                    // 0 = create new offer
+        StellarSdk.Operation.pathPaymentStrictReceive({
+          sendAsset: StellarSdk.Asset.native(),               // sending XLM
+          sendMax,                                            // upper bound on XLM spent
+          destination: config.stellar.escrowPublicKey,        // same-account swap (atomic)
+          destAsset: USDC_ASSET,                              // receive USDC (testnet issuer)
+          destAmount,                                         // EXACT USDC required
+          path: [],                                           // direct XLM↔USDC orderbook
         })
       )
       .setTimeout(30)
@@ -442,30 +371,30 @@ async function swapXlmToUsdc(xlmAmount, quote) {
 
     tx.sign(escrowKeypair);
     const result = await horizon.submitTransaction(tx);
-    logger.info(`[Escrow] ✅ manageBuyOffer broadcast successful: ${result.hash}`);
+    logger.info(`[Escrow] ✅ pathPaymentStrictReceive successful: ${result.hash}`);
 
-    // ── Step 4: Expected amount ──
-    // manageBuyOffer will fill as much as it can up to buyAmount
-    // For a testnet environment, assume it fills completely (since we have market maker offers)
-    const actualUsdc = destNum;
-    
-    logger.info(`[Escrow] 🎯 Swap complete: ${actualUsdc} USDC (type: ${typeof actualUsdc}), tx: ${result.hash}`);
-    
-    // Defensive check before returning - MUST be a number
-    if (!Number.isFinite(actualUsdc) || typeof actualUsdc !== 'number') {
-      logger.error(`[Escrow] ❌ CRITICAL: actualUsdc is not a valid number: ${actualUsdc} (type: ${typeof actualUsdc})`);
-      throw new Error(`Invalid result USDC amount: ${actualUsdc} (type was ${typeof actualUsdc}, expected number)`);
-    }
-    
+    // ── Atomic guarantee from the operation ──
+    // Stellar guarantees the destination received EXACTLY destAmount or the
+    // entire transaction failed. So actualUsdc === targetUsdc by definition.
+    const actualUsdc = targetUsdc;
+
+    logger.info(`[Escrow] 🎯 Swap complete: ${actualUsdc} USDC, tx: ${result.hash}`);
+
     return {
-      amount: actualUsdc,  // Will be a NUMBER, not a string
+      amount: actualUsdc,
       txHash: result.hash,
-      source: 'dex',
+      source: 'path-payment-strict-receive',
       quoteAligned: true,
     };
   } catch (err) {
-    logger.error(`[Escrow] ❌ DEX swap failed:`, err.message);
-    throw new Error(`XLM→USDC swap failed: ${err.message}`);
+    // Surface Stellar result codes for diagnosis (e.g. op_too_few_offers, op_under_dest_min)
+    const codes = err?.response?.data?.extras?.result_codes;
+    if (codes) {
+      logger.error(`[Escrow] ❌ Path payment failed with Stellar codes:`, codes);
+    } else {
+      logger.error(`[Escrow] ❌ Path payment failed:`, err.message);
+    }
+    throw new Error(`XLM→USDC path payment failed: ${err.message}`);
   }
 }
 
