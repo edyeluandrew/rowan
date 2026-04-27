@@ -316,7 +316,7 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
  *      or the tx fails entirely. The amount stored in DB is the requested destAmount.
  */
 async function swapXlmToUsdc(xlmAmount, quote) {
-  logger.info(`[Escrow] 🔄 SWAP START (pathPaymentStrictReceive): xlmAmount=${xlmAmount}`);
+  logger.info(`[Escrow] 🔄 SWAP START: pathPaymentStrictReceive, xlmAmount=${xlmAmount}`);
   logger.info(`[Escrow] Quote: id=${quote.id}, source=${quote.quote_source}, path_xlm_needed=${quote.path_xlm_needed}, path_usdc_received=${quote.path_usdc_received}`);
 
   // ── Architectural guard: refuse to execute against fake/legacy quotes ──
