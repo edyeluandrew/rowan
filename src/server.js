@@ -29,6 +29,8 @@ import logger from './utils/logger.js';
 const app = express();
 const httpServer = createServer(app);
 
+// [PHASE 5] pathPaymentStrictReceive for atomic swaps - deployed 2026-04-27
+
 // express-rate-limit and req.ip read the real client IP from the X-Forwarded-For
 // header when the server runs behind Railway, Render, or Cloudflare. Without this
 // line all rate limiting is broken in production because every request appears to
