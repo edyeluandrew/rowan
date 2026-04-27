@@ -377,12 +377,13 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
     // FALLBACK: Calculate quote using configured rates directly
     // This is acceptable for controlled trading environments where rates are stable
     try {
-      const legacyRate = await getLegacyXlmRate(fiatCurrency); // XLM/fiat rate
-      const xlmToUsdcRate = legacyRate / usdcToFiat; // Convert to XLM/USDC
+      const legacyRate = await getLegacyXlmRate(fiatCurrency); // fiat/XLM rate
+      const xlmToUsdcRate = legacyRate / usdcToFiat; // Convert to USDC/XLM
       
       // Use direct rate calculation
+      // xlmNeeded = usdcNeeded / (USDC/XLM rate)
       const simulatedUsdcNeeded = usdcTargetForPath;
-      const simulatedXlmNeeded = simulatedUsdcNeeded * xlmToUsdcRate;
+      const simulatedXlmNeeded = simulatedUsdcNeeded / xlmToUsdcRate;
       
       pathResult = {
         xlmRate: xlmToUsdcRate,
