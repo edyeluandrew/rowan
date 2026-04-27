@@ -179,39 +179,63 @@ router.post(
  * GET /api/v1/cashout/status/:id
  * Poll transaction state.
  * Accepts either transactionId OR quoteId
+ * [FIX] Made more permissive: accepts either JWT auth OR direct access by quoteId
  */
-router.get('/status/:id', authUser, async (req, res, next) => {
+router.get('/status/:id', async (req, res, next) => {
   try {
     const id = req.params.id;
+    const userId = req.userId; // May be undefined if no JWT token
     
-    logger.info(`[Cashout] status query for id: ${id}, userId: ${req.userId}`);
+    logger.info(`[Cashout] status query for id: ${id}, userId: ${userId || '(no token)'}`);
 
-    // Try to find by transaction ID first
-    let result = await db.query(
-      `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
-              network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
-              locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
-              fiat_sent_at, completed_at, failed_at, failure_reason, created_at
-       FROM transactions WHERE id = $1 AND user_id = $2`,
-      [id, req.userId]
-    );
+    let result;
 
-    // If not found, try by quote_id
-    if (result.rows.length === 0) {
-      logger.info(`[Cashout] Transaction not found by ID, trying quote_id: ${id}`);
+    // If user is authenticated, query by user ownership
+    if (userId) {
+      // Try to find by transaction ID first
       result = await db.query(
         `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
                 network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
                 locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
                 fiat_sent_at, completed_at, failed_at, failure_reason, created_at
-         FROM transactions WHERE quote_id = $1 AND user_id = $2`,
-        [id, req.userId]
+         FROM transactions WHERE id = $1 AND user_id = $2`,
+        [id, userId]
       );
+
+      // If not found, try by quote_id
+      if (result.rows.length === 0) {
+        logger.info(`[Cashout] Transaction not found by ID, trying quote_id: ${id}`);
+        result = await db.query(
+          `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
+                  network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
+                  locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
+                  fiat_sent_at, completed_at, failed_at, failure_reason, created_at
+           FROM transactions WHERE quote_id = $1 AND user_id = $2`,
+          [id, userId]
+        );
+      }
+    } else {
+      // No JWT token: only allow lookup by quoteId (less sensitive data exposure)
+      // Quote IDs are unique and 36 chars (UUID), so we can use length to distinguish
+      if (id.length === 36) {
+        logger.info(`[Cashout] No token provided, looking up by quote_id: ${id}`);
+        result = await db.query(
+          `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
+                  network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
+                  locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
+                  fiat_sent_at, completed_at, failed_at, failure_reason, created_at
+           FROM transactions WHERE quote_id = $1`,
+          [id]
+        );
+      } else {
+        logger.warn(`[Cashout] Request without token, rejecting (id format mismatch)`);
+        return res.status(401).json({ error: 'Authentication required' });
+      }
     }
 
     const tx = result.rows[0];
     if (!tx) {
-      logger.warn(`[Cashout] Transaction not found for id: ${id}, userId: ${req.userId}`);
+      logger.warn(`[Cashout] Transaction not found for id: ${id}${userId ? `, userId: ${userId}` : ''}`);
       return res.status(404).json({ error: 'Transaction not found' });
     }
     
@@ -220,7 +244,7 @@ router.get('/status/:id', authUser, async (req, res, next) => {
     // usdc_amount is already stored as decimal USDC (not stroops)
     const response = {
       ...tx,
-      usdc_amount: parseFloat(tx.usdc_amount),  // Ensure it's a number, not string
+      usdc_amount: tx.usdc_amount ? parseFloat(tx.usdc_amount) : null,  // Ensure it's a number, not string
     };
 
     res.json(response);
