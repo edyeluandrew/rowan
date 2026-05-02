@@ -100,9 +100,16 @@ export function validateTypes(schema) {
  * [AUDIT FIX] Never leak internal error messages to clients in production.
  */
 export function errorHandler(err, req, res, _next) {
-  logger.error(`[Error] ${req.method} ${req.originalUrl}:`, err.message);
   const status = err.statusCode || 500;
   const isProduction = process.env.NODE_ENV === 'production';
+  
+  // ALWAYS log full error details for debugging
+  logger.error(`[Error] ${req.method} ${req.originalUrl}:`, {
+    message: err.message,
+    stack: err.stack,
+    statusCode: status,
+  });
+  
   res.status(status).json({
     error: status >= 500 && isProduction
       ? 'Internal server error'

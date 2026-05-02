@@ -33,10 +33,18 @@ export function authTrader(req, res, next) {
   try {
     const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] });
     if (payload.role !== 'trader') return res.status(403).json({ error: 'Not a trader token' });
+    
+    // CRITICAL: Validate that JWT has required 'sub' field
+    if (!payload.sub) {
+      console.error('[authTrader] JWT missing required sub field:', payload);
+      return res.status(401).json({ error: 'Invalid token: missing trader ID' });
+    }
+    
     req.traderId = payload.sub;
     req.deviceId = payload.deviceId;
     next();
   } catch (err) {
+    console.error('[authTrader] JWT verification failed:', err.message);
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }

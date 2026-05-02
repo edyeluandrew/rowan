@@ -102,42 +102,44 @@ router.post(
 /**
  * GET /api/v1/trader/requests
  * List pending requests assigned to this trader.
+ * Query params: status (optional: 'pending', 'active', or all if not provided)
  */
 router.get('/requests', authTrader, async (req, res, next) => {
   try {
-    const { status } = req.query; // 'pending' or 'active'
+    const { status } = req.query; // May be undefined
+
+    // NEVER pass undefined to SQL — build query conditionally
+    let query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
+                        state, trader_matched_at, created_at
+                 FROM transactions
+                 WHERE trader_id = $1`;
     
-    let query, params;
-    
+    const params = [req.traderId];
+
+    // Only add status filter if status param was provided
     if (status === 'pending') {
-      query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
-                      state, trader_matched_at, created_at
-               FROM transactions
-               WHERE trader_id = $1 AND state = 'TRADER_MATCHED'
-               ORDER BY trader_matched_at DESC NULLS LAST`;
-      params = [req.traderId];
+      query += ` AND state = $2`;
+      params.push('TRADER_MATCHED');
     } else if (status === 'active') {
-      query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
-                      state, trader_matched_at, created_at
-               FROM transactions
-               WHERE trader_id = $1 AND state = 'FIAT_SENT'
-               ORDER BY trader_matched_at DESC NULLS LAST`;
-      params = [req.traderId];
-    } else {
-      // Default: both pending and active
-      query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
-                      state, trader_matched_at, created_at
-               FROM transactions
-               WHERE trader_id = $1 AND state IN ('TRADER_MATCHED', 'FIAT_SENT')
-               ORDER BY trader_matched_at DESC NULLS LAST`;
-      params = [req.traderId];
+      query += ` AND state = $2`;
+      params.push('FIAT_SENT');
     }
-    
+    // If status not provided or unknown value: return ALL trader requests (no additional filter)
+
+    query += ` ORDER BY trader_matched_at DESC NULLS LAST`;
+
+    // LOG before query for debugging
+    console.log('[GET /trader/requests] QUERY PARAMS:', {
+      traderId: req.traderId,
+      statusParam: status || '(not provided)',
+      queryParams: params,
+    });
+
     const result = await db.query(query, params);
-    
+
     // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal, not stroops — don't divide.
     // pg returns NUMERIC as string; coerce to Number for the JSON payload.
-    const acceptTimeoutMs = (180 || 180) * 1000;  // 180 seconds (3 minutes)
+    const acceptTimeoutMs = 180 * 1000;  // 180 seconds (3 minutes)
     const requests = result.rows.map(tx => ({
       ...tx,
       usdc_amount: Number(tx.usdc_amount) || 0,
@@ -146,9 +148,19 @@ router.get('/requests', authTrader, async (req, res, next) => {
       accept_deadline: new Date(Date.now() + acceptTimeoutMs).toISOString(),
       expires_at: new Date(Date.now() + acceptTimeoutMs).toISOString(),
     }));
-    
-    res.json({ requests });
+
+    // RETURN SAFE RESPONSE with success flag
+    res.json({
+      success: true,
+      data: requests,
+    });
   } catch (err) {
+    // WRAP in try/catch and log FULL error
+    console.error('[GET /trader/requests] ERROR:', {
+      message: err.message,
+      stack: err.stack,
+      traderId: req.traderId,
+    });
     next(err);
   }
 });
