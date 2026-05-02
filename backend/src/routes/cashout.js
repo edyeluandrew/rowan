@@ -160,12 +160,20 @@ router.post(
         return res.status(410).json({ error: 'Quote expired' });
       }
 
-      logger.info(`[Cashout] ✅ confirmQuote successful for quote ${quote.id}, tx: ${stellarTxHash}`);
+      // Try to find existing transaction for this quote (in case it already exists)
+      const txResult = await db.query(
+        `SELECT id FROM transactions WHERE quote_id = $1 LIMIT 1`,
+        [quote.id]
+      );
+      const transactionId = txResult.rows[0]?.id || null;
+
+      logger.info(`[Cashout] ✅ confirmQuote successful for quote ${quote.id}, tx: ${stellarTxHash}, transactionId: ${transactionId}`);
 
       res.json({
         status: 'PENDING_DEPOSIT',
         message: 'Transaction broadcast received. Waiting for on-chain confirmation.',
         quoteId: quote.id,
+        transactionId: transactionId,  // Return transaction ID if it exists
         stellarTxHash,
       });
     } catch (err) {

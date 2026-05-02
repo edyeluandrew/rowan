@@ -137,13 +137,14 @@ router.get('/requests', authTrader, async (req, res, next) => {
     
     // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal, not stroops — don't divide.
     // pg returns NUMERIC as string; coerce to Number for the JSON payload.
+    const acceptTimeoutMs = (180 || 180) * 1000;  // 180 seconds (3 minutes)
     const requests = result.rows.map(tx => ({
       ...tx,
       usdc_amount: Number(tx.usdc_amount) || 0,
       xlm_amount: Number(tx.xlm_amount) || 0,
-      // Generate client-side deadline props (60 seconds from now for frontend timer)
-      accept_deadline: new Date(Date.now() + 60000).toISOString(),
-      expires_at: new Date(Date.now() + 60000).toISOString(),
+      // Generate client-side deadline props (180 seconds from now for frontend timer)
+      accept_deadline: new Date(Date.now() + acceptTimeoutMs).toISOString(),
+      expires_at: new Date(Date.now() + acceptTimeoutMs).toISOString(),
     }));
     
     res.json({ requests });

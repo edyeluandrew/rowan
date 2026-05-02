@@ -159,6 +159,7 @@ async function matchTrader(transactionId) {
     });
 
     // Notify trader via notification service
+    const acceptTimeoutMs = (config.platform.traderAcceptTimeoutSeconds || 180) * 1000;
     await notificationService.notifyTraderNewRequest(trader.id, {
       id: transaction.id,
       transactionId: transaction.id,
@@ -171,9 +172,9 @@ async function matchTrader(transactionId) {
       fiatCurrency: transaction.fiat_currency,
       network: transaction.network,
       state: 'TRADER_MATCHED',
-      // Generate client-side deadline (60 seconds from now)
-      accept_deadline: new Date(Date.now() + 60000).toISOString(),
-      expires_at: new Date(Date.now() + 60000).toISOString(),
+      // Generate client-side deadline using config timeout (usually 180s)
+      accept_deadline: new Date(Date.now() + acceptTimeoutMs).toISOString(),
+      expires_at: new Date(Date.now() + acceptTimeoutMs).toISOString(),
       expires_in: config.platform.traderAcceptTimeoutSeconds,
       expiresIn: config.platform.traderAcceptTimeoutSeconds,
       phoneHash: transaction.phone_hash,
