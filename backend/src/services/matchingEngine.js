@@ -160,13 +160,24 @@ async function matchTrader(transactionId) {
 
     // Notify trader via notification service
     await notificationService.notifyTraderNewRequest(trader.id, {
+      id: transaction.id,
       transactionId: transaction.id,
+      xlm_amount: transaction.xlm_amount,
+      usdc_amount: transaction.usdc_amount,
       usdcAmount: transaction.usdc_amount,
+      fiat_amount: transaction.fiat_amount,
       fiatAmount: transaction.fiat_amount,
+      fiat_currency: transaction.fiat_currency,
       fiatCurrency: transaction.fiat_currency,
       network: transaction.network,
-      phoneHash: transaction.phone_hash,
+      reference: transaction.reference,
+      state: 'TRADER_MATCHED',
+      accept_deadline: transaction.accept_deadline,
+      expires_at: transaction.expires_at,
+      expires_in: config.platform.traderAcceptTimeoutSeconds,
       expiresIn: config.platform.traderAcceptTimeoutSeconds,
+      phoneHash: transaction.phone_hash,
+      timestamp: new Date().toISOString(),
     });
     logger.info(`[Matching] Pushed request to trader ${trader.id} via NotificationService`);
 

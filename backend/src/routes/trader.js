@@ -105,20 +105,45 @@ router.post(
  */
 router.get('/requests', authTrader, async (req, res, next) => {
   try {
-    const result = await db.query(
-      `SELECT id, usdc_amount, fiat_amount, fiat_currency, network,
-              state, trader_matched_at, created_at
-       FROM transactions
-       WHERE trader_id = $1 AND state IN ('TRADER_MATCHED', 'FIAT_SENT')
-       ORDER BY trader_matched_at DESC`,
-      [req.traderId]
-    );
+    const { status } = req.query; // 'pending' or 'active'
+    
+    let query, params;
+    
+    if (status === 'pending') {
+      query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
+                      state, reference, trader_matched_at, accept_deadline, expires_at,
+                      created_at
+               FROM transactions
+               WHERE trader_id = $1 AND state = 'TRADER_MATCHED'
+               ORDER BY trader_matched_at DESC NULLS LAST`;
+      params = [req.traderId];
+    } else if (status === 'active') {
+      query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
+                      state, reference, trader_matched_at, accept_deadline, expires_at,
+                      created_at
+               FROM transactions
+               WHERE trader_id = $1 AND state = 'FIAT_SENT'
+               ORDER BY trader_matched_at DESC NULLS LAST`;
+      params = [req.traderId];
+    } else {
+      // Default: both pending and active
+      query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
+                      state, reference, trader_matched_at, accept_deadline, expires_at,
+                      created_at
+               FROM transactions
+               WHERE trader_id = $1 AND state IN ('TRADER_MATCHED', 'FIAT_SENT')
+               ORDER BY trader_matched_at DESC NULLS LAST`;
+      params = [req.traderId];
+    }
+    
+    const result = await db.query(query, params);
     
     // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal, not stroops — don't divide.
     // pg returns NUMERIC as string; coerce to Number for the JSON payload.
     const requests = result.rows.map(tx => ({
       ...tx,
       usdc_amount: Number(tx.usdc_amount) || 0,
+      xlm_amount: Number(tx.xlm_amount) || 0,
     }));
     
     res.json({ requests });
