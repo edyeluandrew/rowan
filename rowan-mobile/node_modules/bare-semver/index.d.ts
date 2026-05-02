@@ -21,7 +21,7 @@ export class Version {
   major: number
   minor: number
   patch: number
-  prerealease: string[]
+  prerelease: string[]
   build: string[]
 
   compare(version: Version): boolean
