@@ -170,10 +170,10 @@ async function matchTrader(transactionId) {
       fiat_currency: transaction.fiat_currency,
       fiatCurrency: transaction.fiat_currency,
       network: transaction.network,
-      reference: transaction.reference,
       state: 'TRADER_MATCHED',
-      accept_deadline: transaction.accept_deadline,
-      expires_at: transaction.expires_at,
+      // Generate client-side deadline (60 seconds from now)
+      accept_deadline: new Date(Date.now() + 60000).toISOString(),
+      expires_at: new Date(Date.now() + 60000).toISOString(),
       expires_in: config.platform.traderAcceptTimeoutSeconds,
       expiresIn: config.platform.traderAcceptTimeoutSeconds,
       phoneHash: transaction.phone_hash,

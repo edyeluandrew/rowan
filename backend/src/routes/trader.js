@@ -111,16 +111,14 @@ router.get('/requests', authTrader, async (req, res, next) => {
     
     if (status === 'pending') {
       query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
-                      state, reference, trader_matched_at, accept_deadline, expires_at,
-                      created_at
+                      state, trader_matched_at, created_at
                FROM transactions
                WHERE trader_id = $1 AND state = 'TRADER_MATCHED'
                ORDER BY trader_matched_at DESC NULLS LAST`;
       params = [req.traderId];
     } else if (status === 'active') {
       query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
-                      state, reference, trader_matched_at, accept_deadline, expires_at,
-                      created_at
+                      state, trader_matched_at, created_at
                FROM transactions
                WHERE trader_id = $1 AND state = 'FIAT_SENT'
                ORDER BY trader_matched_at DESC NULLS LAST`;
@@ -128,8 +126,7 @@ router.get('/requests', authTrader, async (req, res, next) => {
     } else {
       // Default: both pending and active
       query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
-                      state, reference, trader_matched_at, accept_deadline, expires_at,
-                      created_at
+                      state, trader_matched_at, created_at
                FROM transactions
                WHERE trader_id = $1 AND state IN ('TRADER_MATCHED', 'FIAT_SENT')
                ORDER BY trader_matched_at DESC NULLS LAST`;
@@ -144,6 +141,9 @@ router.get('/requests', authTrader, async (req, res, next) => {
       ...tx,
       usdc_amount: Number(tx.usdc_amount) || 0,
       xlm_amount: Number(tx.xlm_amount) || 0,
+      // Generate client-side deadline props (60 seconds from now for frontend timer)
+      accept_deadline: new Date(Date.now() + 60000).toISOString(),
+      expires_at: new Date(Date.now() + 60000).toISOString(),
     }));
     
     res.json({ requests });
