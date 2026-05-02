@@ -42,19 +42,40 @@ export function useRequests() {
   /* ── WebSocket events ── */
   useEffect(() => {
     const handleNew = (req) => {
-      setPending((prev) => [req, ...prev]);
+      setPending((prev) => {
+        // Don't add duplicate IDs
+        if (prev.some((r) => r.id === req.id)) {
+          return prev;
+        }
+        return [req, ...prev];
+      });
     };
     const handleTimeout = (data) => {
       const id = data?.id || data?.transactionId;
       setPending((prev) => prev.filter((r) => r.id !== id));
+      setActive((prev) => prev.filter((r) => r.id !== id));
     };
     const handleDeclined = (data) => {
       const id = data?.id || data?.transactionId;
       setPending((prev) => prev.filter((r) => r.id !== id));
+      setActive((prev) => prev.filter((r) => r.id !== id));
     };
     const handleUpdate = (data) => {
       const id = data?.id || data?.transactionId;
-      setActive((prev) => prev.map((r) => (r.id === id ? { ...r, ...data } : r)));
+      // If request moves to FIAT_SENT, remove from pending and add to active
+      if (data?.state === 'FIAT_SENT') {
+        setPending((prev) => prev.filter((r) => r.id !== id));
+        setActive((prev) => {
+          // Don't add duplicate if it already exists in active
+          if (prev.some((r) => r.id === id)) {
+            return prev.map((r) => (r.id === id ? { ...r, ...data } : r));
+          }
+          return [{ ...data, id }, ...prev];
+        });
+      } else {
+        // Update in active if it exists
+        setActive((prev) => prev.map((r) => (r.id === id ? { ...r, ...data } : r)));
+      }
     };
 
     on('new_request', handleNew);
