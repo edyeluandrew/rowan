@@ -14,14 +14,16 @@ export function useRequests() {
   const fetchPending = useCallback(async () => {
     try {
       const data = await getRequests('pending');
-      setPending(data.requests || data || []);
+      // Handle both old format ({ requests }) and new format ({ success, data })
+      setPending(data.data || data.requests || data || []);
     } catch { /* ignore */ }
   }, []);
 
   const fetchActive = useCallback(async () => {
     try {
       const data = await getRequests('active');
-      setActive(data.requests || data || []);
+      // Handle both old format ({ requests }) and new format ({ success, data })
+      setActive(data.data || data.requests || data || []);
     } catch { /* ignore */ }
   }, []);
 
