@@ -430,6 +430,17 @@ async function releaseToTrader(transactionId) {
     const transaction = txResult.rows[0];
     if (!transaction) throw new Error('Transaction not found or wrong state');
 
+    // ── Validate trader stellar address before attempting release ──
+    if (!transaction.trader_stellar) {
+      logger.error(`[Escrow] Trader stellar address is NULL for tx ${transactionId}, trader_id=${transaction.trader_id}`);
+      // Mark transaction as stuck — needs manual intervention
+      await db.query(
+        `UPDATE transactions SET failure_reason = 'Trader missing stellar address' WHERE id = $1`,
+        [transactionId]
+      );
+      throw new Error(`Trader ${transaction.trader_id} has no stellar address configured`);
+    }
+
     // Guard: if already COMPLETE (e.g., concurrent release succeeded), bail out
     if (transaction.stellar_release_tx) {
       logger.warn(`[Escrow] Tx ${transactionId} already has release hash — skipping`);
@@ -439,6 +450,17 @@ async function releaseToTrader(transactionId) {
     // ── [H-1 FIX] Check trader has USDC trustline before attempting release ──
     try {
       const traderAccount = await horizon.loadAccount(transaction.trader_stellar);
+      
+      if (!traderAccount) {
+        logger.error(`[Escrow] Horizon returned null for trader account ${transaction.trader_stellar}`);
+        throw new Error('Failed to load trader account from Horizon');
+      }
+      
+      if (!traderAccount.balances || !Array.isArray(traderAccount.balances)) {
+        logger.error(`[Escrow] Trader account has invalid balances structure:`, traderAccount.balances);
+        throw new Error('Invalid trader account structure from Horizon');
+      }
+      
       const hasTrustline = traderAccount.balances.some(
         (b) => b.asset_code === USDC_ASSET.code && b.asset_issuer === USDC_ASSET.issuer
       );
@@ -451,6 +473,9 @@ async function releaseToTrader(transactionId) {
       }
     } catch (trustlineErr) {
       logger.error(`[Escrow] Failed to check trader trustline:`, trustlineErr.message);
+      // Block release if we can't verify trustline
+      // Better to block than to attempt release that will fail
+      throw new Error(`Cannot verify trader trustline: ${trustlineErr.message}`);
       // Don't block — allow release attempt (Stellar will reject if no trustline)
     }
 
