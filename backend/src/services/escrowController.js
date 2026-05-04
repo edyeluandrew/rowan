@@ -458,8 +458,12 @@ async function releaseToTrader(transactionId) {
 
     // Convert stroops to decimal USDC for Stellar operation
     // NOTE: usdc_amount is already in USDC decimal format (not stroops)
-    const usdcDecimal = transaction.usdc_amount;
-    logger.info(`[Escrow] Converting usdc_amount for release: ${transaction.usdc_amount} stroops → ${usdcDecimal} USDC`);
+    // Ensure it's a number (might come from DB as string)
+    const usdcDecimal = Number(transaction.usdc_amount);
+    if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+      throw new Error(`Invalid USDC amount for release: ${transaction.usdc_amount}`);
+    }
+    logger.info(`[Escrow] Converting usdc_amount for release: ${transaction.usdc_amount} → ${usdcDecimal} USDC`);
 
     const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
       fee: config.stellarMaxFee,

@@ -212,6 +212,14 @@ async function acceptRequest(transactionId, traderId) {
   const beforeState = checkBefore.rows[0];
   logger.info(`[Accept] Before accept: id=${transactionId}, trader_id=${beforeState?.trader_id}, state=${beforeState?.state}, matched_at=${beforeState?.matched_at}`);
   
+  // Check if already in a completed state (FIAT_SENT, COMPLETED, etc.)
+  if (beforeState && !['TRADER_MATCHED'].includes(beforeState.state)) {
+    logger.warn(`[Accept] Request already progressed to ${beforeState.state} state — cannot accept`);
+    const err = new Error(`Request already progressed to ${beforeState.state} state`);
+    err.statusCode = 410; // 410 Gone — request has moved on
+    throw err;
+  }
+  
   const result = await db.query(
     `UPDATE transactions
      SET matched_at = NOW()
