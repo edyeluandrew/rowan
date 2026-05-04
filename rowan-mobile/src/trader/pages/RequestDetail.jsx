@@ -128,10 +128,16 @@ export default function RequestDetail() {
   // Determine step from state
   const getStep = () => {
     if (!tx) return 0;
-    const state = tx.state || tx.status;
-    if (state === 'completed' || state === 'released') return 3;
-    if (state === 'payout_confirmed' || state === 'releasing') return 2;
-    if (state === 'accepted' || state === 'in_progress') return 1;
+    const state = (tx.state || tx.status || '').toUpperCase();
+    // Map database states to UI steps:
+    // Step 3: Transaction complete
+    if (state === 'COMPLETED') return 3;
+    // Step 2: Fiat has been sent by trader (now releasing USDC)
+    if (state === 'FIAT_SENT') return 2;
+    // Step 1: Payout ready - trader matched and should send fiat
+    // (includes TRADER_MATCHED state where trader is assigned)
+    if (state === 'TRADER_MATCHED') return 1;
+    // Step 0: Earlier states (QUOTE_CONFIRMED, ESCROW_LOCKED)
     return 0;
   };
 
