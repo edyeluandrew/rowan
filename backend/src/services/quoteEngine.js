@@ -331,7 +331,7 @@ function fiatToUgxRate(amount, fiatCurrency) {
  * 
  * Returns the quote object with a 60-second TTL.
  */
-async function createQuote({ userId, xlmAmount, network, phoneHash }) {
+async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone, payoutName }) {
   logger.info(`[QuoteEngine] 🔄 Creating quote: xlmAmount=${xlmAmount}, network=${network}`);
 
   const fiatCurrency = networkToFiat(network);
@@ -462,8 +462,9 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
     `INSERT INTO quotes
        (user_id, xlm_amount, fiat_currency, market_rate, user_rate, fiat_amount,
         platform_fee, network, phone_hash, memo, escrow_address, expires_at,
-        rate_ugx, fee_ugx, status, path_xlm_needed, path_usdc_received, quote_source)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17)
+        rate_ugx, fee_ugx, status, path_xlm_needed, path_usdc_received, quote_source,
+        payout_phone, payout_name)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17,$18,$19)
      RETURNING *`,
     [
       userId, xlmAmount, fiatCurrency, 
@@ -476,6 +477,8 @@ async function createQuote({ userId, xlmAmount, network, phoneHash }) {
       pathData.xlmNeeded,        // path_xlm_needed (for execution)
       pathData.usdcReceived,     // path_usdc_received (for execution)
       quoteSource,                // 'horizon-path' (executable) | 'legacy-fallback' (non-executable)
+      payoutPhone,               // payout_phone (full phone for trader)
+      payoutName,                // payout_name (recipient name)
     ]
   );
 

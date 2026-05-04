@@ -13,7 +13,7 @@ const router = Router();
 /**
  * POST /api/v1/cashout/quote
  * Request a locked exchange rate.
- * Body: { xlmAmount, network, phoneHash }
+ * Body: { xlmAmount, network, phoneHash, payoutPhone?, payoutName? }
  */
 router.post(
   '/quote',
@@ -23,7 +23,7 @@ router.post(
   checkUserLimits,
   async (req, res, next) => {
     try {
-      const { xlmAmount, network, phoneHash } = req.body;
+      const { xlmAmount, network, phoneHash, payoutPhone, payoutName } = req.body;
       
       logger.info(`[Cashout] getQuote called: xlmAmount=${xlmAmount} (type: ${typeof xlmAmount}), network=${network}, phoneHash=${phoneHash?.slice(0, 8)}...`);
 
@@ -72,6 +72,8 @@ router.post(
           xlmAmount: xlmNum,
           network,
           phoneHash,
+          payoutPhone: payoutPhone?.trim(),
+          payoutName: payoutName?.trim(),
         });
       } catch (quoteErr) {
         logger.error(`[Cashout] Quote creation failed:`, quoteErr.message);

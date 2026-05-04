@@ -235,19 +235,51 @@ export default function RequestDetail() {
           <h3 className="text-rowan-yellow text-xs font-semibold mb-3 uppercase tracking-wider">
             Payout Instructions
           </h3>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-rowan-muted text-xs">Recipient</span>
-              <span className="text-rowan-text text-sm">{tx.recipient_name || '—'}</span>
+          <div className="space-y-3">
+            <div>
+              <p className="text-rowan-muted text-xs mb-1">Send {formatCurrency(tx.fiat_amount, tx.fiat_currency)} to:</p>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-rowan-muted text-xs">Phone</span>
-              {phoneRevealed ? (
-                <span className="text-rowan-text text-sm font-mono">{tx.recipient_phone}</span>
-              ) : (
-                <button
-                  onClick={handleReveal}
-                  className="text-rowan-yellow text-xs font-medium underline"
+            <div className="bg-rowan-bg rounded-lg p-3 space-y-2">
+              <div>
+                <p className="text-rowan-muted text-xs mb-1">Recipient Name</p>
+                <p className="text-rowan-text text-sm font-semibold">{tx.payout_name || 'Unknown'}</p>
+              </div>
+              <div>
+                <p className="text-rowan-muted text-xs mb-1">Phone Number</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-rowan-text text-sm font-mono flex-1">{tx.payout_phone || 'Unknown'}</p>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(tx.payout_phone);
+                      alert('Phone copied!');
+                    }}
+                    className="text-rowan-yellow text-xs font-medium"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`${tx.fiat_amount}`);
+                  alert('Amount copied!');
+                }}
+                className="text-rowan-yellow text-xs font-medium flex-1 py-2 border border-rowan-yellow rounded"
+              >
+                Copy Amount
+              </button>
+              <button
+                onClick={() => navigate(`/trader/requests/${id}/confirm`)}
+                className="text-rowan-yellow text-xs font-medium flex-1 py-2 border border-rowan-yellow rounded"
+              >
+                I've Sent Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
                 >
                   Reveal Number
                 </button>

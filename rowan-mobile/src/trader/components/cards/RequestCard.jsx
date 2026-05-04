@@ -69,14 +69,23 @@ export default function RequestCard({ request, onRemove }) {
         </div>
       </div>
 
-      {/* Row 3: USDC locked */}
+      {/* Row 3: Payout details (masked before accept) */}
+      <div className="mt-3 bg-rowan-bg rounded px-3 py-2">
+        <p className="text-rowan-muted text-xs mb-1">Send to</p>
+        <p className="text-rowan-text text-sm font-medium">
+          {request.payout_phone_masked || 'Phone hidden'}
+        </p>
+        <p className="text-rowan-muted text-xs mt-1">Recipient details shown after you accept</p>
+      </div>
+
+      {/* Row 4: USDC locked */}
       <div className="mt-3">
         <span className="inline-flex items-center gap-1.5 border border-rowan-yellow rounded px-3 py-1.5 text-rowan-yellow text-sm font-bold">
           <LockKeyhole size={14} className="inline" /> {formatCurrency(request.usdc_amount, 'USDC')} IN ESCROW
         </span>
       </div>
 
-      {/* Row 4: Timer + Actions */}
+      {/* Row 5: Timer + Actions */}
       <div className="mt-3 flex justify-between items-center">
         <CountdownTimer endTime={request.accept_deadline || request.expires_at} />
         <div className="flex gap-2">

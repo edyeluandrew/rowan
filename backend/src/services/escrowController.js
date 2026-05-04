@@ -114,8 +114,9 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     const txResult = await client.query(
       `INSERT INTO transactions
          (quote_id, user_id, xlm_amount, fiat_amount, fiat_currency,
-          network, phone_hash, state, stellar_deposit_tx, locked_rate, escrow_locked_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'ESCROW_LOCKED',$8,$9,NOW())
+          network, phone_hash, state, stellar_deposit_tx, locked_rate, escrow_locked_at,
+          payout_phone, payout_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'ESCROW_LOCKED',$8,$9,NOW(),$10,$11)
        RETURNING *`,
       [
         quote.id, 
@@ -127,6 +128,8 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
         quote.phone_hash,
         txHash, 
         parseFloat(quote.user_rate),   // Ensure numeric
+        quote.payout_phone,             // Payout phone from quote
+        quote.payout_name,              // Payout name from quote
       ]
     );
     transaction = txResult.rows[0];

@@ -21,6 +21,7 @@ export default function Cashout() {
   const [amount, setAmount] = useState('')
   const [network, setNetwork] = useState(null)
   const [phone, setPhone] = useState('')
+  const [recipientName, setRecipientName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -45,7 +46,8 @@ export default function Cashout() {
     xlmAmount >= MIN_XLM_AMOUNT &&
     xlmAmount <= maxAmount &&
     network &&
-    phone.length >= 7
+    phone.length >= 7 &&
+    recipientName.trim().length >= 2
 
   // Show biometric lock if app requires re-entry authentication
   if (isLocked) return <BiometricLock />
@@ -62,8 +64,14 @@ export default function Cashout() {
       const cleanPhone = phone.replace(/\D/g, '')
       const fullPhone = `${derivedCountryCode}${cleanPhone}`
       const phoneHash = await hashPhoneNumber(fullPhone)
-      const quote = await getQuote({ xlmAmount, network, phoneHash })
-      navigate('/wallet/cashout/confirm', { state: { quote, network, phone: fullPhone } })
+      const quote = await getQuote({ 
+        xlmAmount, 
+        network, 
+        phoneHash,
+        payoutPhone: fullPhone,
+        payoutName: recipientName.trim(),
+      })
+      navigate('/wallet/cashout/confirm', { state: { quote, network, phone: fullPhone, recipientName: recipientName.trim() } })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -113,6 +121,20 @@ export default function Cashout() {
         />
       </div>
 
+      <div className="mt-6">
+        <label className="block text-rowan-muted text-xs font-medium mb-2 uppercase tracking-wider">
+          Recipient Mobile Money Name
+        </label>
+        <input
+          type="text"
+          value={recipientName}
+          onChange={(e) => setRecipientName(e.target.value)}
+          placeholder="e.g., Edyelu Andrew"
+          className="w-full bg-rowan-surface border border-rowan-border rounded-lg px-4 py-3 text-rowan-text placeholder-rowan-muted focus:outline-none focus:border-rowan-yellow"
+        />
+        <p className="text-rowan-muted text-xs mt-1">The mobile money account holder name</p>
+      </div>
+
       {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
 
       {/* Validation feedback */}
@@ -128,6 +150,9 @@ export default function Cashout() {
             </li>
             <li className={phone.length >= 7 ? 'text-rowan-green' : 'text-rowan-muted'}>
               {phone.length >= 7 ? '✓' : '✗'} Phone number: {phone.length}/7+ digits
+            </li>
+            <li className={recipientName.trim().length >= 2 ? 'text-rowan-green' : 'text-rowan-muted'}>
+              {recipientName.trim().length >= 2 ? '✓' : '✗'} Recipient name: {recipientName.length}/2+ characters
             </li>
           </ul>
         </div>

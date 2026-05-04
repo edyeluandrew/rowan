@@ -1,12 +1,14 @@
 import client from './client'
 
-export function getQuote({ xlmAmount, network, phoneHash }) {
-  console.log('[API] getQuote called with:', { xlmAmount, network, phoneHash, xlmType: typeof xlmAmount })
+export function getQuote({ xlmAmount, network, phoneHash, payoutPhone, payoutName }) {
+  console.log('[API] getQuote called with:', { xlmAmount, network, phoneHash, payoutPhone, payoutName, xlmType: typeof xlmAmount })
   
   return client.post('/api/v1/cashout/quote', {
     xlmAmount: Number(xlmAmount),  // Ensure it's a number
     network,
     phoneHash,
+    payoutPhone,
+    payoutName,
   }).then(res => {
     console.log('[API] ✅ getQuote response:', res.data)
     return res.data

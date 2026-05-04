@@ -19,6 +19,7 @@ export default function Cashout() {
   const [amount, setAmount] = useState('')
   const [network, setNetwork] = useState(null)
   const [phone, setPhone] = useState('')
+  const [recipientName, setRecipientName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -43,7 +44,8 @@ export default function Cashout() {
     xlmAmount >= MIN_XLM_AMOUNT &&
     xlmAmount <= maxAmount &&
     network &&
-    phone.length >= 7
+    phone.length >= 7 &&
+    recipientName.trim().length >= 2
 
   const handleGetQuote = async () => {
     if (!canProceed) return
@@ -57,8 +59,8 @@ export default function Cashout() {
       const cleanPhone = phone.replace(/\D/g, '')
       const fullPhone = `${derivedCountryCode}${cleanPhone}`
       const phoneHash = await hashPhoneNumber(fullPhone)
-      const quote = await getQuote({ xlmAmount, network, phoneHash })
-      navigate('/cashout/confirm', { state: { quote, network, phone: fullPhone } })
+      const quote = await getQuote({ xlmAmount, network, phoneHash, payoutPhone: fullPhone, payoutName: recipientName })
+      navigate('/cashout/confirm', { state: { quote, network, phone: fullPhone, recipientName } })
     } catch (err) {
       // [PHASE 4] Convert backend error to user-friendly message
       const friendlyError = getUserFriendlyError(err.message)
@@ -110,6 +112,23 @@ export default function Cashout() {
         />
       </div>
 
+      {/* Recipient Name Input */}
+      <div className="mt-6">
+        <label className="block text-rowan-muted text-xs uppercase tracking-wider mb-2">
+          Recipient Name
+        </label>
+        <input
+          type="text"
+          placeholder="Full name (as it appears on mobile money account)"
+          value={recipientName}
+          onChange={(e) => setRecipientName(e.target.value)}
+          className="w-full bg-rowan-surface border border-rowan-border rounded-lg px-4 py-3 text-rowan-text placeholder-rowan-muted focus:outline-none focus:border-rowan-accent"
+        />
+        <p className="text-rowan-muted text-xs mt-2">
+          This is who will receive the mobile money payment
+        </p>
+      </div>
+
       {/* [PHASE 4] Improved error display */}
       {error && (
         <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-lg p-3 mt-4 flex items-start gap-2">
@@ -131,6 +150,9 @@ export default function Cashout() {
             </li>
             <li className={phone.length >= 7 ? 'text-rowan-green' : 'text-rowan-muted'}>
               {phone.length >= 7 ? '✓' : '✗'} Phone number: {phone.length}/7+ digits
+            </li>
+            <li className={recipientName.trim().length >= 2 ? 'text-rowan-green' : 'text-rowan-muted'}>
+              {recipientName.trim().length >= 2 ? '✓' : '✗'} Recipient name: {recipientName.length}/2+ characters
             </li>
           </ul>
         </div>

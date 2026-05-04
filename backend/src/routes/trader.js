@@ -110,7 +110,7 @@ router.get('/requests', authTrader, async (req, res, next) => {
 
     // NEVER pass undefined to SQL — build query conditionally
     let query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
-                        state, trader_matched_at, created_at
+                        state, trader_matched_at, created_at, payout_phone
                  FROM transactions
                  WHERE trader_id = $1`;
     
@@ -137,6 +137,9 @@ router.get('/requests', authTrader, async (req, res, next) => {
 
     const result = await db.query(query, params);
 
+    // Import phone masking utility
+    const { maskPhoneNumber } = require('../utils/phoneMasking.js');
+
     // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal, not stroops — don't divide.
     // pg returns NUMERIC as string; coerce to Number for the JSON payload.
     const acceptTimeoutMs = 180 * 1000;  // 180 seconds (3 minutes)
@@ -144,6 +147,10 @@ router.get('/requests', authTrader, async (req, res, next) => {
       ...tx,
       usdc_amount: Number(tx.usdc_amount) || 0,
       xlm_amount: Number(tx.xlm_amount) || 0,
+      // Mask phone number for privacy (before acceptance)
+      payout_phone_masked: tx.payout_phone ? maskPhoneNumber(tx.payout_phone) : 'Unknown',
+      // Do NOT return full phone in list view
+      payout_phone: undefined,
       // Generate client-side deadline props (180 seconds from now for frontend timer)
       accept_deadline: new Date(Date.now() + acceptTimeoutMs).toISOString(),
       expires_at: new Date(Date.now() + acceptTimeoutMs).toISOString(),
@@ -168,6 +175,7 @@ router.get('/requests', authTrader, async (req, res, next) => {
 /**
  * GET /api/v1/trader/requests/:id
  * Get a single request assigned to this trader (full detail).
+ * Returns full payout details (phone, name) only for this trader.
  */
 router.get('/requests/:id', authTrader, async (req, res, next) => {
   try {
@@ -175,9 +183,8 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
       `SELECT t.id, t.usdc_amount, t.xlm_amount, t.fiat_amount, t.fiat_currency,
               t.network, t.state, t.trader_matched_at, t.matched_at,
               t.fiat_sent_at, t.created_at, t.user_id, t.trader_id,
-              u.phone_hash AS user_phone_hash
+              t.payout_phone, t.payout_name
        FROM transactions t
-       LEFT JOIN users u ON u.id = t.user_id
        WHERE t.id = $1 AND t.trader_id = $2`,
       [req.params.id, req.traderId]
     );
@@ -192,6 +199,9 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
       data: {
         ...tx,
         usdc_amount: Number(tx.usdc_amount) || 0,
+        // Full payout details returned only to assigned trader
+        payout_phone: tx.payout_phone || 'Unknown',
+        payout_name: tx.payout_name || 'Unknown',
       },
     });
   } catch (err) {
