@@ -220,17 +220,34 @@ async function acceptRequest(transactionId, traderId) {
     [transactionId, traderId]
   );
 
-  const transaction = result.rows[0];
+  let transaction = result.rows[0];
+  
   if (!transaction) {
-    // Most likely the request expired and was re-matched, or already accepted.
-    // Surface a 409 (Conflict) to the client so it doesn't appear as a server error.
-    logger.warn(`[Accept] ❌ Update failed for tx ${transactionId}. Condition not met. Checked trader_id=${traderId}, state=TRADER_MATCHED, matched_at=NULL`);
-    const err = new Error('Request expired or already handled');
-    err.statusCode = 409;
-    throw err;
+    // Update failed - check if already accepted (matched_at is not NULL)
+    const alreadyAcceptedResult = await db.query(
+      `SELECT id, trader_id, state, matched_at FROM transactions 
+       WHERE id = $1 AND trader_id = $2 AND state = 'TRADER_MATCHED' AND matched_at IS NOT NULL`,
+      [transactionId, traderId]
+    );
+    
+    if (alreadyAcceptedResult.rows.length > 0) {
+      // Already accepted - this is idempotent, return success
+      logger.info(`[Accept] ✅ Request ${transactionId} already accepted at ${alreadyAcceptedResult.rows[0].matched_at}`);
+      const fullResult = await db.query(
+        `SELECT * FROM transactions WHERE id = $1`,
+        [transactionId]
+      );
+      transaction = fullResult.rows[0];
+    } else {
+      // Real error: request expired, state changed, or trader not assigned
+      logger.warn(`[Accept] ❌ Update failed for tx ${transactionId}. Condition not met. Checked trader_id=${beforeState?.trader_id}, state=${beforeState?.state}, matched_at=${beforeState?.matched_at}`);
+      const err = new Error('Request expired or already handled');
+      err.statusCode = 409;
+      throw err;
+    }
+  } else {
+    logger.info(`[Accept] ✅ Accepted: matched_at set to ${transaction.matched_at}`);
   }
-
-  logger.info(`[Accept] ✅ Accepted: matched_at set to ${transaction.matched_at}`);
 
   const userResult = await db.query(
     `SELECT phone_hash FROM users WHERE id = $1`,
