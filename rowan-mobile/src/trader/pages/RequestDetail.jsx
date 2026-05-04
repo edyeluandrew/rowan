@@ -280,24 +280,6 @@ export default function RequestDetail() {
           </div>
         </div>
       )}
-                >
-                  Reveal Number
-                </button>
-              )}
-            </div>
-            <div className="flex justify-between">
-              <span className="text-rowan-muted text-xs">Network</span>
-              <span className="text-rowan-text text-sm">{network.label || tx.network}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-rowan-muted text-xs">Send Exactly</span>
-              <span className="text-rowan-green text-sm font-bold">
-                {formatCurrency(tx.fiat_amount, tx.fiat_currency)}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Confirm Payout Button */}
       {isPayoutStep && (

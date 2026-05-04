@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { stroopsToUsdc } from '../utils/financial.js';
+import { maskPhoneNumber } from '../utils/phoneMasking.js';
 
 const router = Router();
 
@@ -136,9 +137,6 @@ router.get('/requests', authTrader, async (req, res, next) => {
     });
 
     const result = await db.query(query, params);
-
-    // Import phone masking utility
-    const { maskPhoneNumber } = require('../utils/phoneMasking.js');
 
     // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal, not stroops — don't divide.
     // pg returns NUMERIC as string; coerce to Number for the JSON payload.
