@@ -147,15 +147,10 @@ router.post(
         } else {
           logger.warn(`[Cashout] Quote DOES NOT EXIST in database`);
         }
-        return res.status(404).json({ error: 'Quote not found or already used' });
+        return res.status(404).json({ error: 'Quote not found' });
       }
       
       logger.info(`[Cashout] Quote found: id=${quote.id}, is_used=${quote.is_used}, expires_at=${quote.expires_at}`);
-      
-      if (quote.is_used) {
-        logger.warn(`[Cashout] Quote already used: ${quote.id}`);
-        return res.status(404).json({ error: 'Quote has already been used' });
-      }
       
       if (new Date(quote.expires_at) < new Date()) {
         logger.warn(`[Cashout] Quote expired: ${quote.id}, expired at ${quote.expires_at}`);
@@ -163,19 +158,34 @@ router.post(
       }
 
       // Try to find existing transaction for this quote (in case it already exists)
+      // This handles the case where escrow controller already created the transaction
       const txResult = await db.query(
         `SELECT id FROM transactions WHERE quote_id = $1 LIMIT 1`,
         [quote.id]
       );
       const transactionId = txResult.rows[0]?.id || null;
 
-      logger.info(`[Cashout] ✅ confirmQuote successful for quote ${quote.id}, tx: ${stellarTxHash}, transactionId: ${transactionId}`);
+      // If transaction already exists, confirm is idempotent — just return success
+      if (transactionId) {
+        logger.info(`[Cashout] ✅ confirmQuote idempotent for quote ${quote.id}, tx already created: ${transactionId}`);
+        return res.json({
+          status: 'PENDING_DEPOSIT',
+          message: 'Transaction already confirmed. Waiting for escrow lock and trader match.',
+          quoteId: quote.id,
+          transactionId: transactionId,
+          stellarTxHash,
+        });
+      }
+
+      // If no transaction exists yet, this shouldn't happen (escrow should have created it)
+      // But for now return a status indicating we're waiting
+      logger.info(`[Cashout] confirmQuote called but escrow hasn't processed yet for quote ${quote.id}`);
 
       res.json({
         status: 'PENDING_DEPOSIT',
         message: 'Transaction broadcast received. Waiting for on-chain confirmation.',
         quoteId: quote.id,
-        transactionId: transactionId,  // Return transaction ID if it exists
+        transactionId: null,
         stellarTxHash,
       });
     } catch (err) {
