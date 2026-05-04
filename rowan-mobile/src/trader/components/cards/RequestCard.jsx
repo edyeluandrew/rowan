@@ -16,17 +16,24 @@ export default function RequestCard({ request, onRemove }) {
   const handleAccept = async () => {
     setAccepting(true);
     try {
-      await acceptRequest(request.id);
+      const response = await acceptRequest(request.id);
+      // Accept successful - navigate to detail page to show full payout info
+      // The detail page will fetch the latest request data
       navigate(`/trader/requests/${request.id}`);
     } catch (err) {
-      // Most common cause: request expired or was re-matched (HTTP 409/404).
-      // Drop the card from the list instead of leaving a stale entry.
+      // Only remove from list if request actually expired/can't be accepted
+      // Don't remove on temporary network errors
       const msg = err?.message || 'Could not accept request';
-      const expired = /expired|already|not found|wrong state/i.test(msg);
-      if (expired) {
+      const isPermanent = /expired|already handled|not found|not assigned/i.test(msg);
+      
+      if (isPermanent) {
+        // Request is no longer available - remove it
         onRemove?.(request.id);
+        alert('This request is no longer available. It may have expired or been accepted by another trader.');
+      } else {
+        // Temporary error - let user retry
+        alert(`Failed to accept: ${msg}`);
       }
-      alert(expired ? 'This request expired or was already accepted.' : msg);
       setAccepting(false);
     }
   };

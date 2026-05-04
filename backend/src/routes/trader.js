@@ -211,11 +211,48 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
  * POST /api/v1/trader/requests/:id/accept
  * Trader accepts a cash-out request.
  */
+/**
+ * POST /api/v1/trader/requests/:id/accept
+ * Trader accepts a cash-out request.
+ * Returns full request data including payout details.
+ */
 router.post('/requests/:id/accept', authTrader, async (req, res, next) => {
   try {
-    const data = await matchingEngine.acceptRequest(req.params.id, req.traderId);
-    res.json(data);
+    logger.info(`[Trader] Accepting request ${req.params.id} for trader ${req.traderId}`);
+    
+    // Call accept to mark acceptance
+    await matchingEngine.acceptRequest(req.params.id, req.traderId);
+    
+    // Fetch full request data to return to frontend
+    const result = await db.query(
+      `SELECT t.id, t.usdc_amount, t.xlm_amount, t.fiat_amount, t.fiat_currency,
+              t.network, t.state, t.trader_matched_at, t.matched_at,
+              t.fiat_sent_at, t.created_at, t.user_id, t.trader_id,
+              t.payout_phone, t.payout_name
+       FROM transactions t
+       WHERE t.id = $1 AND t.trader_id = $2`,
+      [req.params.id, req.traderId]
+    );
+    
+    const tx = result.rows[0];
+    if (!tx) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+    
+    logger.info(`[Trader] ✅ Request ${req.params.id} accepted. State: ${tx.state}, matched_at: ${tx.matched_at}`);
+    
+    res.json({
+      success: true,
+      data: {
+        ...tx,
+        usdc_amount: Number(tx.usdc_amount) || 0,
+        xlm_amount: Number(tx.xlm_amount) || 0,
+        payout_phone: tx.payout_phone || 'Unknown',
+        payout_name: tx.payout_name || 'Unknown',
+      },
+    });
   } catch (err) {
+    logger.error(`[Trader] ❌ Accept request ${req.params.id} failed:`, err.message);
     next(err);
   }
 });

@@ -203,6 +203,15 @@ async function matchTrader(transactionId) {
 async function acceptRequest(transactionId, traderId) {
   // ── B1 FIX: Set fiat_sent_at-adjacent timestamp to record acceptance ──
   // We use matched_at to record the acceptance time (trader_matched_at = assigned time)
+  
+  // Debug: First check current state of request
+  const checkBefore = await db.query(
+    `SELECT id, trader_id, state, matched_at FROM transactions WHERE id = $1`,
+    [transactionId]
+  );
+  const beforeState = checkBefore.rows[0];
+  logger.info(`[Accept] Before accept: id=${transactionId}, trader_id=${beforeState?.trader_id}, state=${beforeState?.state}, matched_at=${beforeState?.matched_at}`);
+  
   const result = await db.query(
     `UPDATE transactions
      SET matched_at = NOW()
@@ -215,10 +224,13 @@ async function acceptRequest(transactionId, traderId) {
   if (!transaction) {
     // Most likely the request expired and was re-matched, or already accepted.
     // Surface a 409 (Conflict) to the client so it doesn't appear as a server error.
+    logger.warn(`[Accept] ❌ Update failed for tx ${transactionId}. Condition not met. Checked trader_id=${traderId}, state=TRADER_MATCHED, matched_at=NULL`);
     const err = new Error('Request expired or already handled');
     err.statusCode = 409;
     throw err;
   }
+
+  logger.info(`[Accept] ✅ Accepted: matched_at set to ${transaction.matched_at}`);
 
   const userResult = await db.query(
     `SELECT phone_hash FROM users WHERE id = $1`,
