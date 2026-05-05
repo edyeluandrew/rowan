@@ -13,21 +13,24 @@ import websocket from './websocket.js';
  *
  * States:
  *   QUOTE_REQUESTED → QUOTE_CONFIRMED → ESCROW_LOCKED → TRADER_MATCHED
- *   → FIAT_SENT → COMPLETE
+ *   → FIAT_PAYOUT_SUBMITTED → USER_CONFIRMATION_PENDING → COMPLETE
  *   Any → FAILED → REFUNDED
- *   FIAT_SENT → RELEASE_BLOCKED (trustline issue)
+ *   FIAT_PAYOUT_SUBMITTED → DISPUTE_OPENED (user didn't receive payment)
+ *   USER_CONFIRMATION_PENDING → RELEASE_BLOCKED (trustline issue)
  */
 
 const VALID_TRANSITIONS = {
   QUOTE_REQUESTED:  ['QUOTE_CONFIRMED', 'FAILED'],
   QUOTE_CONFIRMED:  ['ESCROW_LOCKED', 'FAILED'],
   ESCROW_LOCKED:    ['TRADER_MATCHED', 'FAILED', 'REFUNDED'],
-  TRADER_MATCHED:   ['ESCROW_LOCKED', 'FIAT_SENT', 'FAILED', 'REFUNDED'], // ESCROW_LOCKED = unassign
-  FIAT_SENT:        ['COMPLETE', 'RELEASE_BLOCKED', 'FAILED', 'REFUNDED'],
+  TRADER_MATCHED:   ['FIAT_PAYOUT_SUBMITTED', 'ESCROW_LOCKED', 'FAILED', 'REFUNDED'], // FIAT_PAYOUT_SUBMITTED = trader sent, ESCROW_LOCKED = unassign
+  FIAT_PAYOUT_SUBMITTED: ['USER_CONFIRMATION_PENDING', 'DISPUTE_OPENED', 'FAILED', 'REFUNDED'],
+  USER_CONFIRMATION_PENDING: ['COMPLETE', 'RELEASE_BLOCKED', 'FAILED', 'REFUNDED'],
   RELEASE_BLOCKED:  ['COMPLETE', 'FAILED', 'REFUNDED'],
   FAILED:           ['REFUNDED'],
   COMPLETE:         [], // terminal
   REFUNDED:         [], // terminal
+  DISPUTE_OPENED:   ['FAILED', 'REFUNDED'], // admin resolves disputes
 };
 
 // Map state → timestamp column
@@ -35,7 +38,8 @@ const STATE_TIMESTAMPS = {
   QUOTE_CONFIRMED:  'quote_confirmed_at',
   ESCROW_LOCKED:    'escrow_locked_at',
   TRADER_MATCHED:   'trader_matched_at',
-  FIAT_SENT:        'fiat_sent_at',
+  FIAT_PAYOUT_SUBMITTED: 'fiat_payout_submitted_at',
+  USER_CONFIRMATION_PENDING: 'user_confirmation_pending_at',
   COMPLETE:         'completed_at',
   FAILED:           'failed_at',
   REFUNDED:         'refunded_at',
@@ -176,10 +180,18 @@ async function transitionForDispute(transactionId, action, extra = {}) {
   }
 }
 
+/**
+ * Helper to check if a state is terminal (no further transitions possible).
+ */
+function isTerminal(state) {
+  return VALID_TRANSITIONS[state]?.length === 0 || !VALID_TRANSITIONS[state];
+}
+
 export default {
   transition,
   isValidTransition,
   transitionForDispute,
+  isTerminal,
   VALID_TRANSITIONS,
   STATE_TIMESTAMPS,
 };

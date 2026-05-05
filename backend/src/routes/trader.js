@@ -264,6 +264,42 @@ router.post('/requests/:id/accept', authTrader, async (req, res, next) => {
  * [B4 FIX] Wraps escrow release in try/catch. On failure, enqueues a
  * Bull retry job so the trader still receives their USDC.
  */
+router.post('/requests/:id/payout-sent', authTrader, async (req, res, next) => {
+  try {
+    const { reference } = req.body;
+
+    if (!reference || typeof reference !== 'string' || reference.trim().length === 0) {
+      return res.status(400).json({
+        error: 'Mobile money reference is required',
+        details: 'Please provide a valid reference number from your mobile money provider.',
+      });
+    }
+
+    const transaction = await matchingEngine.submitPayoutSent(
+      req.params.id,
+      req.traderId,
+      reference.trim()
+    );
+
+    res.json({
+      status: 'FIAT_PAYOUT_SUBMITTED',
+      message: 'Payment submitted. Waiting for customer confirmation before USDC is released.',
+      transaction: {
+        id: transaction.id,
+        state: transaction.state,
+        payout_reference: transaction.payout_reference,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DEPRECATED: /requests/:id/confirm
+ * This endpoint is kept for backwards compatibility but is no longer the recommended flow.
+ * New flow: POST /requests/:id/payout-sent → User confirms → POST /user/transactions/:id/confirm-receipt
+ */
 router.post('/requests/:id/confirm', authTrader, async (req, res, next) => {
   try {
     const transaction = await matchingEngine.confirmPayout(req.params.id, req.traderId);

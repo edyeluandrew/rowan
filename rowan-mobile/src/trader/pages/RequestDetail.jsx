@@ -131,9 +131,9 @@ export default function RequestDetail() {
     const state = (tx.state || tx.status || '').toUpperCase();
     // Map database states to UI steps:
     // Step 3: Transaction complete
-    if (state === 'COMPLETED') return 3;
-    // Step 2: Fiat has been sent by trader (now releasing USDC)
-    if (state === 'FIAT_SENT') return 2;
+    if (state === 'COMPLETE') return 3;
+    // Step 2: Payment submitted, waiting for customer confirmation (FIAT_PAYOUT_SUBMITTED, USER_CONFIRMATION_PENDING)
+    if (state === 'FIAT_PAYOUT_SUBMITTED' || state === 'USER_CONFIRMATION_PENDING') return 2;
     // Step 1: Payout ready - trader matched and should send fiat
     // (includes TRADER_MATCHED state where trader is assigned)
     if (state === 'TRADER_MATCHED') return 1;
@@ -277,7 +277,7 @@ export default function RequestDetail() {
                 Copy Amount
               </button>
               <button
-                onClick={() => navigate(`/trader/requests/${id}/confirm`)}
+                onClick={() => setShowConfirm(true)}
                 className="text-rowan-yellow text-xs font-medium flex-1 py-2 border border-rowan-yellow rounded"
               >
                 I've Sent Payment
@@ -289,14 +289,14 @@ export default function RequestDetail() {
 
       {/* Confirm Payout Button */}
       {isPayoutStep && (
-        <Button
-          variant="primary"
-          size="lg"
-          className="w-full"
-          onClick={() => setShowConfirm(true)}
-        >
-          Confirm Payout Sent
-        </Button>
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 text-center mb-4">
+          <p className="text-rowan-yellow text-sm font-medium">
+            Payment submitted
+          </p>
+          <p className="text-rowan-muted text-xs mt-1">
+            Waiting for customer confirmation before USDC is released.
+          </p>
+        </div>
       )}
 
       {/* Complete state */}

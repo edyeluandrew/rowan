@@ -19,13 +19,12 @@ export const NETWORKS = {
 
 /** Transaction states → display labels and badge styling */
 export const TX_STATES = {
-  PENDING_ESCROW:   { label: 'Pending Escrow',  badge: 'bg-rowan-yellow/15 text-rowan-yellow' },
-  ESCROW_FUNDED:    { label: 'Escrow Funded',    badge: 'bg-rowan-yellow/15 text-rowan-yellow' },
   TRADER_MATCHED:   { label: 'Matched',          badge: 'bg-rowan-yellow/15 text-rowan-yellow' },
-  FIAT_SENT:        { label: 'Fiat Sent',        badge: 'bg-blue-500/15 text-blue-400' },
+  FIAT_PAYOUT_SUBMITTED: { label: 'Payout Submitted', badge: 'bg-blue-500/15 text-blue-400' },
+  USER_CONFIRMATION_PENDING: { label: 'Awaiting Confirmation', badge: 'bg-blue-500/15 text-blue-400' },
   COMPLETE:         { label: 'Complete',          badge: 'bg-rowan-green/15 text-rowan-green' },
   REFUNDED:         { label: 'Refunded',          badge: 'bg-rowan-muted/15 text-rowan-muted' },
-  DISPUTED:         { label: 'Disputed',          badge: 'bg-rowan-red/15 text-rowan-red' },
+  DISPUTE_OPENED:   { label: 'Disputed',          badge: 'bg-rowan-red/15 text-rowan-red' },
   FAILED:           { label: 'Failed',            badge: 'bg-rowan-red/15 text-rowan-red' },
 };
 

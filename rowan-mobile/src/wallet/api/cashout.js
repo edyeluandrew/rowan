@@ -37,3 +37,11 @@ export function fileDispute({ transactionId, reason, description }) {
 export function getTransactionReceipt(transactionId) {
   return client.get(`/api/v1/cashout/receipt/${transactionId}`).then(res => res.data)
 }
+
+export function confirmReceipt(transactionId) {
+  return client.post(`/api/v1/user/transactions/${transactionId}/confirm-receipt`).then(res => res.data)
+}
+
+export function openDispute(transactionId, reason) {
+  return client.post(`/api/v1/user/transactions/${transactionId}/dispute`, { reason }).then(res => res.data)
+}

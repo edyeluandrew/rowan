@@ -3,6 +3,8 @@ import rateLimit from 'express-rate-limit';
 import { authUser } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import quoteEngine from '../services/quoteEngine.js';
+import escrowController from '../services/escrowController.js';
+import stateMachine from '../services/transactionStateMachine.js';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
 import { stroopsToUsdc } from '../utils/financial.js';
@@ -721,5 +723,204 @@ router.get(
     }
   }
 );
+
+/**
+ * POST /api/v1/user/transactions/:id/confirm-receipt
+ * User confirms receipt of mobile money after trader submits payout.
+ * Triggers USDC release from escrow to trader Stellar wallet.
+ *
+ * [PHASE 8] User-side secure receipt confirmation.
+ */
+router.post('/transactions/:id/confirm-receipt', authUser, async (req, res, next) => {
+  try {
+    const transactionId = req.params.id;
+    const userId = req.userId;
+
+    // Fetch transaction
+    const txResult = await db.query(
+      `SELECT id, user_id, state, trader_id, usdc_amount, fiat_amount, fiat_currency
+       FROM transactions WHERE id = $1`,
+      [transactionId]
+    );
+    const transaction = txResult.rows[0];
+
+    if (!transaction) {
+      return res.status(404).json({
+        error: 'Transaction not found',
+      });
+    }
+
+    // Verify ownership
+    if (transaction.user_id !== userId) {
+      return res.status(403).json({
+        error: 'Unauthorized',
+        details: 'You can only confirm receipt for your own transactions',
+      });
+    }
+
+    // Verify state (must be awaiting confirmation)
+    if (transaction.state !== 'FIAT_PAYOUT_SUBMITTED' && transaction.state !== 'USER_CONFIRMATION_PENDING') {
+      return res.status(409).json({
+        error: 'Invalid transaction state',
+        details: `Cannot confirm receipt in state ${transaction.state}. Expected FIAT_PAYOUT_SUBMITTED or USER_CONFIRMATION_PENDING.`,
+        currentState: transaction.state,
+      });
+    }
+
+    // Idempotency check: if already has stellar_release_tx, return success
+    if (transaction.stellar_release_tx) {
+      logger.info(`[User] Confirm receipt already processed for tx ${transactionId}`);
+      return res.json({
+        status: 'COMPLETE',
+        message: 'Receipt already confirmed — USDC has been released to trader.',
+        stellarReleaseTx: transaction.stellar_release_tx,
+        transactionId: transaction.id,
+      });
+    }
+
+    // Transition to USER_CONFIRMATION_PENDING if not already there
+    if (transaction.state === 'FIAT_PAYOUT_SUBMITTED') {
+      await stateMachine.transition(
+        transactionId,
+        'FIAT_PAYOUT_SUBMITTED',
+        'USER_CONFIRMATION_PENDING'
+      );
+      logger.info(`[User] Transitioned tx ${transactionId} to USER_CONFIRMATION_PENDING`);
+    }
+
+    // Attempt USDC release
+    try {
+      const releaseTxHash = await escrowController.releaseToTrader(transactionId);
+
+      // Mark transaction as completed
+      await stateMachine.transition(
+        transactionId,
+        'USER_CONFIRMATION_PENDING',
+        'COMPLETE',
+        {
+          stellar_release_tx: releaseTxHash,
+          user_confirmed_receipt_at: 'NOW()',
+        }
+      );
+
+      logger.info(`[User] Transaction ${transactionId} completed: USDC released, hash ${releaseTxHash}`);
+
+      res.json({
+        status: 'COMPLETE',
+        message: 'Receipt confirmed. USDC has been released to the trader.',
+        stellarReleaseTx: releaseTxHash,
+        transactionId: transactionId,
+      });
+    } catch (releaseErr) {
+      logger.error(`[User] Escrow release failed for tx ${transactionId}:`, releaseErr.message);
+
+      // Transition to RELEASE_BLOCKED state
+      await stateMachine.transition(
+        transactionId,
+        'USER_CONFIRMATION_PENDING',
+        'RELEASE_BLOCKED',
+        { release_error: releaseErr.message }
+      );
+
+      res.status(500).json({
+        error: 'Release failed',
+        details: 'USDC release encountered an error. Please contact support.',
+        message: releaseErr.message,
+        transactionId: transactionId,
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/user/transactions/:id/dispute
+ * User reports that they did not receive the mobile money.
+ * Blocks USDC release and opens a dispute for admin review.
+ *
+ * [PHASE 8] User-side dispute path.
+ */
+router.post('/transactions/:id/dispute', authUser, async (req, res, next) => {
+  try {
+    const transactionId = req.params.id;
+    const userId = req.userId;
+    const { reason } = req.body;
+
+    if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+      return res.status(400).json({
+        error: 'Dispute reason is required',
+      });
+    }
+
+    // Fetch transaction
+    const txResult = await db.query(
+      `SELECT id, user_id, state, trader_id, usdc_amount, fiat_amount, fiat_currency
+       FROM transactions WHERE id = $1`,
+      [transactionId]
+    );
+    const transaction = txResult.rows[0];
+
+    if (!transaction) {
+      return res.status(404).json({
+        error: 'Transaction not found',
+      });
+    }
+
+    // Verify ownership
+    if (transaction.user_id !== userId) {
+      return res.status(403).json({
+        error: 'Unauthorized',
+        details: 'You can only dispute your own transactions',
+      });
+    }
+
+    // Verify state (can only dispute if awaiting confirmation)
+    if (transaction.state !== 'FIAT_PAYOUT_SUBMITTED' && transaction.state !== 'USER_CONFIRMATION_PENDING') {
+      return res.status(409).json({
+        error: 'Invalid transaction state',
+        details: `Cannot open dispute in state ${transaction.state}. Must be FIAT_PAYOUT_SUBMITTED or USER_CONFIRMATION_PENDING.`,
+        currentState: transaction.state,
+      });
+    }
+
+    // Transition to DISPUTE_OPENED (idempotency: state machine will guard)
+    const updated = await stateMachine.transition(
+      transactionId,
+      transaction.state,
+      'DISPUTE_OPENED'
+    );
+
+    if (!updated) {
+      return res.status(409).json({
+        error: 'Dispute update failed',
+        details: 'Transaction state changed before dispute could be opened. Please try again.',
+      });
+    }
+
+    // Store dispute details in transactions table
+    await db.query(
+      `UPDATE transactions
+       SET dispute_id = gen_random_uuid(),
+           dispute_started_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [transactionId]
+    );
+
+    logger.info(
+      `[User] Dispute opened for tx ${transactionId} by user ${userId}: "${reason}"`
+    );
+
+    res.json({
+      status: 'DISPUTE_OPENED',
+      message: 'Dispute has been opened. An admin will review your claim.',
+      transactionId: transactionId,
+      reason: reason.trim(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 export default router;

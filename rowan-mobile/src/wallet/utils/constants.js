@@ -45,11 +45,12 @@ export const TX_STATES = {
   QUOTE_CONFIRMED:  { label: 'Quote Confirmed',  icon: 'CircleDot'      },
   ESCROW_LOCKED:    { label: 'XLM Received',     icon: 'Lock'           },
   TRADER_MATCHED:   { label: 'Trader Assigned',  icon: 'UserCheck'      },
-  FIAT_SENT:        { label: 'Money Sent',        icon: 'Banknote'       },
+  FIAT_PAYOUT_SUBMITTED: { label: 'Payment Sent by Trader', icon: 'Banknote' },
+  USER_CONFIRMATION_PENDING: { label: 'Waiting Your Confirmation', icon: 'ShieldCheck' },
   COMPLETE:         { label: 'Complete',          icon: 'CircleCheckBig' },
   REFUNDED:         { label: 'Refunded',          icon: 'RotateCcw'      },
   FAILED:           { label: 'Failed',            icon: 'CircleX'        },
-  DISPUTED:         { label: 'Disputed',          icon: 'ShieldAlert'    },
+  DISPUTE_OPENED:   { label: 'Disputed',          icon: 'ShieldAlert'    },
 }
 
 export const KYC_LEVELS = {
@@ -87,15 +88,17 @@ export const STATE_ORDER = [
   'QUOTE_CONFIRMED',
   'ESCROW_LOCKED',
   'TRADER_MATCHED',
-  'FIAT_SENT',
+  'FIAT_PAYOUT_SUBMITTED',
+  'USER_CONFIRMATION_PENDING',
   'COMPLETE',
 ]
 
 export const STATE_SUBTITLES = {
   QUOTE_CONFIRMED: 'Quote confirmed, waiting for XLM',
   ESCROW_LOCKED:   'XLM received — swapping to USDC',
-  TRADER_MATCHED:  'USDC swap complete — finding available trader',
-  FIAT_SENT:       'Mobile money sent to your number',
+  TRADER_MATCHED:  'USDC swap complete — trader assigned',
+  FIAT_PAYOUT_SUBMITTED: 'Trader sent mobile money — waiting for your confirmation',
+  USER_CONFIRMATION_PENDING: 'Confirming receipt with escrow...',
   COMPLETE:        'Done — check your mobile money balance',
 }
 

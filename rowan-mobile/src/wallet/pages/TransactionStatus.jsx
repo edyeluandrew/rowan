@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock } from 'lucide-react'
-import { getTransactionStatus } from '../api/cashout'
+import { getTransactionStatus, confirmReceipt, openDispute } from '../api/cashout'
 import useSocketHook from '../hooks/useSocket'
 import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
 import Button from '../components/ui/Button'
@@ -20,6 +20,13 @@ export default function TransactionStatus() {
   const [error, setError] = useState(null)
   const [isWaiting, setIsWaiting] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [showDisputeModal, setShowDisputeModal] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [disputing, setDisputing] = useState(false)
+  const [disputeReason, setDisputeReason] = useState('')
+  const [confirmError, setConfirmError] = useState(null)
+  const [disputeError, setDisputeError] = useState(null)
 
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
 
@@ -85,6 +92,102 @@ export default function TransactionStatus() {
     }
   }, [id])
 
+  const handleConfirmReceipt = async () => {
+    setConfirming(true)
+    setConfirmError(null)
+    try {
+      const result = await confirmReceipt(id)
+      // Update transaction state
+      setTransaction((prev) => (prev ? { ...prev, state: 'COMPLETE', ...result } : prev))
+      setShowConfirmModal(false)
+    } catch (err) {
+      setConfirmError(err.response?.data?.error || err.message || 'Confirmation failed')
+    } finally {
+      setConfirming(false)
+    }
+  }
+
+  const handleOpenDispute = async () => {
+    if (!disputeReason.trim()) {
+      setDisputeError('Please provide a reason for the dispute')
+      return
+    }
+    setDisputing(true)
+    setDisputeError(null)
+    try {
+      const result = await openDispute(id, disputeReason.trim())
+      // Update transaction state
+      setTransaction((prev) => (prev ? { ...prev, state: 'DISPUTE_OPENED', ...result } : prev))
+      setShowDisputeModal(false)
+      setDisputeReason('')
+    } catch (err) {
+      setDisputeError(err.response?.data?.error || err.message || 'Dispute opening failed')
+    } finally {
+      setDisputing(false)
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    let pollTimer = null
+
+    const fetch = async () => {
+      try {
+        const tx = await getTransactionStatus(id)
+        if (!cancelled) {
+          setTransaction(tx)
+          setIsWaiting(false)
+          setLoading(false)
+          setRetryCount(0) // Reset retries on success
+
+          // ✅ FIX: Keep polling until transaction reaches terminal state
+          // so UI stays in sync with backend state changes
+          if (!TERMINAL_STATES.includes(tx.state)) {
+            console.log(`[TransactionStatus] Tx in state ${tx.state} — polling again in 3s`)
+            pollTimer = setTimeout(() => {
+              if (!cancelled) {
+                fetch() // Poll again
+              }
+            }, POLL_INTERVAL)
+          } else {
+            console.log(`[TransactionStatus] Transaction reached terminal state: ${tx.state}`)
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          // 404 means transaction not yet recorded — this is normal, retry (but with timeout)
+          if (err.response?.status === 404) {
+            if (retryCount >= MAX_RETRIES_ON_404) {
+              // Timeout: give up after ~2 minutes
+              setError('Transaction confirmation timeout — check your history or contact support')
+              setLoading(false)
+              console.log(`[TransactionStatus] Transaction not found after ${retryCount} retries (~2 min)`)
+            } else {
+              setIsWaiting(true)
+              setRetryCount((prev) => prev + 1)
+              console.log(`[TransactionStatus] Transaction not yet recorded (attempt ${retryCount + 1}/${MAX_RETRIES_ON_404}), retrying in 3 seconds...`)
+              // Schedule next poll
+              pollTimer = setTimeout(() => {
+                if (!cancelled) {
+                  fetch() // Retry
+                }
+              }, POLL_INTERVAL)
+            }
+          } else {
+            // Real error (not 404)
+            setError(err.message)
+            setLoading(false)
+          }
+        }
+      }
+    }
+
+    fetch()
+    return () => {
+      cancelled = true
+      if (pollTimer) clearTimeout(pollTimer)
+    }
+  }, [id])
   useSocketHook('transaction_update', (data) => {
     if (data.transactionId === id) {
       setTransaction((prev) => (prev ? { ...prev, ...data } : prev))
@@ -226,6 +329,39 @@ export default function TransactionStatus() {
 
       {transaction && <TransactionStateTracker currentState={transaction.state} />}
 
+      {/* Confirmation prompt for FIAT_PAYOUT_SUBMITTED */}
+      {transaction && transaction.state === 'FIAT_PAYOUT_SUBMITTED' && (
+        <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
+          <div className="text-center">
+            <p className="text-rowan-text text-sm font-medium">
+              Trader says they sent {transaction.fiat_amount} {transaction.fiat_currency}
+            </p>
+            <p className="text-rowan-muted text-xs mt-1 mb-3">
+              to your {transaction.network} number
+            </p>
+          </div>
+          <p className="text-rowan-text text-sm text-center">
+            Did you receive the money?
+          </p>
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => setShowConfirmModal(true)}
+            >
+              Yes, I Received It
+            </Button>
+            <Button
+              variant="ghost"
+              className="text-rowan-red border-rowan-red"
+              onClick={() => setShowDisputeModal(true)}
+            >
+              I Did Not Receive It
+            </Button>
+          </div>
+        </div>
+      )}
+
       {isTerminal && (
         <div className="mt-8 space-y-3">
           <Button onClick={() => navigate('/wallet/home', { replace: true })}>
@@ -248,6 +384,96 @@ export default function TransactionStatus() {
               Try another cash out
             </button>
           )}
+        </div>
+      )}
+
+      {/* Confirm Receipt Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end" onClick={() => setShowConfirmModal(false)}>
+          <div
+            className="bg-rowan-surface rounded-t-2xl p-6 w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-9 h-1 bg-rowan-border rounded-full mx-auto mb-6" />
+            <h3 className="text-rowan-text font-bold text-lg">Confirm Receipt</h3>
+            <p className="text-rowan-muted text-sm mt-3 mb-4">
+              Only continue if the money is already in your mobile money account.
+            </p>
+            <p className="text-rowan-yellow text-sm font-semibold mb-4">
+              Once confirmed, escrowed USDC will be released to the trader.
+            </p>
+            {confirmError && (
+              <p className="text-rowan-red text-sm mb-4">{confirmError}</p>
+            )}
+            <div className="flex flex-col gap-3">
+              <Button
+                variant="primary"
+                size="lg"
+                loading={confirming}
+                onClick={handleConfirmReceipt}
+              >
+                Confirm and Release
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setShowConfirmModal(false)}
+                className="text-rowan-muted border-rowan-border"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dispute Modal */}
+      {showDisputeModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end" onClick={() => setShowDisputeModal(false)}>
+          <div
+            className="bg-rowan-surface rounded-t-2xl p-6 w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-9 h-1 bg-rowan-border rounded-full mx-auto mb-6" />
+            <h3 className="text-rowan-text font-bold text-lg">Report Missing Payment</h3>
+            <p className="text-rowan-muted text-sm mt-3 mb-4">
+              Only open a dispute if the money has not arrived in your mobile money account.
+            </p>
+            <p className="text-rowan-muted text-sm mb-4">
+              An admin will review the trader's reference and transaction details.
+            </p>
+            <textarea
+              placeholder="Describe what happened (optional)"
+              value={disputeReason}
+              onChange={(e) => setDisputeReason(e.target.value)}
+              className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text placeholder-rowan-muted text-sm focus:outline-none focus:border-rowan-yellow mb-4"
+              rows={3}
+            />
+            {disputeError && (
+              <p className="text-rowan-red text-sm mb-4">{disputeError}</p>
+            )}
+            <div className="flex flex-col gap-3">
+              <Button
+                variant="primary"
+                className="bg-rowan-red hover:bg-rowan-red/80"
+                size="lg"
+                loading={disputing}
+                onClick={handleOpenDispute}
+              >
+                Open Dispute
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShowDisputeModal(false)
+                  setDisputeReason('')
+                  setDisputeError(null)
+                }}
+                className="text-rowan-muted border-rowan-border"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

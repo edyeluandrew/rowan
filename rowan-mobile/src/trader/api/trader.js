@@ -30,6 +30,14 @@ export async function confirmRequest(id) {
   return data;
 }
 
+/** POST /api/v1/trader/requests/:id/payout-sent */
+export async function submitPayoutSent(id, reference) {
+  const { data } = await client.post(`/api/v1/trader/requests/${id}/payout-sent`, {
+    reference,
+  });
+  return data;
+}
+
 /** GET /api/v1/trader/stats */
 export async function getStats() {
   const { data } = await client.get('/api/v1/trader/stats');

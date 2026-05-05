@@ -302,9 +302,50 @@ async function confirmPayout(transactionId, traderId) {
   return transaction;
 }
 
+/**
+ * Trader submits payout sent with mobile money reference.
+ * Sets state to FIAT_PAYOUT_SUBMITTED, awaiting user confirmation.
+ * Does NOT release USDC yet.
+ *
+ * [PHASE 8] User must confirm receipt before USDC is released.
+ */
+async function submitPayoutSent(transactionId, traderId, payoutReference) {
+  // [F-2 FIX] Verify trader authorization BEFORE state transition
+  const txCheck = await db.query(
+    `SELECT trader_id FROM transactions WHERE id = $1 AND state = 'TRADER_MATCHED'`,
+    [transactionId]
+  );
+  if (!txCheck.rows[0]) throw new Error('Cannot submit payout — transaction not found or not in TRADER_MATCHED state');
+  if (txCheck.rows[0].trader_id !== traderId) {
+    throw new Error('Cannot submit payout — transaction not assigned to this trader');
+  }
+
+  const transaction = await stateMachine.transition(
+    transactionId,
+    'TRADER_MATCHED',
+    'FIAT_PAYOUT_SUBMITTED',
+    { payout_reference: payoutReference }
+  );
+  if (!transaction) throw new Error('Cannot submit payout — state transition failed (concurrent modification)');
+
+  logger.info(`[Matching] Trader ${traderId} submitted payout with reference "${payoutReference}" for tx ${transactionId}`);
+
+  // Notify user that trader marked payment sent
+  notificationService.notifyUser(transaction.user_id, 'trader_sent_payout', {
+    transactionId: transaction.id,
+    state: 'FIAT_PAYOUT_SUBMITTED',
+    fiat_amount: transaction.fiat_amount,
+    fiat_currency: transaction.fiat_currency,
+    message: 'Trader marked payment as sent. Please confirm receipt.',
+  });
+
+  return transaction;
+}
+
 export default {
   setIo,
   matchTrader,
   acceptRequest,
   confirmPayout,
+  submitPayoutSent,
 };
