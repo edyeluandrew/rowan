@@ -733,30 +733,39 @@ router.get(
  */
 router.post('/transactions/:id/confirm-receipt', authUser, async (req, res, next) => {
   try {
-    const transactionId = req.params.id;
+    const id = req.params.id;
     const userId = req.userId;
 
-    // Fetch transaction
-    const txResult = await db.query(
-      `SELECT id, user_id, state, trader_id, usdc_amount, fiat_amount, fiat_currency
-       FROM transactions WHERE id = $1`,
-      [transactionId]
+    logger.info(`[User] Confirm receipt called for id: ${id}, userId: ${userId}`);
+
+    // Fetch transaction by ID first
+    let txResult = await db.query(
+      `SELECT id, user_id, state, trader_id, usdc_amount, fiat_amount, fiat_currency, stellar_release_tx
+       FROM transactions WHERE id = $1 AND user_id = $2`,
+      [id, userId]
     );
-    const transaction = txResult.rows[0];
+
+    let transaction = txResult.rows[0];
+
+    // If not found by transaction ID, try by quote_id
+    if (!transaction) {
+      logger.info(`[User] Transaction not found by ID, trying quote_id: ${id}`);
+      txResult = await db.query(
+        `SELECT id, user_id, state, trader_id, usdc_amount, fiat_amount, fiat_currency, stellar_release_tx
+         FROM transactions WHERE quote_id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+      transaction = txResult.rows[0];
+    }
 
     if (!transaction) {
+      logger.warn(`[User] Transaction not found for id: ${id}, userId: ${userId}`);
       return res.status(404).json({
         error: 'Transaction not found',
       });
     }
 
-    // Verify ownership
-    if (transaction.user_id !== userId) {
-      return res.status(403).json({
-        error: 'Unauthorized',
-        details: 'You can only confirm receipt for your own transactions',
-      });
-    }
+    const transactionId = transaction.id;
 
     // Verify state (must be awaiting confirmation)
     if (transaction.state !== 'FIAT_PAYOUT_SUBMITTED' && transaction.state !== 'USER_CONFIRMATION_PENDING') {
@@ -843,7 +852,7 @@ router.post('/transactions/:id/confirm-receipt', authUser, async (req, res, next
  */
 router.post('/transactions/:id/dispute', authUser, async (req, res, next) => {
   try {
-    const transactionId = req.params.id;
+    const id = req.params.id;
     const userId = req.userId;
     const { reason } = req.body;
 
@@ -853,27 +862,36 @@ router.post('/transactions/:id/dispute', authUser, async (req, res, next) => {
       });
     }
 
-    // Fetch transaction
-    const txResult = await db.query(
+    logger.info(`[User] Dispute opened for id: ${id}, userId: ${userId}`);
+
+    // Fetch transaction by ID first
+    let txResult = await db.query(
       `SELECT id, user_id, state, trader_id, usdc_amount, fiat_amount, fiat_currency
-       FROM transactions WHERE id = $1`,
-      [transactionId]
+       FROM transactions WHERE id = $1 AND user_id = $2`,
+      [id, userId]
     );
-    const transaction = txResult.rows[0];
+
+    let transaction = txResult.rows[0];
+
+    // If not found by transaction ID, try by quote_id
+    if (!transaction) {
+      logger.info(`[User] Transaction not found by ID, trying quote_id: ${id}`);
+      txResult = await db.query(
+        `SELECT id, user_id, state, trader_id, usdc_amount, fiat_amount, fiat_currency
+         FROM transactions WHERE quote_id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+      transaction = txResult.rows[0];
+    }
 
     if (!transaction) {
+      logger.warn(`[User] Transaction not found for id: ${id}, userId: ${userId}`);
       return res.status(404).json({
         error: 'Transaction not found',
       });
     }
 
-    // Verify ownership
-    if (transaction.user_id !== userId) {
-      return res.status(403).json({
-        error: 'Unauthorized',
-        details: 'You can only dispute your own transactions',
-      });
-    }
+    const transactionId = transaction.id;
 
     // Verify state (can only dispute if awaiting confirmation)
     if (transaction.state !== 'FIAT_PAYOUT_SUBMITTED' && transaction.state !== 'USER_CONFIRMATION_PENDING') {
