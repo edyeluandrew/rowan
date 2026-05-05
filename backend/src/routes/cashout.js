@@ -279,17 +279,34 @@ router.get('/status/:id', async (req, res, next) => {
 /**
  * GET /api/v1/cashout/receipt/:id
  * Fetch transaction receipt for display.
+ * Accepts either transaction ID or quote ID.
  */
 router.get('/receipt/:id', authUser, async (req, res, next) => {
   try {
-    const result = await db.query(
+    const id = req.params.id;
+    const userId = req.userId;
+
+    // Try by transaction ID first
+    let result = await db.query(
       `SELECT id, xlm_amount, fiat_amount, fiat_currency, network, stellar_deposit_tx,
               stellar_release_tx, locked_rate, completed_at, fiat_sent_at, quote_confirmed_at
        FROM transactions WHERE id = $1 AND user_id = $2`,
-      [req.params.id, req.userId]
+      [id, userId]
     );
 
-    const tx = result.rows[0];
+    let tx = result.rows[0];
+
+    // If not found by transaction ID, try by quote_id
+    if (!tx) {
+      result = await db.query(
+        `SELECT id, xlm_amount, fiat_amount, fiat_currency, network, stellar_deposit_tx,
+                stellar_release_tx, locked_rate, completed_at, fiat_sent_at, quote_confirmed_at
+         FROM transactions WHERE quote_id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+      tx = result.rows[0];
+    }
+
     if (!tx) return res.status(404).json({ error: 'Transaction receipt not found' });
 
     res.json({
