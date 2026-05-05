@@ -3,6 +3,29 @@
 -- Implements user-side receipt confirmation for cashout escrow
 -- ============================================================
 
+-- ─── 0. Add new states to tx_state enum ──────────────────
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'FIAT_PAYOUT_SUBMITTED' AND enumtypid = 'tx_state'::regtype) THEN
+    ALTER TYPE tx_state ADD VALUE 'FIAT_PAYOUT_SUBMITTED' AFTER 'TRADER_MATCHED';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'USER_CONFIRMATION_PENDING' AND enumtypid = 'tx_state'::regtype) THEN
+    ALTER TYPE tx_state ADD VALUE 'USER_CONFIRMATION_PENDING' AFTER 'FIAT_PAYOUT_SUBMITTED';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'DISPUTE_OPENED' AND enumtypid = 'tx_state'::regtype) THEN
+    ALTER TYPE tx_state ADD VALUE 'DISPUTE_OPENED' AFTER 'COMPLETE';
+  END IF;
+END $$;
+
 -- ─── 1. Add new timestamp columns for state tracking ────────
 
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS fiat_payout_submitted_at TIMESTAMPTZ;
@@ -21,11 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_fiat_payout_submitted
 CREATE INDEX IF NOT EXISTS idx_transactions_user_confirmation_pending 
   ON transactions (state) WHERE state = 'USER_CONFIRMATION_PENDING';
 
--- ─── 4. Drop old FIAT_SENT state constraint if any exists ────────
--- (This assumes the state enum or check constraint has already been updated by Supabase)
--- Supabase will handle enum updates separately in its UI
-
--- ─── 5. Add comment explaining new workflow ─────────────────────
+-- ─── 4. Add comment explaining new workflow ─────────────────────
 
 COMMENT ON COLUMN transactions.payout_reference IS 'Mobile money reference provided by trader (MTN/Airtel/M-Pesa reference number)';
 COMMENT ON COLUMN transactions.fiat_payout_submitted_at IS 'Timestamp when trader submitted payout reference';

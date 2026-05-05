@@ -135,7 +135,7 @@ router.get('/overview', authAdmin, async (req, res, next) => {
     const escrowResult = await db.query(`
       SELECT COALESCE(SUM(usdc_amount), 0) as escrow_locked
       FROM transactions
-      WHERE state IN ('ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_SENT')
+      WHERE state IN ('ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING')
     `);
 
     // Success rate
@@ -715,7 +715,7 @@ router.get('/escrow/status', authAdmin, async (req, res, next) => {
         COUNT(*) as active_escrows,
         COALESCE(SUM(usdc_amount), 0) as total_locked
       FROM transactions
-      WHERE state IN ('ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_SENT')
+      WHERE state IN ('ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING')
     `);
     const today = await db.query(`
       SELECT
@@ -744,7 +744,7 @@ router.get('/escrow/transactions', authAdmin, async (req, res, next) => {
              tr.name as trader_name
       FROM transactions t
       LEFT JOIN traders tr ON tr.id = t.trader_id
-      WHERE t.state IN ('ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_SENT')
+      WHERE t.state IN ('ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING')
       ORDER BY t.created_at DESC
       LIMIT 100
     `);

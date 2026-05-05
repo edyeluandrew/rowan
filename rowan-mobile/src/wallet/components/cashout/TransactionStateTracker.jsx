@@ -9,7 +9,8 @@ const STATE_ICONS = {
   QUOTE_CONFIRMED: CircleDot,
   ESCROW_LOCKED: Lock,
   TRADER_MATCHED: UserCheck,
-  FIAT_SENT: Banknote,
+  FIAT_PAYOUT_SUBMITTED: Banknote,
+  USER_CONFIRMATION_PENDING: UserCheck,
   COMPLETE: CircleCheckBig,
 }
 

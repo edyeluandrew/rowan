@@ -62,8 +62,8 @@ export function useRequests() {
     };
     const handleUpdate = (data) => {
       const id = data?.id || data?.transactionId;
-      // If request moves to FIAT_SENT, remove from pending and add to active
-      if (data?.state === 'FIAT_SENT') {
+      // If request moves to FIAT_PAYOUT_SUBMITTED or later, remove from pending and add to active
+      if (['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'COMPLETE', 'DISPUTE_OPENED'].includes(data?.state)) {
         setPending((prev) => prev.filter((r) => r.id !== id));
         setActive((prev) => {
           // Don't add duplicate if it already exists in active

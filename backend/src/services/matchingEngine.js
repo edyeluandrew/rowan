@@ -312,23 +312,41 @@ async function confirmPayout(transactionId, traderId) {
 async function submitPayoutSent(transactionId, traderId, payoutReference) {
   // [F-2 FIX] Verify trader authorization BEFORE state transition
   const txCheck = await db.query(
-    `SELECT trader_id FROM transactions WHERE id = $1 AND state = 'TRADER_MATCHED'`,
+    `SELECT id, trader_id, state FROM transactions WHERE id = $1`,
     [transactionId]
   );
-  if (!txCheck.rows[0]) throw new Error('Cannot submit payout — transaction not found or not in TRADER_MATCHED state');
-  if (txCheck.rows[0].trader_id !== traderId) {
+  const tx = txCheck.rows[0];
+  
+  if (!tx) {
+    logger.error(`[submitPayoutSent] Transaction ${transactionId} not found`);
+    throw new Error('Transaction not found');
+  }
+  
+  if (tx.state !== 'TRADER_MATCHED') {
+    logger.error(`[submitPayoutSent] Transaction ${transactionId} in unexpected state: ${tx.state} (expected TRADER_MATCHED)`);
+    throw new Error(`Cannot submit payout — transaction in state ${tx.state}, expected TRADER_MATCHED`);
+  }
+  
+  if (tx.trader_id !== traderId) {
+    logger.error(`[submitPayoutSent] Trader ${traderId} not authorized for tx ${transactionId}`);
     throw new Error('Cannot submit payout — transaction not assigned to this trader');
   }
 
+  logger.info(`[submitPayoutSent] Starting transition for tx ${transactionId}: TRADER_MATCHED → FIAT_PAYOUT_SUBMITTED`);
+  
   const transaction = await stateMachine.transition(
     transactionId,
     'TRADER_MATCHED',
     'FIAT_PAYOUT_SUBMITTED',
     { payout_reference: payoutReference }
   );
-  if (!transaction) throw new Error('Cannot submit payout — state transition failed (concurrent modification)');
+  
+  if (!transaction) {
+    logger.error(`[submitPayoutSent] State transition FAILED for tx ${transactionId} — concurrent modification or state mismatch`);
+    throw new Error('Cannot submit payout — state transition failed (concurrent modification)');
+  }
 
-  logger.info(`[Matching] Trader ${traderId} submitted payout with reference "${payoutReference}" for tx ${transactionId}`);
+  logger.info(`[submitPayoutSent] ✅ Trader ${traderId} submitted payout for tx ${transactionId}, state now: ${transaction.state}`);
 
   // Notify user that trader marked payment sent
   notificationService.notifyUser(transaction.user_id, 'trader_sent_payout', {

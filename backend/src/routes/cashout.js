@@ -217,6 +217,7 @@ router.get('/status/:id', async (req, res, next) => {
         `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
                 network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
                 locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
+                fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
                 fiat_sent_at, completed_at, failed_at, failure_reason, created_at
          FROM transactions WHERE id = $1 AND user_id = $2`,
         [id, userId]
@@ -229,6 +230,7 @@ router.get('/status/:id', async (req, res, next) => {
           `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
                   network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
                   locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
+                  fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
                   fiat_sent_at, completed_at, failed_at, failure_reason, created_at
            FROM transactions WHERE quote_id = $1 AND user_id = $2`,
           [id, userId]
@@ -243,6 +245,7 @@ router.get('/status/:id', async (req, res, next) => {
           `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
                   network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
                   locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
+                  fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
                   fiat_sent_at, completed_at, failed_at, failure_reason, created_at
            FROM transactions WHERE quote_id = $1`,
           [id]

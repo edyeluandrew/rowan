@@ -122,8 +122,8 @@ router.get('/requests', authTrader, async (req, res, next) => {
       query += ` AND state = $2`;
       params.push('TRADER_MATCHED');
     } else if (status === 'active') {
-      query += ` AND state = $2`;
-      params.push('FIAT_SENT');
+      query += ` AND state IN ($2, $3)`;
+      params.push('FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING');
     }
     // If status not provided or unknown value: return ALL trader requests (no additional filter)
 
