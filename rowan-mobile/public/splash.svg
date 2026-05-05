@@ -1,0 +1,38 @@
+<svg viewBox="0 0 1080 2340" xmlns="http://www.w3.org/2000/svg">
+  <!-- Black background -->
+  <rect width="1080" height="2340" fill="#000000"/>
+  
+  <!-- Rowan logo (centered, upper portion) -->
+  <defs>
+    <linearGradient id="rowanGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F0B90B;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFD700;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main R shape (scaled up for splash) -->
+  <g transform="translate(540, 800) scale(8)">
+    <path d="M 70 50 L 70 150 M 70 50 L 130 50 Q 150 50 150 70 Q 150 85 130 90 L 70 90 M 130 90 L 150 150" 
+      fill="none" 
+      stroke="url(#rowanGradient)" 
+      stroke-width="18" 
+      stroke-linecap="round" 
+      stroke-linejoin="round"/>
+    
+    <!-- Decorative accent circle -->
+    <circle cx="155" cy="115" r="12" fill="#F0B90B" opacity="0.6"/>
+  </g>
+  
+  <!-- App name -->
+  <text x="540" y="1600" font-family="Arial, sans-serif" font-size="120" font-weight="bold" fill="#FFFFFF" text-anchor="middle" letter-spacing="8">
+    ROWAN
+  </text>
+  
+  <!-- Tagline -->
+  <text x="540" y="1750" font-family="Arial, sans-serif" font-size="40" fill="#F0B90B" text-anchor="middle" opacity="0.8">
+    Stellar Liquidity Bridge
+  </text>
+  
+  <!-- Loading indicator placeholder -->
+  <circle cx="540" cy="2100" r="40" fill="none" stroke="#F0B90B" stroke-width="6" opacity="0.3"/>
+</svg>
