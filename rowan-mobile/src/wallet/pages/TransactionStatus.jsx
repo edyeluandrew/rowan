@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock } from 'lucide-react'
+import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace } from 'lucide-react'
 import { getTransactionStatus, confirmReceipt, openDispute } from '../api/cashout'
 import useSocketHook from '../hooks/useSocket'
 import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
 import Button from '../components/ui/Button'
+import { useBiometricLock } from '../../shared/context/BiometricLockContext'
+import useBiometrics from '../hooks/useBiometrics'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
 const POLL_INTERVAL = 3000 // Poll every 3 seconds while waiting
@@ -27,6 +29,14 @@ export default function TransactionStatus() {
   const [disputeReason, setDisputeReason] = useState('')
   const [confirmError, setConfirmError] = useState(null)
   const [disputeError, setDisputeError] = useState(null)
+  const [showVerifyModal, setShowVerifyModal] = useState(false)
+  const [verifyingBiometric, setVerifyingBiometric] = useState(false)
+  const [verifyError, setVerifyError] = useState(null)
+
+  const { lockRequired } = useBiometricLock()
+  const { authenticate, biometricType } = useBiometrics()
+  const biometricLabel = biometricType === 'FACE_ID' ? 'Face ID' : 'Fingerprint'
+  const BiometricIcon = biometricType === 'FACE_ID' ? ScanFace : Fingerprint
 
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
 
@@ -93,6 +103,34 @@ export default function TransactionStatus() {
   }, [id])
 
   const handleConfirmReceipt = async () => {
+    // If biometric lock is enabled, require verification first
+    if (lockRequired) {
+      setShowVerifyModal(true)
+      return
+    }
+    // No biometric lock, proceed directly
+    await executeConfirmReceipt()
+  }
+
+  const handleVerifyAndRelease = async () => {
+    setVerifyingBiometric(true)
+    setVerifyError(null)
+    try {
+      const verified = await authenticate(`Verify to release USDC`)
+      if (verified) {
+        setShowVerifyModal(false)
+        await executeConfirmReceipt()
+      } else {
+        setVerifyError('Verification cancelled')
+      }
+    } catch (err) {
+      setVerifyError(err.message || 'Verification failed')
+    } finally {
+      setVerifyingBiometric(false)
+    }
+  }
+
+  const executeConfirmReceipt = async () => {
     setConfirming(true)
     setConfirmError(null)
     try {
@@ -467,6 +505,50 @@ export default function TransactionStatus() {
                   setShowDisputeModal(false)
                   setDisputeReason('')
                   setDisputeError(null)
+                }}
+                className="text-rowan-muted border-rowan-border"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Biometric Verification Modal (before release) */}
+      {showVerifyModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end" onClick={() => setShowVerifyModal(false)}>
+          <div
+            className="bg-rowan-surface rounded-t-2xl p-6 w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-9 h-1 bg-rowan-border rounded-full mx-auto mb-6" />
+            <div className="flex flex-col items-center mb-6">
+              <div className="w-16 h-16 bg-rowan-bg rounded-full flex items-center justify-center mb-4">
+                <BiometricIcon size={32} className="text-rowan-yellow" />
+              </div>
+              <h3 className="text-rowan-text font-bold text-lg">Verify Your Identity</h3>
+              <p className="text-rowan-muted text-sm mt-2 text-center">
+                Use {biometricLabel} to confirm USDC release
+              </p>
+            </div>
+            {verifyError && (
+              <p className="text-rowan-red text-sm mb-4 text-center">{verifyError}</p>
+            )}
+            <div className="flex flex-col gap-3">
+              <Button
+                variant="primary"
+                size="lg"
+                loading={verifyingBiometric}
+                onClick={handleVerifyAndRelease}
+              >
+                {verifyingBiometric ? 'Verifying...' : `Verify with ${biometricLabel}`}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShowVerifyModal(false)
+                  setVerifyError(null)
                 }}
                 className="text-rowan-muted border-rowan-border"
               >
