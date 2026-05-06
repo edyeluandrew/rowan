@@ -25,6 +25,7 @@ const PayoutSettings = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState(getEmptyFormData());
+  const [submitting, setSubmitting] = useState(false);
 
   function getEmptyFormData() {
     return {
@@ -90,6 +91,11 @@ const PayoutSettings = () => {
     e.preventDefault();
     setError('');
 
+    // Prevent double submission
+    if (submitting) {
+      return;
+    }
+
     try {
       // Validate required fields
       if (!formData.country || !formData.network || !formData.currency ||
@@ -123,6 +129,8 @@ const PayoutSettings = () => {
         fee_percent: formData.fee_percent ? parseFloat(formData.fee_percent) : null,
       };
 
+      setSubmitting(true);
+
       if (editingId) {
         await payoutSettingsAPI.updatePayoutSetting(editingId, payload);
       } else {
@@ -135,6 +143,8 @@ const PayoutSettings = () => {
     } catch (err) {
       console.error('Error saving payout setting:', err);
       setError(err.response?.data?.error || 'Failed to save payout setting');
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -338,14 +348,16 @@ const PayoutSettings = () => {
             <div className="flex gap-3 pt-4">
               <button
                 type="submit"
-                className="flex-1 bg-yellow-500 text-black font-semibold rounded-lg py-2 hover:bg-yellow-400 transition"
+                disabled={submitting}
+                className="flex-1 bg-yellow-500 text-black font-semibold rounded-lg py-2 hover:bg-yellow-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editingId ? 'Update' : 'Create'}
+                {submitting ? 'Creating...' : editingId ? 'Update' : 'Create'}
               </button>
               <button
                 type="button"
                 onClick={handleCancel}
-                className="flex-1 bg-gray-700 text-white font-semibold rounded-lg py-2 hover:bg-gray-600 transition"
+                disabled={submitting}
+                className="flex-1 bg-gray-700 text-white font-semibold rounded-lg py-2 hover:bg-gray-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
