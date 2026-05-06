@@ -3,6 +3,7 @@ import { authTrader, signToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import matchingEngine from '../services/matchingEngine.js';
 import escrowController from '../services/escrowController.js';
+import payoutSettingsRoutes from './payoutSettings.js';
 import db from '../db/index.js';
 import bcrypt from 'bcryptjs';
 import config from '../config/index.js';
@@ -879,5 +880,9 @@ router.get('/float/health', authTrader, async (req, res, next) => {
     next(err);
   }
 });
+
+// ─── Mount payout settings routes ────────────────────────────
+
+router.use('/payout-settings', payoutSettingsRoutes);
 
 export default router;

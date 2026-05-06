@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Globe, Timer, BarChart3, TrendingUp, Settings,
-  ChevronRight, LogOut,
+  ChevronRight, LogOut, CreditCard,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getProfile } from '../api/trader';
@@ -163,6 +163,7 @@ export default function Profile() {
           { to: '/trader/sla', icon: Timer, label: 'SLA Performance', sub: 'Payout targets' },
           { to: '/trader/performance/networks', icon: BarChart3, label: 'Network Performance', sub: 'Stats by network' },
           { to: '/trader/earnings', icon: TrendingUp, label: 'Earnings', sub: 'Breakdown & history' },
+          { to: '/trader/payout-settings', icon: CreditCard, label: 'Payout Settings', sub: 'Networks & pricing' },
         ].map(({ to, icon: Icon, label, sub }) => (
           <button
             key={to}

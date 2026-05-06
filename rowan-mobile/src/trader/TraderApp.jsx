@@ -20,6 +20,7 @@ import DisputeDetail from './pages/DisputeDetail';
 import StellarWallet from './pages/StellarWallet';
 import SlaTracker from './pages/SlaTracker';
 import NetworkPerformance from './pages/NetworkPerformance';
+import PayoutSettings from './pages/PayoutSettings';
 
 import SecuritySettings from './pages/security/SecuritySettings';
 import ChangePassword from './pages/security/ChangePassword';
@@ -51,6 +52,7 @@ export default function TraderApp() {
           <Route path="wallet" element={<StellarWallet />} />
           <Route path="sla" element={<SlaTracker />} />
           <Route path="performance/networks" element={<NetworkPerformance />} />
+          <Route path="payout-settings" element={<PayoutSettings />} />
 
           {/* Security sub-routes */}
           <Route path="security" element={<SecuritySettings />} />
