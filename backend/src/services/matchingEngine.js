@@ -75,29 +75,40 @@ async function matchTrader(transactionId) {
     // [F-6 FIX] Convert fiat amount to UGX equivalent using shared helper
     const fiatAmountUgx = fiatToUgx(fiatNeeded, fiatCurrency);
 
-    // ── C5 FIX: Filter by network + P2 FIX: Use status enum ──
-    // [C-1 FIX] Compare daily_volume (UGX) + fiat-in-UGX against daily_limit_ugx
-    // [C-2 FIX] Only match traders whose float_{currency} >= fiatAmountUgx (not fiatNeeded!)
+    // ── PHASE 2: Filter by payout settings eligibility ──
+    // [P2A] Traders must have active payout setting for this network/currency
+    // [P2B] Amount must be within min/max bounds
+    // [P2C] Available float (minus reserved) must cover the amount
     // [VERIFICATION GUARD] Only match VERIFIED traders
     const traderResult = await db.query(
       `SELECT t.*,
+         ps.id as payout_setting_id,
+         ps.min_amount,
+         ps.max_amount,
+         ps.available_float,
+         ps.reserved_float,
          (SELECT COUNT(*) FROM transactions tx
           WHERE tx.trader_id = t.id AND tx.state IN ('TRADER_MATCHED','FIAT_SENT')) as active_load
        FROM traders t
+       INNER JOIN trader_payout_settings ps ON ps.trader_id = t.id
        WHERE t.status = 'ACTIVE'
          AND t.verification_status = 'VERIFIED'
-         AND $1 = ANY(t.networks)
-         AND t.${floatCol} >= $2
+         AND ps.is_active = true
+         AND ps.network = $1
+         AND ps.currency = $4
+         AND $2 >= ps.min_amount
+         AND $2 <= ps.max_amount
+         AND (ps.available_float - COALESCE(ps.reserved_float, 0)) >= $2
          AND (t.daily_volume + $3) <= t.daily_limit_ugx
        ORDER BY t.trust_score DESC, active_load ASC
        LIMIT 1`,
-      [transaction.network, fiatAmountUgx, fiatAmountUgx]
+      [transaction.network, fiatAmountUgx, fiatAmountUgx, fiatCurrency]
     );
 
     const trader = traderResult.rows[0];
 
     if (!trader) {
-      logger.warn(`[Matching] No available trader for tx ${transactionId} — will retry via job queue`);
+      logger.warn(`[Matching] No eligible trader found for network=${transaction.network}, currency=${fiatCurrency}, amount=${fiatNeeded} — will retry via job queue`);
       // Don't fail immediately — enqueue for retry and let the job queue retry later
       const jobQueue = await getJobQueue();
       await jobQueue.enqueueReMatch(transactionId, null, config.platform.traderRetryDelaySeconds || 30);

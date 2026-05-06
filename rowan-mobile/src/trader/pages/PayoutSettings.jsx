@@ -328,7 +328,7 @@ const PayoutSettings = () => {
 
             {/* Row 3: Available Float */}
             <div>
-              <label className="block text-sm text-gray-300 mb-1">Available Float (USDC) *</label>
+              <label className="block text-sm text-gray-300 mb-1">Available Float ({formData.currency || '?'}) *</label>
               <input
                 type="number"
                 step="0.0000001"
@@ -337,7 +337,7 @@ const PayoutSettings = () => {
                 className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
                 placeholder="0.0000000"
               />
-              <p className="text-xs text-gray-400 mt-1">Liquidity available for payouts</p>
+              <p className="text-xs text-gray-400 mt-1">Mobile money liquidity available for payouts</p>
             </div>
 
             {/* Row 4: Optional Pricing Fields */}
@@ -458,19 +458,19 @@ const PayoutSettings = () => {
                 <div className="bg-gray-900 rounded p-3">
                   <p className="text-gray-400">Min</p>
                   <p className="font-mono text-lg text-yellow-400">
-                    {setting.min_amount.toLocaleString()}
+                    {setting.min_amount.toLocaleString()} {setting.currency}
                   </p>
                 </div>
                 <div className="bg-gray-900 rounded p-3">
                   <p className="text-gray-400">Max</p>
                   <p className="font-mono text-lg text-yellow-400">
-                    {setting.max_amount.toLocaleString()}
+                    {setting.max_amount.toLocaleString()} {setting.currency}
                   </p>
                 </div>
                 <div className="bg-gray-900 rounded p-3">
                   <p className="text-gray-400">Float</p>
                   <p className="font-mono text-lg text-blue-400">
-                    {parseFloat(setting.available_float).toFixed(4)} USDC
+                    {parseFloat(setting.available_float).toFixed(2)} {setting.currency}
                   </p>
                 </div>
               </div>
