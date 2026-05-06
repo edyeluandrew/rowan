@@ -3,7 +3,7 @@
  * Methods for CRUD operations on trader payout settings
  */
 
-import api from '../api.js';
+import client from './client';
 
 const BASE_URL = '/api/v1/trader/payout-settings';
 
@@ -13,7 +13,7 @@ export const payoutSettingsAPI = {
    */
   async fetchPayoutSettings() {
     try {
-      const response = await api.get(BASE_URL);
+      const response = await client.get(BASE_URL);
       return response.data;
     } catch (error) {
       console.error('Error fetching payout settings:', error);
@@ -26,7 +26,7 @@ export const payoutSettingsAPI = {
    */
   async fetchPayoutSetting(id) {
     try {
-      const response = await api.get(`${BASE_URL}/${id}`);
+      const response = await client.get(`${BASE_URL}/${id}`);
       return response.data;
     } catch (error) {
       console.error('Error fetching payout setting:', error);
@@ -49,7 +49,7 @@ export const payoutSettingsAPI = {
    */
   async createPayoutSetting(data) {
     try {
-      const response = await api.post(BASE_URL, data);
+      const response = await client.post(BASE_URL, data);
       return response.data;
     } catch (error) {
       console.error('Error creating payout setting:', error);
@@ -64,7 +64,7 @@ export const payoutSettingsAPI = {
    */
   async updatePayoutSetting(id, data) {
     try {
-      const response = await api.put(`${BASE_URL}/${id}`, data);
+      const response = await client.put(`${BASE_URL}/${id}`, data);
       return response.data;
     } catch (error) {
       console.error('Error updating payout setting:', error);
@@ -78,7 +78,7 @@ export const payoutSettingsAPI = {
    */
   async deletePayoutSetting(id) {
     try {
-      const response = await api.delete(`${BASE_URL}/${id}`);
+      const response = await client.delete(`${BASE_URL}/${id}`);
       return response.data;
     } catch (error) {
       console.error('Error deleting payout setting:', error);
@@ -93,7 +93,7 @@ export const payoutSettingsAPI = {
    */
   async togglePayoutSettingStatus(id, isActive) {
     try {
-      const response = await api.patch(`${BASE_URL}/${id}/toggle`, {
+      const response = await client.patch(`${BASE_URL}/${id}/toggle`, {
         is_active: isActive,
       });
       return response.data;

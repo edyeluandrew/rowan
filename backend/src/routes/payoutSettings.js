@@ -17,7 +17,7 @@ const router = Router();
  */
 router.get('/', authTrader, async (req, res, next) => {
   try {
-    const traderId = req.user.id;
+    const traderId = req.traderId;
     const settings = await payoutSettingsService.getPayoutSettingsByTrader(traderId);
     
     res.json({
@@ -37,7 +37,7 @@ router.get('/', authTrader, async (req, res, next) => {
 router.get('/:id', authTrader, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const traderId = req.user.id;
+    const traderId = req.traderId;
 
     const setting = await payoutSettingsService.getPayoutSettingById(id, traderId);
     if (!setting) {
@@ -68,7 +68,7 @@ router.post(
   validate(['country', 'network', 'currency', 'min_amount', 'max_amount', 'available_float']),
   async (req, res, next) => {
     try {
-      const traderId = req.user.id;
+      const traderId = req.traderId;
       const {
         country,
         network,
@@ -112,7 +112,7 @@ router.post(
 router.put('/:id', authTrader, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const traderId = req.user.id;
+    const traderId = req.traderId;
     const {
       country,
       min_amount,
@@ -152,7 +152,7 @@ router.put('/:id', authTrader, async (req, res, next) => {
 router.delete('/:id', authTrader, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const traderId = req.user.id;
+    const traderId = req.traderId;
 
     const result = await payoutSettingsService.deletePayoutSetting(id, traderId);
 
@@ -175,7 +175,7 @@ router.patch('/:id/toggle', authTrader, validate(['is_active']), async (req, res
   try {
     const { id } = req.params;
     const { is_active } = req.body;
-    const traderId = req.user.id;
+    const traderId = req.traderId;
 
     const setting = await payoutSettingsService.togglePayoutSettingStatus(
       id,

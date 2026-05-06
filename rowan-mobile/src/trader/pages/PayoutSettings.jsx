@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronRight, Plus, Edit2, Trash2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import payoutSettingsAPI from '../api/payoutSettings';
-import logger from '../../utils/logger';
+
 
 const NETWORKS = ['MTN_UG', 'AIRTEL_UG', 'M_PESA_KE', 'MTN_TZ', 'AIRTEL_TZ'];
 const CURRENCIES = ['UGX', 'KES', 'TZS'];
@@ -51,7 +51,7 @@ const PayoutSettings = () => {
       setSettings(response.data || []);
       setError('');
     } catch (err) {
-      logger.error('Failed to fetch payout settings:', err);
+      console.error('Failed to fetch payout settings:', err);
       setError('Failed to load payout settings');
     } finally {
       setLoading(false);
@@ -133,7 +133,7 @@ const PayoutSettings = () => {
       setShowForm(false);
       setFormData(getEmptyFormData());
     } catch (err) {
-      logger.error('Error saving payout setting:', err);
+      console.error('Error saving payout setting:', err);
       setError(err.response?.data?.error || 'Failed to save payout setting');
     }
   }
@@ -145,7 +145,7 @@ const PayoutSettings = () => {
       await payoutSettingsAPI.deletePayoutSetting(id);
       await fetchSettings();
     } catch (err) {
-      logger.error('Error deleting payout setting:', err);
+      console.error('Error deleting payout setting:', err);
       setError('Failed to delete payout setting');
     }
   }
@@ -155,7 +155,7 @@ const PayoutSettings = () => {
       await payoutSettingsAPI.togglePayoutSettingStatus(id, !currentStatus);
       await fetchSettings();
     } catch (err) {
-      logger.error('Error toggling payout setting:', err);
+      console.error('Error toggling payout setting:', err);
       setError('Failed to toggle payout setting');
     }
   }
