@@ -10,6 +10,7 @@ import db from '../db/index.js';
 import redis from '../db/redis.js';
 import quoteEngine from './quoteEngine.js';
 import matchingEngine from './matchingEngine.js';
+import payoutSettingsService from './payoutSettingsService.js';
 import fraudMonitor from './fraudMonitor.js';
 import stateMachine from './transactionStateMachine.js';
 import logger from '../utils/logger.js';
@@ -531,6 +532,18 @@ async function releaseToTrader(transactionId) {
     await stateMachine.transition(transactionId, 'FIAT_SENT', 'COMPLETE', {
       stellar_release_tx: result.hash,
     });
+
+    // ── PHASE 3: Finalize float in payout_settings ──
+    // Deduct both available_float and reserved_float when transaction completes
+    if (transaction.payout_setting_id && transaction.fiat_amount) {
+      try {
+        await payoutSettingsService.finalizeFloat(transaction.payout_setting_id, parseFloat(transaction.fiat_amount));
+        logger.info(`[Escrow] Finalized float for tx ${transactionId}: setting ${transaction.payout_setting_id}, amount ${transaction.fiat_amount}`);
+      } catch (finalizeErr) {
+        logger.error(`[Escrow] Failed to finalize float for tx ${transactionId}:`, finalizeErr.message);
+        // Continue anyway — transaction is already marked COMPLETE
+      }
+    }
 
     // ── [C-1 FIX] Update trader daily volume in UGX equivalent, not USDC ──
     const fiatAmount = parseFloat(transaction.fiat_amount);

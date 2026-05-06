@@ -299,6 +299,121 @@ class PayoutSettingsService {
       throw err;
     }
   }
+
+  /**
+   * Phase 3: Reserve float for a matched transaction
+   * Atomically increments reserved_float when trader is assigned
+   */
+  async reserveFloat(payoutSettingId, fiatAmount) {
+    try {
+      // Validate amount
+      if (fiatAmount <= 0) {
+        const err = new Error('Fiat amount must be greater than 0');
+        err.status = 400;
+        throw err;
+      }
+
+      // Atomically reserve: check still available, increment reserved_float
+      const result = await db.query(
+        `UPDATE trader_payout_settings
+         SET reserved_float = reserved_float + $1,
+             updated_at = NOW()
+         WHERE id = $2
+           AND (available_float - reserved_float) >= $1
+         RETURNING id, trader_id, network, currency, available_float, reserved_float`,
+        [fiatAmount, payoutSettingId]
+      );
+
+      if (result.rows.length === 0) {
+        const err = new Error('Insufficient available float to reserve');
+        err.status = 409;
+        throw err;
+      }
+
+      const setting = result.rows[0];
+      logger.info(`[Float] Reserved ${fiatAmount} for payout setting ${payoutSettingId} (${setting.network}/${setting.currency}). Reserved now: ${setting.reserved_float + fiatAmount}`);
+      return setting;
+    } catch (err) {
+      logger.error('PayoutSettingsService.reserveFloat', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Phase 3: Release reserved float (trader declined or request expired)
+   * Atomically decrements reserved_float back
+   */
+  async releaseReservedFloat(payoutSettingId, fiatAmount) {
+    try {
+      // Validate amount
+      if (fiatAmount <= 0) {
+        const err = new Error('Fiat amount must be greater than 0');
+        err.status = 400;
+        throw err;
+      }
+
+      // Atomically release: decrement reserved_float, ensure non-negative
+      const result = await db.query(
+        `UPDATE trader_payout_settings
+         SET reserved_float = GREATEST(0, reserved_float - $1),
+             updated_at = NOW()
+         WHERE id = $2
+         RETURNING id, trader_id, network, currency, available_float, reserved_float`,
+        [fiatAmount, payoutSettingId]
+      );
+
+      if (result.rows.length === 0) {
+        logger.warn(`PayoutSettingsService.releaseReservedFloat: Setting ${payoutSettingId} not found`);
+        return null;
+      }
+
+      const setting = result.rows[0];
+      logger.info(`[Float] Released ${fiatAmount} reservation for payout setting ${payoutSettingId} (${setting.network}/${setting.currency}). Reserved now: ${setting.reserved_float}`);
+      return setting;
+    } catch (err) {
+      logger.error('PayoutSettingsService.releaseReservedFloat', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Phase 3: Finalize float deduction (transaction completed)
+   * Atomically decrements both available_float and reserved_float
+   * Once per transaction (use idempotency key or check state)
+   */
+  async finalizeFloat(payoutSettingId, fiatAmount) {
+    try {
+      // Validate amount
+      if (fiatAmount <= 0) {
+        const err = new Error('Fiat amount must be greater than 0');
+        err.status = 400;
+        throw err;
+      }
+
+      // Atomically finalize: decrement both available and reserved
+      const result = await db.query(
+        `UPDATE trader_payout_settings
+         SET available_float = GREATEST(0, available_float - $1),
+             reserved_float = GREATEST(0, reserved_float - $1),
+             updated_at = NOW()
+         WHERE id = $2
+         RETURNING id, trader_id, network, currency, available_float, reserved_float`,
+        [fiatAmount, payoutSettingId]
+      );
+
+      if (result.rows.length === 0) {
+        logger.warn(`PayoutSettingsService.finalizeFloat: Setting ${payoutSettingId} not found`);
+        return null;
+      }
+
+      const setting = result.rows[0];
+      logger.info(`[Float] Finalized ${fiatAmount} for payout setting ${payoutSettingId} (${setting.network}/${setting.currency}). Available now: ${setting.available_float}, Reserved now: ${setting.reserved_float}`);
+      return setting;
+    } catch (err) {
+      logger.error('PayoutSettingsService.finalizeFloat', err);
+      throw err;
+    }
+  }
 }
 
 export default new PayoutSettingsService();

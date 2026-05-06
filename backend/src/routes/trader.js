@@ -3,6 +3,7 @@ import { authTrader, signToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import matchingEngine from '../services/matchingEngine.js';
 import escrowController from '../services/escrowController.js';
+import payoutSettingsService from '../services/payoutSettingsService.js';
 import payoutSettingsRoutes from './payoutSettings.js';
 import db from '../db/index.js';
 import bcrypt from 'bcryptjs';
@@ -481,6 +482,17 @@ router.post('/requests/:id/decline', authTrader, async (req, res, next) => {
 
     // ── [C-2 FIX] Restore trader float on decline ──
     await escrowController.restoreTraderFloat(tx);
+
+    // ── PHASE 3: Release reserved float on decline ──
+    if (tx.payout_setting_id && tx.fiat_amount) {
+      try {
+        await payoutSettingsService.releaseReservedFloat(tx.payout_setting_id, parseFloat(tx.fiat_amount));
+        logger.info(`[Decline] Released reserved float for tx ${tx.id}: setting ${tx.payout_setting_id}, amount ${tx.fiat_amount}`);
+      } catch (releaseErr) {
+        logger.error(`[Decline] Failed to release reserved float for tx ${tx.id}:`, releaseErr.message);
+        // Continue anyway — transaction is already unassigned
+      }
+    }
 
     // Slight trust score decay for declining
     await db.query(

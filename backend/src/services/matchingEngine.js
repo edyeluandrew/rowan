@@ -3,6 +3,7 @@ import redis from '../db/redis.js';
 import config from '../config/index.js';
 import notificationService from './notificationService.js';
 import stateMachine from './transactionStateMachine.js';
+import payoutSettingsService from './payoutSettingsService.js';
 import { fiatToUgx, getFloatColumn } from '../utils/financial.js';
 import logger from '../utils/logger.js';
 
@@ -157,6 +158,38 @@ async function matchTrader(transactionId) {
         trader_matched_at: null,
       });
       // Retry matching (will pick next best trader)
+      return matchTrader(transactionId);
+    }
+
+    // ── PHASE 3: Reserve float in payout_settings ──
+    // Atomically increment reserved_float to lock fiat for this transaction
+    try {
+      await payoutSettingsService.reserveFloat(trader.payout_setting_id, fiatNeeded);
+      
+      // Update transaction with payout_setting_id for lifecycle tracking
+      await db.query(
+        `UPDATE transactions SET payout_setting_id = $1 WHERE id = $2`,
+        [trader.payout_setting_id, transactionId]
+      );
+      
+      logger.info(`[Matching] Reserved float for tx ${transactionId}: payout_setting ${trader.payout_setting_id}, amount ${fiatNeeded}`);
+    } catch (reserveErr) {
+      // Float reservation failed — roll back the assignment and trader float decrement
+      logger.warn(`[Matching] Float reservation failed for tx ${transactionId}: ${reserveErr.message} — rolling back`);
+      
+      // Restore trader float
+      await db.query(
+        `UPDATE traders SET ${floatCol} = ${floatCol} + $1 WHERE id = $2`,
+        [fiatAmountUgx, trader.id]
+      );
+      
+      // Rollback transaction assignment
+      await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'ESCROW_LOCKED', {
+        trader_id: null,
+        trader_matched_at: null,
+      });
+      
+      // Retry matching with next trader
       return matchTrader(transactionId);
     }
 
