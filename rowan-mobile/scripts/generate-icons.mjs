@@ -33,11 +33,11 @@ async function generateIcon(iconPath, size, outputDir, filename) {
     
     const outputPath = path.join(outputDir, filename);
     
-    // Resize PNG to exact size with black background for transparency
+    // Resize PNG to exact size, preserving transparency
     await sharp(iconPath)
       .resize(size, size, { 
         fit: 'contain',
-        background: { r: 0, g: 0, b: 0, alpha: 0 } // Transparent black
+        background: { r: 0, g: 0, b: 0, alpha: 1 } // Black background (opaque)
       })
       .png()
       .toFile(outputPath);
