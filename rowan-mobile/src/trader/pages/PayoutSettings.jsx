@@ -26,6 +26,7 @@ const PayoutSettings = () => {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState(getEmptyFormData());
   const [submitting, setSubmitting] = useState(false);
+  const [duplicateSetting, setDuplicateSetting] = useState(null);
 
   function getEmptyFormData() {
     return {
@@ -61,6 +62,7 @@ const PayoutSettings = () => {
 
   const handleAddClick = () => {
     setEditingId(null);
+    setDuplicateSetting(null);
     setFormData(getEmptyFormData());
     setShowForm(true);
   };
@@ -84,7 +86,41 @@ const PayoutSettings = () => {
   const handleCancel = () => {
     setShowForm(false);
     setEditingId(null);
+    setDuplicateSetting(null);
     setFormData(getEmptyFormData());
+  };
+
+  const handleNetworkCurrencyChange = (newNetwork, newCurrency) => {
+    // Find if this (network, currency) combo already exists
+    const existing = settings.find(
+      s => s.network === newNetwork && s.currency === newCurrency
+    );
+
+    if (existing) {
+      // Auto-switch to edit mode for existing setting
+      setDuplicateSetting(existing);
+      setEditingId(existing.id);
+      setFormData({
+        country: existing.country,
+        network: existing.network,
+        currency: existing.currency,
+        min_amount: existing.min_amount,
+        max_amount: existing.max_amount,
+        available_float: existing.available_float,
+        rate_per_usdc: existing.rate_per_usdc || '',
+        spread_percent: existing.spread_percent || '',
+        fee_percent: existing.fee_percent || '',
+      });
+    } else {
+      // New setting
+      setDuplicateSetting(null);
+      setEditingId(null);
+      setFormData(prev => ({
+        ...prev,
+        network: newNetwork,
+        currency: newCurrency,
+      }));
+    }
   };
 
   async function handleSubmit(e) {
@@ -140,6 +176,8 @@ const PayoutSettings = () => {
       await fetchSettings();
       setShowForm(false);
       setFormData(getEmptyFormData());
+      setEditingId(null);
+      setDuplicateSetting(null);
     } catch (err) {
       console.error('Error saving payout setting:', err);
       setError(err.response?.data?.error || 'Failed to save payout setting');
@@ -197,9 +235,14 @@ const PayoutSettings = () => {
       {/* Form */}
       {showForm && (
         <div className="mx-4 mt-4 bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <h2 className="text-xl font-bold mb-4">
-            {editingId ? 'Edit Payout Setting' : 'Add New Payout Setting'}
+          <h2 className="text-xl font-bold mb-2">
+            {duplicateSetting ? 'Update Existing Setting' : 'Add New Payout Setting'}
           </h2>
+          {duplicateSetting && (
+            <div className="mb-4 p-3 bg-blue-900/30 border border-blue-600 rounded text-sm text-blue-200">
+              ℹ️ You already have a {duplicateSetting.network}/{duplicateSetting.currency} setting. Editing it now.
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Row 1: Country, Network, Currency */}
@@ -225,9 +268,9 @@ const PayoutSettings = () => {
                 <label className="block text-sm text-gray-300 mb-1">Network *</label>
                 <select
                   value={formData.network}
-                  onChange={(e) => setFormData({ ...formData, network: e.target.value })}
+                  onChange={(e) => handleNetworkCurrencyChange(e.target.value, formData.currency)}
                   className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
-                  disabled={editingId ? true : false}
+                  disabled={duplicateSetting ? true : false}
                 >
                   <option value="">Select</option>
                   {NETWORKS.map((net) => (
@@ -242,9 +285,9 @@ const PayoutSettings = () => {
                 <label className="block text-sm text-gray-300 mb-1">Currency *</label>
                 <select
                   value={formData.currency}
-                  onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                  onChange={(e) => handleNetworkCurrencyChange(formData.network, e.target.value)}
                   className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
-                  disabled={editingId ? true : false}
+                  disabled={duplicateSetting ? true : false}
                 >
                   <option value="">Select</option>
                   {CURRENCIES.map((curr) => (
@@ -351,7 +394,7 @@ const PayoutSettings = () => {
                 disabled={submitting}
                 className="flex-1 bg-yellow-500 text-black font-semibold rounded-lg py-2 hover:bg-yellow-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {submitting ? 'Creating...' : editingId ? 'Update' : 'Create'}
+                {submitting ? (duplicateSetting ? 'Updating...' : 'Creating...') : (duplicateSetting ? 'Update' : 'Create')}
               </button>
               <button
                 type="button"
