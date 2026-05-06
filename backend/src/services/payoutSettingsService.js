@@ -156,27 +156,27 @@ class PayoutSettingsService {
       values.push(data.country);
     }
     if (data.min_amount !== undefined) {
-      updates.push(`min_amount = $${paramIndex++}`);
+      updates.push(`min_amount = $${paramIndex++}::NUMERIC`);
       values.push(data.min_amount);
     }
     if (data.max_amount !== undefined) {
-      updates.push(`max_amount = $${paramIndex++}`);
+      updates.push(`max_amount = $${paramIndex++}::NUMERIC`);
       values.push(data.max_amount);
     }
     if (data.available_float !== undefined) {
-      updates.push(`available_float = $${paramIndex++}`);
+      updates.push(`available_float = $${paramIndex++}::NUMERIC`);
       values.push(data.available_float);
     }
     if (data.rate_per_usdc !== undefined) {
-      updates.push(`rate_per_usdc = $${paramIndex++}`);
+      updates.push(`rate_per_usdc = $${paramIndex++}::NUMERIC`);
       values.push(data.rate_per_usdc);
     }
     if (data.spread_percent !== undefined) {
-      updates.push(`spread_percent = $${paramIndex++}`);
+      updates.push(`spread_percent = $${paramIndex++}::NUMERIC`);
       values.push(data.spread_percent);
     }
     if (data.fee_percent !== undefined) {
-      updates.push(`fee_percent = $${paramIndex++}`);
+      updates.push(`fee_percent = $${paramIndex++}::NUMERIC`);
       values.push(data.fee_percent);
     }
     if (data.is_active !== undefined) {
