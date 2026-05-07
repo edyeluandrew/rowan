@@ -425,7 +425,7 @@ async function releaseToTrader(transactionId) {
       `SELECT t.*, tr.stellar_address as trader_stellar
        FROM transactions t
        JOIN traders tr ON tr.id = t.trader_id
-       WHERE t.id = $1 AND t.state = 'FIAT_SENT'`,
+       WHERE t.id = $1 AND t.state = 'USER_CONFIRMATION_PENDING'`,
       [transactionId]
     );
     const transaction = txResult.rows[0];
@@ -467,7 +467,7 @@ async function releaseToTrader(transactionId) {
       );
       if (!hasTrustline) {
         logger.error(`[Escrow] Trader ${transaction.trader_id} has no USDC trustline — blocking release`);
-        await stateMachine.transition(transactionId, 'FIAT_SENT', 'RELEASE_BLOCKED', {
+        await stateMachine.transition(transactionId, 'USER_CONFIRMATION_PENDING', 'RELEASE_BLOCKED', {
           failure_reason: 'Trader missing USDC trustline',
         });
         return null;
@@ -529,7 +529,7 @@ async function releaseToTrader(transactionId) {
     }
 
     // Update transaction to COMPLETE
-    await stateMachine.transition(transactionId, 'FIAT_SENT', 'COMPLETE', {
+    await stateMachine.transition(transactionId, 'USER_CONFIRMATION_PENDING', 'COMPLETE', {
       stellar_release_tx: result.hash,
     });
 
