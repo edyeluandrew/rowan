@@ -44,15 +44,18 @@ export default function TransactionStatus() {
   const BiometricIcon = biometricType === 'FACE_ID' ? ScanFace : Fingerprint
 
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
+  const INITIAL_WAIT_MS = 1000 // Wait 1 second before first poll to let Horizon process
 
   useEffect(() => {
     let cancelled = false
     let pollTimer = null
+    let initialWaitTimer = null
 
     const fetch = async () => {
       try {
         const tx = await getTransactionStatus(statusId)
         if (!cancelled) {
+          console.log(`[TransactionStatus] ✅ Transaction found on attempt ${retryCount + 1}`)
           setTransaction(tx)
           setIsWaiting(false)
           setLoading(false)
@@ -95,15 +98,24 @@ export default function TransactionStatus() {
             // Real error (not 404)
             setError(err.message)
             setLoading(false)
+            console.error(`[TransactionStatus] Error polling: ${err.message}`)
           }
         }
       }
     }
 
-    fetch()
+    // Initial wait before first poll to let Horizon process deposit
+    console.log(`[TransactionStatus] Waiting ${INITIAL_WAIT_MS}ms before first poll to let Horizon process...`)
+    initialWaitTimer = setTimeout(() => {
+      if (!cancelled) {
+        fetch()
+      }
+    }, INITIAL_WAIT_MS)
+
     return () => {
       cancelled = true
       if (pollTimer) clearTimeout(pollTimer)
+      if (initialWaitTimer) clearTimeout(initialWaitTimer)
     }
   }, [statusId])
 

@@ -177,13 +177,36 @@ router.post(
         });
       }
 
-      // If no transaction exists yet, this shouldn't happen (escrow should have created it)
-      // But for now return a status indicating we're waiting
-      logger.info(`[Cashout] confirmQuote called but escrow hasn't processed yet for quote ${quote.id}`);
+      // If no transaction exists yet, wait briefly for Horizon to process it
+      // Horizon detection happens in ~500ms-2 seconds typically
+      logger.info(`[Cashout] Transaction not yet created by Horizon for quote ${quote.id}, waiting...`);
+      
+      // Add a small delay to let Horizon detect and process the deposit
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Try again once
+      const txResultRetry = await db.query(
+        `SELECT id FROM transactions WHERE quote_id = $1 LIMIT 1`,
+        [quote.id]
+      );
+      const transactionIdRetry = txResultRetry.rows[0]?.id || null;
+      
+      if (transactionIdRetry) {
+        logger.info(`[Cashout] ✅ Transaction created after retry: ${transactionIdRetry}`);
+        return res.json({
+          status: 'PENDING_DEPOSIT',
+          message: 'Transaction confirmed. Waiting for escrow lock and trader match.',
+          quoteId: quote.id,
+          transactionId: transactionIdRetry,
+          stellarTxHash,
+        });
+      }
 
+      // If still not created, return with nil transactionId and tell frontend to poll
+      logger.warn(`[Cashout] Transaction still not created after retry for quote ${quote.id} — frontend will poll`);
       res.json({
         status: 'PENDING_DEPOSIT',
-        message: 'Transaction broadcast received. Waiting for on-chain confirmation.',
+        message: 'Transaction broadcast received. Waiting for blockchain confirmation and trader assignment.',
         quoteId: quote.id,
         transactionId: null,
         stellarTxHash,
