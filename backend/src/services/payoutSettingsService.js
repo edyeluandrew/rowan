@@ -229,7 +229,7 @@ class PayoutSettingsService {
 
       const query = `UPDATE trader_payout_settings
                      SET ${updates.join(', ')}
-                     WHERE id = $${paramIndex + 1} AND trader_id = $${paramIndex + 2}
+                     WHERE id = $${paramIndex} AND trader_id = $${paramIndex + 1}
                      RETURNING id, trader_id, country, network, currency,
                                min_amount, max_amount, available_float, reserved_float,
                                rate_per_usdc, spread_percent, fee_percent,
