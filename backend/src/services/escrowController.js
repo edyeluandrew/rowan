@@ -107,7 +107,20 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     );
     if (markResult.rows.length === 0) {
       await client.query('ROLLBACK');
-      logger.warn(`[Escrow] Quote ${quote.id} already used — skipping`);
+      logger.warn(`[Escrow] Quote ${quote.id} already used — checking if transaction exists`);
+      
+      // Check if transaction already exists for this quote (idempotent retry)
+      const existingTx = await db.query(
+        `SELECT id, state FROM transactions WHERE quote_id = $1`,
+        [quote.id]
+      );
+      if (existingTx.rows.length > 0) {
+        logger.info(`[Escrow] ✅ IDEMPOTENT: Transaction already created for quote ${quote.id}: ${existingTx.rows[0].id} (state: ${existingTx.rows[0].state})`);
+        await redis.del(lockKey);
+        return;
+      }
+      
+      logger.error(`[Escrow] ❌ CRITICAL: Quote marked used but no transaction found! quote=${quote.id}`);
       await redis.del(lockKey);
       return;
     }
@@ -144,16 +157,34 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
-    logger.error(`[Escrow] ❌ DB error during deposit handling:`, err.message);
-    logger.error(`[Escrow] Values that were being inserted:`, {
-      quoteId: quote.id,
-      userId: quote.user_id,
-      xlmAmount: receivedXlm,
-      fiatAmount: quote.fiat_amount,
-      userRate: quote.user_rate,
-    });
-    await redis.del(lockKey);
-    throw err;
+    // Check for unique constraint violation on quote_id
+    if (err.code === '23505' && err.constraint?.includes('quote_id')) {
+      logger.warn(`[Escrow] ⚠️  UNIQUE constraint violation on quote_id — transaction already exists (idempotent)`);
+      // This is idempotent — the transaction was already created by a previous call
+      const existingTx = await db.query(
+        `SELECT id, state FROM transactions WHERE quote_id = $1`,
+        [quote.id]
+      );
+      if (existingTx.rows.length > 0) {
+        logger.info(`[Escrow] ✅ IDEMPOTENT: Found existing transaction: ${existingTx.rows[0].id}`);
+        transaction = existingTx.rows[0];
+      } else {
+        logger.error(`[Escrow] ❌ Unique constraint error but no transaction found!`);
+        await redis.del(lockKey);
+        throw err;
+      }
+    } else {
+      logger.error(`[Escrow] ❌ DB error during deposit handling:`, err.message);
+      logger.error(`[Escrow] Values that were being inserted:`, {
+        quoteId: quote.id,
+        userId: quote.user_id,
+        xlmAmount: receivedXlm,
+        fiatAmount: quote.fiat_amount,
+        userRate: quote.user_rate,
+      });
+      await redis.del(lockKey);
+      throw err;
+    }
   } finally {
     client.release();
   }
