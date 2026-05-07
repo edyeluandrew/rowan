@@ -218,7 +218,7 @@ router.get('/status/:id', async (req, res, next) => {
                 network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
                 locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
                 fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
-                fiat_sent_at, completed_at, failed_at, failure_reason, created_at
+                fiat_sent_at, completed_at, failed_at, failure_reason, created_at, user_id
          FROM transactions WHERE id = $1 AND user_id = $2`,
         [id, userId]
       );
@@ -231,10 +231,29 @@ router.get('/status/:id', async (req, res, next) => {
                   network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
                   locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
                   fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
-                  fiat_sent_at, completed_at, failed_at, failure_reason, created_at
+                  fiat_sent_at, completed_at, failed_at, failure_reason, created_at, user_id
            FROM transactions WHERE quote_id = $1 AND user_id = $2`,
           [id, userId]
         );
+      }
+
+      // ⚠️ DEBUG: If still not found, check if transaction exists at all (user_id mismatch detection)
+      if (result.rows.length === 0) {
+        const debugCheck = await db.query(
+          `SELECT id, user_id, state FROM transactions WHERE id = $1 LIMIT 1`,
+          [id]
+        );
+        if (debugCheck.rows.length > 0) {
+          const txFound = debugCheck.rows[0];
+          logger.warn(`[Cashout] ⚠️  TRANSACTION EXISTS BUT USER_ID MISMATCH!`);
+          logger.warn(`[Cashout]   Requested userId: ${userId}`);
+          logger.warn(`[Cashout]   Actual tx userId: ${txFound.user_id}`);
+          logger.warn(`[Cashout]   Transaction state: ${txFound.state}`);
+          logger.warn(`[Cashout]   This means the user token doesn't match the transaction owner`);
+        } else {
+          logger.warn(`[Cashout] ⚠️  TRANSACTION DOES NOT EXIST (checked without user_id filter)`);
+          logger.warn(`[Cashout]   Requested id: ${id}`);
+        }
       }
     } else {
       // No JWT token: only allow lookup by quoteId (less sensitive data exposure)
