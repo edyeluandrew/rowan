@@ -6,6 +6,7 @@ import fraudMonitor from '../services/fraudMonitor.js';
 import notificationService from '../services/notificationService.js';
 import config from '../config/index.js';
 import db from '../db/index.js';
+import redis from '../db/redis.js';
 import logger from '../utils/logger.js';
 
 const router = Router();
@@ -239,7 +240,7 @@ router.get('/status/:id', async (req, res, next) => {
     if (id.length === 36) {
       // Could be either transactionId or quoteId (both are UUIDs)
       // Try Redis cache first (populated by escrowController)
-      const cachedTxId = await require('../db/redis.js').get(`quote:${id}:tx`);
+      const cachedTxId = await redis.get(`quote:${id}:tx`);
       if (cachedTxId) {
         logger.info(`[Cashout] ✅ Using cached transaction ID from quote: ${id} → ${cachedTxId}`);
         txId = cachedTxId;
