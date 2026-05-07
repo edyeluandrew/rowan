@@ -15,7 +15,12 @@ export default function TransactionStatus() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const { stellarTxHash } = location.state || {}
+  const { stellarTxHash, transactionId: passedTransactionId } = location.state || {}
+  
+  // Use transactionId from state if available (from CashoutSend), otherwise use URL param
+  // This ensures we use the correct transaction ID instead of falling back to quoteId
+  const statusId = passedTransactionId || id
+  console.log('[TransactionStatus] Route ID:', id, 'Passed transactionId:', passedTransactionId, 'Using:', statusId)
   
   const [transaction, setTransaction] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -46,7 +51,7 @@ export default function TransactionStatus() {
 
     const fetch = async () => {
       try {
-        const tx = await getTransactionStatus(id)
+        const tx = await getTransactionStatus(statusId)
         if (!cancelled) {
           setTransaction(tx)
           setIsWaiting(false)
@@ -100,7 +105,7 @@ export default function TransactionStatus() {
       cancelled = true
       if (pollTimer) clearTimeout(pollTimer)
     }
-  }, [id])
+  }, [statusId])
 
   const handleConfirmReceipt = async () => {
     // If biometric lock is enabled, require verification first
@@ -134,7 +139,7 @@ export default function TransactionStatus() {
     setConfirming(true)
     setConfirmError(null)
     try {
-      const result = await confirmReceipt(id)
+      const result = await confirmReceipt(statusId)
       // Update transaction state
       setTransaction((prev) => (prev ? { ...prev, state: 'COMPLETE', ...result } : prev))
       setShowConfirmModal(false)
@@ -153,7 +158,7 @@ export default function TransactionStatus() {
     setDisputing(true)
     setDisputeError(null)
     try {
-      const result = await openDispute(id, disputeReason.trim())
+      const result = await openDispute(statusId, disputeReason.trim())
       // Update transaction state
       setTransaction((prev) => (prev ? { ...prev, state: 'DISPUTE_OPENED', ...result } : prev))
       setShowDisputeModal(false)
@@ -171,7 +176,7 @@ export default function TransactionStatus() {
 
     const fetch = async () => {
       try {
-        const tx = await getTransactionStatus(id)
+        const tx = await getTransactionStatus(statusId)
         if (!cancelled) {
           setTransaction(tx)
           setIsWaiting(false)
@@ -225,9 +230,9 @@ export default function TransactionStatus() {
       cancelled = true
       if (pollTimer) clearTimeout(pollTimer)
     }
-  }, [id])
+  }, [statusId])
   useSocketHook('transaction_update', (data) => {
-    if (data.transactionId === id) {
+    if (data.transactionId === statusId) {
       setTransaction((prev) => (prev ? { ...prev, ...data } : prev))
     }
   })

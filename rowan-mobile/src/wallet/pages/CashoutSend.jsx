@@ -65,22 +65,25 @@ export default function CashoutSend() {
 
       // Confirm quote on backend with the txHash
       console.log('[CashoutSend] 🔗 Confirming quote on backend...', { quoteId: quote.quoteId, stellarTxHash })
+      let transactionId = null
       try {
         const response = await confirmQuote({
           quoteId: quote.quoteId,
           stellarTxHash,
         })
         console.log('[CashoutSend] ✅ confirmQuote response:', response)
+        transactionId = response?.transactionId  // EXTRACT transactionId from response
       } catch (confirmErr) {
         // Log the error but don't fail — proceed to transaction status page
         // (Escrow will process the deposit and match a trader)
         console.warn('[CashoutSend] ⚠️ Confirm quote error (continuing anyway):', confirmErr.message)
       }
 
-      // Navigate to transaction status (use quoteId as fallback ID)
-      console.log('[CashoutSend] 🚀 Navigating to transaction status page for quoteId:', quote.quoteId)
-      navigate(`/wallet/transaction/${quote.quoteId}`, { 
-        state: { quoteId: quote.quoteId, stellarTxHash },
+      // Navigate to transaction status using transactionId (or quoteId as fallback)
+      const statusId = transactionId || quote.quoteId
+      console.log('[CashoutSend] 🚀 Navigating to transaction status page for ID:', statusId, '(transactionId:', transactionId, 'quoteId:', quote.quoteId, ')')
+      navigate(`/wallet/transaction/${statusId}`, { 
+        state: { transactionId, quoteId: quote.quoteId, stellarTxHash },
         replace: true 
       })
     } catch (err) {
