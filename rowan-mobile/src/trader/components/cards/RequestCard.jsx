@@ -24,6 +24,15 @@ export default function RequestCard({ request, onRemove }) {
       // Only remove from list if request actually expired/can't be accepted
       // Don't remove on temporary network errors
       const msg = err?.message || 'Could not accept request';
+      
+      // Handle 410 (Gone) - request already progressed to FIAT_PAYOUT_SUBMITTED
+      // This can happen in race conditions - navigate to detail to show current state
+      if (err?.response?.status === 410) {
+        navigate(`/trader/requests/${request.id}`);
+        setAccepting(false);
+        return;
+      }
+      
       const isPermanent = /expired|already handled|not found|not assigned/i.test(msg);
       
       if (isPermanent) {
