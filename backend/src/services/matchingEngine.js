@@ -246,9 +246,13 @@ async function matchTrader(transactionId) {
  */
 async function acceptRequest(transactionId, traderId) {
   // [DEBUG] Capture call stack to see where accept is called from
-  const stack = new Error().stack.split('\n').slice(1, 4).map(s => s.trim()).join(' | ');\n  logger.warn(`[acceptRequest:CALLED] tx ${transactionId}, trader ${traderId}. Caller: ${stack}`);\n  \n  // ── B1 FIX: Set fiat_sent_at-adjacent timestamp to record acceptance ──
+  const stack = new Error().stack.split('\n').slice(1, 4).map(s => s.trim()).join(' | ');
+  logger.warn(`[acceptRequest:CALLED] tx ${transactionId}, trader ${traderId}. Caller: ${stack}`);
+
+  // ── B1 FIX: Set fiat_sent_at-adjacent timestamp to record acceptance ──
   // We use matched_at to record the acceptance time (trader_matched_at = assigned time)
-  \n  // Debug: First check current state of request
+
+  // Debug: First check current state of request
   const checkBefore = await db.query(
     `SELECT id, trader_id, state, matched_at FROM transactions WHERE id = $1`,
     [transactionId]
