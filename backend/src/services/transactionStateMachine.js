@@ -59,6 +59,10 @@ const STATE_TIMESTAMPS = {
  * @returns {object|null}        - updated transaction row, or null if guard failed
  */
 async function transition(transactionId, fromState, toState, extra = {}) {
+  // Capture call stack for debugging
+  const stack = new Error().stack.split('\n').slice(1, 6).map(s => s.trim()).join(' | ');
+  logger.debug(`[StateMachine:transition] CALLED: ${transactionId} ${fromState}→${toState}. Caller: ${stack}`);
+
   // 1. Validate the transition
   const allowed = VALID_TRANSITIONS[fromState];
   if (!allowed || !allowed.includes(toState)) {
@@ -98,11 +102,11 @@ async function transition(transactionId, fromState, toState, extra = {}) {
   const row = result.rows[0];
 
   if (!row) {
-    logger.warn(`[StateMachine] Guard failed: tx ${transactionId} not in ${fromState} — transition to ${toState} skipped`);
+    logger.warn(`[StateMachine] GUARD_FAILED: tx ${transactionId} not in ${fromState} (may be in different state). Cannot transition to ${toState}`);
     return null;
   }
 
-  logger.info(`[StateMachine] tx ${transactionId}: ${fromState} → ${toState}`);
+  logger.warn(`[StateMachine:SUCCESS] tx ${transactionId}: ${fromState} → ${toState} | extra: ${JSON.stringify(extra)}`);
 
   // Broadcast transaction update to all admins for real-time dashboard
   try {

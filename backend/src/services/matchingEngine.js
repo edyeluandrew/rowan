@@ -245,20 +245,21 @@ async function matchTrader(transactionId) {
  * can distinguish "matched but not accepted" from "accepted and working".
  */
 async function acceptRequest(transactionId, traderId) {
-  // ── B1 FIX: Set fiat_sent_at-adjacent timestamp to record acceptance ──
+  // [DEBUG] Capture call stack to see where accept is called from
+  const stack = new Error().stack.split('\n').slice(1, 4).map(s => s.trim()).join(' | ');\n  logger.warn(`[acceptRequest:CALLED] tx ${transactionId}, trader ${traderId}. Caller: ${stack}`);\n  \n  // ── B1 FIX: Set fiat_sent_at-adjacent timestamp to record acceptance ──
   // We use matched_at to record the acceptance time (trader_matched_at = assigned time)
-  
-  // Debug: First check current state of request
+  \n  // Debug: First check current state of request
   const checkBefore = await db.query(
     `SELECT id, trader_id, state, matched_at FROM transactions WHERE id = $1`,
     [transactionId]
   );
   const beforeState = checkBefore.rows[0];
-  logger.info(`[Accept] Before accept: id=${transactionId}, trader_id=${beforeState?.trader_id}, state=${beforeState?.state}, matched_at=${beforeState?.matched_at}`);
+  logger.info(`[acceptRequest:BEFORE] tx ${transactionId}: trader_id=${beforeState?.trader_id}, state=${beforeState?.state}, matched_at=${beforeState?.matched_at}`);
   
   // Check if already in a completed state (FIAT_SENT, COMPLETED, etc.)
   if (beforeState && !['TRADER_MATCHED'].includes(beforeState.state)) {
-    logger.warn(`[Accept] Request already progressed to ${beforeState.state} state — cannot accept`);
+    const stack = new Error().stack.split('\n').slice(1, 3).map(s => s.trim()).join(' | ');
+    logger.warn(`[Accept:GUARD_FAILED] tx ${transactionId}: Expected TRADER_MATCHED but found ${beforeState.state}. This request was auto-progressed! Stack: ${stack}`);
     const err = new Error(`Request already progressed to ${beforeState.state} state`);
     err.statusCode = 410; // 410 Gone — request has moved on
     throw err;
@@ -356,6 +357,10 @@ async function confirmPayout(transactionId, traderId) {
  * [PHASE 8] User must confirm receipt before USDC is released.
  */
 async function submitPayoutSent(transactionId, traderId, payoutReference) {
+  // [DEBUG] Capture call stack to trace who calls this function
+  const stack = new Error().stack.split('\n').slice(1, 5).map(s => s.trim()).join(' | ');
+  logger.warn(`[submitPayoutSent:CALLED] tx ${transactionId}, trader ${traderId}, ref ${payoutReference}. Caller: ${stack}`);
+
   // [F-2 FIX] Verify trader authorization BEFORE state transition
   const txCheck = await db.query(
     `SELECT id, trader_id, state FROM transactions WHERE id = $1`,
