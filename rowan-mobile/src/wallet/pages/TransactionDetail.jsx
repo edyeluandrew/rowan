@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, Star, Smartphone, Clock, Copy, CopyCheck, AlertTriangle, FileText } from 'lucide-react'
-import { getTransactionStatus } from '../api/cashout'
+import { getTransactionStatus, confirmReceipt, openDispute } from '../api/cashout'
 import useSocketHook from '../hooks/useSocket'
 import TransactionStatusBadge from '../components/transactions/TransactionStatusBadge'
 import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
+import DisputeStatusCard from '../components/disputes/DisputeStatusCard'
+import ReceiptConfirmationCard from '../components/disputes/ReceiptConfirmationCard'
+import ConfirmingReceiptCard from '../components/disputes/ConfirmingReceiptCard'
+import DisputeConfirmModal from '../components/disputes/DisputeConfirmModal'
 import { formatXlm, formatCurrency, formatDateTime, formatAddress } from '../utils/format'
 import { NETWORKS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 
@@ -15,6 +19,10 @@ export default function TransactionDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [copied, setCopied] = useState(null)
+  const [confirmingReceipt, setConfirmingReceipt] = useState(false)
+  const [showDisputeModal, setShowDisputeModal] = useState(false)
+  const [openingDispute, setOpeningDispute] = useState(false)
+  const [disputeError, setDisputeError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -50,6 +58,18 @@ export default function TransactionDetail() {
     }
   })
 
+  useSocketHook('dispute_opened', (data) => {
+    if (data.transactionId === id) {
+      setTx((prev) => (prev ? { ...prev, state: 'DISPUTE_OPENED', ...data } : prev))
+    }
+  })
+
+  useSocketHook('dispute_resolved', (data) => {
+    if (data.transactionId === id) {
+      setTx((prev) => (prev ? { ...prev, state: data.newState, ...data } : prev))
+    }
+  })
+
   const handleCopy = async (text, field) => {
     try {
       await navigator.clipboard.writeText(text)
@@ -60,8 +80,30 @@ export default function TransactionDetail() {
     }
   }
 
-  const canDispute = tx && tx.state === 'COMPLETE' && tx.completedAt &&
-    Date.now() - new Date(tx.completedAt).getTime() < 24 * 60 * 60 * 1000
+  const handleConfirmReceipt = async () => {
+    setConfirmingReceipt(true)
+    try {
+      await confirmReceipt(id)
+      setTx((prev) => (prev ? { ...prev, state: 'COMPLETE' } : prev))
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to confirm receipt')
+    } finally {
+      setConfirmingReceipt(false)
+    }
+  }
+
+  const handleOpenDispute = async () => {
+    setOpeningDispute(true)
+    try {
+      await openDispute(id, 'Did not receive mobile money')
+      setTx((prev) => (prev ? { ...prev, state: 'DISPUTE_OPENED' } : prev))
+      setShowDisputeModal(false)
+    } catch (err) {
+      setDisputeError(err.response?.data?.error || 'Failed to open dispute')
+    } finally {
+      setOpeningDispute(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -106,6 +148,38 @@ export default function TransactionDetail() {
           <span className="text-rowan-muted text-xs">{formatDateTime(tx.createdAt)}</span>
         </div>
       </div>
+
+      {/* Dispute status cards */}
+      {['DISPUTE_OPENED', 'DISPUTE_RELEASE_PENDING', 'DISPUTE_REFUND_PENDING', 'RELEASE_BLOCKED', 'REFUNDED'].includes(tx.state) && (
+        <div className="mb-4">
+          <DisputeStatusCard state={tx.state} data={tx} />
+        </div>
+      )}
+
+      {/* Receipt confirmation for FIAT_PAYOUT_SUBMITTED only */}
+      {tx.state === 'FIAT_PAYOUT_SUBMITTED' && (
+        <div className="mb-4">
+          <ReceiptConfirmationCard
+            onConfirmReceipt={handleConfirmReceipt}
+            onOpenDispute={() => setShowDisputeModal(true)}
+            isLoading={confirmingReceipt}
+          />
+        </div>
+      )}
+
+      {/* Confirming receipt status for USER_CONFIRMATION_PENDING */}
+      {tx.state === 'USER_CONFIRMATION_PENDING' && (
+        <div className="mb-4">
+          <ConfirmingReceiptCard />
+        </div>
+      )}
+
+      {/* Error message */}
+      {disputeError && (
+        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mb-4">
+          <p className="text-rowan-red text-sm">{disputeError}</p>
+        </div>
+      )}
 
       {/* Amounts */}
       <div className="bg-rowan-surface rounded-xl p-4 mb-4">
@@ -152,6 +226,15 @@ export default function TransactionDetail() {
         {tx.memo && (
           <DetailRow label="Memo" value={tx.memo} />
         )}
+        {tx.stellar_release_tx && (
+          <DetailRow
+            label="Stellar Release TX"
+            value={formatAddress(tx.stellar_release_tx)}
+            copyable
+            copied={copied === 'release'}
+            onCopy={() => handleCopy(tx.stellar_release_tx, 'release')}
+          />
+        )}
         {tx.stellarTxHash && (
           <DetailRow
             label="Stellar TX"
@@ -180,15 +263,13 @@ export default function TransactionDetail() {
         </button>
       )}
 
-      {/* Dispute button */}
-      {canDispute && (
-        <button
-          onClick={() => navigate(`/wallet/dispute/${tx.id}`)}
-          className="w-full flex items-center justify-center gap-2 bg-rowan-red/10 border border-rowan-red/30 rounded-xl px-4 py-3 min-h-11 mt-4"
-        >
-          <AlertTriangle size={16} className="text-rowan-red" />
-          <span className="text-rowan-red text-sm font-medium">File Dispute</span>
-        </button>
+      {/* Dispute modal */}
+      {showDisputeModal && (
+        <DisputeConfirmModal
+          onConfirm={handleOpenDispute}
+          onCancel={() => setShowDisputeModal(false)}
+          isLoading={openingDispute}
+        />
       )}
     </div>
   )

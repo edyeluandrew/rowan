@@ -53,23 +53,45 @@ async function getEscrowController() {
 const refundQueue = new Queue('refund', defaultOpts);
 
 refundQueue.process(async (job) => {
-  const { transactionId } = job.data;
-  logger.info(`[Job:refund] Processing refund for tx ${transactionId}`);
+  const { transactionId, dispute, userId } = job.data;
+  logger.info(`[Job:refund] Processing ${dispute ? 'DISPUTE ' : ''}refund for tx ${transactionId}`);
 
   const escrowController = await getEscrowController();
+  const payoutSettingsService = await import('./payoutSettingsService.js').then(m => m.default);
 
   const result = await db.query(
-    `SELECT t.*, u.stellar_address as user_stellar
+    `SELECT t.*, u.stellar_address as user_stellar, ps.trader_id
      FROM transactions t
      JOIN users u ON u.id = t.user_id
-     WHERE t.id = $1 AND t.state IN ('FAILED', 'TRADER_MATCHED')`,
+     LEFT JOIN trader_payout_settings ps ON ps.id = t.payout_setting_id
+     WHERE t.id = $1`,
     [transactionId]
   );
   const tx = result.rows[0];
-  if (!tx) throw new Error(`Transaction ${transactionId} not found or not refundable`);
+  if (!tx) throw new Error(`Transaction ${transactionId} not found`);
 
-  // ── [C-2 FIX] Restore trader float if a trader was matched ──
+  // ── [DISPUTE] Only release reserved float for user ──
+  if (dispute && tx.payout_setting_id && tx.trader_id) {
+    logger.info(`[Job:refund] DISPUTE: Releasing reserved float for tx ${transactionId}`);
+    await payoutSettingsService.releaseReservedFloat(tx.payout_setting_id, tx.fiat_amount);
+    
+    // Transition to REFUNDED state
+    await stateMachine.transition(transactionId, 'DISPUTE_REFUND_PENDING', 'REFUNDED', {
+      dispute_refund_tx: 'N/A', // No XLM refund in dispute
+    });
+    
+    // Notify user
+    await notificationService.notifyUser(userId, 'dispute_resolved_refund', {
+      transactionId,
+      floatRestored: true,
+    });
+    
+    return { status: 'dispute_resolved', action: 'float_released' };
+  }
+
+  // ── [NORMAL] Restore trader float if a trader was matched ──
   if (tx.trader_id) {
+    logger.info(`[Job:refund] Restoring trader float for tx ${transactionId}`);
     await escrowController.restoreTraderFloat(tx);
   }
 
@@ -102,14 +124,38 @@ const releaseQueue = new Queue('release', {
 });
 
 releaseQueue.process(async (job) => {
-  const { transactionId } = job.data;
-  logger.info(`[Job:release] Retrying USDC release for tx ${transactionId}`);
+  const { transactionId, dispute, traderId } = job.data;
+  logger.info(`[Job:release] Processing ${dispute ? 'DISPUTE ' : ''}USDC release for tx ${transactionId}`);
 
   const escrowController = await getEscrowController();
+
+  // ── Release USDC to trader (handles float finalization + state transition internally) ──
   const releaseHash = await escrowController.releaseToTrader(transactionId);
   logger.info(`[Job:release] Release succeeded for tx ${transactionId}: ${releaseHash}`);
 
-  // Notify both parties on successful release
+  // ── [DISPUTE] Notify parties on successful resolution ──
+  if (dispute) {
+    const txResult = await db.query(
+      `SELECT user_id FROM transactions WHERE id = $1`,
+      [transactionId]
+    );
+    const tx = txResult.rows[0];
+    
+    if (tx) {
+      await notificationService.notifyUser(tx.user_id, 'dispute_resolved_release', {
+        transactionId,
+        message: 'Dispute resolved - USDC released to trader',
+      });
+      await notificationService.notifyTrader(traderId, 'dispute_resolved_release', {
+        transactionId,
+        usdcReleased: true,
+      });
+    }
+    
+    return { releaseHash, status: 'dispute_resolved' };
+  }
+
+  // ── [NORMAL] Notify both parties on successful release ──
   const txResult = await db.query(
     `SELECT * FROM transactions WHERE id = $1`,
     [transactionId]
@@ -223,18 +269,18 @@ orphanRecoveryQueue.process(async () => {
   const escrowController = await getEscrowController();
   const { default: matchingEngine } = await import('./matchingEngine.js');
 
-  // 1. FIAT_SENT for too long → flag for admin (potential dispute)
+  // 1. FIAT_PAYOUT_SUBMITTED for too long → flag for admin (potential dispute)
   const fiatSentMinutes = config.platform.orphanFiatSentMinutes;
   const stuckFiatSent = await db.query(
     `SELECT t.*, u.stellar_address as user_stellar
      FROM transactions t
      JOIN users u ON u.id = t.user_id
-     WHERE t.state = 'FIAT_SENT'
-       AND t.fiat_sent_at < NOW() - INTERVAL '1 minute' * $1`,
+     WHERE t.state = 'FIAT_PAYOUT_SUBMITTED'
+       AND t.fiat_payout_submitted_at < NOW() - INTERVAL '1 minute' * $1`,
     [fiatSentMinutes]
   );
   for (const tx of stuckFiatSent.rows) {
-    logger.warn(`[Job:orphan-recovery] FIAT_SENT stuck for tx ${tx.id} — flagging for admin review`);
+    logger.warn(`[Job:orphan-recovery] FIAT_PAYOUT_SUBMITTED stuck for tx ${tx.id} — flagging for admin review`);
   }
 
   // 2. TRADER_MATCHED but never accepted → unassign, restore float, re-match

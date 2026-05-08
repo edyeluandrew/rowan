@@ -797,20 +797,9 @@ router.post('/transactions/:id/confirm-receipt', authUser, async (req, res, next
       logger.info(`[User] Transitioned tx ${transactionId} to USER_CONFIRMATION_PENDING`);
     }
 
-    // Attempt USDC release
+    // Attempt USDC release (releaseToTrader handles state transition to COMPLETE)
     try {
       const releaseTxHash = await escrowController.releaseToTrader(transactionId);
-
-      // Mark transaction as completed
-      await stateMachine.transition(
-        transactionId,
-        'USER_CONFIRMATION_PENDING',
-        'COMPLETE',
-        {
-          stellar_release_tx: releaseTxHash,
-          user_confirmed_receipt_at: 'NOW()',
-        }
-      );
 
       logger.info(`[User] Transaction ${transactionId} completed: USDC released, hash ${releaseTxHash}`);
 

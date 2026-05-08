@@ -5,11 +5,12 @@ import { getRequest, confirmRequest } from '../api/trader';
 import { useSocket } from '../context/SocketContext';
 import { useCountdown } from '../hooks/useCountdown';
 import { formatCurrency, formatAddress } from '../utils/format';
-import { NETWORKS, TX_STATES } from '../utils/constants';
+import { NETWORKS, TX_STATES, PHONE_REVEAL_TIMEOUT_MS } from '../utils/constants';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import ConfirmPayoutModal from '../components/modals/ConfirmPayoutModal';
+import TraderDisputeStatusCard from '../components/disputes/TraderDisputeStatusCard';
 
 const STEPS = ['Escrow Funded', 'Payout Sent', 'Complete'];
 
@@ -129,6 +130,10 @@ export default function RequestDetail() {
   const getStep = () => {
     if (!tx) return 0;
     const state = (tx.state || tx.status || '').toUpperCase();
+    // Dispute states don't progress in the normal step flow
+    if (['DISPUTE_OPENED', 'DISPUTE_RELEASE_PENDING', 'DISPUTE_REFUND_PENDING'].includes(state)) {
+      return state === 'DISPUTE_RELEASE_PENDING' ? 3 : 2; // Show dispute but don't allow payout
+    }
     // Map database states to UI steps:
     // Step 3: Transaction complete
     if (state === 'COMPLETE') return 3;
@@ -196,6 +201,13 @@ export default function RequestDetail() {
       {tx.sla_expires_at && !isComplete && (
         <div className="mb-4">
           <SlaCountdown expiresAt={tx.sla_expires_at} />
+        </div>
+      )}
+
+      {/* Dispute/Status Cards */}
+      {['FIAT_PAYOUT_SUBMITTED', 'DISPUTE_OPENED', 'DISPUTE_RELEASE_PENDING', 'DISPUTE_REFUND_PENDING', 'REFUNDED'].includes(tx.state) && (
+        <div className="mb-4">
+          <TraderDisputeStatusCard state={tx.state} data={tx} />
         </div>
       )}
 
@@ -278,7 +290,7 @@ export default function RequestDetail() {
               </button>
               <button
                 onClick={() => setShowConfirm(true)}
-                className="text-rowan-yellow text-xs font-medium flex-1 py-2 border border-rowan-yellow rounded"
+                className="text-rowan-yellow text-xs font-medium flex-1 py-2 border border-rowan-yellow rounded hover:bg-rowan-yellow/10"
               >
                 I've Sent Payment
               </button>

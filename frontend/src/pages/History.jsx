@@ -9,7 +9,7 @@ import { formatCurrency } from '../utils/format';
 import TransactionCard from '../components/cards/TransactionCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
-const STATUS_OPTIONS = ['COMPLETED', 'FIAT_SENT', 'TRADER_MATCHED', 'EXPIRED', 'DISPUTED', 'REFUNDED'];
+const STATUS_OPTIONS = ['COMPLETE', 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'DISPUTE_OPENED', 'REFUNDED', 'FAILED'];
 const NETWORK_OPTIONS = ['MTN', 'AIRTEL', 'BANK'];
 const DATE_OPTIONS = [
   { label: 'Today', days: 0 },

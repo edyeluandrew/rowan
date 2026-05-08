@@ -322,7 +322,7 @@ router.post('/requests/:id/confirm', authTrader, async (req, res, next) => {
       await jobQueue.enqueueRelease(transaction.id);
 
       res.json({
-        status: 'FIAT_SENT',
+        status: 'FIAT_PAYOUT_SUBMITTED',
         message: 'Payout confirmed. USDC release is being processed (will retry automatically).',
         retrying: true,
       });

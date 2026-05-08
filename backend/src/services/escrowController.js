@@ -456,11 +456,11 @@ async function releaseToTrader(transactionId) {
       `SELECT t.*, tr.stellar_address as trader_stellar
        FROM transactions t
        JOIN traders tr ON tr.id = t.trader_id
-       WHERE t.id = $1 AND t.state = 'USER_CONFIRMATION_PENDING'`,
+       WHERE t.id = $1 AND t.state IN ('USER_CONFIRMATION_PENDING', 'DISPUTE_RELEASE_PENDING')`,
       [transactionId]
     );
     const transaction = txResult.rows[0];
-    if (!transaction) throw new Error('Transaction not found or wrong state');
+    if (!transaction) throw new Error('Transaction not found or wrong state (expected USER_CONFIRMATION_PENDING or DISPUTE_RELEASE_PENDING)');
 
     // ── Validate trader stellar address before attempting release ──
     if (!transaction.trader_stellar) {
@@ -559,8 +559,8 @@ async function releaseToTrader(transactionId) {
       );
     }
 
-    // Update transaction to COMPLETE
-    await stateMachine.transition(transactionId, 'USER_CONFIRMATION_PENDING', 'COMPLETE', {
+    // Update transaction to COMPLETE (from either USER_CONFIRMATION_PENDING or DISPUTE_RELEASE_PENDING)
+    await stateMachine.transition(transactionId, transaction.state, 'COMPLETE', {
       stellar_release_tx: result.hash,
     });
 

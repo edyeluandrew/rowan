@@ -34,7 +34,7 @@ export default function Home() {
 
   /* Active unconfirmed request */
   const activeRequest = active?.find((r) =>
-    r.state === 'TRADER_MATCHED' || r.state === 'FIAT_SENT'
+    ['TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(r.state)
   );
 
   return (

@@ -396,9 +396,9 @@ router.post(
     try {
       const { transactionId, reason } = req.body;
 
-      // Verify transaction belongs to user and is in FIAT_SENT state
+      // Verify transaction belongs to user and is in a disputable state
       const txResult = await db.query(
-        `SELECT * FROM transactions WHERE id = $1 AND user_id = $2 AND state = 'FIAT_SENT'`,
+        `SELECT * FROM transactions WHERE id = $1 AND user_id = $2 AND state IN ('FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING')`,
         [transactionId, req.userId]
       );
       const tx = txResult.rows[0];

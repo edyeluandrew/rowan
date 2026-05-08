@@ -34,7 +34,7 @@ async function broadcastOverviewUpdate() {
     const escrowResult = await db.query(`
       SELECT COALESCE(SUM(usdc_amount), 0) as escrow_locked
       FROM transactions
-      WHERE state IN ('ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_SENT')
+      WHERE state IN ('ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING')
     `);
 
     const txRow = txToday.rows[0];
@@ -100,8 +100,8 @@ async function broadcastEscrowUpdate() {
       SELECT
         COALESCE(SUM(usdc_amount) FILTER (WHERE state = 'ESCROW_LOCKED'), 0) as total_locked,
         COALESCE(SUM(usdc_amount) FILTER (WHERE state = 'TRADER_MATCHED'), 0) as awaiting_release,
-        COALESCE(SUM(usdc_amount) FILTER (WHERE state = 'FIAT_SENT'), 0) as pending_confirmation,
-        COUNT(*) FILTER (WHERE state IN ('ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_SENT')) as active_transactions
+        COALESCE(SUM(usdc_amount) FILTER (WHERE state IN ('FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING')), 0) as pending_confirmation,
+        COUNT(*) FILTER (WHERE state IN ('ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING')) as active_transactions
       FROM transactions
     `);
 

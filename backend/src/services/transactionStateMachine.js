@@ -27,10 +27,12 @@ const VALID_TRANSITIONS = {
   FIAT_PAYOUT_SUBMITTED: ['USER_CONFIRMATION_PENDING', 'DISPUTE_OPENED', 'FAILED', 'REFUNDED'],
   USER_CONFIRMATION_PENDING: ['COMPLETE', 'RELEASE_BLOCKED', 'FAILED', 'REFUNDED'],
   RELEASE_BLOCKED:  ['COMPLETE', 'FAILED', 'REFUNDED'],
+  DISPUTE_OPENED:   ['DISPUTE_REFUND_PENDING', 'DISPUTE_RELEASE_PENDING', 'FAILED', 'REFUNDED'], // admin resolves disputes
+  DISPUTE_REFUND_PENDING: ['REFUNDED'],  // float released, XLM refunded to user
+  DISPUTE_RELEASE_PENDING: ['COMPLETE'],  // float finalized, USDC released to trader
   FAILED:           ['REFUNDED'],
   COMPLETE:         [], // terminal
   REFUNDED:         [], // terminal
-  DISPUTE_OPENED:   ['FAILED', 'REFUNDED'], // admin resolves disputes
 };
 
 // Map state → timestamp column
@@ -40,6 +42,8 @@ const STATE_TIMESTAMPS = {
   TRADER_MATCHED:   'trader_matched_at',
   FIAT_PAYOUT_SUBMITTED: 'fiat_payout_submitted_at',
   USER_CONFIRMATION_PENDING: 'user_confirmation_pending_at',
+  DISPUTE_REFUND_PENDING: 'dispute_resolved_at',
+  DISPUTE_RELEASE_PENDING: 'dispute_resolved_at',
   COMPLETE:         'completed_at',
   FAILED:           'failed_at',
   REFUNDED:         'refunded_at',
@@ -154,12 +158,12 @@ async function transitionForDispute(transactionId, action, extra = {}) {
       return;
 
     case 'DISPUTE_WON_USER':
-      // User won dispute - initiate refund
+      // User won dispute - transition to refund pending state
       targetState = 'DISPUTE_REFUND_PENDING';
       break;
 
     case 'DISPUTE_WON_TRADER':
-      // Trader won dispute - initiate release
+      // Trader won dispute - transition to release pending state
       targetState = 'DISPUTE_RELEASE_PENDING';
       break;
 
@@ -170,13 +174,12 @@ async function transitionForDispute(transactionId, action, extra = {}) {
   if (targetState) {
     logger.info(`[StateMachine] Dispute resolution: tx ${transactionId} → ${targetState}`);
     
-    // Update transaction state and timestamp
-    await db.query(
-      `UPDATE transactions 
-       SET state = $1, dispute_resolved_at = NOW(), updated_at = NOW()
-       WHERE id = $2`,
-      [targetState, transactionId]
-    );
+    // Transition from DISPUTE_OPENED to target state
+    const result = await transition(transactionId, 'DISPUTE_OPENED', targetState, extra);
+    if (!result) {
+      throw new Error(`Failed to transition tx ${transactionId} to ${targetState}: not in DISPUTE_OPENED state`);
+    }
+    return result;
   }
 }
 

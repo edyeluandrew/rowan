@@ -89,7 +89,7 @@ async function matchTrader(transactionId) {
          ps.available_float,
          ps.reserved_float,
          (SELECT COUNT(*) FROM transactions tx
-          WHERE tx.trader_id = t.id AND tx.state IN ('TRADER_MATCHED','FIAT_SENT')) as active_load
+          WHERE tx.trader_id = t.id AND tx.state IN ('TRADER_MATCHED','FIAT_PAYOUT_SUBMITTED','USER_CONFIRMATION_PENDING')) as active_load
        FROM traders t
        INNER JOIN trader_payout_settings ps ON ps.trader_id = t.id
        WHERE t.status = 'ACTIVE'
@@ -318,7 +318,9 @@ async function acceptRequest(transactionId, traderId) {
 
 /**
  * Handle trader confirming payout sent.
- * Moves state to FIAT_SENT — escrow release handled by the caller.
+ * DEPRECATED: Use submitPayoutSent() instead.
+ * Moves state to FIAT_PAYOUT_SUBMITTED — escrow release handled by the caller.
+ * This function is kept for backward compatibility with deprecated endpoint.
  */
 async function confirmPayout(transactionId, traderId) {
   // [F-2 FIX] Verify trader authorization BEFORE state transition to prevent state corruption
@@ -331,7 +333,7 @@ async function confirmPayout(transactionId, traderId) {
     throw new Error('Cannot confirm — transaction not assigned to this trader');
   }
 
-  const transaction = await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'FIAT_SENT');
+  const transaction = await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED');
   if (!transaction) throw new Error('Cannot confirm — state transition failed (concurrent modification)');
 
   logger.info(`[Matching] Trader ${traderId} confirmed payout for tx ${transactionId}`);
@@ -339,7 +341,7 @@ async function confirmPayout(transactionId, traderId) {
   // Notify user via notification service
   notificationService.notifyUser(transaction.user_id, 'fiat_sent', {
     transactionId: transaction.id,
-    state: 'FIAT_SENT',
+    state: 'FIAT_PAYOUT_SUBMITTED',
     message: 'Mobile money is on its way!',
   });
 
