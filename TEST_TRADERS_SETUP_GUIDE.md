@@ -5,16 +5,16 @@
 ### 1. Create Diverse Test Traders
 ```bash
 cd backend
-node setup-diverse-test-traders.mjs
+node setup-test-traders-from-env.mjs
 ```
 
-This creates 4 traders:
-- **trader-mtb-airtel** (MTB + Airtel) - Most flexible
-- **trader-airtel-only** (Airtel only)
-- **trader-mtn-only** (MTN only)  
-- **trader-mpesa-only** (Mpesa only)
+This reads `TEST_TRADERS_CONFIG` from `.env` and creates 4 traders:
+- **trader-mtb-airtel@test.com** (MTB, Airtel) - Most flexible
+- **trader-airtel@test.com** (Airtel only)
+- **trader-mtn@test.com** (MTN only)  
+- **trader-mpesa@test.com** (Mpesa only)
 
-Each with 25k-50k KES float and 50k-100k daily limit.
+Each trader gets **50,000,000 stroops** (50 XLM) float per network.
 
 ---
 
