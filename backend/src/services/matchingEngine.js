@@ -138,14 +138,19 @@ async function matchTrader(transactionId) {
       [fiatAmountUgx, trader.id]
     );
     if (floatDecrResult.rows.length === 0) {
-      // Float was insufficient (race condition) — roll back the assignment
-      logger.warn(`[Matching] Float decrement failed for trader ${trader.id} — rolling back assignment`);
-      // [F-5 FIX] Route rollback through state machine for audit trail
-      await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'ESCROW_LOCKED', {
-        trader_id: null,
-        trader_matched_at: null,
-      });
-      // Retry matching (will pick next best trader)
+      // Float was insufficient (race condition)
+      // CRITICAL: Do NOT roll back state. Once TRADER_MATCHED, transaction progresses forward only.
+      // Instead, mark this match as invalid and try the next trader
+      logger.warn(`[Matching] Float insufficient for trader ${trader.id} after atomic match — trying next trader`);
+      
+      // Clear this trader's ID from the transaction (keep TRADER_MATCHED state)
+      // This allows another trader to be matched later
+      await db.query(
+        `UPDATE transactions SET trader_id = NULL WHERE id = $1 AND trader_id = $2`,
+        [transactionId, trader.id]
+      );
+      
+      // Retry matching (will pick next best trader, staying in TRADER_MATCHED state)
       return matchTrader(transactionId);
     }
 
