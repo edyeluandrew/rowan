@@ -8,7 +8,7 @@ import { formatCurrency } from '../../utils/format';
 
 const PAYOUT_CONFIRM_REDIRECT_MS = 2000;
 
-export default function ConfirmPayoutModal({ open, request, onClose }) {
+export default function ConfirmPayoutModal({ open, request, onClose, onPayoutSubmitted }) {
   const navigate = useNavigate();
   const [reference, setReference] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -25,6 +25,10 @@ export default function ConfirmPayoutModal({ open, request, onClose }) {
     setError(null);
     try {
       await submitPayoutSent(request.id, reference.trim());
+      // Optimistic update: remove from pending, move to active
+      if (onPayoutSubmitted) {
+        onPayoutSubmitted(request.id);
+      }
       setSuccess(true);
       setTimeout(() => navigate('/trader/requests'), PAYOUT_CONFIRM_REDIRECT_MS);
     } catch (err) {

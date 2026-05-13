@@ -7,13 +7,24 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 export default function Requests() {
   const [tab, setTab] = useState('incoming'); // 'incoming' | 'active'
-  const { pending, active, loading, setPending, fetchActive } = useRequests();
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const { pending, active, loading, setPending, setActive } = useRequests();
   const { isConnected } = useSocket();
 
   const list = tab === 'incoming' ? pending : active;
 
   const handleRemove = (id) => {
     setPending((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const handlePayoutSubmitted = (requestId) => {
+    // Optimistic update: remove from pending, add to active
+    setPending((prev) => prev.filter((r) => r.id !== requestId));
+    // Find the request being moved to active
+    const request = pending.find((r) => r.id === requestId);
+    if (request) {
+      setActive((prev) => [{ ...request, state: 'FIAT_PAYOUT_SUBMITTED' }, ...prev]);
+    }
   };
 
   return (
@@ -68,7 +79,13 @@ export default function Requests() {
         /* Request list */
         <div>
           {list.map((req) => (
-            <RequestCard key={req.id} request={req} onRemove={handleRemove} />
+            <RequestCard
+              key={req.id}
+              request={req}
+              onRemove={handleRemove}
+              onSelectRequest={setSelectedRequest}
+              onPayoutSubmitted={handlePayoutSubmitted}
+            />
           ))}
         </div>
       )}

@@ -3,7 +3,6 @@ import redis from '../db/redis.js';
 import config from '../config/index.js';
 import notificationService from './notificationService.js';
 import stateMachine from './transactionStateMachine.js';
-import payoutSettingsService from './payoutSettingsService.js';
 import { fiatToUgx, getFloatColumn } from '../utils/financial.js';
 import logger from '../utils/logger.js';
 
@@ -76,40 +75,29 @@ async function matchTrader(transactionId) {
     // [F-6 FIX] Convert fiat amount to UGX equivalent using shared helper
     const fiatAmountUgx = fiatToUgx(fiatNeeded, fiatCurrency);
 
-    // ── PHASE 2: Filter by payout settings eligibility ──
-    // [P2A] Traders must have active payout setting for this network/currency
-    // [P2B] Amount must be within min/max bounds
-    // [P2C] Available float (minus reserved) must cover the amount
+    // ── C5 FIX: Filter by network + P2 FIX: Use status enum ──
+    // [C-1 FIX] Compare daily_volume (UGX) + fiat-in-UGX against daily_limit_ugx
+    // [C-2 FIX] Only match traders whose float_{currency} >= fiatAmountUgx (not fiatNeeded!)
     // [VERIFICATION GUARD] Only match VERIFIED traders
     const traderResult = await db.query(
       `SELECT t.*,
-         ps.id as payout_setting_id,
-         ps.min_amount,
-         ps.max_amount,
-         ps.available_float,
-         ps.reserved_float,
          (SELECT COUNT(*) FROM transactions tx
-          WHERE tx.trader_id = t.id AND tx.state IN ('TRADER_MATCHED','FIAT_PAYOUT_SUBMITTED','USER_CONFIRMATION_PENDING')) as active_load
+          WHERE tx.trader_id = t.id AND tx.state IN ('TRADER_MATCHED','FIAT_SENT')) as active_load
        FROM traders t
-       INNER JOIN trader_payout_settings ps ON ps.trader_id = t.id
        WHERE t.status = 'ACTIVE'
          AND t.verification_status = 'VERIFIED'
-         AND ps.is_active = true
-         AND ps.network = $1
-         AND ps.currency = $4
-         AND $2 >= ps.min_amount
-         AND $2 <= ps.max_amount
-         AND (ps.available_float - COALESCE(ps.reserved_float, 0)) >= $2
+         AND $1 = ANY(t.networks)
+         AND t.${floatCol} >= $2
          AND (t.daily_volume + $3) <= t.daily_limit_ugx
        ORDER BY t.trust_score DESC, active_load ASC
        LIMIT 1`,
-      [transaction.network, fiatAmountUgx, fiatAmountUgx, fiatCurrency]
+      [transaction.network, fiatAmountUgx, fiatAmountUgx]
     );
 
     const trader = traderResult.rows[0];
 
     if (!trader) {
-      logger.warn(`[Matching] No eligible trader found for network=${transaction.network}, currency=${fiatCurrency}, amount=${fiatNeeded} — will retry via job queue`);
+      logger.warn(`[Matching] No available trader for tx ${transactionId} — will retry via job queue`);
       // Don't fail immediately — enqueue for retry and let the job queue retry later
       const jobQueue = await getJobQueue();
       await jobQueue.enqueueReMatch(transactionId, null, config.platform.traderRetryDelaySeconds || 30);
@@ -158,38 +146,6 @@ async function matchTrader(transactionId) {
         trader_matched_at: null,
       });
       // Retry matching (will pick next best trader)
-      return matchTrader(transactionId);
-    }
-
-    // ── PHASE 3: Reserve float in payout_settings ──
-    // Atomically increment reserved_float to lock fiat for this transaction
-    try {
-      await payoutSettingsService.reserveFloat(trader.payout_setting_id, fiatNeeded);
-      
-      // Update transaction with payout_setting_id for lifecycle tracking
-      await db.query(
-        `UPDATE transactions SET payout_setting_id = $1 WHERE id = $2`,
-        [trader.payout_setting_id, transactionId]
-      );
-      
-      logger.info(`[Matching] Reserved float for tx ${transactionId}: payout_setting ${trader.payout_setting_id}, amount ${fiatNeeded}`);
-    } catch (reserveErr) {
-      // Float reservation failed — roll back the assignment and trader float decrement
-      logger.warn(`[Matching] Float reservation failed for tx ${transactionId}: ${reserveErr.message} — rolling back`);
-      
-      // Restore trader float
-      await db.query(
-        `UPDATE traders SET ${floatCol} = ${floatCol} + $1 WHERE id = $2`,
-        [fiatAmountUgx, trader.id]
-      );
-      
-      // Rollback transaction assignment
-      await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'ESCROW_LOCKED', {
-        trader_id: null,
-        trader_matched_at: null,
-      });
-      
-      // Retry matching with next trader
       return matchTrader(transactionId);
     }
 
@@ -245,25 +201,20 @@ async function matchTrader(transactionId) {
  * can distinguish "matched but not accepted" from "accepted and working".
  */
 async function acceptRequest(transactionId, traderId) {
-  // [DEBUG] Capture call stack to see where accept is called from
-  const stack = new Error().stack.split('\n').slice(1, 4).map(s => s.trim()).join(' | ');
-  logger.warn(`[acceptRequest:CALLED] tx ${transactionId}, trader ${traderId}. Caller: ${stack}`);
-
   // ── B1 FIX: Set fiat_sent_at-adjacent timestamp to record acceptance ──
   // We use matched_at to record the acceptance time (trader_matched_at = assigned time)
-
+  
   // Debug: First check current state of request
   const checkBefore = await db.query(
     `SELECT id, trader_id, state, matched_at FROM transactions WHERE id = $1`,
     [transactionId]
   );
   const beforeState = checkBefore.rows[0];
-  logger.info(`[acceptRequest:BEFORE] tx ${transactionId}: trader_id=${beforeState?.trader_id}, state=${beforeState?.state}, matched_at=${beforeState?.matched_at}`);
+  logger.info(`[Accept] Before accept: id=${transactionId}, trader_id=${beforeState?.trader_id}, state=${beforeState?.state}, matched_at=${beforeState?.matched_at}`);
   
   // Check if already in a completed state (FIAT_SENT, COMPLETED, etc.)
   if (beforeState && !['TRADER_MATCHED'].includes(beforeState.state)) {
-    const stack = new Error().stack.split('\n').slice(1, 3).map(s => s.trim()).join(' | ');
-    logger.warn(`[Accept:GUARD_FAILED] tx ${transactionId}: Expected TRADER_MATCHED but found ${beforeState.state}. This request was auto-progressed! Stack: ${stack}`);
+    logger.warn(`[Accept] Request already progressed to ${beforeState.state} state — cannot accept`);
     const err = new Error(`Request already progressed to ${beforeState.state} state`);
     err.statusCode = 410; // 410 Gone — request has moved on
     throw err;
@@ -323,9 +274,7 @@ async function acceptRequest(transactionId, traderId) {
 
 /**
  * Handle trader confirming payout sent.
- * DEPRECATED: Use submitPayoutSent() instead.
- * Moves state to FIAT_PAYOUT_SUBMITTED — escrow release handled by the caller.
- * This function is kept for backward compatibility with deprecated endpoint.
+ * Moves state to FIAT_SENT — escrow release handled by the caller.
  */
 async function confirmPayout(transactionId, traderId) {
   // [F-2 FIX] Verify trader authorization BEFORE state transition to prevent state corruption
@@ -338,7 +287,7 @@ async function confirmPayout(transactionId, traderId) {
     throw new Error('Cannot confirm — transaction not assigned to this trader');
   }
 
-  const transaction = await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED');
+  const transaction = await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'FIAT_SENT');
   if (!transaction) throw new Error('Cannot confirm — state transition failed (concurrent modification)');
 
   logger.info(`[Matching] Trader ${traderId} confirmed payout for tx ${transactionId}`);
@@ -346,7 +295,7 @@ async function confirmPayout(transactionId, traderId) {
   // Notify user via notification service
   notificationService.notifyUser(transaction.user_id, 'fiat_sent', {
     transactionId: transaction.id,
-    state: 'FIAT_PAYOUT_SUBMITTED',
+    state: 'FIAT_SENT',
     message: 'Mobile money is on its way!',
   });
 
@@ -361,10 +310,6 @@ async function confirmPayout(transactionId, traderId) {
  * [PHASE 8] User must confirm receipt before USDC is released.
  */
 async function submitPayoutSent(transactionId, traderId, payoutReference) {
-  // [DEBUG] Capture call stack to trace who calls this function
-  const stack = new Error().stack.split('\n').slice(1, 5).map(s => s.trim()).join(' | ');
-  logger.warn(`[submitPayoutSent:CALLED] tx ${transactionId}, trader ${traderId}, ref ${payoutReference}. Caller: ${stack}`);
-
   // [F-2 FIX] Verify trader authorization BEFORE state transition
   const txCheck = await db.query(
     `SELECT id, trader_id, state FROM transactions WHERE id = $1`,

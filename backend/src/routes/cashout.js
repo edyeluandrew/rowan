@@ -6,7 +6,6 @@ import fraudMonitor from '../services/fraudMonitor.js';
 import notificationService from '../services/notificationService.js';
 import config from '../config/index.js';
 import db from '../db/index.js';
-import redis from '../db/redis.js';
 import logger from '../utils/logger.js';
 
 const router = Router();
@@ -178,39 +177,15 @@ router.post(
         });
       }
 
-      // If no transaction exists yet, wait briefly for Horizon to process it
-      // Horizon detection happens in ~500ms-2 seconds typically
-      logger.info(`[Cashout] Transaction not yet created by Horizon for quote ${quote.id}, waiting...`);
-      
-      // Add a small delay to let Horizon detect and process the deposit
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Try again once
-      const txResultRetry = await db.query(
-        `SELECT id FROM transactions WHERE quote_id = $1 LIMIT 1`,
-        [quote.id]
-      );
-      const transactionIdRetry = txResultRetry.rows[0]?.id || null;
-      
-      if (transactionIdRetry) {
-        logger.info(`[Cashout] ✅ Transaction created after retry: ${transactionIdRetry}`);
-        return res.json({
-          status: 'PENDING_DEPOSIT',
-          message: 'Transaction confirmed. Waiting for escrow lock and trader match.',
-          quoteId: quote.id,
-          transactionId: transactionIdRetry,
-          stellarTxHash,
-        });
-      }
+      // If no transaction exists yet, this shouldn't happen (escrow should have created it)
+      // But for now return a status indicating we're waiting
+      logger.info(`[Cashout] confirmQuote called but escrow hasn't processed yet for quote ${quote.id}`);
 
-      // If still not created, return with nil transactionId and tell frontend to poll
-      // [FIX] Return quoteId so frontend can use it as statusId for polling
-      logger.warn(`[Cashout] Transaction still not created after retry for quote ${quote.id} — frontend will poll with quoteId as fallback`);
       res.json({
         status: 'PENDING_DEPOSIT',
-        message: 'Transaction broadcast received. Waiting for blockchain confirmation and trader assignment.',
+        message: 'Transaction broadcast received. Waiting for on-chain confirmation.',
         quoteId: quote.id,
-        transactionId: null,  // Will eventually be created by Horizon watcher
+        transactionId: null,
         stellarTxHash,
       });
     } catch (err) {
@@ -224,7 +199,7 @@ router.post(
  * GET /api/v1/cashout/status/:id
  * Poll transaction state.
  * Accepts either transactionId OR quoteId
- * [FIX] Uses Redis cache for quote→tx mapping to avoid state inconsistency
+ * [FIX] Made more permissive: accepts either JWT auth OR direct access by quoteId
  */
 router.get('/status/:id', async (req, res, next) => {
   try {
@@ -233,64 +208,33 @@ router.get('/status/:id', async (req, res, next) => {
     
     logger.info(`[Cashout] status query for id: ${id}, userId: ${userId || '(no token)'}`);
 
-    let txId = id;
-
-    // Try Redis cache first (if querying by quoteId)
-    // escrowController caches quote→tx mapping when creating transaction
-    if (id.length === 36) {
-      // Could be either transactionId or quoteId (both are UUIDs)
-      // Try Redis cache first (populated by escrowController)
-      const cachedTxId = await redis.get(`quote:${id}:tx`);
-      if (cachedTxId) {
-        logger.info(`[Cashout] ✅ Using cached transaction ID from quote: ${id} → ${cachedTxId}`);
-        txId = cachedTxId;
-      }
-    }
-
     let result;
 
     // If user is authenticated, query by user ownership
     if (userId) {
-      // Try to find by transaction ID first (or cached txId from quote)
+      // Try to find by transaction ID first
       result = await db.query(
         `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
                 network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
                 locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
                 fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
-                fiat_sent_at, completed_at, failed_at, failure_reason, created_at, user_id
+                fiat_sent_at, completed_at, failed_at, failure_reason, created_at
          FROM transactions WHERE id = $1 AND user_id = $2`,
-        [txId, userId]
+        [id, userId]
       );
 
-      // If not found, try by quote_id as fallback
-      if (result.rows.length === 0 && txId === id) {
+      // If not found, try by quote_id
+      if (result.rows.length === 0) {
         logger.info(`[Cashout] Transaction not found by ID, trying quote_id: ${id}`);
         result = await db.query(
           `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
                   network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
                   locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
                   fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
-                  fiat_sent_at, completed_at, failed_at, failure_reason, created_at, user_id
+                  fiat_sent_at, completed_at, failed_at, failure_reason, created_at
            FROM transactions WHERE quote_id = $1 AND user_id = $2`,
           [id, userId]
         );
-      }
-
-      // ⚠️ DEBUG: If still not found, check if transaction exists at all (user_id mismatch detection)
-      if (result.rows.length === 0) {
-        const debugCheck = await db.query(
-          `SELECT id, user_id, state FROM transactions WHERE id = $1 OR quote_id = $1 LIMIT 1`,
-          [id]
-        );
-        if (debugCheck.rows.length > 0) {
-          const txFound = debugCheck.rows[0];
-          logger.warn(`[Cashout] ⚠️  TRANSACTION EXISTS BUT USER_ID MISMATCH!`);
-          logger.warn(`[Cashout]   Requested userId: ${userId}`);
-          logger.warn(`[Cashout]   Actual tx userId: ${txFound.user_id}`);
-          logger.warn(`[Cashout]   Transaction state: ${txFound.state}`);
-        } else {
-          logger.warn(`[Cashout] ⚠️  TRANSACTION DOES NOT EXIST for id: ${id}`);
-        }
       }
     } else {
       // No JWT token: only allow lookup by quoteId (less sensitive data exposure)
@@ -396,9 +340,9 @@ router.post(
     try {
       const { transactionId, reason } = req.body;
 
-      // Verify transaction belongs to user and is in a disputable state
+      // Verify transaction belongs to user and is in FIAT_SENT state
       const txResult = await db.query(
-        `SELECT * FROM transactions WHERE id = $1 AND user_id = $2 AND state IN ('FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING')`,
+        `SELECT * FROM transactions WHERE id = $1 AND user_id = $2 AND state = 'FIAT_SENT'`,
         [transactionId, req.userId]
       );
       const tx = txResult.rows[0];

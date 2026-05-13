@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getRequest, confirmRequest } from '../api/trader';
 import { useSocket } from '../context/SocketContext';
+import { useRequests } from '../hooks/useRequests';
 import { useCountdown } from '../hooks/useCountdown';
 import { formatCurrency, formatAddress } from '../utils/format';
 import { NETWORKS, TX_STATES, PHONE_REVEAL_TIMEOUT_MS } from '../utils/constants';
@@ -78,6 +79,7 @@ export default function RequestDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { on, off } = useSocket();
+  const { refresh } = useRequests();
 
   const [tx, setTx] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -119,6 +121,12 @@ export default function RequestDetail() {
     const timer = setTimeout(() => setPhoneRevealed(false), PHONE_REVEAL_TIMEOUT_MS);
     setRevealTimer(timer);
   };
+
+  const handlePayoutSubmitted = useCallback(async () => {
+    // Refresh the global pending/active lists after payout submission
+    // This ensures the request moves from pending to active without bounce
+    await refresh();
+  }, [refresh]);
 
   useEffect(() => {
     return () => {
@@ -329,6 +337,7 @@ export default function RequestDetail() {
         open={showConfirm}
         onClose={() => setShowConfirm(false)}
         request={tx}
+        onPayoutSubmitted={handlePayoutSubmitted}
       />
     </div>
   );

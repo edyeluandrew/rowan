@@ -43,11 +43,13 @@ export async function setSecure(key, value) {
   if (plugin) {
     try {
       await plugin.set({ key, value })
-    } catch {
-      /* write failure */
+      return
+    } catch (err) {
+      // Plugin failed — fallback to localStorage
+      console.warn(`[Storage] Capacitor plugin failed, falling back to localStorage:`, err.message)
     }
-    return
   }
+  // Fallback: use localStorage (dev env or plugin failure)
   localStorage.setItem(SS_PREFIX + key, value)
 }
 
