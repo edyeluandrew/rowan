@@ -27,29 +27,46 @@ async function getPlugin() {
  */
 export async function getSecure(key) {
   const plugin = await getPlugin()
+  let value = null
+  
+  // Try plugin first (for native encrypted storage)
   if (plugin) {
     try {
-      const { value } = await plugin.get({ key })
-      return value
-    } catch {
-      return null
+      const result = await plugin.get({ key })
+      if (result?.value) {
+        return result.value
+      }
+    } catch (err) {
+      console.debug(`[Storage] Plugin read failed, checking localStorage:`, err.message)
     }
   }
-  return localStorage.getItem(SS_PREFIX + key)
+  
+  // Always check localStorage as fallback (ensures data persists across plugin failures)
+  // This is critical for wallet keypairs - MUST NOT return null if data exists
+  const localValue = localStorage.getItem(SS_PREFIX + key)
+  if (localValue) {
+    return localValue
+  }
+  
+  return null
 }
 
 export async function setSecure(key, value) {
   const plugin = await getPlugin()
+  let pluginSuccess = false
+  
+  // Always try plugin first (for native encryption)
   if (plugin) {
     try {
       await plugin.set({ key, value })
-      return
+      pluginSuccess = true
     } catch (err) {
-      // Plugin failed — fallback to localStorage
-      console.warn(`[Storage] Capacitor plugin failed, falling back to localStorage:`, err.message)
+      console.warn(`[Storage] Capacitor plugin write failed, using localStorage:`, err.message)
     }
   }
-  // Fallback: use localStorage (dev env or plugin failure)
+  
+  // CRITICAL: Always fallback to localStorage to ensure data persists
+  // This is especially important for wallet keypairs
   localStorage.setItem(SS_PREFIX + key, value)
 }
 

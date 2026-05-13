@@ -31,8 +31,16 @@ export default function CashoutSend() {
     setError(null)
     try {
       // Read secret key from secure storage on-demand — never held in React state
-      const stored = await getSecure('rowan_stellar_keypair')
+      // Retry up to 3 times in case of initialization delay
+      let stored = null
+      for (let i = 0; i < 3; i++) {
+        stored = await getSecure('rowan_stellar_keypair')
+        if (stored) break
+        if (i < 2) await new Promise(r => setTimeout(r, 100)) // 100ms delay between retries
+      }
+      
       if (!stored) throw new Error('Wallet not found. Please re-import your wallet.')
+      
       const kp = JSON.parse(stored)
       if (!kp.secretKey) throw new Error('Wallet key data is corrupted. Please re-import your wallet.')
 
