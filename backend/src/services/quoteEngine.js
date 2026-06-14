@@ -33,31 +33,22 @@ async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
     // ── CRITICAL: Use market maker as SOURCE for path discovery ──
     // Market maker holds XLM and can send real payment (not self-swap)
     // Escrow is DESTINATION where USDC is received
-    const sourceAddr = sourceAccount || config.stellar.marketMakerPublicKey || config.stellar.escrowPublicKey;
-    const destAddr = config.stellar.escrowPublicKey;
-    
     logger.info(`[QuoteEngine] 🔄 Discovering strict-receive path: receive ${usdcTarget} USDC`);
     logger.info(`[QuoteEngine] 📍 Network: ${config.stellar.network}, Horizon: ${config.stellar.horizonUrl}`);
-    
-    if (!sourceAddr || !destAddr) {
-      logger.error('[QuoteEngine] ❌ Missing addresses: source or escrow not configured');
-      return null;
-    }
-    
-    logger.info(`[QuoteEngine] Path approach: ${sourceAccount ? 'custom' : config.stellar.marketMakerPublicKey ? 'market-maker' : 'escrow'} account`);
-    logger.info(`[QuoteEngine] Path params: source=${sourceAddr.slice(0, 8)}..., dest=${destAddr.slice(0, 8)}..., USDC issuer=${USDC_ASSET.issuer.slice(0, 8)}..., amount=${usdcTarget}`);
 
-    // [FIX] Use Horizon REST API directly for path discovery
-    // The Stellar SDK v12 Server object doesn't expose .paths() method
-    // Instead, we construct the URL and call the endpoint directly
+    // [PHASE 2D FIX] The actual escrow swap always PAYS native XLM, so discover the
+    // XLM → USDC path using `source_assets=native`. Previously this used
+    // `source_account=<MM/escrow>`, which (a) returned a trivial USDC→USDC path when
+    // the account already held USDC and (b) required a specific funded source. Using
+    // source_assets=native finds the real XLM→USDC route regardless of who executes it.
     const horizonUrl = config.stellar.horizonUrl;
     const pathUrl = `${horizonUrl}/paths/strict-receive?` +
-      `source_account=${encodeURIComponent(sourceAddr)}&` +
-      `destination_account=${encodeURIComponent(destAddr)}&` +
+      `source_assets=native&` +
       `destination_asset_type=credit_alphanum4&` +
       `destination_asset_code=${USDC_ASSET.code}&` +
       `destination_asset_issuer=${encodeURIComponent(USDC_ASSET.issuer)}&` +
       `destination_amount=${usdcTarget.toFixed(7)}`;
+    logger.info(`[QuoteEngine] Path params: source=native XLM, USDC issuer=${USDC_ASSET.issuer.slice(0, 8)}..., amount=${usdcTarget}`);
 
     logger.debug(`[QuoteEngine] 🌐 Calling Horizon path endpoint...`);
     logger.debug(`[QuoteEngine]    URL: ${pathUrl}`);
@@ -77,23 +68,31 @@ async function getStrictReceivePath(usdcTarget, sourceAccount = null) {
 
     const pathResponse = await response.json();
 
-    if (!pathResponse.records || pathResponse.records.length === 0) {
-      logger.warn('[QuoteEngine] ⚠️  No valid path returned from Horizon (records: [])');
+    // [PHASE 2D FIX] Horizon returns path results nested under `_embedded.records`,
+    // NOT a top-level `records` array. The old code read `pathResponse.records`
+    // (always undefined) so EVERY quote silently fell back to indicative rates.
+    const allRecords = pathResponse._embedded?.records || pathResponse.records || [];
+    // Only accept paths that actually start from native XLM (defensive — avoids any
+    // trivial same-asset path) and pick the cheapest source amount.
+    const nativeRecords = allRecords.filter((r) => r.source_asset_type === 'native');
+
+    if (nativeRecords.length === 0) {
+      logger.warn('[QuoteEngine] ⚠️  No XLM→USDC path returned from Horizon');
       logger.warn(`[QuoteEngine] 🔍 Debug info:`, {
         network: config.stellar.network,
-        source: sourceAddr.slice(0, 8) + '...',
-        dest: destAddr.slice(0, 8) + '...',
         usdcCode: USDC_ASSET.code,
         usdcIssuer: USDC_ASSET.issuer.slice(0, 8) + '...',
         usdcTarget,
-        recordCount: pathResponse.records ? pathResponse.records.length : 'undefined',
+        recordCount: allRecords.length,
       });
-      logger.info(`[QuoteEngine] Possible causes: 1) Insufficient orderbook depth, 2) Market maker has no offers in correct direction (sell USDC / buy XLM), 3) Issuer mismatch on USDC asset, 4) Source/destination accounts not funded or missing trustline`);
+      logger.info(`[QuoteEngine] Possible causes: 1) Insufficient orderbook depth, 2) No XLM→USDC liquidity (sell USDC / buy XLM offers), 3) Issuer mismatch on USDC asset`);
       return null;
     }
 
-    // Take the first (best) path
-    const path = pathResponse.records[0];
+    // Pick the path with the smallest XLM source amount (best price for receiving USDC)
+    const path = nativeRecords.reduce((best, cur) =>
+      parseFloat(cur.source_amount) < parseFloat(best.source_amount) ? cur : best
+    );
     
     // Extract source amount (XLM needed) and destination amount (USDC received)
     const xlmNeeded = parseFloat(path.source_amount);
