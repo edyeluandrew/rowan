@@ -14,6 +14,7 @@ const config = {
   // Stellar
   stellar: {
     network: process.env.STELLAR_NETWORK || 'testnet',
+    isMainnet: (process.env.STELLAR_NETWORK || 'testnet') === 'mainnet',
     horizonUrl: process.env.HORIZON_URL || 'https://horizon-testnet.stellar.org',
     escrowPublicKey: process.env.ESCROW_PUBLIC_KEY,
     escrowSecretKey: process.env.ESCROW_SECRET_KEY,
@@ -54,6 +55,13 @@ const config = {
     redisLockCleanupDelayMs: parseInt(process.env.REDIS_LOCK_CLEANUP_DELAY_MS, 10) || 5000,
     orphanFiatSentMinutes: parseInt(process.env.ORPHAN_FIAT_SENT_MINUTES, 10) || 60,
     orphanMatchedMinutes: parseInt(process.env.ORPHAN_MATCHED_MINUTES, 10) || 30,
+    // [PHASE 2C] Fallback-quote safety. On testnet, fallback quotes are allowed by
+    // default (demo). On mainnet, fallback quotes are blocked unless explicitly
+    // enabled via ALLOW_FALLBACK_QUOTES=true (and still capped by FALLBACK_MAX_XLM).
+    allowFallbackQuotes: process.env.ALLOW_FALLBACK_QUOTES != null
+      ? process.env.ALLOW_FALLBACK_QUOTES === 'true'
+      : (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet',
+    fallbackMaxXlm: parseFloat(process.env.FALLBACK_MAX_XLM) || 1000,
   },
 
   // USDC issuers (Stellar)

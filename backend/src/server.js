@@ -97,6 +97,46 @@ if (process.env.JWT_SECRET.length < 32) {
   process.exit(1);
 }
 
+// ─── [PHASE 2C] Production safety env validation ──────────────
+// Strict, FATAL checks apply on MAINNET (real funds). On testnet/demo we warn
+// loudly but keep running so the verified testnet flow is never broken.
+// NEVER print secret VALUES — only present/missing status.
+(function validateProductionSafetyEnv() {
+  const isMainnet = (process.env.STELLAR_NETWORK || 'testnet') === 'mainnet';
+  const cors = (process.env.CORS_ORIGIN || '').trim();
+  const present = (k) => (process.env[k] ? 'present' : 'MISSING');
+
+  console.log('\n[Server] ── Env safety check ──');
+  console.log(`[Server]   NODE_ENV=${process.env.NODE_ENV || 'development'} | STELLAR_NETWORK=${process.env.STELLAR_NETWORK || 'testnet'} (mainnet=${isMainnet})`);
+  ['DATABASE_URL', 'JWT_SECRET', 'ESCROW_PUBLIC_KEY', 'ESCROW_SECRET_KEY', 'STELLAR_NETWORK', 'HORIZON_URL', 'CORS_ORIGIN', 'MARKET_MAKER_PUBLIC_KEY', 'MARKET_MAKER_SECRET_KEY']
+    .forEach((k) => console.log(`[Server]   ${k}: ${present(k)}`));
+  console.log(`[Server]   CORS_ORIGIN wildcard: ${cors === '*' ? 'YES' : 'no'} | fallback quotes allowed: ${config.platform.allowFallbackQuotes}`);
+
+  const mmConfigured = !!(process.env.MARKET_MAKER_PUBLIC_KEY && process.env.MARKET_MAKER_SECRET_KEY);
+
+  if (isMainnet) {
+    const fatals = [];
+    if (cors === '*') fatals.push('CORS_ORIGIN must NOT be "*" on mainnet — set a comma-separated allowlist of trusted origins');
+    if (!process.env.USDC_ISSUER && !process.env.USDC_ISSUER_MAINNET) fatals.push('USDC_ISSUER (mainnet) must be set explicitly on mainnet');
+    if (!mmConfigured && !config.platform.allowFallbackQuotes) {
+      // acceptable: no MM but fallback disabled means quotes will fail loudly (not silently)
+    }
+    if (fatals.length) {
+      console.error('\nFATAL (mainnet safety):');
+      fatals.forEach((f) => console.error(`  - ${f}`));
+      console.error('Refusing to start on mainnet with unsafe configuration.');
+      process.exit(1);
+    }
+    if (!mmConfigured) console.warn('[Server] ⚠️  MAINNET: market maker not configured — quotes depend on external orderbook liquidity');
+    if (config.platform.allowFallbackQuotes) console.warn('[Server] ⚠️  MAINNET: ALLOW_FALLBACK_QUOTES=true — fallback (indicative) quotes can settle. Ensure this is intended.');
+  } else {
+    if (cors === '*') console.warn('[Server] ⚠️  CORS_ORIGIN="*" — fine for testnet/demo, but MUST be an allowlist before mainnet.');
+    if (!mmConfigured) console.warn('[Server] ⚠️  Market maker not configured — quotes will use FALLBACK (indicative) rates.');
+    if (config.platform.allowFallbackQuotes) console.warn('[Server] ⚠️  Fallback quotes are ALLOWED (testnet/demo). Capped at FALLBACK_MAX_XLM=' + config.platform.fallbackMaxXlm + ' XLM.');
+  }
+  console.log('[Server] ── Env safety check complete ──\n');
+})();
+
 // [AUDIT FIX] Global rate limiter — configurable via env
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -119,13 +159,28 @@ const authLimiter = rateLimit({
 // [SEP-1] stellar.toml — must be public with CORS *, registered before app-wide CORS
 app.use('/.well-known', wellKnownRoutes);
 
-// [AUDIT FIX] CORS origin from env — supports wildcard for development.
-// CORS_ORIGIN is validated at startup; parsed as comma-separated list or '*'.
+// [AUDIT FIX / PHASE 2C] CORS origin from env.
+// - "*" allows all origins (testnet/demo only — blocked on mainnet by env check above).
+// - Otherwise a comma-separated allowlist; unknown browser origins are rejected and
+//   logged. Requests with no Origin header (native mobile apps, curl, server-to-server)
+//   are allowed since CORS only protects browser cross-origin requests.
 const corsOrigin = process.env.CORS_ORIGIN.trim();
-const corsConfig = corsOrigin === '*' 
-  ? cors() // Wildcard — allows all origins
-  : cors({ origin: corsOrigin.split(',').map(o => o.trim()) }); // Specific origins
-app.use(corsConfig);
+if (corsOrigin === '*') {
+  logger.warn('[CORS] Wildcard origin enabled (CORS_ORIGIN="*"). Allowed on testnet/demo only.');
+  app.use(cors());
+} else {
+  const allowedOrigins = corsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+  logger.info(`[CORS] Allowlist: ${allowedOrigins.join(', ')}`);
+  app.use(cors({
+    origin(origin, callback) {
+      if (!origin) return callback(null, true); // non-browser / native mobile / same-origin
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      logger.warn(`[CORS] Rejected disallowed origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+  }));
+}
 app.use(express.json({ limit: '100kb' }));
 
 // Request logging (dev)

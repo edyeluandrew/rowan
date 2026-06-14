@@ -405,7 +405,32 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
   }
 
   const { xlmRate, pathData } = pathResult;
-  
+
+  // ── [PHASE 2C] Classify rate source + enforce fallback safety ──
+  // LIVE  = priced from a real Horizon strict-receive path (executable liquidity).
+  // FALLBACK = priced from legacy/indicative rates (path discovery unavailable).
+  const rateSource = pathData.source === 'horizon-path' ? 'LIVE' : 'FALLBACK';
+  let quoteWarning = null;
+  if (rateSource === 'FALLBACK') {
+    quoteWarning = 'Rate is indicative (live market liquidity was unavailable at quote time).';
+    // Mainnet (real funds): never settle a mispriced fallback quote unless explicitly allowed.
+    if (config.stellar.isMainnet && !config.platform.allowFallbackQuotes) {
+      const err = new Error('Quote temporarily unavailable: live market liquidity is required for cash-out right now. Please try again shortly.');
+      err.statusCode = 503;
+      err.code = 'QUOTE_UNAVAILABLE';
+      throw err;
+    }
+    // Even where fallback is allowed (testnet/demo), cap the amount so a bad rate
+    // can only affect small test/demo cash-outs.
+    if (config.platform.allowFallbackQuotes && xlmAmount > config.platform.fallbackMaxXlm) {
+      const err = new Error(`Quote temporarily unavailable for this amount: live liquidity is required for cash-outs above ${config.platform.fallbackMaxXlm} XLM. Please try a smaller amount or try again shortly.`);
+      err.statusCode = 503;
+      err.code = 'QUOTE_UNAVAILABLE_FALLBACK_CAP';
+      throw err;
+    }
+    logger.warn(`[QuoteEngine] ⚠️  FALLBACK quote allowed (network=${config.stellar.network}, xlm=${xlmAmount}, cap=${config.platform.fallbackMaxXlm}). Marked rate_source=FALLBACK.`);
+  }
+
   // ── Step 4: Apply configured SLIPPAGE TOLERANCE (PHASE 1 SPRINT) ──
   // [PHASE 1] Use slippage from config, not hardcoded constant
   const slippageMultiplier = 1 + (config.platform.quoteSlippagePercent / 100);
@@ -463,8 +488,8 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
        (user_id, xlm_amount, fiat_currency, market_rate, user_rate, fiat_amount,
         platform_fee, network, phone_hash, memo, escrow_address, expires_at,
         rate_ugx, fee_ugx, status, path_xlm_needed, path_usdc_received, quote_source,
-        payout_phone, payout_name)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17,$18,$19)
+        payout_phone, payout_name, rate_source, quote_warning)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17,$18,$19,$20,$21)
      RETURNING *`,
     [
       userId, xlmAmount, fiatCurrency, 
@@ -479,6 +504,8 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
       quoteSource,                // 'horizon-path' (executable) | 'legacy-fallback' (non-executable)
       payoutPhone,               // payout_phone (full phone for trader)
       payoutName,                // payout_name (recipient name)
+      rateSource,                 // [PHASE 2C] LIVE | FALLBACK
+      quoteWarning,               // [PHASE 2C] indicative-rate warning (or null)
     ]
   );
 

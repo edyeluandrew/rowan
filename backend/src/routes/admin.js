@@ -6,6 +6,7 @@ import verificationService from '../services/traderVerificationService.js';
 import disputeService from '../services/disputeService.js';
 import stateMachine from '../services/transactionStateMachine.js';
 import notificationService from '../services/notificationService.js';
+import healthService from '../services/healthService.js';
 import db from '../db/index.js';
 import bcrypt from 'bcryptjs';
 import logger from '../utils/logger.js';
@@ -836,11 +837,20 @@ router.get('/system/health', authAdmin, async (req, res, next) => {
     await db.query('SELECT 1');
     const dbLatency = Date.now() - dbStart;
 
+    // [PHASE 2C] Liquidity / escrow / pipeline health for operations visibility.
+    let liquidity = null;
+    try { liquidity = await healthService.getLiquidityHealth(); }
+    catch (e) { liquidity = { warningLevel: 'CRITICAL', criticals: ['health check failed: ' + e.message] }; }
+
+    const overall = liquidity?.warningLevel === 'CRITICAL' ? 'degraded'
+                  : liquidity?.warningLevel === 'WARNING' ? 'warning' : 'healthy';
+
     res.json({
-      status: 'healthy',
+      status: overall,
       uptime: process.uptime(),
       db: { latency_ms: dbLatency, status: 'connected' },
       memory: process.memoryUsage(),
+      liquidity,
       timestamp: new Date().toISOString(),
     });
   } catch (err) { next(err); }
@@ -903,10 +913,28 @@ router.get('/rates', authAdmin, async (req, res, next) => {
       WHERE status = 'ACTIVE'
     `);
     const row = result.rows[0];
+
+    // [PHASE 2C] Surface live rate/liquidity posture alongside trader rates so ops
+    // can see whether quotes are coming from real liquidity or fallback.
+    let liquidity = null;
+    try { liquidity = await healthService.getLiquidityHealth(); }
+    catch (e) { liquidity = { warningLevel: 'CRITICAL', criticals: ['health check failed: ' + e.message] }; }
+
     res.json({
       avg_rate_ugx: parseFloat(row.avg_rate_ugx) || 0,
       min_rate_ugx: parseFloat(row.min_rate_ugx) || 0,
       max_rate_ugx: parseFloat(row.max_rate_ugx) || 0,
+      quote_source: liquidity?.quoteSource || 'UNKNOWN',
+      path_discovery_available: liquidity?.pathDiscovery?.available ?? null,
+      fallback_quotes_allowed: liquidity?.fallbackQuotesAllowed ?? null,
+      market_maker_configured: liquidity?.marketMaker?.configured ?? null,
+      escrow_usdc_balance: liquidity?.escrow?.usdc_balance ?? null,
+      escrow_xlm_balance: liquidity?.escrow?.xlm_balance ?? null,
+      pending_refunds: liquidity?.pending?.dispute_refund_pending ?? null,
+      release_blocked: liquidity?.pending?.release_blocked ?? null,
+      recent_failed: liquidity?.pending?.recent_failed ?? null,
+      liquidity_warning_level: liquidity?.warningLevel || 'OK',
+      liquidity_warnings: liquidity?.warnings || [],
       updated_at: new Date().toISOString(),
     });
   } catch (err) { next(err); }

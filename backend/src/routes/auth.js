@@ -272,6 +272,18 @@ router.post(
       const admin = result.rows[0];
 
       if (!admin || !(await bcrypt.compare(password, admin.password_hash))) {
+        // [PHASE 2C] Audit failed admin login attempts (security-sensitive). admin_id
+        // is null when the email doesn't match an admin; never log the password.
+        await auditLogService.log({
+          admin_id: admin?.id || null,
+          actor_role: 'admin',
+          action: 'admin_login_failed',
+          resource_type: 'admin',
+          resource_id: admin?.id || null,
+          metadata: { email, reason: admin ? 'bad_password' : 'no_such_admin' },
+          ip_address: req.ip,
+          user_agent: req.get('user-agent'),
+        });
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 

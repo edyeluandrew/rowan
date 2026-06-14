@@ -77,6 +77,14 @@ router.post(
         });
       } catch (quoteErr) {
         logger.error(`[Cashout] Quote creation failed:`, quoteErr.message);
+        // [PHASE 2C] Honor structured unavailability errors (e.g. unsafe fallback
+        // blocked) with a clean client message — do NOT create an unsettleable cashout.
+        if (quoteErr.code === 'QUOTE_UNAVAILABLE' || quoteErr.code === 'QUOTE_UNAVAILABLE_FALLBACK_CAP') {
+          return res.status(quoteErr.statusCode || 503).json({
+            error: quoteErr.message,
+            code: quoteErr.code,
+          });
+        }
         // Return 503 for transient errors (no liquidity) or 400 for permanent errors
         if (quoteErr.message.includes('No valid path') || quoteErr.message.includes('No liquidity')) {
           return res.status(503).json({ 
@@ -106,6 +114,11 @@ router.post(
         fiatCurrency: quote.fiat_currency,
         platformFee: quote.platform_fee,
         expiresAt: quote.expires_at,
+        // [PHASE 2C] Rate transparency: LIVE = priced from real liquidity,
+        // FALLBACK = indicative rate (path discovery was unavailable).
+        rateSource: quote.rate_source || (quote.quote_source === 'horizon-path' ? 'LIVE' : 'FALLBACK'),
+        pathAvailable: quote.quote_source === 'horizon-path',
+        quoteWarning: quote.quote_warning || null,
       });
     } catch (err) {
       next(err);
