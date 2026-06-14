@@ -310,17 +310,25 @@ async function submitPayoutSent(transactionId, traderId, payoutReference) {
   
   if (!tx) {
     logger.error(`[submitPayoutSent] Transaction ${transactionId} not found`);
-    throw new Error('Transaction not found');
+    const err = new Error('Transaction not found');
+    err.statusCode = 404;
+    throw err;
   }
   
   if (tx.state !== 'TRADER_MATCHED') {
     logger.error(`[submitPayoutSent] Transaction ${transactionId} in unexpected state: ${tx.state} (expected TRADER_MATCHED)`);
-    throw new Error(`Cannot submit payout — transaction in state ${tx.state}, expected TRADER_MATCHED`);
+    // [B1 FIX] Invalid-state action is a client conflict (409), not a 500. This also
+    // covers re-submitting a payout on a transaction already in DISPUTE_OPENED.
+    const err = new Error(`Cannot submit payout — transaction is in state ${tx.state}, expected TRADER_MATCHED`);
+    err.statusCode = 409;
+    throw err;
   }
   
   if (tx.trader_id !== traderId) {
     logger.error(`[submitPayoutSent] Trader ${traderId} not authorized for tx ${transactionId}`);
-    throw new Error('Cannot submit payout — transaction not assigned to this trader');
+    const err = new Error('Cannot submit payout — transaction not assigned to this trader');
+    err.statusCode = 403;
+    throw err;
   }
 
   logger.info(`[submitPayoutSent] Starting transition for tx ${transactionId}: TRADER_MATCHED → FIAT_PAYOUT_SUBMITTED`);
@@ -334,7 +342,9 @@ async function submitPayoutSent(transactionId, traderId, payoutReference) {
   
   if (!transaction) {
     logger.error(`[submitPayoutSent] State transition FAILED for tx ${transactionId} — concurrent modification or state mismatch`);
-    throw new Error('Cannot submit payout — state transition failed (concurrent modification)');
+    const err = new Error('Cannot submit payout — state transition failed (concurrent modification)');
+    err.statusCode = 409;
+    throw err;
   }
 
   logger.info(`[submitPayoutSent] ✅ Trader ${traderId} submitted payout for tx ${transactionId}, state now: ${transaction.state}`);

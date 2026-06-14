@@ -257,19 +257,27 @@ async function adminAction(disputeId, adminId, action, actionData = {}) {
     case 'resolve_user':
       targetStatus = 'RESOLVED_FOR_USER';
       if (!VALID_TRANSITIONS[dispute.status] || !VALID_TRANSITIONS[dispute.status].includes(targetStatus)) {
-        throw new Error(`Cannot resolve for user from ${dispute.status} status`);
+        // [B1-class FIX] Already-resolved / invalid status is a client conflict (409),
+        // so a duplicate admin resolution returns a clean error instead of HTTP 500.
+        const err = new Error(`Cannot resolve for user from ${dispute.status} status`);
+        err.statusCode = 409;
+        throw err;
       }
       break;
     case 'resolve_trader':
       targetStatus = 'RESOLVED_FOR_TRADER';
       if (!VALID_TRANSITIONS[dispute.status] || !VALID_TRANSITIONS[dispute.status].includes(targetStatus)) {
-        throw new Error(`Cannot resolve for trader from ${dispute.status} status`);
+        const err = new Error(`Cannot resolve for trader from ${dispute.status} status`);
+        err.statusCode = 409;
+        throw err;
       }
       break;
     case 'escalate':
       targetStatus = 'ESCALATED';
       if (!VALID_TRANSITIONS[dispute.status] || !VALID_TRANSITIONS[dispute.status].includes(targetStatus)) {
-        throw new Error(`Cannot escalate from ${dispute.status} status`);
+        const err = new Error(`Cannot escalate from ${dispute.status} status`);
+        err.statusCode = 409;
+        throw err;
       }
       break;
     case 'request_evidence':
@@ -278,7 +286,9 @@ async function adminAction(disputeId, adminId, action, actionData = {}) {
     case 'dismiss':
       targetStatus = 'DISMISSED';
       if (!VALID_TRANSITIONS[dispute.status] || !VALID_TRANSITIONS[dispute.status].includes(targetStatus)) {
-        throw new Error(`Cannot dismiss from ${dispute.status} status`);
+        const err = new Error(`Cannot dismiss from ${dispute.status} status`);
+        err.statusCode = 409;
+        throw err;
       }
       break;
     case 'close':

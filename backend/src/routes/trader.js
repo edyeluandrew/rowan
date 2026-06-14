@@ -282,6 +282,12 @@ router.post('/requests/:id/payout-sent', authTrader, async (req, res, next) => {
       },
     });
   } catch (err) {
+    // [B1 FIX] Honor explicit status codes (404/409/403) so invalid trader actions
+    // — e.g. payout-sent on a transaction already in DISPUTE_OPENED — return a clean
+    // client error instead of a generic HTTP 500.
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     next(err);
   }
 });
