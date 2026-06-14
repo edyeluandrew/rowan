@@ -7,23 +7,57 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: ENABLE_SMS_FALLBACK
+        value: "false"
+
+      # ── Core (REQUIRED — server refuses to boot without these) ──
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
         sync: false
       - key: JWT_SECRET
         sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: API_URL
+        sync: false
+
+      # ── Stellar (REQUIRED) ──
       - key: STELLAR_NETWORK
+        sync: false
+      - key: HORIZON_URL
+        sync: false
+      - key: ESCROW_PUBLIC_KEY
         sync: false
       - key: ESCROW_SECRET_KEY
         sync: false
+      - key: SEP10_SIGNING_KEY
+        sync: false
+      - key: SEP10_SIGNING_SECRET
+        sync: false
+
+      # ── Market maker (optional — enables Horizon path discovery) ──
+      - key: MARKET_MAKER_PUBLIC_KEY
+        sync: false
+      - key: MARKET_MAKER_SECRET_KEY
+        sync: false
+
+      # ── Supabase storage ──
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+
+      # ── SMS (Africa's Talking) ──
       - key: AT_API_KEY
         sync: false
       - key: AT_USERNAME
         sync: false
-      - key: ENABLE_SMS_FALLBACK
-        value: "false"
+
+      # ── Admin bootstrap (optional — seeds admin on first boot) ──
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

@@ -26,11 +26,12 @@ export function getTransactionStatus(transactionId) {
   return client.get(`/api/v1/cashout/status/${transactionId}`).then(res => res.data)
 }
 
+// Canonical dispute endpoint. The legacy POST /api/v1/cashout/dispute was
+// removed (it relied on the obsolete FIAT_SENT state); both entry points now
+// open disputes via the per-transaction user route.
 export function fileDispute({ transactionId, reason, description }) {
-  return client.post('/api/v1/cashout/dispute', {
-    transactionId,
-    reason,
-    description,
+  return client.post(`/api/v1/user/transactions/${transactionId}/dispute`, {
+    reason: description ? `${reason}: ${description}` : reason,
   }).then(res => res.data)
 }
 

@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { authUser } from '../middleware/auth.js';
+import { authUser, signToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import quoteEngine from '../services/quoteEngine.js';
 import escrowController from '../services/escrowController.js';
 import stateMachine from '../services/transactionStateMachine.js';
+import disputeService from '../services/disputeService.js';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
 import { stroopsToUsdc } from '../utils/financial.js';
@@ -543,10 +544,32 @@ router.post(
         return res.status(400).json({ error: 'Two-factor authentication is not enabled for this account' });
       }
 
+      // Helper: issue the real session token only after a successful 2FA check.
+      const issueSession = async () => {
+        const token = signToken(userId, 'user', req.body.deviceId || null);
+        const userRow = (await db.query(
+          `SELECT id, stellar_address, kyc_level, daily_limit, per_tx_limit FROM users WHERE id = $1`,
+          [userId]
+        )).rows[0];
+        return {
+          token,
+          user: userRow
+            ? {
+                id: userRow.id,
+                stellarAddress: userRow.stellar_address,
+                kycLevel: userRow.kyc_level,
+                dailyLimit: userRow.daily_limit,
+                perTxLimit: userRow.per_tx_limit,
+              }
+            : undefined,
+        };
+      };
+
       // Try TOTP code first
       if (verifyTotpCode(twoFaSettings.totp_secret, code)) {
         await log2faVerificationUser(db, userId, 'login', 'success', null, req.ip, req.get('user-agent'));
-        return res.json({ verified: true, method: 'totp' });
+        const session = await issueSession();
+        return res.json({ verified: true, method: 'totp', ...session });
       }
 
       // Try backup code
@@ -559,7 +582,8 @@ router.post(
           [newCount, userId]
         );
         await log2faVerificationUser(db, userId, 'login', 'success', null, req.ip, req.get('user-agent'));
-        return res.json({ verified: true, method: 'backup_code', backupCodesRemaining: newCount });
+        const session = await issueSession();
+        return res.json({ verified: true, method: 'backup_code', backupCodesRemaining: newCount, ...session });
       }
 
       // Both failed
@@ -882,49 +906,40 @@ router.post('/transactions/:id/dispute', authUser, async (req, res, next) => {
 
     const transactionId = transaction.id;
 
-    // Verify state (can only dispute if awaiting confirmation)
-    if (transaction.state !== 'FIAT_PAYOUT_SUBMITTED' && transaction.state !== 'USER_CONFIRMATION_PENDING') {
+    // A partner must be assigned (always true in disputable states).
+    if (!transaction.trader_id) {
       return res.status(409).json({
-        error: 'Invalid transaction state',
-        details: `Cannot open dispute in state ${transaction.state}. Must be FIAT_PAYOUT_SUBMITTED or USER_CONFIRMATION_PENDING.`,
-        currentState: transaction.state,
+        error: 'Cannot open dispute',
+        details: 'No partner is assigned to this transaction yet.',
       });
     }
 
-    // Transition to DISPUTE_OPENED (idempotency: state machine will guard)
-    const updated = await stateMachine.transition(
-      transactionId,
-      transaction.state,
-      'DISPUTE_OPENED'
-    );
+    // Canonical dispute path: disputeService creates the dispute record AND
+    // transitions the transaction to DISPUTE_OPENED (escrow stays locked,
+    // duplicate disputes are rejected, parties + admins are notified).
+    try {
+      const dispute = await disputeService.createDispute(
+        transactionId,
+        userId,
+        transaction.trader_id,
+        reason.trim()
+      );
 
-    if (!updated) {
-      return res.status(409).json({
-        error: 'Dispute update failed',
-        details: 'Transaction state changed before dispute could be opened. Please try again.',
+      logger.info(`[User] Dispute ${dispute.id} opened for tx ${transactionId} by user ${userId}`);
+
+      return res.json({
+        status: 'DISPUTE_OPENED',
+        message: 'Dispute opened. Your USDC stays locked in escrow until an admin reviews your claim.',
+        transactionId,
+        disputeId: dispute.id,
+        reason: reason.trim(),
       });
+    } catch (e) {
+      if (e.statusCode) {
+        return res.status(e.statusCode).json({ error: 'Cannot open dispute', details: e.message });
+      }
+      throw e;
     }
-
-    // Store dispute details in transactions table
-    await db.query(
-      `UPDATE transactions
-       SET dispute_id = gen_random_uuid(),
-           dispute_started_at = NOW(),
-           updated_at = NOW()
-       WHERE id = $1`,
-      [transactionId]
-    );
-
-    logger.info(
-      `[User] Dispute opened for tx ${transactionId} by user ${userId}: "${reason}"`
-    );
-
-    res.json({
-      status: 'DISPUTE_OPENED',
-      message: 'Dispute has been opened. An admin will review your claim.',
-      transactionId: transactionId,
-      reason: reason.trim(),
-    });
   } catch (err) {
     next(err);
   }

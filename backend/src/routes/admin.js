@@ -3,6 +3,7 @@ import { authAdmin } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import escrowController from '../services/escrowController.js';
 import verificationService from '../services/traderVerificationService.js';
+import disputeService from '../services/disputeService.js';
 import stateMachine from '../services/transactionStateMachine.js';
 import notificationService from '../services/notificationService.js';
 import db from '../db/index.js';
@@ -1126,29 +1127,50 @@ router.get('/disputes/:id', authAdmin, async (req, res, next) => {
 
 /**
  * POST /api/v1/admin/disputes/:id/resolve
+ *
+ * P0.7: This previously did a DB-only status UPDATE and never touched escrow,
+ * so resolving a dispute moved no money. It now delegates to the
+ * escrow-integrated disputeService.adminAction:
+ *   - RESOLVED_FOR_TRADER → transitions tx to DISPUTE_RELEASE_PENDING and
+ *     enqueues the USDC release to the partner.
+ *   - RESOLVED_FOR_USER   → transitions tx to DISPUTE_REFUND_PENDING and
+ *     enqueues the refund resolution (see refund job for pending behaviour).
+ *   - DISMISSED           → closes the dispute without moving funds.
+ *
+ * Body: { resolution: 'RESOLVED_FOR_USER'|'RESOLVED_FOR_TRADER'|'DISMISSED'|'refund'|'release'|'dismiss', adminNotes }
  */
 router.post('/disputes/:id/resolve', authAdmin, async (req, res, next) => {
   try {
     const { resolution, adminNotes } = req.body;
     if (!resolution) return res.status(400).json({ error: 'resolution is required' });
 
-    // Map resolution to valid dispute_status enum values
-    const statusMap = {
-      'refund': 'RESOLVED_FOR_USER',
-      'RESOLVED_FOR_USER': 'RESOLVED_FOR_USER',
-      'RESOLVED_FOR_TRADER': 'RESOLVED_FOR_TRADER',
-      'DISMISSED': 'DISMISSED',
-      'dismiss': 'DISMISSED',
+    // Map the admin-console resolution value to a disputeService action.
+    const actionMap = {
+      RESOLVED_FOR_USER: 'resolve_user',
+      refund: 'resolve_user',
+      RESOLVED_FOR_TRADER: 'resolve_trader',
+      release: 'resolve_trader',
+      DISMISSED: 'dismiss',
+      dismiss: 'dismiss',
     };
-    const dbStatus = statusMap[resolution] || 'RESOLVED_FOR_USER';
+    const action = actionMap[resolution];
+    if (!action) {
+      return res.status(400).json({ error: `Unsupported resolution: ${resolution}` });
+    }
 
-    await db.query(
-      `UPDATE disputes SET status = $1, admin_notes = $2, resolved_at = NOW() WHERE id = $3`,
-      [dbStatus, adminNotes || resolution, req.params.id]
-    );
-    logger.info(`[Admin] Dispute ${req.params.id} resolved: ${dbStatus}`);
-    res.json({ success: true, disputeId: req.params.id, resolution: dbStatus });
-  } catch (err) { next(err); }
+    const dispute = await disputeService.adminAction(req.params.id, req.adminId, action, {
+      reason: adminNotes || resolution,
+      internalNote: adminNotes,
+    });
+
+    logger.info(`[Admin] Dispute ${req.params.id} resolved via escrow-integrated action: ${action}`);
+    res.json({ success: true, disputeId: req.params.id, resolution: dispute.status, dispute });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    next(err);
+  }
 });
 
 /**

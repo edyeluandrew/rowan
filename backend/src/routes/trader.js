@@ -12,15 +12,6 @@ import { maskPhoneNumber } from '../utils/phoneMasking.js';
 
 const router = Router();
 
-// Lazy-load jobQueue to avoid circular deps
-let jobQueueModule = null;
-async function getJobQueue() {
-  if (!jobQueueModule) {
-    jobQueueModule = (await import('../services/jobQueue.js')).default;
-  }
-  return jobQueueModule;
-}
-
 /**
  * POST /api/v1/trader/login
  * Trader authentication.
@@ -296,38 +287,24 @@ router.post('/requests/:id/payout-sent', authTrader, async (req, res, next) => {
 });
 
 /**
- * DEPRECATED: /requests/:id/confirm
- * This endpoint is kept for backwards compatibility but is no longer the recommended flow.
- * New flow: POST /requests/:id/payout-sent → User confirms → POST /user/transactions/:id/confirm-receipt
+ * DEPRECATED: POST /requests/:id/confirm
+ *
+ * This endpoint used the obsolete FIAT_SENT state to release escrow immediately
+ * on the trader's word. That bypassed user receipt confirmation and is removed.
+ *
+ * Canonical flow:
+ *   POST /requests/:id/payout-sent  (partner submits mobile money reference)
+ *   → user confirms receipt: POST /user/transactions/:id/confirm-receipt
+ *   → escrow releases USDC to the partner.
+ *
+ * Returns 410 Gone so any stale client surfaces the correct flow.
  */
-router.post('/requests/:id/confirm', authTrader, async (req, res, next) => {
-  try {
-    const transaction = await matchingEngine.confirmPayout(req.params.id, req.traderId);
-
-    // Attempt escrow release — retry via Bull on failure
-    try {
-      const releaseTxHash = await escrowController.releaseToTrader(transaction.id);
-      res.json({
-        status: 'COMPLETE',
-        message: 'Payout confirmed. USDC released to your wallet.',
-        stellarReleaseTx: releaseTxHash,
-      });
-    } catch (releaseErr) {
-      logger.error(`[Trader] Escrow release failed for tx ${transaction.id}:`, releaseErr.message);
-
-      // Enqueue retry via Bull (3 attempts with exponential backoff)
-      const jobQueue = await getJobQueue();
-      await jobQueue.enqueueRelease(transaction.id);
-
-      res.json({
-        status: 'FIAT_SENT',
-        message: 'Payout confirmed. USDC release is being processed (will retry automatically).',
-        retrying: true,
-      });
-    }
-  } catch (err) {
-    next(err);
-  }
+router.post('/requests/:id/confirm', authTrader, async (req, res) => {
+  return res.status(410).json({
+    error: 'Endpoint deprecated',
+    message: 'Submit your mobile money reference via /requests/:id/payout-sent. USDC is released after the customer confirms receipt.',
+    canonicalEndpoint: 'POST /api/v1/trader/requests/:id/payout-sent',
+  });
 });
 
 /**

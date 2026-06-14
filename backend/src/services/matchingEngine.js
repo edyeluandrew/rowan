@@ -82,7 +82,7 @@ async function matchTrader(transactionId) {
     const traderResult = await db.query(
       `SELECT t.*,
          (SELECT COUNT(*) FROM transactions tx
-          WHERE tx.trader_id = t.id AND tx.state IN ('TRADER_MATCHED','FIAT_SENT')) as active_load
+          WHERE tx.trader_id = t.id AND tx.state IN ('TRADER_MATCHED','FIAT_PAYOUT_SUBMITTED','USER_CONFIRMATION_PENDING')) as active_load
        FROM traders t
        WHERE t.status = 'ACTIVE'
          AND t.verification_status = 'VERIFIED'
@@ -278,33 +278,19 @@ async function acceptRequest(transactionId, traderId) {
 }
 
 /**
- * Handle trader confirming payout sent.
- * Moves state to FIAT_SENT — escrow release handled by the caller.
+ * DEPRECATED — legacy "trader confirms payout" that immediately released escrow
+ * via the obsolete FIAT_SENT state.
+ *
+ * The canonical flow is now: submitPayoutSent (FIAT_PAYOUT_SUBMITTED) → user
+ * confirms receipt → escrow release. This function no longer writes any state
+ * and exists only to return a clear deprecation error to any stale caller.
  */
-async function confirmPayout(transactionId, traderId) {
-  // [F-2 FIX] Verify trader authorization BEFORE state transition to prevent state corruption
-  const txCheck = await db.query(
-    `SELECT trader_id FROM transactions WHERE id = $1 AND state = 'TRADER_MATCHED'`,
-    [transactionId]
+async function confirmPayout() {
+  const err = new Error(
+    'This endpoint is deprecated. Submit the mobile money reference via /requests/:id/payout-sent; USDC is released after the user confirms receipt.'
   );
-  if (!txCheck.rows[0]) throw new Error('Cannot confirm — transaction not found or wrong state');
-  if (txCheck.rows[0].trader_id !== traderId) {
-    throw new Error('Cannot confirm — transaction not assigned to this trader');
-  }
-
-  const transaction = await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'FIAT_SENT');
-  if (!transaction) throw new Error('Cannot confirm — state transition failed (concurrent modification)');
-
-  logger.info(`[Matching] Trader ${traderId} confirmed payout for tx ${transactionId}`);
-
-  // Notify user via notification service
-  notificationService.notifyUser(transaction.user_id, 'fiat_sent', {
-    transactionId: transaction.id,
-    state: 'FIAT_SENT',
-    message: 'Mobile money is on its way!',
-  });
-
-  return transaction;
+  err.statusCode = 410;
+  throw err;
 }
 
 /**

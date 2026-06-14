@@ -24,7 +24,10 @@ const upload = multer({
 
 /**
  * POST /api/v1/disputes
- * User creates a dispute for a completed transaction
+ * Secondary alias for opening a dispute. The canonical client endpoint is
+ * POST /api/v1/user/transactions/:id/dispute. Both delegate to the same
+ * disputeService.createDispute, which transitions the transaction to
+ * DISPUTE_OPENED (escrow held) and prevents duplicate disputes.
  *
  * Body: { transactionId, reason }
  */

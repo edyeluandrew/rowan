@@ -17,13 +17,12 @@ export default function WalletTwoFactorVerify() {
   const { setWalletAuthAfter2FA } = useAuth();
 
   const userId = location.state?.userId;
-  const token = location.state?.token;
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Redirect if userId or token not provided
-  if (!userId || !token) {
+  // Redirect if userId not provided
+  if (!userId) {
     return (
       <div className="bg-rowan-bg min-h-screen flex flex-col items-center justify-center px-6">
         <h1 className="text-rowan-yellow text-3xl font-bold tracking-widest mb-4">ROWAN</h1>
@@ -42,10 +41,10 @@ export default function WalletTwoFactorVerify() {
     setLoading(true);
     setError(null);
     try {
-      // Verify 2FA code
+      // Verify 2FA code — backend issues the session token on success.
       const response = await verifyTwoFactorLogin(userId, verifyCode);
 
-      if (response?.verified === true) {
+      if (response?.verified === true && response?.token) {
         // Get keypair from secure storage
         let keypair = null;
         try {
@@ -57,8 +56,8 @@ export default function WalletTwoFactorVerify() {
           console.warn('[2FA] Could not retrieve keypair:', err.message);
         }
 
-        // Complete wallet auth with token issued before 2FA
-        await setWalletAuthAfter2FA(token, { id: userId }, keypair);
+        // Complete wallet auth with the freshly issued token.
+        await setWalletAuthAfter2FA(response.token, response.user || { id: userId }, keypair);
 
         // Redirect to wallet home
         navigate('/wallet/home', { replace: true });

@@ -161,13 +161,14 @@ router.post(
       const has2faEnabled = twoFaSettings && twoFaSettings.is_enabled === true;
 
       if (has2faEnabled) {
-        // Issue token anyway but indicate 2FA verification is required
-        // Frontend will show 2FA modal before proceeding
-        const token = signToken(user.id, 'user', deviceId);
+        // SECURITY: do NOT issue a usable token before TOTP verification.
+        // The client must call POST /api/v1/user/2fa/verify-login with the
+        // returned userId; the real session token is only issued there on
+        // successful TOTP / backup-code verification.
         return res.json({
           requiresTwoFactorVerification: true,
           userId: user.id,
-          token,
+          deviceId: deviceId || null,
           message: 'Please verify your 2FA code to continue',
         });
       }
@@ -216,6 +217,21 @@ router.post(
       const user = result.rows[0];
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (!user.is_active) return res.status(403).json({ error: 'Account disabled' });
+
+      // SECURITY: legacy login must honour 2FA too — otherwise it is a bypass.
+      const twoFaResult = await db.query(
+        `SELECT is_enabled FROM user_2fa_settings WHERE user_id = $1`,
+        [user.id]
+      );
+      if (twoFaResult.rows[0]?.is_enabled === true) {
+        // No usable token issued until TOTP is verified via /user/2fa/verify-login.
+        return res.json({
+          requiresTwoFactorVerification: true,
+          userId: user.id,
+          deviceId: deviceId || null,
+          message: 'Please verify your 2FA code to continue',
+        });
+      }
 
       const token = signToken(user.id, 'user', deviceId);
 
@@ -315,8 +331,17 @@ router.post(
 
 /**
  * POST /api/v1/auth/trader/signup
- * Public trader self-registration.
+ * Public trader self-registration — creates a PENDING partner account only.
  * Body: { name, email, password }
+ *
+ * SECURITY (P0.6): self-signup must NOT create a fully active, payout-eligible
+ * partner. The account is created with status = 'PAUSED' and the default
+ * verification_status = 'SUBMITTED'. The matching engine only routes payouts to
+ * traders with status = 'ACTIVE' AND verification_status = 'VERIFIED', both of
+ * which are set exclusively by an admin via /admin/traders/:id/verify after KYC.
+ *
+ * A session token is still issued so the applicant can complete onboarding/KYC,
+ * but it grants no payout capability until an admin verifies the account.
  */
 router.post(
   '/trader/signup',
@@ -335,17 +360,23 @@ router.post(
 
       const passwordHash = await bcrypt.hash(password, 12);
 
+      // Explicitly create as PAUSED + unverified (pending) — never ACTIVE.
       const result = await db.query(
-        `INSERT INTO traders (name, email, password_hash)
-         VALUES ($1, $2, $3)
-         RETURNING id, name, email, trust_score`,
+        `INSERT INTO traders (name, email, password_hash, status, is_active)
+         VALUES ($1, $2, $3, 'PAUSED', FALSE)
+         RETURNING id, name, email, trust_score, status, verification_status`,
         [name, email, passwordHash]
       );
 
       const trader = result.rows[0];
       const token = signToken(trader.id, 'trader');
 
-      res.status(201).json({ token, trader });
+      res.status(201).json({
+        token,
+        trader,
+        pendingVerification: true,
+        message: 'Account created. Complete onboarding and verification; an admin must approve your account before you can receive payouts.',
+      });
     } catch (err) {
       next(err);
     }

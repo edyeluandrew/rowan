@@ -328,51 +328,21 @@ router.get('/receipt/:id', authUser, async (req, res, next) => {
 });
 
 /**
- * POST /api/v1/cashout/dispute
- * User reports non-receipt of mobile money.
- * Body: { transactionId, reason }
+ * DEPRECATED: POST /api/v1/cashout/dispute
+ *
+ * This legacy endpoint required the obsolete FIAT_SENT state and created a
+ * dispute row without holding the transaction in DISPUTE_OPENED, so escrow was
+ * not reliably held and admins could not resolve it correctly.
+ *
+ * Canonical dispute path: POST /api/v1/user/transactions/:id/dispute
+ * Returns 410 Gone so any stale client surfaces the correct endpoint.
  */
-router.post(
-  '/dispute',
-  authUser,
-  validate(['transactionId', 'reason']),
-  async (req, res, next) => {
-    try {
-      const { transactionId, reason } = req.body;
-
-      // Verify transaction belongs to user and is in FIAT_SENT state
-      const txResult = await db.query(
-        `SELECT * FROM transactions WHERE id = $1 AND user_id = $2 AND state = 'FIAT_SENT'`,
-        [transactionId, req.userId]
-      );
-      const tx = txResult.rows[0];
-      if (!tx) {
-        return res.status(404).json({ error: 'Transaction not found or not in disputable state' });
-      }
-
-      // Create dispute
-      const disputeResult = await db.query(
-        `INSERT INTO disputes (transaction_id, user_id, trader_id, reason)
-         VALUES ($1, $2, $3, $4)
-         RETURNING *`,
-        [transactionId, req.userId, tx.trader_id, reason]
-      );
-
-      // Check if trader has 3+ open/resolved-for-user disputes → auto-suspend via fraud monitor
-      const healthCheck = await fraudMonitor.checkTraderHealth(tx.trader_id);
-      if (!healthCheck.healthy) {
-        logger.info(`[Dispute] Trader ${tx.trader_id}: ${healthCheck.reason}`);
-      }
-
-      res.json({
-        disputeId: disputeResult.rows[0].id,
-        status: 'OPEN',
-        message: 'Dispute filed. Escrow is held pending review.',
-      });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
+router.post('/dispute', authUser, async (req, res) => {
+  return res.status(410).json({
+    error: 'Endpoint deprecated',
+    message: 'Open disputes via POST /api/v1/user/transactions/:id/dispute.',
+    canonicalEndpoint: 'POST /api/v1/user/transactions/:id/dispute',
+  });
+});
 
 export default router;

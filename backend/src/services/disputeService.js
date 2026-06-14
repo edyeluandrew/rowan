@@ -23,8 +23,10 @@ import stateMachine from './transactionStateMachine.js';
  */
 
 const VALID_TRANSITIONS = {
-  OPEN: ['TRADER_RESPONDED', 'UNDER_REVIEW', 'DISMISSED', 'ESCALATED', 'CLOSED'],
-  TRADER_RESPONDED: ['UNDER_REVIEW', 'DISMISSED', 'CLOSED', 'ESCALATED'],
+  // Admins may resolve directly from OPEN / TRADER_RESPONDED (no mandatory
+  // UNDER_REVIEW step) so the escrow-integrated resolution path is reachable.
+  OPEN: ['TRADER_RESPONDED', 'UNDER_REVIEW', 'RESOLVED_FOR_USER', 'RESOLVED_FOR_TRADER', 'DISMISSED', 'ESCALATED', 'CLOSED'],
+  TRADER_RESPONDED: ['UNDER_REVIEW', 'RESOLVED_FOR_USER', 'RESOLVED_FOR_TRADER', 'DISMISSED', 'CLOSED', 'ESCALATED'],
   UNDER_REVIEW: ['RESOLVED_FOR_USER', 'RESOLVED_FOR_TRADER', 'ESCALATED', 'DISMISSED', 'CLOSED'],
   ESCALATED: ['RESOLVED_FOR_USER', 'RESOLVED_FOR_TRADER', 'DISMISSED', 'CLOSED'],
   RESOLVED_FOR_USER: ['CLOSED'],
@@ -54,13 +56,28 @@ async function createDispute(transactionId, userId, traderId, reason) {
   if (tx.user_id !== userId) throw new Error('Transaction does not belong to this user');
   if (tx.trader_id !== traderId) throw new Error('Transaction does not belong to this trader');
 
+  // 1b. Only allow disputes while awaiting/after payout but before settlement.
+  // Valid source states: FIAT_PAYOUT_SUBMITTED, USER_CONFIRMATION_PENDING.
+  // (If a dispute is already open the tx is in DISPUTE_OPENED, which also fails
+  //  this check — a second layer of duplicate protection.)
+  const DISPUTABLE_STATES = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'];
+  if (!DISPUTABLE_STATES.includes(tx.state)) {
+    const err = new Error(
+      `Cannot open a dispute in state ${tx.state}. A dispute can only be opened after the partner has submitted the mobile money payout and before the cash-out is settled.`
+    );
+    err.statusCode = 409;
+    throw err;
+  }
+
   // 2. Check if dispute already exists
   const existingResult = await db.query(
     `SELECT id FROM disputes WHERE transaction_id = $1 AND status NOT IN ('CLOSED', 'DISMISSED')`,
     [transactionId]
   );
   if (existingResult.rows.length > 0) {
-    throw new Error('Dispute already exists for this transaction');
+    const err = new Error('A dispute is already open for this transaction');
+    err.statusCode = 409;
+    throw err;
   }
 
   // 3. Create dispute with SLA deadline (48 hours)
@@ -73,8 +90,21 @@ async function createDispute(transactionId, userId, traderId, reason) {
   );
   const dispute = disputeResult.rows[0];
 
-  // 4. Update transaction state to disputed (hold escrow)
-  await stateMachine.transitionForDispute(transactionId, 'DISPUTE_OPENED', { dispute_id: dispute.id });
+  // 4. Move the transaction into DISPUTE_OPENED and link the dispute.
+  // Escrow stays locked because no release/refund runs until an admin resolves.
+  // The state-machine guard (fromState = tx.state) makes this safe against races.
+  const moved = await stateMachine.transition(transactionId, tx.state, 'DISPUTE_OPENED', {
+    dispute_id: dispute.id,
+    dispute_started_at: new Date(),
+  });
+  if (!moved) {
+    // Transaction advanced concurrently — roll back the dispute row so we don't
+    // leave an orphan OPEN dispute with no held escrow.
+    await db.query(`DELETE FROM disputes WHERE id = $1`, [dispute.id]);
+    const err = new Error('Transaction state changed before the dispute could be opened. Please retry.');
+    err.statusCode = 409;
+    throw err;
+  }
 
   // 5. Log audit trail
   await auditLogService.log({

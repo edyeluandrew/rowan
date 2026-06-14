@@ -28,11 +28,15 @@ const VALID_TRANSITIONS = {
   // This prevents transaction regression (TRADER_MATCHED → ESCROW_LOCKED → TRADER_MATCHED)
   TRADER_MATCHED:   ['FIAT_PAYOUT_SUBMITTED', 'FAILED', 'REFUNDED'],
   FIAT_PAYOUT_SUBMITTED: ['USER_CONFIRMATION_PENDING', 'DISPUTE_OPENED', 'FAILED', 'REFUNDED'],
-  USER_CONFIRMATION_PENDING: ['COMPLETE', 'RELEASE_BLOCKED', 'FAILED', 'REFUNDED'],
+  // DISPUTE_OPENED is allowed here too: a user can dispute after entering receipt
+  // confirmation but before settlement completes (matches disputeService + routes).
+  USER_CONFIRMATION_PENDING: ['COMPLETE', 'RELEASE_BLOCKED', 'DISPUTE_OPENED', 'FAILED', 'REFUNDED'],
   RELEASE_BLOCKED:  ['COMPLETE', 'FAILED', 'REFUNDED'],
   DISPUTE_OPENED:   ['DISPUTE_REFUND_PENDING', 'DISPUTE_RELEASE_PENDING', 'FAILED', 'REFUNDED'], // admin resolves disputes
   DISPUTE_REFUND_PENDING: ['REFUNDED'],  // float released, XLM refunded to user
-  DISPUTE_RELEASE_PENDING: ['COMPLETE'],  // float finalized, USDC released to trader
+  // RELEASE_BLOCKED allows a dispute-release that fails the trustline check to
+  // land in a safe, retryable state instead of silently stalling.
+  DISPUTE_RELEASE_PENDING: ['COMPLETE', 'RELEASE_BLOCKED'],  // float finalized, USDC released to trader
   FAILED:           ['REFUNDED'],
   COMPLETE:         [], // terminal
   REFUNDED:         [], // terminal

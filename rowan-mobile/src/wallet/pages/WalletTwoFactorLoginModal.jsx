@@ -34,16 +34,16 @@ export default function WalletTwoFactorLoginModal({
     setLoading(true);
     setError(null);
     try {
-      // Call backend to verify 2FA code (TOTP or backup code)
+      // Call backend to verify 2FA code (TOTP or backup code).
+      // On success the backend now ISSUES the session token here:
+      //   { verified: true, method, token, user }
       const response = await verifyTwoFactorLogin(userId, verifyCode);
-      
-      // Backend returns: { verified: true, method: 'totp' | 'backup_code', backupCodesRemaining? }
-      if (response?.verified === true) {
-        // Success - pass the code back to parent for final auth completion
+
+      if (response?.verified === true && response?.token) {
+        // Pass the issued token/user up so the parent can persist the session.
         setCode('');
-        await onSuccess(verifyCode);
+        await onSuccess(response);
       } else {
-        // This shouldn't happen with proper error handling, but be safe
         setError('Verification failed. Please try again.');
       }
     } catch (err) {

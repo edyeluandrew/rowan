@@ -127,6 +127,12 @@ export function AuthProvider({ children }) {
     const phoneHash = await hashPhoneNumber(phoneNumber);
     const data = await registerUser({ transaction: signedXdr, phoneHash });
 
+    // SECURITY: if the backend requires 2FA, it does NOT return a usable token.
+    // Surface the challenge to the caller without persisting any session.
+    if (data?.requiresTwoFactorVerification === true) {
+      return { requiresTwoFactorVerification: true, userId: data.userId, publicKey: account };
+    }
+
     const jwt = data.token;
     await setSecure('rowan_token', jwt);
     await setSecure('rowan_user', JSON.stringify(data.user || data));
@@ -166,6 +172,13 @@ export function AuthProvider({ children }) {
     console.log('[Auth] Signed XDR length:', signedXdr?.length);
     
     const data = await submitChallenge(signedXdr);
+
+    // SECURITY: when 2FA is enabled the backend withholds the token and returns
+    // only { requiresTwoFactorVerification, userId }. Do NOT persist or mark the
+    // session authenticated — the real token is issued by verify-login after TOTP.
+    if (data?.requiresTwoFactorVerification === true) {
+      return { requiresTwoFactorVerification: true, userId: data.userId, publicKey: account };
+    }
 
     const jwt = data.token;
     await setSecure('rowan_token', jwt);
@@ -225,10 +238,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   /**
-   * setWalletAuthAfter2FA — Used after successful 2FA verification for wallet users.
-   * Called from WalletTwoFactorLoginModal to complete wallet authentication
-   * without going through loginWithWallet again.
-   * For wallet: token and user are already issued, just need to complete final auth
+   * setWalletAuthAfter2FA — Completes wallet auth after a successful 2FA check.
+   * The token + user passed here come from the verify-login response (the ONLY
+   * place a wallet session token is issued when 2FA is enabled).
    */
   const setWalletAuthAfter2FA = useCallback(async (token, user, keypair) => {
     // Persist to secure storage (wallet sessions survive app restart)

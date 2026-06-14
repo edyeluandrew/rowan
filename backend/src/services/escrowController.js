@@ -498,7 +498,10 @@ async function releaseToTrader(transactionId) {
       );
       if (!hasTrustline) {
         logger.error(`[Escrow] Trader ${transaction.trader_id} has no USDC trustline — blocking release`);
-        await stateMachine.transition(transactionId, 'USER_CONFIRMATION_PENDING', 'RELEASE_BLOCKED', {
+        // Use the ACTUAL current state as the guard source so this works for both
+        // the normal (USER_CONFIRMATION_PENDING) and dispute (DISPUTE_RELEASE_PENDING)
+        // release paths. Funds remain locked; tx is retryable from RELEASE_BLOCKED.
+        await stateMachine.transition(transactionId, transaction.state, 'RELEASE_BLOCKED', {
           failure_reason: 'Trader missing USDC trustline',
         });
         return null;

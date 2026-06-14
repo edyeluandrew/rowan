@@ -70,23 +70,32 @@ refundQueue.process(async (job) => {
   const tx = result.rows[0];
   if (!tx) throw new Error(`Transaction ${transactionId} not found`);
 
-  // ── [DISPUTE] Only release reserved float for user ──
-  if (dispute && tx.payout_setting_id && tx.trader_id) {
-    logger.info(`[Job:refund] DISPUTE: Releasing reserved float for tx ${transactionId}`);
-    await payoutSettingsService.releaseReservedFloat(tx.payout_setting_id, tx.fiat_amount);
-    
-    // Transition to REFUNDED state
-    await stateMachine.transition(transactionId, 'DISPUTE_REFUND_PENDING', 'REFUNDED', {
-      dispute_refund_tx: 'N/A', // No XLM refund in dispute
-    });
-    
-    // Notify user
+  // ── [DISPUTE] User won the dispute ──────────────────────────
+  // IMPORTANT (P0.7): we do NOT fake an on-chain refund here. By this point the
+  // deposited XLM has already been swapped to USDC and is held in escrow, so a
+  // user refund is a real money-movement decision that is not safely automated
+  // yet. Marking the tx REFUNDED with a placeholder hash would falsely claim the
+  // customer was paid back. Instead we:
+  //   1. Release any reserved partner float (safe internal bookkeeping), and
+  //   2. Leave the transaction in DISPUTE_REFUND_PENDING (a clear, non-terminal
+  //      "awaiting manual settlement" state) for operations to settle.
+  if (dispute) {
+    if (tx.payout_setting_id && tx.trader_id) {
+      logger.info(`[Job:refund] DISPUTE: releasing reserved float for tx ${transactionId}`);
+      await payoutSettingsService.releaseReservedFloat(tx.payout_setting_id, tx.fiat_amount);
+    }
+
+    logger.warn(
+      `[Job:refund] DISPUTE resolved for user on tx ${transactionId}: refund left in DISPUTE_REFUND_PENDING for manual settlement (no automated on-chain refund).`
+    );
+
     await notificationService.notifyUser(userId, 'dispute_resolved_refund', {
       transactionId,
-      floatRestored: true,
+      status: 'refund_pending',
+      message: 'Your dispute was resolved in your favour. Your refund is being processed manually by our team.',
     });
-    
-    return { status: 'dispute_resolved', action: 'float_released' };
+
+    return { status: 'dispute_resolved', action: 'refund_pending_manual_settlement' };
   }
 
   // ── [NORMAL] Restore trader float if a trader was matched ──
@@ -131,6 +140,13 @@ releaseQueue.process(async (job) => {
 
   // ── Release USDC to trader (handles float finalization + state transition internally) ──
   const releaseHash = await escrowController.releaseToTrader(transactionId);
+
+  // A null hash means the release did NOT happen (e.g. trader missing USDC
+  // trustline → tx moved to RELEASE_BLOCKED, or a concurrent lock). Do NOT report
+  // success or send "resolved" notifications; throw so the job retries / surfaces.
+  if (!releaseHash) {
+    throw new Error(`[Job:release] Release blocked or not completed for tx ${transactionId} (no release hash). Funds remain locked; check trader trustline / tx state.`);
+  }
   logger.info(`[Job:release] Release succeeded for tx ${transactionId}: ${releaseHash}`);
 
   // ── [DISPUTE] Notify parties on successful resolution ──
@@ -222,10 +238,16 @@ reMatchQueue.process(async (job) => {
       [currentTraderId]
     );
 
-    // Unassign and reset to ESCROW_LOCKED for re-matching
-    await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'ESCROW_LOCKED', {
-      trader_id: null,
-    });
+    // Unassign and reset to ESCROW_LOCKED for re-matching.
+    // NOTE: done via raw UPDATE (not the state machine) because TRADER_MATCHED →
+    // ESCROW_LOCKED is intentionally NOT a valid forward transition; this is a
+    // controlled re-queue, mirroring the decline / orphan-recovery paths.
+    await db.query(
+      `UPDATE transactions
+         SET trader_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL, updated_at = NOW()
+       WHERE id = $1 AND state = 'TRADER_MATCHED'`,
+      [transactionId]
+    );
 
     // Lazy-load matchingEngine to avoid circular dependency
     const { default: matchingEngine } = await import('./matchingEngine.js');
