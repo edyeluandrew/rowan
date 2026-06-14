@@ -218,7 +218,8 @@ router.get('/status/:id', async (req, res, next) => {
                 network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
                 locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
                 fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
-                fiat_sent_at, completed_at, failed_at, failure_reason, created_at
+                fiat_sent_at, completed_at, failed_at, failure_reason,
+                stellar_refund_tx, refund_error, dispute_id, dispute_resolved_at, created_at
          FROM transactions WHERE id = $1 AND user_id = $2`,
         [id, userId]
       );
@@ -231,7 +232,8 @@ router.get('/status/:id', async (req, res, next) => {
                   network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
                   locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
                   fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
-                  fiat_sent_at, completed_at, failed_at, failure_reason, created_at
+                  fiat_sent_at, completed_at, failed_at, failure_reason,
+                stellar_refund_tx, refund_error, dispute_id, dispute_resolved_at, created_at
            FROM transactions WHERE quote_id = $1 AND user_id = $2`,
           [id, userId]
         );
@@ -246,7 +248,8 @@ router.get('/status/:id', async (req, res, next) => {
                   network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
                   locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
                   fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
-                  fiat_sent_at, completed_at, failed_at, failure_reason, created_at
+                  fiat_sent_at, completed_at, failed_at, failure_reason,
+                stellar_refund_tx, refund_error, dispute_id, dispute_resolved_at, created_at
            FROM transactions WHERE quote_id = $1`,
           [id]
         );

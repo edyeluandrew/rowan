@@ -1192,6 +1192,58 @@ router.post('/disputes/:id/resolve', authAdmin, async (req, res, next) => {
 });
 
 /**
+ * POST /api/v1/admin/transactions/:id/retry-refund
+ *
+ * [PHASE 2B] Retry the on-chain USDC refund for a user-win dispute that is stuck
+ * in DISPUTE_REFUND_PENDING (e.g. the user has since added a USDC trustline).
+ * Idempotent + fully self-guarded by escrowController.refundToUser.
+ *
+ * Responses:
+ *   200 { status: 'refunded', refundHash }          — refund completed
+ *   200 { status: 'already_refunded', refundHash }  — was already refunded (no-op)
+ *   200 { status: 'blocked' | 'failed', code, message } — still pending, retry later
+ *   409 { error }                                   — invalid (already released / wrong state)
+ */
+router.post('/transactions/:id/retry-refund', authAdmin, async (req, res, next) => {
+  try {
+    const result = await escrowController.refundToUser(req.params.id, {
+      adminId: req.adminId,
+      retry: true,
+    });
+    logger.info(`[Admin] retry-refund tx ${req.params.id} by ${req.adminId} → ${result.status}${result.code ? '/' + result.code : ''}`);
+    return res.json({ success: result.status === 'refunded' || result.status === 'already_refunded', ...result });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/admin/disputes/:id/retry-refund
+ * [PHASE 2B] Convenience alias — resolves the dispute's transaction then retries
+ * the refund, so the admin console can retry from a dispute context too.
+ */
+router.post('/disputes/:id/retry-refund', authAdmin, async (req, res, next) => {
+  try {
+    const d = await db.query(`SELECT transaction_id FROM disputes WHERE id = $1`, [req.params.id]);
+    if (!d.rows[0]) return res.status(404).json({ error: 'Dispute not found' });
+    const result = await escrowController.refundToUser(d.rows[0].transaction_id, {
+      adminId: req.adminId,
+      retry: true,
+    });
+    logger.info(`[Admin] retry-refund dispute ${req.params.id} (tx ${d.rows[0].transaction_id}) by ${req.adminId} → ${result.status}`);
+    return res.json({ success: result.status === 'refunded' || result.status === 'already_refunded', ...result });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+/**
  * POST /api/v1/admin/disputes/:id/escalate
  */
 router.post('/disputes/:id/escalate', authAdmin, async (req, res, next) => {

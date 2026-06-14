@@ -14,6 +14,7 @@ import payoutSettingsService from './payoutSettingsService.js';
 import fraudMonitor from './fraudMonitor.js';
 import stateMachine from './transactionStateMachine.js';
 import auditLogService from './auditLogService.js';
+import notificationService from './notificationService.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -675,6 +676,282 @@ async function refundXlm(userStellarAddress, xlmAmount, reason) {
 }
 
 /**
+ * [PHASE 2B] Refund escrowed USDC back to the wallet user (user-win dispute).
+ *
+ * Product decision: refund the escrowed USDC to the user's Stellar address.
+ * We do NOT swap USDC back to XLM in this phase, and we NEVER release to the
+ * trader on a user-win.
+ *
+ * Safety / idempotency:
+ *   - Redis distributed lock prevents concurrent double-refund.
+ *   - Hard guards (throw 409): tx already released to trader (stellar_release_tx),
+ *     COMPLETE, or not in DISPUTE_REFUND_PENDING.
+ *   - Soft idempotency (no throw): already REFUNDED / stellar_refund_tx present →
+ *     returns { status: 'already_refunded' }.
+ *   - Blocked (no throw): missing trustline / account / escrow balance → keeps the
+ *     tx in DISPUTE_REFUND_PENDING, records refund_error, returns { status:'blocked' }.
+ *   - Failed submission (no throw): keeps DISPUTE_REFUND_PENDING, records error,
+ *     returns { status:'failed' } so an admin can retry.
+ *
+ * Float is NOT touched here — the reserved float was already released during
+ * user-win resolution (Phase 2A) and is idempotent via transactions.float_settled.
+ *
+ * @param {string} transactionId
+ * @param {object} [opts] - { adminId?: string, retry?: boolean }
+ * @returns {Promise<{status:string, refundHash?:string, code?:string, error?:string, message?:string}>}
+ */
+async function refundToUser(transactionId, { adminId = null, retry = false } = {}) {
+  const lockKey = `lock:refund:${transactionId}`;
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', config.platform.redisLockTtlReleaseSeconds, 'NX');
+  if (!lockAcquired) {
+    logger.warn(`[Refund] Refund lock held for tx ${transactionId} — skipping duplicate`);
+    return { status: 'locked', message: 'Refund already in progress' };
+  }
+
+  try {
+    const txResult = await db.query(
+      `SELECT t.*, u.stellar_address AS user_stellar
+       FROM transactions t
+       JOIN users u ON u.id = t.user_id
+       WHERE t.id = $1`,
+      [transactionId]
+    );
+    const tx = txResult.rows[0];
+    if (!tx) {
+      const err = new Error('Transaction not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    // ── Hard safety guards (must NOT refund) ──
+    if (tx.stellar_release_tx) {
+      const err = new Error('Cannot refund: USDC was already released to the trader for this transaction.');
+      err.statusCode = 409;
+      throw err;
+    }
+    if (tx.state === 'COMPLETE') {
+      const err = new Error('Cannot refund a COMPLETE transaction.');
+      err.statusCode = 409;
+      throw err;
+    }
+
+    // ── Soft idempotency (already refunded) ──
+    if (tx.stellar_refund_tx || tx.state === 'REFUNDED') {
+      logger.info(`[Refund] Tx ${transactionId} already refunded (${tx.stellar_refund_tx || 'state REFUNDED'}) — no-op`);
+      return { status: 'already_refunded', refundHash: tx.stellar_refund_tx || null };
+    }
+
+    // ── State guard: only a user-win pending refund is refundable ──
+    if (tx.state !== 'DISPUTE_REFUND_PENDING') {
+      const err = new Error(`Cannot refund: transaction is in ${tx.state}, expected DISPUTE_REFUND_PENDING.`);
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const usdcDecimal = Number(tx.usdc_amount);
+    if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+      const code = 'INVALID_USDC_AMOUNT';
+      await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [code, transactionId]);
+      await auditLogService.log({
+        actor_role: adminId ? 'admin' : 'system',
+        admin_id: adminId,
+        action: 'refund_failed',
+        resource_type: 'transaction',
+        resource_id: transactionId,
+        metadata: { user_id: tx.user_id, dispute_id: tx.dispute_id, error_code: code, usdc_amount: tx.usdc_amount },
+      });
+      return { status: 'failed', code, message: `Invalid USDC amount for refund: ${tx.usdc_amount}` };
+    }
+
+    if (!tx.user_stellar) {
+      const code = 'USER_MISSING_STELLAR_ADDRESS';
+      await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [code, transactionId]);
+      await auditLogService.log({
+        actor_role: adminId ? 'admin' : 'system',
+        admin_id: adminId,
+        action: 'refund_blocked_missing_trustline',
+        resource_type: 'transaction',
+        resource_id: transactionId,
+        metadata: { user_id: tx.user_id, dispute_id: tx.dispute_id, error_code: code },
+      });
+      return { status: 'blocked', code, message: 'User has no Stellar address on file.' };
+    }
+
+    // ── Audit: refund started / retried ──
+    await auditLogService.log({
+      actor_role: adminId ? 'admin' : 'system',
+      admin_id: adminId,
+      action: retry ? 'refund_retry' : 'refund_started',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      metadata: {
+        user_id: tx.user_id,
+        trader_id: tx.trader_id,
+        dispute_id: tx.dispute_id,
+        amount_usdc: usdcDecimal,
+        user_stellar: tx.user_stellar,
+      },
+    });
+
+    // ── 1. Verify escrow holds enough USDC ──
+    let escrowAccount;
+    try {
+      escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+    } catch (e) {
+      const code = 'ESCROW_ACCOUNT_LOAD_FAILED';
+      await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [code, transactionId]);
+      await auditLogService.log({
+        actor_role: adminId ? 'admin' : 'system', admin_id: adminId,
+        action: 'refund_failed', resource_type: 'transaction', resource_id: transactionId,
+        metadata: { user_id: tx.user_id, dispute_id: tx.dispute_id, error_code: code, error: e.message },
+      });
+      return { status: 'failed', code, message: `Could not load escrow account: ${e.message}` };
+    }
+
+    const escrowUsdcBal = escrowAccount.balances.find(
+      (b) => b.asset_code === USDC_ASSET.code && b.asset_issuer === USDC_ASSET.issuer
+    );
+    const escrowUsdc = escrowUsdcBal ? Number(escrowUsdcBal.balance) : 0;
+    if (escrowUsdc + 1e-7 < usdcDecimal) {
+      const code = 'INSUFFICIENT_ESCROW_BALANCE';
+      await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [code, transactionId]);
+      await auditLogService.log({
+        actor_role: adminId ? 'admin' : 'system', admin_id: adminId,
+        action: 'refund_failed', resource_type: 'transaction', resource_id: transactionId,
+        metadata: { user_id: tx.user_id, dispute_id: tx.dispute_id, error_code: code, escrow_usdc: escrowUsdc, needed_usdc: usdcDecimal },
+      });
+      logger.error(`[Refund] Tx ${transactionId} blocked: escrow holds ${escrowUsdc} USDC, needs ${usdcDecimal}`);
+      return { status: 'failed', code, message: `Escrow holds ${escrowUsdc} USDC but ${usdcDecimal} is required.` };
+    }
+
+    // ── 2. Verify user account exists + has a USDC trustline ──
+    let userAccount;
+    try {
+      userAccount = await horizon.loadAccount(tx.user_stellar);
+    } catch (e) {
+      // 404 = account not funded/created on this network
+      const notFound = e?.response?.status === 404 || /not found/i.test(e.message);
+      const code = notFound ? 'USER_ACCOUNT_NOT_FOUND' : 'USER_ACCOUNT_LOAD_FAILED';
+      await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [code, transactionId]);
+      await auditLogService.log({
+        actor_role: adminId ? 'admin' : 'system', admin_id: adminId,
+        action: 'refund_blocked_missing_trustline', resource_type: 'transaction', resource_id: transactionId,
+        metadata: { user_id: tx.user_id, dispute_id: tx.dispute_id, error_code: code, user_stellar: tx.user_stellar },
+      });
+      logger.warn(`[Refund] Tx ${transactionId} blocked: ${code} for ${tx.user_stellar}`);
+      return { status: 'blocked', code, message: notFound ? 'User wallet account does not exist on Stellar yet.' : `Could not load user account: ${e.message}` };
+    }
+
+    const hasTrustline = userAccount.balances.some(
+      (b) => b.asset_code === USDC_ASSET.code && b.asset_issuer === USDC_ASSET.issuer
+    );
+    if (!hasTrustline) {
+      const code = 'USER_MISSING_USDC_TRUSTLINE';
+      // Keep tx in DISPUTE_REFUND_PENDING — do NOT mark REFUNDED.
+      await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [code, transactionId]);
+      await auditLogService.log({
+        actor_role: adminId ? 'admin' : 'system', admin_id: adminId,
+        action: 'refund_blocked_missing_trustline', resource_type: 'transaction', resource_id: transactionId,
+        metadata: { user_id: tx.user_id, dispute_id: tx.dispute_id, error_code: code, amount_usdc: usdcDecimal, user_stellar: tx.user_stellar },
+      });
+      try {
+        await notificationService.notifyUser(tx.user_id, 'refund_blocked_trustline', {
+          transactionId,
+          status: 'refund_waiting_trustline',
+          message: 'Your dispute was resolved in your favour, but your wallet must add a USDC trustline before the refund can complete.',
+        });
+      } catch (_) { /* notification best-effort */ }
+      logger.warn(`[Refund] Tx ${transactionId} blocked: user ${tx.user_stellar} has no USDC trustline`);
+      return { status: 'blocked', code, message: 'User wallet has no USDC trustline. Refund will complete after the user adds one and an admin retries.' };
+    }
+
+    // ── 3. Submit USDC payment escrow → user ──
+    let result;
+    try {
+      const paymentTx = new StellarSdk.TransactionBuilder(escrowAccount, {
+        fee: config.stellarMaxFee,
+        networkPassphrase,
+      })
+        .addOperation(
+          StellarSdk.Operation.payment({
+            destination: tx.user_stellar,
+            asset: USDC_ASSET,
+            amount: usdcDecimal.toFixed(7),
+          })
+        )
+        .setTimeout(30)
+        .build();
+      paymentTx.sign(escrowKeypair);
+      result = await horizon.submitTransaction(paymentTx);
+    } catch (e) {
+      const codes = e?.response?.data?.extras?.result_codes;
+      const code = 'REFUND_TX_FAILED';
+      const detail = codes ? JSON.stringify(codes) : e.message;
+      await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [`${code}: ${detail}`, transactionId]);
+      await auditLogService.log({
+        actor_role: adminId ? 'admin' : 'system', admin_id: adminId,
+        action: 'refund_failed', resource_type: 'transaction', resource_id: transactionId,
+        metadata: { user_id: tx.user_id, dispute_id: tx.dispute_id, error_code: code, amount_usdc: usdcDecimal, stellar_result: codes || null, error: e.message },
+      });
+      logger.error(`[Refund] Tx ${transactionId} submission FAILED: ${detail}`);
+      return { status: 'failed', code, message: `On-chain refund submission failed: ${detail}` };
+    }
+
+    // ── 4. Mark REFUNDED only after a successful on-chain refund ──
+    const transitioned = await stateMachine.transition(transactionId, 'DISPUTE_REFUND_PENDING', 'REFUNDED', {
+      stellar_refund_tx: result.hash,
+      refund_error: null,
+    });
+    if (!transitioned) {
+      // The on-chain refund already happened. A concurrent path moved the state.
+      // Persist the hash defensively and treat as success (idempotent).
+      logger.warn(`[Refund] Tx ${transactionId} state guard failed after on-chain refund ${result.hash} — persisting hash defensively`);
+      await db.query(
+        `UPDATE transactions SET stellar_refund_tx = COALESCE(stellar_refund_tx, $1), refund_error = NULL WHERE id = $2`,
+        [result.hash, transactionId]
+      );
+    }
+
+    await auditLogService.log({
+      actor_role: adminId ? 'admin' : 'system',
+      admin_id: adminId,
+      action: 'refund_succeeded',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      new_value: { state: 'REFUNDED', stellar_refund_tx: result.hash },
+      metadata: {
+        user_id: tx.user_id,
+        trader_id: tx.trader_id,
+        dispute_id: tx.dispute_id,
+        amount_usdc: usdcDecimal,
+        stellar_refund_tx: result.hash,
+        user_stellar: tx.user_stellar,
+      },
+    });
+
+    try {
+      await notificationService.notifyUser(tx.user_id, 'refund_complete', {
+        transactionId,
+        status: 'refunded',
+        stellarRefundTx: result.hash,
+        message: 'Your dispute was resolved in your favour. The escrowed USDC has been returned to your wallet.',
+      });
+      if (tx.trader_id) {
+        await notificationService.notifyTrader(tx.trader_id, 'dispute_refund_complete', {
+          transactionId,
+          message: 'This dispute was resolved for the customer. The escrowed USDC was returned to the customer.',
+        });
+      }
+    } catch (_) { /* notification best-effort */ }
+
+    logger.info(`[Refund] Tx ${transactionId} REFUNDED ${usdcDecimal} USDC to user ${tx.user_stellar} — ${result.hash}`);
+    return { status: 'refunded', refundHash: result.hash, amountUsdc: usdcDecimal };
+  } finally {
+    setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
+  }
+}
+
+/**
  * [C-2 FIX] Restore trader float when a matched transaction is refunded/declined.
  * Must be called whenever a transaction in TRADER_MATCHED state is unassigned.
  */
@@ -703,5 +980,6 @@ export default {
   swapXlmToUsdc,
   releaseToTrader,
   refundXlm,
+  refundToUser,
   restoreTraderFloat,
 };

@@ -88,11 +88,7 @@ refundQueue.process(async (job) => {
       tx.fiat_amount
     );
 
-    logger.warn(
-      `[Job:refund] DISPUTE resolved for user on tx ${transactionId}: refund left in DISPUTE_REFUND_PENDING for manual settlement (no automated on-chain refund).`
-    );
-
-    // [PHASE 2A / B3] Audit the (manual) refund-pending outcome — money decision.
+    // [PHASE 2A / B3] Audit the refund-pending outcome — money decision.
     await auditLogService.log({
       actor_role: 'system',
       action: 'dispute_refund_pending',
@@ -105,17 +101,34 @@ refundQueue.process(async (job) => {
         payout_setting_id: tx.payout_setting_id,
         fiat_amount: tx.fiat_amount,
         fiat_currency: tx.fiat_currency,
-        note: 'no_automated_on_chain_refund_manual_settlement',
       },
     });
 
-    await notificationService.notifyUser(userId, 'dispute_resolved_refund', {
-      transactionId,
-      status: 'refund_pending',
-      message: 'Your dispute was resolved in your favour. Your refund is being processed manually by our team.',
+    // [PHASE 2B] Attempt the real on-chain USDC refund to the user. refundToUser
+    // is fully self-guarded + idempotent: on success it moves the tx to REFUNDED
+    // and stores stellar_refund_tx; if blocked (e.g. user has no USDC trustline)
+    // or the submission fails, it records refund_error and LEAVES the tx in
+    // DISPUTE_REFUND_PENDING for an admin retry — it does NOT throw, so this job
+    // completes cleanly rather than retry-storming a user-action-required state.
+    const refundResult = await escrowController.refundToUser(transactionId, {
+      adminId: null,
+      retry: false,
     });
 
-    return { status: 'dispute_resolved', action: 'refund_pending_manual_settlement' };
+    if (refundResult.status === 'refunded') {
+      logger.info(`[Job:refund] DISPUTE user-win tx ${transactionId} REFUNDED on-chain: ${refundResult.refundHash}`);
+      return { status: 'dispute_resolved', action: 'refunded', refundHash: refundResult.refundHash };
+    }
+
+    logger.warn(
+      `[Job:refund] DISPUTE user-win tx ${transactionId} could not auto-settle (${refundResult.status}${refundResult.code ? '/' + refundResult.code : ''}) — left in DISPUTE_REFUND_PENDING for admin retry.`
+    );
+    return {
+      status: 'dispute_resolved',
+      action: 'refund_pending',
+      refundStatus: refundResult.status,
+      code: refundResult.code || null,
+    };
   }
 
   // ── [NORMAL] Release reserved float if a trader was matched ──

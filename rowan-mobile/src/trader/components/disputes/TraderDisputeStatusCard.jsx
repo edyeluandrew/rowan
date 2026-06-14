@@ -72,12 +72,9 @@ export default function TraderDisputeStatusCard({ state, data = {} }) {
         <div className="flex items-start gap-3">
           <Clock size={20} className="text-rowan-yellow flex-shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-rowan-text font-semibold text-sm">Dispute Resolution in Progress</h3>
+            <h3 className="text-rowan-text font-semibold text-sm">Dispute Resolved for Customer</h3>
             <p className="text-rowan-muted text-sm mt-1">
-              Admin resolved this dispute for the customer.
-            </p>
-            <p className="text-rowan-muted text-sm mt-1">
-              Your reserved float is being reconciled.
+              Admin resolved this dispute for the customer. USDC will not be released to you.
             </p>
           </div>
         </div>
@@ -91,12 +88,9 @@ export default function TraderDisputeStatusCard({ state, data = {} }) {
         <div className="flex items-start gap-3">
           <AlertTriangle size={20} className="text-rowan-muted flex-shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-rowan-text font-semibold text-sm">Dispute Resolved</h3>
+            <h3 className="text-rowan-text font-semibold text-sm">Dispute Closed</h3>
             <p className="text-rowan-muted text-sm mt-1">
-              This transaction was resolved for the customer.
-            </p>
-            <p className="text-rowan-muted text-sm mt-1">
-              USDC was not released.
+              This dispute was resolved for the customer. The escrowed USDC was returned to the customer.
             </p>
           </div>
         </div>
