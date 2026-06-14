@@ -13,6 +13,7 @@ import matchingEngine from './matchingEngine.js';
 import payoutSettingsService from './payoutSettingsService.js';
 import fraudMonitor from './fraudMonitor.js';
 import stateMachine from './transactionStateMachine.js';
+import auditLogService from './auditLogService.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -504,6 +505,18 @@ async function releaseToTrader(transactionId) {
         await stateMachine.transition(transactionId, transaction.state, 'RELEASE_BLOCKED', {
           failure_reason: 'Trader missing USDC trustline',
         });
+        await auditLogService.log({
+          actor_role: 'system',
+          action: 'escrow_release_blocked',
+          resource_type: 'transaction',
+          resource_id: transactionId,
+          new_value: { state: 'RELEASE_BLOCKED' },
+          metadata: {
+            trader_id: transaction.trader_id,
+            reason: 'Trader missing USDC trustline',
+            from_state: transaction.state,
+          },
+        });
         return null;
       }
     } catch (trustlineErr) {
@@ -567,17 +580,39 @@ async function releaseToTrader(transactionId) {
       stellar_release_tx: result.hash,
     });
 
-    // ── PHASE 3: Finalize float in payout_settings ──
-    // Deduct both available_float and reserved_float when transaction completes
-    if (transaction.payout_setting_id && transaction.fiat_amount) {
-      try {
-        await payoutSettingsService.finalizeFloat(transaction.payout_setting_id, parseFloat(transaction.fiat_amount));
-        logger.info(`[Escrow] Finalized float for tx ${transactionId}: setting ${transaction.payout_setting_id}, amount ${transaction.fiat_amount}`);
-      } catch (finalizeErr) {
-        logger.error(`[Escrow] Failed to finalize float for tx ${transactionId}:`, finalizeErr.message);
-        // Continue anyway — transaction is already marked COMPLETE
-      }
+    // ── [PHASE 2A] Finalize canonical float EXACTLY ONCE ──
+    // Decrements BOTH available_float and reserved_float on the payout setting,
+    // in the setting's own currency. Idempotent via transactions.float_settled,
+    // so normal-complete and trader-win-dispute both settle at most once. Legacy
+    // transactions with NULL payout_setting_id are logged and safely skipped.
+    try {
+      await payoutSettingsService.finalizeFloatForTransaction(
+        transactionId,
+        transaction.payout_setting_id,
+        transaction.fiat_amount
+      );
+    } catch (finalizeErr) {
+      // USDC is already released on-chain; do NOT fail here (that would risk a
+      // double-release retry). Surface loudly for ops; float can be reconciled.
+      logger.error(`[Escrow] Float finalize FAILED for tx ${transactionId} (USDC already released): ${finalizeErr.message}`);
     }
+
+    // ── [PHASE 2A / B3] Audit the money-moving release ──
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'escrow_release',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      new_value: { state: 'COMPLETE', stellar_release_tx: result.hash },
+      metadata: {
+        trader_id: transaction.trader_id,
+        payout_setting_id: transaction.payout_setting_id,
+        usdc_amount: transaction.usdc_amount,
+        fiat_amount: transaction.fiat_amount,
+        fiat_currency: transaction.fiat_currency,
+        from_state: transaction.state,
+      },
+    });
 
     // ── [C-1 FIX] Update trader daily volume in UGX equivalent, not USDC ──
     const fiatAmount = parseFloat(transaction.fiat_amount);

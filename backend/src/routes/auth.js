@@ -7,6 +7,7 @@ import db from '../db/index.js';
 import redis from '../db/redis.js';
 import bcrypt from 'bcryptjs';
 import { StellarSdk, networkPassphrase } from '../config/stellar.js';
+import auditLogService from '../services/auditLogService.js';
 import logger from '../utils/logger.js';
 import {
   generateTotpSecret,
@@ -275,6 +276,18 @@ router.post(
       }
 
       const token = signToken(admin.id, 'admin');
+
+      // [PHASE 2A / B3] Audit admin authentication (security-sensitive).
+      await auditLogService.log({
+        admin_id: admin.id,
+        actor_role: 'admin',
+        action: 'admin_login',
+        resource_type: 'admin',
+        resource_id: admin.id,
+        metadata: { email: admin.email },
+        ip_address: req.ip,
+        user_agent: req.get('user-agent'),
+      });
 
       res.json({
         token,

@@ -488,6 +488,15 @@ router.post('/traders/:id/verify', authAdmin, async (req, res, next) => {
       req.adminId,
       { notes: req.body.notes, checks: req.body.checks }
     );
+    await auditLogService.log({
+      admin_id: req.adminId,
+      actor_role: 'admin',
+      action: 'trader_verify_approve',
+      resource_type: 'trader',
+      resource_id: req.params.id,
+      new_value: { verification_status: 'VERIFIED' },
+      metadata: { notes: req.body.notes },
+    });
     res.json({ success: true, ...result, message: 'Trader verified and activated. They will now receive matches.' });
   } catch (err) {
     if (err.message.includes('Cannot verify') || err.message.includes('not accepted') || err.message.includes('already verified')) {
@@ -507,6 +516,15 @@ router.post('/traders/:id/reject', authAdmin, async (req, res, next) => {
       req.adminId,
       { notes: req.body.notes, failedChecks: req.body.failedChecks }
     );
+    await auditLogService.log({
+      admin_id: req.adminId,
+      actor_role: 'admin',
+      action: 'trader_verify_reject',
+      resource_type: 'trader',
+      resource_id: req.params.id,
+      new_value: { verification_status: 'REJECTED' },
+      metadata: { notes: req.body.notes, failedChecks: req.body.failedChecks },
+    });
     res.json({ success: true, ...result, message: 'Trader rejected. They may re-submit documents.' });
   } catch (err) {
     next(err);

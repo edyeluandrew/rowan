@@ -399,8 +399,9 @@ async function adminAction(disputeId, adminId, action, actionData = {}) {
     await jobQueue.enqueueDisputeRelease(dispute.transaction_id, dispute.trader_id);
   }
 
-  // 6. Log audit trail
+  // 6. Log audit trail (money-sensitive admin action)
   await auditLogService.log({
+    admin_id: adminId,
     actor_role: 'admin',
     action: `dispute_${action}`,
     resource_type: 'dispute',

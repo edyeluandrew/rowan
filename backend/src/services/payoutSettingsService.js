@@ -414,6 +414,82 @@ class PayoutSettingsService {
       throw err;
     }
   }
+
+  /**
+   * [PHASE 2A] Idempotently claim the one-time "float settlement" for a transaction.
+   * Uses transactions.float_settled as the guard so finalize / release-reservation
+   * runs AT MOST ONCE per transaction, regardless of job retries or concurrent calls.
+   *
+   * @returns {boolean} true if THIS caller won the claim (must perform the settlement),
+   *                    false if it was already settled (caller must do nothing).
+   */
+  async claimFloatSettlement(transactionId) {
+    const result = await db.query(
+      `UPDATE transactions
+       SET float_settled = TRUE, float_settled_at = NOW()
+       WHERE id = $1 AND float_settled = FALSE
+       RETURNING id`,
+      [transactionId]
+    );
+    return result.rows.length > 0;
+  }
+
+  /** Undo a float-settlement claim (used if the settlement itself fails). */
+  async unclaimFloatSettlement(transactionId) {
+    await db.query(
+      `UPDATE transactions SET float_settled = FALSE, float_settled_at = NULL WHERE id = $1`,
+      [transactionId]
+    );
+  }
+
+  /**
+   * [PHASE 2A] Canonical, idempotent float FINALIZE for a transaction
+   * (normal completion + trader-win dispute). Decrements BOTH available_float
+   * and reserved_float exactly once. Native-currency amount.
+   */
+  async finalizeFloatForTransaction(transactionId, payoutSettingId, fiatAmount) {
+    if (!payoutSettingId) {
+      logger.warn(`[Float] finalizeFloatForTransaction: tx ${transactionId} has NULL payout_setting_id (legacy). Skipping payout-setting float finalize — no canonical float to settle.`);
+      return { skipped: true, reason: 'no_payout_setting' };
+    }
+    const won = await this.claimFloatSettlement(transactionId);
+    if (!won) {
+      logger.info(`[Float] finalizeFloatForTransaction: tx ${transactionId} already settled — skipping (idempotent).`);
+      return { skipped: true, reason: 'already_settled' };
+    }
+    try {
+      const setting = await this.finalizeFloat(payoutSettingId, parseFloat(fiatAmount));
+      return { skipped: false, setting };
+    } catch (err) {
+      // Roll back the claim so a retry can finalize.
+      await this.unclaimFloatSettlement(transactionId).catch(() => {});
+      throw err;
+    }
+  }
+
+  /**
+   * [PHASE 2A] Canonical, idempotent reservation RELEASE for a transaction
+   * (user-win dispute, or matched-then-refunded). Decrements reserved_float ONLY,
+   * leaving available_float intact. Native-currency amount.
+   */
+  async releaseReservationForTransaction(transactionId, payoutSettingId, fiatAmount) {
+    if (!payoutSettingId) {
+      logger.warn(`[Float] releaseReservationForTransaction: tx ${transactionId} has NULL payout_setting_id (legacy). Skipping reservation release.`);
+      return { skipped: true, reason: 'no_payout_setting' };
+    }
+    const won = await this.claimFloatSettlement(transactionId);
+    if (!won) {
+      logger.info(`[Float] releaseReservationForTransaction: tx ${transactionId} already settled — skipping (idempotent).`);
+      return { skipped: true, reason: 'already_settled' };
+    }
+    try {
+      const setting = await this.releaseReservedFloat(payoutSettingId, parseFloat(fiatAmount));
+      return { skipped: false, setting };
+    } catch (err) {
+      await this.unclaimFloatSettlement(transactionId).catch(() => {});
+      throw err;
+    }
+  }
 }
 
 export default new PayoutSettingsService();

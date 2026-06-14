@@ -4,6 +4,7 @@ import db from '../db/index.js';
 import websocket from '../services/websocket.js';
 import notificationService from '../services/notificationService.js';
 import stateMachine from './transactionStateMachine.js';
+import auditLogService from './auditLogService.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -60,10 +61,9 @@ refundQueue.process(async (job) => {
   const payoutSettingsService = await import('./payoutSettingsService.js').then(m => m.default);
 
   const result = await db.query(
-    `SELECT t.*, u.stellar_address as user_stellar, ps.trader_id
+    `SELECT t.*, u.stellar_address as user_stellar
      FROM transactions t
      JOIN users u ON u.id = t.user_id
-     LEFT JOIN trader_payout_settings ps ON ps.id = t.payout_setting_id
      WHERE t.id = $1`,
     [transactionId]
   );
@@ -80,14 +80,34 @@ refundQueue.process(async (job) => {
   //   2. Leave the transaction in DISPUTE_REFUND_PENDING (a clear, non-terminal
   //      "awaiting manual settlement" state) for operations to settle.
   if (dispute) {
-    if (tx.payout_setting_id && tx.trader_id) {
-      logger.info(`[Job:refund] DISPUTE: releasing reserved float for tx ${transactionId}`);
-      await payoutSettingsService.releaseReservedFloat(tx.payout_setting_id, tx.fiat_amount);
-    }
+    // [PHASE 2A] User won: release the RESERVED float ONLY (reserved_float -= amount),
+    // leaving available_float intact. Idempotent via transactions.float_settled.
+    await payoutSettingsService.releaseReservationForTransaction(
+      transactionId,
+      tx.payout_setting_id,
+      tx.fiat_amount
+    );
 
     logger.warn(
       `[Job:refund] DISPUTE resolved for user on tx ${transactionId}: refund left in DISPUTE_REFUND_PENDING for manual settlement (no automated on-chain refund).`
     );
+
+    // [PHASE 2A / B3] Audit the (manual) refund-pending outcome — money decision.
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'dispute_refund_pending',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      new_value: { state: 'DISPUTE_REFUND_PENDING' },
+      metadata: {
+        user_id: userId,
+        trader_id: tx.trader_id,
+        payout_setting_id: tx.payout_setting_id,
+        fiat_amount: tx.fiat_amount,
+        fiat_currency: tx.fiat_currency,
+        note: 'no_automated_on_chain_refund_manual_settlement',
+      },
+    });
 
     await notificationService.notifyUser(userId, 'dispute_resolved_refund', {
       transactionId,
@@ -98,9 +118,14 @@ refundQueue.process(async (job) => {
     return { status: 'dispute_resolved', action: 'refund_pending_manual_settlement' };
   }
 
-  // ── [NORMAL] Restore trader float if a trader was matched ──
-  if (tx.trader_id) {
-    logger.info(`[Job:refund] Restoring trader float for tx ${transactionId}`);
+  // ── [NORMAL] Release reserved float if a trader was matched ──
+  // [PHASE 2A] Prefer canonical reservation release; fall back to legacy column
+  // restore only for pre-2A transactions that never reserved via a payout setting.
+  if (tx.payout_setting_id) {
+    logger.info(`[Job:refund] Releasing reserved float (canonical) for tx ${transactionId}`);
+    await payoutSettingsService.releaseReservationForTransaction(transactionId, tx.payout_setting_id, tx.fiat_amount);
+  } else if (tx.trader_id) {
+    logger.warn(`[Job:refund] Tx ${transactionId} has trader but NULL payout_setting_id (legacy) — restoring legacy trader float`);
     await escrowController.restoreTraderFloat(tx);
   }
 

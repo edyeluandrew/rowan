@@ -53,14 +53,21 @@ async function log(entry) {
         user_agent || null,
       ]
     );
+    return { persisted: true };
   } catch (err) {
-    // Table might not exist - fall back to logger
-    logger.info(`[AuditLog] ${entry.action}`, {
+    // [B3 FIX] Do NOT silently swallow. Audit inserts were failing (admin_id NOT NULL
+    // violation) and being hidden — surface the real DB error so this can never go
+    // unnoticed again. We still fall back to the app log and return a non-throwing
+    // result: audit must not, by itself, roll back an already-committed money movement
+    // (e.g. an on-chain release). Callers that require audit can inspect `persisted`.
+    logger.error(`[AuditLog] PERSIST FAILED for action "${entry.action}" (${err.code || 'no_code'}): ${err.message}`);
+    logger.info(`[AuditLog:fallback] ${entry.action}`, {
       role: entry.actor_role,
       resource: entry.resource_type,
       id: entry.resource_id,
       ...entry.metadata,
     });
+    return { persisted: false, error: err.message };
   }
 }
 

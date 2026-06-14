@@ -3,7 +3,8 @@ import redis from '../db/redis.js';
 import config from '../config/index.js';
 import notificationService from './notificationService.js';
 import stateMachine from './transactionStateMachine.js';
-import { fiatToUgx, getFloatColumn } from '../utils/financial.js';
+import payoutSettingsService from './payoutSettingsService.js';
+import { fiatToUgx } from '../utils/financial.js';
 import logger from '../utils/logger.js';
 
 // Will be set by websocket module after init
@@ -67,131 +68,150 @@ async function matchTrader(transactionId) {
     }
 
     const fiatNeeded = parseFloat(transaction.fiat_amount || 0);
-
-    // ── [C-1 FIX] Determine the fiat currency and float column ──
     const fiatCurrency = transaction.fiat_currency || 'UGX';
-    const floatCol = getFloatColumn(fiatCurrency);
+    if (!Number.isFinite(fiatNeeded) || fiatNeeded <= 0) {
+      logger.error(`[Matching] Tx ${transactionId} has invalid fiat_amount ${transaction.fiat_amount} — cannot match`);
+      return null;
+    }
 
-    // [F-6 FIX] Convert fiat amount to UGX equivalent using shared helper
+    // [PHASE 2A] Daily-limit guard uses the UGX ledger (daily_volume / daily_limit_ugx
+    // are denominated in UGX, so converting fiat→UGX HERE is correct — this is NOT
+    // the legacy float unit bug). Canonical FLOAT now lives in trader_payout_settings
+    // and is reserved/finalized in the payout setting's OWN currency.
     const fiatAmountUgx = fiatToUgx(fiatNeeded, fiatCurrency);
 
-    // ── C5 FIX: Filter by network + P2 FIX: Use status enum ──
-    // [C-1 FIX] Compare daily_volume (UGX) + fiat-in-UGX against daily_limit_ugx
-    // [C-2 FIX] Only match traders whose float_{currency} >= fiatAmountUgx (not fiatNeeded!)
-    // [VERIFICATION GUARD] Only match VERIFIED traders
-    const traderResult = await db.query(
-      `SELECT t.*,
-         (SELECT COUNT(*) FROM transactions tx
-          WHERE tx.trader_id = t.id AND tx.state IN ('TRADER_MATCHED','FIAT_PAYOUT_SUBMITTED','USER_CONFIRMATION_PENDING')) as active_load
-       FROM traders t
-       WHERE t.status = 'ACTIVE'
-         AND t.verification_status = 'VERIFIED'
-         AND $1 = ANY(t.networks)
-         AND t.${floatCol} >= $2
-         AND (t.daily_volume + $3) <= t.daily_limit_ugx
-       ORDER BY t.trust_score DESC, active_load ASC
-       LIMIT 1`,
-      [transaction.network, fiatAmountUgx, fiatAmountUgx]
-    );
+    const triedTraderIds = [];
+    for (let attempt = 0; attempt < 6; attempt++) {
+      // ── [PHASE 2A] Canonical candidate selection from trader_payout_settings ──
+      //   • trader ACTIVE + VERIFIED + has stellar_address (can actually receive USDC)
+      //   • payout setting ACTIVE, matching network + currency
+      //   • fiat within [min_amount, max_amount]
+      //   • (available_float - reserved_float) >= fiat   (native currency — no unit mixing)
+      //   • under daily UGX limit
+      const candidateResult = await db.query(
+        `SELECT t.id AS trader_id, t.name AS trader_name,
+                ps.id AS payout_setting_id, ps.available_float, ps.reserved_float,
+                (SELECT COUNT(*) FROM transactions tx
+                   WHERE tx.trader_id = t.id
+                     AND tx.state IN ('TRADER_MATCHED','FIAT_PAYOUT_SUBMITTED','USER_CONFIRMATION_PENDING')) AS active_load
+         FROM traders t
+         JOIN trader_payout_settings ps ON ps.trader_id = t.id
+         WHERE t.status = 'ACTIVE'
+           AND t.verification_status = 'VERIFIED'
+           AND t.stellar_address IS NOT NULL
+           AND ps.is_active = TRUE
+           AND ps.network = $1::mobile_network
+           AND ps.currency = $2
+           AND $3 BETWEEN ps.min_amount AND ps.max_amount
+           AND (ps.available_float - ps.reserved_float) >= $3
+           AND (t.daily_volume + $4) <= t.daily_limit_ugx
+           AND t.id <> ALL($5::uuid[])
+         ORDER BY t.trust_score DESC, active_load ASC
+         LIMIT 1`,
+        [transaction.network, fiatCurrency, fiatNeeded, fiatAmountUgx, triedTraderIds]
+      );
 
-    const trader = traderResult.rows[0];
+      const candidate = candidateResult.rows[0];
+      if (!candidate) {
+        logger.warn(`[Matching] No eligible trader/payout-setting for tx ${transactionId} (${transaction.network}/${fiatCurrency} amount ${fiatNeeded}) — enqueue retry`);
+        const jobQueue = await getJobQueue();
+        await jobQueue.enqueueReMatch(transactionId, null, config.platform.traderRetryDelaySeconds || 30);
+        return null;
+      }
 
-    if (!trader) {
-      logger.warn(`[Matching] No available trader for tx ${transactionId} — will retry via job queue`);
-      // Don't fail immediately — enqueue for retry and let the job queue retry later
-      const jobQueue = await getJobQueue();
-      await jobQueue.enqueueReMatch(transactionId, null, config.platform.traderRetryDelaySeconds || 30);
-      logger.info(`[Matching] Enqueued retry for tx ${transactionId} in 30 seconds`);
-      return null;
-    }
+      // ── Atomically assign trader + payout_setting_id (state guarded) ──
+      // Re-read current state — it can advance between loop iterations.
+      const stRes = await db.query(`SELECT state, trader_id FROM transactions WHERE id = $1`, [transactionId]);
+      const cur = stRes.rows[0];
+      if (!cur) return null;
 
-    // ── C3 FIX: Atomic state transition prevents double-assignment ──
-    // Accept both ESCROW_LOCKED (old flow) and TRADER_MATCHED (new flow) as source
-    let assignResult = null;
-    if (transaction.state === 'ESCROW_LOCKED') {
-      assignResult = await stateMachine.transition(transactionId, 'ESCROW_LOCKED', 'TRADER_MATCHED', {
-        trader_id: trader.id,
+      let assigned = null;
+      if (cur.state === 'ESCROW_LOCKED') {
+        assigned = await stateMachine.transition(transactionId, 'ESCROW_LOCKED', 'TRADER_MATCHED', {
+          trader_id: candidate.trader_id,
+          payout_setting_id: candidate.payout_setting_id,
+        });
+      } else if (cur.state === 'TRADER_MATCHED' && !cur.trader_id) {
+        const upd = await db.query(
+          `UPDATE transactions
+           SET trader_id = $1, payout_setting_id = $2, trader_matched_at = NOW(), updated_at = NOW()
+           WHERE id = $3 AND trader_id IS NULL AND state = 'TRADER_MATCHED'
+           RETURNING *`,
+          [candidate.trader_id, candidate.payout_setting_id, transactionId]
+        );
+        assigned = upd.rows[0] || null;
+      } else {
+        logger.warn(`[Matching] Tx ${transactionId} advanced to ${cur.state} during matching — stopping`);
+        return null;
+      }
+
+      if (!assigned) {
+        logger.warn(`[Matching] Atomic assign failed for tx ${transactionId} — already advanced`);
+        return null;
+      }
+
+      // ── [PHASE 2A] Reserve float on the payout setting (atomic, no overbooking) ──
+      // reserveFloat increments reserved_float ONLY when (available - reserved) >= amount,
+      // in a single guarded UPDATE, so concurrent matches can never overbook.
+      try {
+        const reserved = await payoutSettingsService.reserveFloat(candidate.payout_setting_id, fiatNeeded);
+        logger.info(`[Matching] Matched tx ${transactionId} → trader ${candidate.trader_id} (${candidate.trader_name}); reserved ${fiatNeeded} ${fiatCurrency} on setting ${candidate.payout_setting_id} (reserved_float now ${reserved.reserved_float})`);
+      } catch (reserveErr) {
+        // Lost the float race (another tx reserved first). Unassign (keep TRADER_MATCHED,
+        // clear trader_id + payout_setting_id) and try the next eligible trader.
+        logger.warn(`[Matching] Reservation failed for trader ${candidate.trader_id} on tx ${transactionId}: ${reserveErr.message} — trying next`);
+        await db.query(
+          `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL
+           WHERE id = $1 AND trader_id = $2`,
+          [transactionId, candidate.trader_id]
+        );
+        triedTraderIds.push(candidate.trader_id);
+        continue;
+      }
+
+      const trader = { id: candidate.trader_id, name: candidate.trader_name };
+
+      // ── [L-3 FIX] Notify user that a trader has been matched ──
+      notificationService.notifyUser(transaction.user_id, 'trader_matched', {
+        transactionId: transaction.id,
+        state: 'TRADER_MATCHED',
+        message: 'A trader has been matched to your request. Mobile money payout coming soon.',
       });
-    } else if (transaction.state === 'TRADER_MATCHED' && !transaction.trader_id) {
-      // Already in TRADER_MATCHED (early transition from escrowController), just update trader_id
-      const updateResult = await db.query(
-        `UPDATE transactions 
-         SET trader_id = $1, trader_matched_at = NOW(), updated_at = NOW()
-         WHERE id = $2 AND trader_id IS NULL AND state = 'TRADER_MATCHED'
-         RETURNING *`,
-        [trader.id, transactionId]
-      );
-      assignResult = updateResult.rows[0] || null;
+
+      // Notify trader via notification service
+      const acceptTimeoutMs = (config.platform.traderAcceptTimeoutSeconds || 180) * 1000;
+      await notificationService.notifyTraderNewRequest(trader.id, {
+        id: transaction.id,
+        transactionId: transaction.id,
+        xlm_amount: transaction.xlm_amount,
+        usdc_amount: transaction.usdc_amount,
+        usdcAmount: transaction.usdc_amount,
+        fiat_amount: transaction.fiat_amount,
+        fiatAmount: transaction.fiat_amount,
+        fiat_currency: transaction.fiat_currency,
+        fiatCurrency: transaction.fiat_currency,
+        network: transaction.network,
+        state: 'TRADER_MATCHED',
+        accept_deadline: new Date(Date.now() + acceptTimeoutMs).toISOString(),
+        expires_at: new Date(Date.now() + acceptTimeoutMs).toISOString(),
+        expires_in: config.platform.traderAcceptTimeoutSeconds,
+        expiresIn: config.platform.traderAcceptTimeoutSeconds,
+        phoneHash: transaction.phone_hash,
+        timestamp: new Date().toISOString(),
+      });
+      logger.info(`[Matching] Pushed request to trader ${trader.id} via NotificationService`);
+
+      // ── P1 FIX: Schedule re-match via Bull delayed job instead of setTimeout ──
+      const jobQueue = await getJobQueue();
+      await jobQueue.enqueueReMatch(transactionId, trader.id, config.platform.traderAcceptTimeoutSeconds);
+
+      return trader;
     }
 
-    if (!assignResult) {
-      logger.warn(`[Matching] Atomic assign failed for tx ${transactionId} — already advanced`);
-      return null;
-    }
-
-    // ── [C-2 FIX] Atomically decrement trader float after match ──
-    // Use fiatAmountUgx (integer) not fiatNeeded (decimal) for BIGINT column
-    const floatDecrResult = await db.query(
-      `UPDATE traders SET ${floatCol} = ${floatCol} - $1
-       WHERE id = $2 AND ${floatCol} >= $1
-       RETURNING id`,
-      [fiatAmountUgx, trader.id]
-    );
-    if (floatDecrResult.rows.length === 0) {
-      // Float was insufficient (race condition)
-      // CRITICAL: Do NOT roll back state. Once TRADER_MATCHED, transaction progresses forward only.
-      // Instead, mark this match as invalid and try the next trader
-      logger.warn(`[Matching] Float insufficient for trader ${trader.id} after atomic match — trying next trader`);
-      
-      // Clear this trader's ID from the transaction (keep TRADER_MATCHED state)
-      // This allows another trader to be matched later
-      await db.query(
-        `UPDATE transactions SET trader_id = NULL WHERE id = $1 AND trader_id = $2`,
-        [transactionId, trader.id]
-      );
-      
-      // Retry matching (will pick next best trader, staying in TRADER_MATCHED state)
-      return matchTrader(transactionId);
-    }
-
-    logger.info(`[Matching] Matched tx ${transactionId} → trader ${trader.id} (${trader.name}), decremented ${floatCol} by ${fiatNeeded}`);
-
-    // ── [L-3 FIX] Notify user that a trader has been matched ──
-    notificationService.notifyUser(transaction.user_id, 'trader_matched', {
-      transactionId: transaction.id,
-      state: 'TRADER_MATCHED',
-      message: 'A trader has been matched to your request. Mobile money payout coming soon.',
-    });
-
-    // Notify trader via notification service
-    const acceptTimeoutMs = (config.platform.traderAcceptTimeoutSeconds || 180) * 1000;
-    await notificationService.notifyTraderNewRequest(trader.id, {
-      id: transaction.id,
-      transactionId: transaction.id,
-      xlm_amount: transaction.xlm_amount,
-      usdc_amount: transaction.usdc_amount,
-      usdcAmount: transaction.usdc_amount,
-      fiat_amount: transaction.fiat_amount,
-      fiatAmount: transaction.fiat_amount,
-      fiat_currency: transaction.fiat_currency,
-      fiatCurrency: transaction.fiat_currency,
-      network: transaction.network,
-      state: 'TRADER_MATCHED',
-      // Generate client-side deadline using config timeout (usually 180s)
-      accept_deadline: new Date(Date.now() + acceptTimeoutMs).toISOString(),
-      expires_at: new Date(Date.now() + acceptTimeoutMs).toISOString(),
-      expires_in: config.platform.traderAcceptTimeoutSeconds,
-      expiresIn: config.platform.traderAcceptTimeoutSeconds,
-      phoneHash: transaction.phone_hash,
-      timestamp: new Date().toISOString(),
-    });
-    logger.info(`[Matching] Pushed request to trader ${trader.id} via NotificationService`);
-
-    // ── P1 FIX: Schedule re-match via Bull delayed job instead of setTimeout ──
-    const jobQueue = await getJobQueue();
-    await jobQueue.enqueueReMatch(transactionId, trader.id, config.platform.traderAcceptTimeoutSeconds);
-
-    return trader;
+    logger.warn(`[Matching] Exhausted match attempts for tx ${transactionId} — enqueue retry`);
+    const jq = await getJobQueue();
+    await jq.enqueueReMatch(transactionId, null, config.platform.traderRetryDelaySeconds || 30);
+    return null;
   } finally {
     // Release lock after a short delay to prevent rapid re-entry
     // [PHASE 4] Use config-driven cleanup delay
