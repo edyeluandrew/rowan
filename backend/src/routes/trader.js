@@ -9,6 +9,7 @@ import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { stroopsToUsdc } from '../utils/financial.js';
 import { maskPhoneNumber } from '../utils/phoneMasking.js';
+import { traderLoginLimiter, sensitiveActionLimiter } from '../middleware/rateLimits.js';
 
 const router = Router();
 
@@ -20,6 +21,7 @@ const router = Router();
  */
 router.post(
   '/login',
+  traderLoginLimiter,
   validate(['email', 'password']),
   async (req, res, next) => {
     try {
@@ -255,7 +257,7 @@ router.post('/requests/:id/accept', authTrader, async (req, res, next) => {
  * [B4 FIX] Wraps escrow release in try/catch. On failure, enqueues a
  * Bull retry job so the trader still receives their USDC.
  */
-router.post('/requests/:id/payout-sent', authTrader, async (req, res, next) => {
+router.post('/requests/:id/payout-sent', authTrader, sensitiveActionLimiter, async (req, res, next) => {
   try {
     const { reference } = req.body;
 

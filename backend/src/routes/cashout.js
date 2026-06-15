@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authUser, checkUserLimits } from '../middleware/auth.js';
 import { validate, validateTypes } from '../middleware/validate.js';
+import { cashoutStatusLimiter } from '../middleware/rateLimits.js';
 import quoteEngine from '../services/quoteEngine.js';
 import fraudMonitor from '../services/fraudMonitor.js';
 import notificationService from '../services/notificationService.js';
@@ -216,83 +217,63 @@ router.post(
 
 /**
  * GET /api/v1/cashout/status/:id
- * Poll transaction state.
- * Accepts either transactionId OR quoteId
- * [FIX] Made more permissive: accepts either JWT auth OR direct access by quoteId
+ * Poll transaction state for the authenticated wallet user only.
+ * [PHASE 2H-2] Requires JWT; returns a sanitized status DTO (no sensitive settlement fields).
  */
-router.get('/status/:id', async (req, res, next) => {
+router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next) => {
   try {
     const id = req.params.id;
-    const userId = req.userId; // May be undefined if no JWT token
-    
-    logger.info(`[Cashout] status query for id: ${id}, userId: ${userId || '(no token)'}`);
+    const userId = req.userId;
 
-    let result;
+    logger.info(`[Cashout] status query for id: ${id}, userId: ${userId}`);
 
-    // If user is authenticated, query by user ownership
-    if (userId) {
-      // Try to find by transaction ID first
+    let result = await db.query(
+      `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
+              quote_confirmed_at, escrow_locked_at, trader_matched_at,
+              fiat_payout_submitted_at, user_confirmation_pending_at,
+              completed_at, failed_at, created_at, dispute_id,
+              stellar_deposit_tx, stellar_release_tx
+       FROM transactions WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+
+    if (result.rows.length === 0) {
       result = await db.query(
-        `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
-                network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
-                locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
-                fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
-                fiat_sent_at, completed_at, failed_at, failure_reason,
-                stellar_refund_tx, refund_error, dispute_id, dispute_resolved_at, created_at
-         FROM transactions WHERE id = $1 AND user_id = $2`,
+        `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
+                quote_confirmed_at, escrow_locked_at, trader_matched_at,
+                fiat_payout_submitted_at, user_confirmation_pending_at,
+                completed_at, failed_at, created_at, dispute_id,
+                stellar_deposit_tx, stellar_release_tx
+         FROM transactions WHERE quote_id = $1 AND user_id = $2`,
         [id, userId]
       );
-
-      // If not found, try by quote_id
-      if (result.rows.length === 0) {
-        logger.info(`[Cashout] Transaction not found by ID, trying quote_id: ${id}`);
-        result = await db.query(
-          `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
-                  network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
-                  locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
-                  fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
-                  fiat_sent_at, completed_at, failed_at, failure_reason,
-                stellar_refund_tx, refund_error, dispute_id, dispute_resolved_at, created_at
-           FROM transactions WHERE quote_id = $1 AND user_id = $2`,
-          [id, userId]
-        );
-      }
-    } else {
-      // No JWT token: only allow lookup by quoteId (less sensitive data exposure)
-      // Quote IDs are unique and 36 chars (UUID), so we can use length to distinguish
-      if (id.length === 36) {
-        logger.info(`[Cashout] No token provided, looking up by quote_id: ${id}`);
-        result = await db.query(
-          `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
-                  network, stellar_deposit_tx, stellar_swap_tx, stellar_release_tx,
-                  locked_rate, quote_confirmed_at, escrow_locked_at, trader_matched_at,
-                  fiat_payout_submitted_at, user_confirmation_pending_at, payout_reference,
-                  fiat_sent_at, completed_at, failed_at, failure_reason,
-                stellar_refund_tx, refund_error, dispute_id, dispute_resolved_at, created_at
-           FROM transactions WHERE quote_id = $1`,
-          [id]
-        );
-      } else {
-        logger.warn(`[Cashout] Request without token, rejecting (id format mismatch)`);
-        return res.status(401).json({ error: 'Authentication required' });
-      }
     }
 
     const tx = result.rows[0];
     if (!tx) {
-      logger.warn(`[Cashout] Transaction not found for id: ${id}${userId ? `, userId: ${userId}` : ''}`);
       return res.status(404).json({ error: 'Transaction not found' });
     }
-    
-    logger.info(`[Cashout] ✅ Status found for tx ${tx.id}, state: ${tx.state}`);
 
-    // usdc_amount is already stored as decimal USDC (not stroops)
-    const response = {
-      ...tx,
-      usdc_amount: tx.usdc_amount ? parseFloat(tx.usdc_amount) : null,  // Ensure it's a number, not string
-    };
-
-    res.json(response);
+    res.json({
+      id: tx.id,
+      state: tx.state,
+      xlm_amount: tx.xlm_amount != null ? parseFloat(tx.xlm_amount) : null,
+      usdc_amount: tx.usdc_amount != null ? parseFloat(tx.usdc_amount) : null,
+      fiat_amount: tx.fiat_amount != null ? parseFloat(tx.fiat_amount) : null,
+      fiat_currency: tx.fiat_currency,
+      network: tx.network,
+      hasDispute: !!tx.dispute_id,
+      stellar_deposit_tx: tx.stellar_deposit_tx,
+      stellar_release_tx: tx.stellar_release_tx,
+      quote_confirmed_at: tx.quote_confirmed_at,
+      escrow_locked_at: tx.escrow_locked_at,
+      trader_matched_at: tx.trader_matched_at,
+      fiat_payout_submitted_at: tx.fiat_payout_submitted_at,
+      user_confirmation_pending_at: tx.user_confirmation_pending_at,
+      completed_at: tx.completed_at,
+      failed_at: tx.failed_at,
+      created_at: tx.created_at,
+    });
   } catch (err) {
     next(err);
   }

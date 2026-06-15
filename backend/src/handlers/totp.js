@@ -166,7 +166,19 @@ export async function log2faVerificationUser(db, userId, type, result, failureRe
     );
   } catch (err) {
     console.error('[2FA] User audit log write failed:', err.message);
-    // Don't throw - logging failure shouldn't break the flow
+  }
+}
+
+export async function log2faVerificationAdmin(db, adminId, type, result, failureReason = null, ipAddress = null, userAgent = null) {
+  try {
+    await db.query(
+      `INSERT INTO admin_2fa_verification_logs
+       (admin_id, verification_type, result, failure_reason, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [adminId, type, result, failureReason, ipAddress, userAgent]
+    );
+  } catch (err) {
+    console.error('[2FA] Admin audit log write failed:', err.message);
   }
 }
 
@@ -251,6 +263,7 @@ export default {
   getBackupCodeCount,
   log2faVerification,
   log2faVerificationUser,
+  log2faVerificationAdmin,
   verifyAndUseBackupCodeUser,
   storeBackupCodesUser,
   getBackupCodeCountUser,

@@ -11,6 +11,7 @@ import db from '../db/index.js';
 import bcrypt from 'bcryptjs';
 import logger from '../utils/logger.js';
 import auditLogService from '../services/auditLogService.js';
+import { sensitiveActionLimiter } from '../middleware/rateLimits.js';
 
 const router = Router();
 
@@ -561,12 +562,14 @@ router.get('/traders/documents/:traderId/:fileId', authAdmin, async (req, res, n
 
 /**
  * POST /api/v1/admin/refund/:quoteId
+ * [PHASE 2H-2] Pre-swap XLM refunds only. Post-swap must use escrow-integrated paths.
  */
-router.post('/refund/:quoteId', authAdmin, async (req, res, next) => {
+router.post('/refund/:quoteId', authAdmin, sensitiveActionLimiter, async (req, res, next) => {
   try {
     const txResult = await db.query(
-      `SELECT t.*, q.memo
+      `SELECT t.*, u.stellar_address AS user_stellar
        FROM transactions t
+       JOIN users u ON u.id = t.user_id
        JOIN quotes q ON q.id = t.quote_id
        WHERE q.id = $1 AND t.state NOT IN ('COMPLETE', 'REFUNDED')`,
       [req.params.quoteId]
@@ -576,15 +579,46 @@ router.post('/refund/:quoteId', authAdmin, async (req, res, next) => {
       return res.status(404).json({ error: 'Transaction not found or already completed/refunded' });
     }
 
+    const postSwap = !!(tx.stellar_swap_tx && Number(tx.usdc_amount) > 0);
+    if (postSwap) {
+      await auditLogService.log({
+        actor_role: 'admin',
+        actor_id: req.adminId,
+        action: 'dangerous_endpoint_blocked',
+        resource_type: 'transaction',
+        resource_id: tx.id,
+        metadata: {
+          endpoint: 'POST /admin/refund/:quoteId',
+          reason: 'post_swap_usdc_refund_not_allowed',
+          redirect: 'POST /admin/escrow/refund-retry/:transactionId',
+        },
+      });
+      return res.status(409).json({
+        error: 'Post-swap refund blocked',
+        message: 'This transaction has already swapped to USDC. Use POST /api/v1/admin/escrow/refund-retry/:transactionId or dispute resolution.',
+        useInstead: `POST /api/v1/admin/escrow/refund-retry/${tx.id}`,
+      });
+    }
+
     const refundHash = await escrowController.refundXlm(
-      tx.user_stellar_address || tx.stellar_address,
+      tx.user_stellar,
       tx.xlm_amount,
-      `Admin manual refund: ${req.body.reason || 'No reason provided'}`
+      `Admin manual refund (pre-swap): ${req.body.reason || 'No reason provided'}`
     );
 
     await stateMachine.transition(tx.id, tx.state, 'REFUNDED', {
       stellar_refund_tx: refundHash,
       failure_reason: `Admin refund: ${req.body.reason || ''}`,
+    });
+
+    await auditLogService.log({
+      actor_role: 'admin',
+      actor_id: req.adminId,
+      action: 'admin_manual_refund',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      new_value: { state: 'REFUNDED', stellar_refund_tx: refundHash },
+      metadata: { quoteId: req.params.quoteId, asset: 'XLM', pre_swap: true },
     });
 
     res.json({ success: true, refundTxHash: refundHash, transactionId: tx.id });
@@ -597,7 +631,7 @@ router.post('/refund/:quoteId', authAdmin, async (req, res, next) => {
  * POST /api/v1/admin/escrow/refund-retry/:transactionId
  * Retry a failed refund for a transaction
  */
-router.post('/escrow/refund-retry/:transactionId', authAdmin, async (req, res, next) => {
+router.post('/escrow/refund-retry/:transactionId', authAdmin, sensitiveActionLimiter, async (req, res, next) => {
   try {
     const txResult = await db.query(
       `SELECT * FROM transactions WHERE id = $1`,
@@ -1200,7 +1234,7 @@ router.get('/disputes/:id', authAdmin, async (req, res, next) => {
  *
  * Body: { resolution: 'RESOLVED_FOR_USER'|'RESOLVED_FOR_TRADER'|'DISMISSED'|'refund'|'release'|'dismiss', adminNotes }
  */
-router.post('/disputes/:id/resolve', authAdmin, async (req, res, next) => {
+router.post('/disputes/:id/resolve', authAdmin, sensitiveActionLimiter, async (req, res, next) => {
   try {
     const { resolution, adminNotes } = req.body;
     if (!resolution) return res.status(400).json({ error: 'resolution is required' });

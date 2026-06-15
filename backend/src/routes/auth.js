@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import { signToken, authAdmin, authTrader } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
+import { adminLoginLimiter, twoFactorVerifyLimiter, sensitiveActionLimiter } from '../middleware/rateLimits.js';
+import { packTotpSecret, verifyTotpFromStored, upgradeTotpSecretIfPlaintext } from '../utils/totpSecret.js';
 import db from '../db/index.js';
 import redis from '../db/redis.js';
 import bcrypt from 'bcryptjs';
@@ -18,19 +19,10 @@ import {
   storeBackupCodes,
   getBackupCodeCount,
   log2faVerification,
+  log2faVerificationAdmin,
 } from '../handlers/totp.js';
 
 const router = Router();
-
-/* ── Rate limiters for security-critical endpoints ── */
-const twoFactorVerifyLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15, // 15 requests per IP per window
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many 2FA verification attempts. Please try again later.' },
-  skip: (req) => process.env.NODE_ENV === 'development', // Skip in development
-});
 
 /* ── SEP-10 server signing keypair (loaded once at startup) ────────── */
 const sep10Keypair = process.env.SEP10_SIGNING_SECRET
@@ -259,21 +251,19 @@ router.post(
  */
 router.post(
   '/admin/login',
+  adminLoginLimiter,
   validate(['email', 'password']),
   async (req, res, next) => {
     try {
       const { email, password } = req.body;
 
-      // [AUDIT FIX] Select only needed columns — never return full row with password_hash
       const result = await db.query(
-        `SELECT id, email, password_hash, role FROM users WHERE email = $1 AND role = 'admin'`,
+        `SELECT id, email, password_hash, role, is_active FROM users WHERE email = $1 AND role = 'admin'`,
         [email]
       );
       const admin = result.rows[0];
 
       if (!admin || !(await bcrypt.compare(password, admin.password_hash))) {
-        // [PHASE 2C] Audit failed admin login attempts (security-sensitive). admin_id
-        // is null when the email doesn't match an admin; never log the password.
         await auditLogService.log({
           admin_id: admin?.id || null,
           actor_role: 'admin',
@@ -287,16 +277,53 @@ router.post(
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
+      if (!admin.is_active) {
+        return res.status(403).json({ error: 'Admin account disabled' });
+      }
+
+      await auditLogService.log({
+        admin_id: admin.id,
+        actor_role: 'admin',
+        action: 'admin_login_started',
+        resource_type: 'admin',
+        resource_id: admin.id,
+        metadata: { email: admin.email },
+        ip_address: req.ip,
+        user_agent: req.get('user-agent'),
+      });
+
+      const twoFaResult = await db.query(
+        `SELECT is_enabled FROM admin_2fa_settings WHERE admin_id = $1`,
+        [admin.id]
+      );
+      const has2fa = twoFaResult.rows[0]?.is_enabled === true;
+
+      if (has2fa) {
+        await auditLogService.log({
+          admin_id: admin.id,
+          actor_role: 'admin',
+          action: 'admin_2fa_required',
+          resource_type: 'admin',
+          resource_id: admin.id,
+          metadata: { email: admin.email },
+          ip_address: req.ip,
+          user_agent: req.get('user-agent'),
+        });
+        return res.json({
+          requiresTwoFactorVerification: true,
+          adminId: admin.id,
+        });
+      }
+
       const token = signToken(admin.id, 'admin');
 
-      // [PHASE 2A / B3] Audit admin authentication (security-sensitive).
       await auditLogService.log({
         admin_id: admin.id,
         actor_role: 'admin',
         action: 'admin_login',
         resource_type: 'admin',
         resource_id: admin.id,
-        metadata: { email: admin.email },
+        metadata: { email: admin.email, twoFactorUsed: false },
         ip_address: req.ip,
         user_agent: req.get('user-agent'),
       });
@@ -534,6 +561,7 @@ async function verifyLegacyChallenge(stellarAddress, signatureBase64) {
 router.post(
   '/trader/auth/change-password',
   authTrader,
+  sensitiveActionLimiter,
   validate(['currentPassword', 'newPassword', 'confirmPassword']),
   async (req, res, next) => {
     try {
@@ -575,6 +603,7 @@ router.post(
  */
 router.post(
   '/trader/auth/forgot-password',
+  sensitiveActionLimiter,
   validate(['email']),
   async (req, res, next) => {
     try {
@@ -612,6 +641,7 @@ router.post(
  */
 router.post(
   '/trader/auth/reset-password',
+  sensitiveActionLimiter,
   validate(['email', 'otp', 'newPassword', 'confirmPassword']),
   async (req, res, next) => {
     try {
@@ -818,21 +848,19 @@ router.post(
       );
 
       if (existing.rows.length > 0) {
-        // Update existing record
         await db.query(
           `UPDATE trader_2fa_settings
            SET totp_secret = $1, is_enabled = TRUE, enabled_at = NOW(), 
                backup_codes_remaining = $2, updated_at = NOW()
            WHERE trader_id = $3`,
-          [secret, 10, traderId]
+          [packTotpSecret(secret), 10, traderId]
         );
       } else {
-        // Create new record
         await db.query(
           `INSERT INTO trader_2fa_settings
            (trader_id, totp_secret, is_enabled, enabled_at, backup_codes_remaining)
            VALUES ($1, $2, TRUE, NOW(), $3)`,
-          [traderId, secret, 10]
+          [traderId, packTotpSecret(secret), 10]
         );
       }
 
@@ -915,9 +943,9 @@ router.post(
       }
 
       const { totp_secret } = result.rows[0];
+      await upgradeTotpSecretIfPlaintext(db, 'trader_2fa_settings', traderId, totp_secret);
 
-      // Try TOTP code first
-      let isValid = verifyTotpCode(totp_secret, code);
+      let isValid = verifyTotpFromStored(totp_secret, code);
       let verificationMethod = 'totp';
 
       // If TOTP fails, try backup code
@@ -1005,9 +1033,9 @@ router.post(
       }
 
       const { totp_secret } = result.rows[0];
+      await upgradeTotpSecretIfPlaintext(db, 'trader_2fa_settings', traderId, totp_secret);
 
-      // Try TOTP code first
-      let isValid = verifyTotpCode(totp_secret, code);
+      let isValid = verifyTotpFromStored(totp_secret, code);
 
       // If TOTP fails, try backup code
       if (!isValid) {
@@ -1071,9 +1099,9 @@ router.post(
       }
 
       const { totp_secret } = result.rows[0];
+      await upgradeTotpSecretIfPlaintext(db, 'trader_2fa_settings', traderId, totp_secret);
 
-      // Verify TOTP code
-      const isValid = verifyTotpCode(totp_secret, code);
+      const isValid = verifyTotpFromStored(totp_secret, code);
       if (!isValid) {
         return res.status(401).json({ error: 'Invalid code. Backup codes not regenerated.' });
       }
@@ -1102,5 +1130,157 @@ router.post(
     }
   }
 );
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ADMIN TWO-FACTOR AUTHENTICATION
+   ═══════════════════════════════════════════════════════════════════════ */
+
+router.post('/admin/2fa/setup', authAdmin, async (req, res, next) => {
+  try {
+    const adminId = req.adminId;
+    const existing = await db.query(
+      `SELECT id FROM admin_2fa_settings WHERE admin_id = $1 AND is_enabled = TRUE`,
+      [adminId]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: '2FA is already enabled on this admin account' });
+    }
+
+    const adminRow = await db.query(`SELECT email FROM users WHERE id = $1 AND role = 'admin'`, [adminId]);
+    if (!adminRow.rows[0]) return res.status(404).json({ error: 'Admin not found' });
+
+    const { secret, qrCode, manualEntry } = await generateTotpSecret(adminId, adminRow.rows[0].email, 'Rowan Admin');
+    const setupKey = `admin:2fa_setup:${adminId}`;
+    await redis.setex(setupKey, 600, JSON.stringify({ secret }));
+
+    res.json({ qrCode, manualEntry, setupId: adminId });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/admin/2fa/verify-setup', authAdmin, validate(['code']), async (req, res, next) => {
+  try {
+    const adminId = req.adminId;
+    const { code } = req.body;
+    const setupKey = `admin:2fa_setup:${adminId}`;
+    const setupData = await redis.get(setupKey);
+    if (!setupData) {
+      return res.status(400).json({ error: 'Setup session expired. Please restart 2FA setup.' });
+    }
+    const { secret } = JSON.parse(setupData);
+    if (!verifyTotpCode(secret, code)) {
+      await log2faVerificationAdmin(db, adminId, 'setup', 'failed', 'Invalid TOTP code', req.ip, req.get('user-agent'));
+      return res.status(401).json({ error: 'Invalid verification code' });
+    }
+
+    const packed = packTotpSecret(secret);
+    const existing = await db.query(`SELECT id FROM admin_2fa_settings WHERE admin_id = $1`, [adminId]);
+    if (existing.rows.length > 0) {
+      await db.query(
+        `UPDATE admin_2fa_settings SET totp_secret = $1, is_enabled = TRUE, enabled_at = NOW(), updated_at = NOW() WHERE admin_id = $2`,
+        [packed, adminId]
+      );
+    } else {
+      await db.query(
+        `INSERT INTO admin_2fa_settings (admin_id, totp_secret, is_enabled, enabled_at) VALUES ($1, $2, TRUE, NOW())`,
+        [adminId, packed]
+      );
+    }
+
+    await redis.del(setupKey);
+    await log2faVerificationAdmin(db, adminId, 'setup', 'success', null, req.ip, req.get('user-agent'));
+    await auditLogService.log({
+      admin_id: adminId,
+      actor_role: 'admin',
+      action: 'admin_2fa_enabled',
+      resource_type: 'admin',
+      resource_id: adminId,
+    });
+
+    res.json({ message: 'Admin two-factor authentication enabled.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/admin/2fa/status', authAdmin, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT is_enabled, enabled_at FROM admin_2fa_settings WHERE admin_id = $1`,
+      [req.adminId]
+    );
+    if (!result.rows[0]) return res.json({ is2faEnabled: false });
+    res.json({ is2faEnabled: result.rows[0].is_enabled, enabledAt: result.rows[0].enabled_at });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/admin/2fa/verify-login', twoFactorVerifyLimiter, validate(['adminId', 'code']), async (req, res, next) => {
+  try {
+    const { adminId, code } = req.body;
+    const settings = await db.query(
+      `SELECT totp_secret, is_enabled FROM admin_2fa_settings WHERE admin_id = $1`,
+      [adminId]
+    );
+    const row = settings.rows[0];
+    if (!row?.is_enabled) {
+      return res.status(400).json({ error: '2FA not enabled for this admin account' });
+    }
+
+    await upgradeTotpSecretIfPlaintext(db, 'admin_2fa_settings', adminId, row.totp_secret);
+
+    if (!verifyTotpFromStored(row.totp_secret, code)) {
+      await log2faVerificationAdmin(db, adminId, 'login', 'failed', 'Invalid TOTP code', req.ip, req.get('user-agent'));
+      await auditLogService.log({
+        admin_id: adminId,
+        actor_role: 'admin',
+        action: 'admin_2fa_failed',
+        resource_type: 'admin',
+        resource_id: adminId,
+        ip_address: req.ip,
+        user_agent: req.get('user-agent'),
+      });
+      return res.status(401).json({ error: 'Invalid authentication code' });
+    }
+
+    const adminRow = await db.query(
+      `SELECT id, email, role, is_active FROM users WHERE id = $1 AND role = 'admin'`,
+      [adminId]
+    );
+    const admin = adminRow.rows[0];
+    if (!admin?.is_active) return res.status(403).json({ error: 'Admin account disabled' });
+
+    const token = signToken(admin.id, 'admin');
+    await log2faVerificationAdmin(db, adminId, 'login', 'success', null, req.ip, req.get('user-agent'));
+    await auditLogService.log({
+      admin_id: adminId,
+      actor_role: 'admin',
+      action: 'admin_2fa_success',
+      resource_type: 'admin',
+      resource_id: adminId,
+      ip_address: req.ip,
+      user_agent: req.get('user-agent'),
+    });
+    await auditLogService.log({
+      admin_id: adminId,
+      actor_role: 'admin',
+      action: 'admin_login',
+      resource_type: 'admin',
+      resource_id: adminId,
+      metadata: { email: admin.email, twoFactorUsed: true },
+      ip_address: req.ip,
+      user_agent: req.get('user-agent'),
+    });
+
+    res.json({
+      token,
+      admin: { id: admin.id, email: admin.email, role: admin.role },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 export default router;

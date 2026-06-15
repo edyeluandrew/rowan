@@ -22,10 +22,13 @@ const config = {
     marketMakerSecretKey: process.env.MARKET_MAKER_SECRET_KEY,
   },
 
-  // JWT
+  // JWT — role-specific TTLs (admin shorter in production)
   jwt: {
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    adminExpiresIn: process.env.JWT_ADMIN_EXPIRES_IN
+      || ((process.env.NODE_ENV || 'development') === 'production' ? '1h' : '7d'),
+    traderExpiresIn: process.env.JWT_TRADER_EXPIRES_IN || process.env.JWT_EXPIRES_IN || '7d',
   },
 
   // Encryption (AES-256-GCM for PII like ID document numbers)
@@ -93,6 +96,13 @@ const config = {
   // Rate limiting
   globalRateLimitMax: parseInt(process.env.RATE_LIMIT_GLOBAL_MAX, 10) || 100,
   authRateLimitMax: parseInt(process.env.RATE_LIMIT_AUTH_MAX, 10) || 20,
+  rateLimits: {
+    adminLoginMax: parseInt(process.env.RATE_LIMIT_ADMIN_LOGIN_MAX, 10) || 10,
+    traderLoginMax: parseInt(process.env.RATE_LIMIT_TRADER_LOGIN_MAX, 10) || 15,
+    twoFactorVerifyMax: parseInt(process.env.RATE_LIMIT_2FA_VERIFY_MAX, 10) || 15,
+    cashoutStatusMax: parseInt(process.env.RATE_LIMIT_CASHOUT_STATUS_MAX, 10) || 60,
+    sensitiveActionMax: parseInt(process.env.RATE_LIMIT_SENSITIVE_ACTION_MAX, 10) || 30,
+  },
 
   // CoinGecko
   coingeckoApiUrl: process.env.COINGECKO_API_URL || 'https://api.coingecko.com/api/v3',

@@ -19,6 +19,8 @@ import {
   getBackupCodeCountUser,
   log2faVerificationUser,
 } from '../handlers/totp.js';
+import { packTotpSecret, verifyTotpFromStored, upgradeTotpSecretIfPlaintext } from '../utils/totpSecret.js';
+import { sensitiveActionLimiter } from '../middleware/rateLimits.js';
 
 const router = Router();
 
@@ -481,15 +483,14 @@ router.post(
            SET totp_secret = $1, is_enabled = TRUE, enabled_at = NOW(), 
                backup_codes_remaining = $2, updated_at = NOW()
            WHERE user_id = $3`,
-          [secret, 10, userId]
+          [packTotpSecret(secret), 10, userId]
         );
       } else {
-        // Create new record
         await db.query(
           `INSERT INTO user_2fa_settings
            (user_id, totp_secret, is_enabled, enabled_at, backup_codes_remaining)
            VALUES ($1, $2, TRUE, NOW(), $3)`,
-          [userId, secret, 10]
+          [userId, packTotpSecret(secret), 10]
         );
       }
 
@@ -566,8 +567,10 @@ router.post(
         };
       };
 
+      await upgradeTotpSecretIfPlaintext(db, 'user_2fa_settings', userId, twoFaSettings.totp_secret);
+
       // Try TOTP code first
-      if (verifyTotpCode(twoFaSettings.totp_secret, code)) {
+      if (verifyTotpFromStored(twoFaSettings.totp_secret, code)) {
         await log2faVerificationUser(db, userId, 'login', 'success', null, req.ip, req.get('user-agent'));
         const session = await issueSession();
         return res.json({ verified: true, method: 'totp', ...session });
@@ -625,7 +628,8 @@ router.post(
       }
 
       // Verify TOTP code
-      if (!verifyTotpCode(settings.totp_secret, code)) {
+      await upgradeTotpSecretIfPlaintext(db, 'user_2fa_settings', userId, settings.totp_secret);
+      if (!verifyTotpFromStored(settings.totp_secret, code)) {
         await log2faVerificationUser(db, userId, 'disable', 'failed', 'Invalid TOTP code', null, req.get('user-agent'));
         return res.status(401).json({ error: 'Invalid authentication code' });
       }
@@ -682,7 +686,8 @@ router.post(
       }
 
       // Verify TOTP code
-      if (!verifyTotpCode(settings.totp_secret, code)) {
+      await upgradeTotpSecretIfPlaintext(db, 'user_2fa_settings', userId, settings.totp_secret);
+      if (!verifyTotpFromStored(settings.totp_secret, code)) {
         await log2faVerificationUser(db, userId, 'regenerate', 'failed', 'Invalid TOTP code', null, req.get('user-agent'));
         return res.status(401).json({ error: 'Invalid authentication code' });
       }
@@ -756,7 +761,7 @@ router.get(
  *
  * [PHASE 8] User-side secure receipt confirmation.
  */
-router.post('/transactions/:id/confirm-receipt', authUser, async (req, res, next) => {
+router.post('/transactions/:id/confirm-receipt', authUser, sensitiveActionLimiter, async (req, res, next) => {
   try {
     const id = req.params.id;
     const userId = req.userId;

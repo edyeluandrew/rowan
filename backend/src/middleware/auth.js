@@ -17,7 +17,12 @@ export function authUser(req, res, next) {
     if (payload.role !== 'user') return res.status(403).json({ error: 'Not a user token' });
     req.userId = payload.sub;
     req.deviceId = payload.deviceId;
-    next();
+    ensureActiveAccount('user', payload.sub)
+      .then((active) => {
+        if (!active) return res.status(403).json({ error: 'Account disabled' });
+        next();
+      })
+      .catch(() => res.status(500).json({ error: 'Authentication check failed' }));
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
@@ -34,17 +39,19 @@ export function authTrader(req, res, next) {
     const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] });
     if (payload.role !== 'trader') return res.status(403).json({ error: 'Not a trader token' });
     
-    // CRITICAL: Validate that JWT has required 'sub' field
     if (!payload.sub) {
-      console.error('[authTrader] JWT missing required sub field:', payload);
       return res.status(401).json({ error: 'Invalid token: missing trader ID' });
     }
     
     req.traderId = payload.sub;
     req.deviceId = payload.deviceId;
-    next();
+    ensureActiveTrader(payload.sub)
+      .then((active) => {
+        if (!active) return res.status(403).json({ error: 'Account disabled or suspended' });
+        next();
+      })
+      .catch(() => res.status(500).json({ error: 'Authentication check failed' }));
   } catch (err) {
-    console.error('[authTrader] JWT verification failed:', err.message);
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
@@ -60,7 +67,12 @@ export function authAdmin(req, res, next) {
     const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] });
     if (payload.role !== 'admin') return res.status(403).json({ error: 'Not an admin token' });
     req.adminId = payload.sub;
-    next();
+    ensureActiveAccount('admin', payload.sub)
+      .then((active) => {
+        if (!active) return res.status(403).json({ error: 'Admin account disabled' });
+        next();
+      })
+      .catch(() => res.status(500).json({ error: 'Authentication check failed' }));
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
@@ -68,13 +80,38 @@ export function authAdmin(req, res, next) {
 
 /**
  * Generate a JWT for a given subject and role.
+ * Admin tokens use a shorter TTL in production (JWT_ADMIN_EXPIRES_IN).
  */
 export function signToken(sub, role, deviceId = null) {
+  const expiresIn = role === 'admin'
+    ? config.jwt.adminExpiresIn
+    : role === 'trader'
+      ? config.jwt.traderExpiresIn
+      : config.jwt.expiresIn;
+
   return jwt.sign(
     { sub, role, deviceId },
     config.jwt.secret,
-    { algorithm: 'HS256', expiresIn: config.jwt.expiresIn }
+    { algorithm: 'HS256', expiresIn }
   );
+}
+
+async function ensureActiveAccount(role, userId) {
+  const result = await db.query(
+    `SELECT is_active FROM users WHERE id = $1 AND role = $2`,
+    [userId, role]
+  );
+  return result.rows[0]?.is_active === true;
+}
+
+async function ensureActiveTrader(traderId) {
+  const result = await db.query(
+    `SELECT is_active, is_suspended FROM traders WHERE id = $1`,
+    [traderId]
+  );
+  const row = result.rows[0];
+  if (!row) return false;
+  return row.is_active === true && row.is_suspended !== true;
 }
 
 /**
