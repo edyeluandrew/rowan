@@ -85,37 +85,55 @@ On Stellar testnet Horizon, load the trader's public key:
 ## Correct recovery path
 
 1. **Fix root cause** (trustline, address, escrow funding, Horizon connectivity).
-2. **Retry escrow-integrated release** — funds must move on-chain before `COMPLETE`.
+2. **Verify trader USDC trustline** on Horizon.
+3. **Call admin release-retry** (escrow-integrated):
+
+```http
+POST /api/v1/admin/escrow/release-retry/:transactionId
+Authorization: Bearer <admin token>
+Content-Type: application/json
+
+{}
+```
+
+**Allowed state:** `RELEASE_BLOCKED` only. All other states return **409**.
+
+**Success (200):**
+
+```json
+{
+  "success": true,
+  "state": "COMPLETE",
+  "releaseHash": "<stellar tx hash>",
+  "transactionId": "..."
+}
+```
+
+**Still blocked (409):** trustline still missing, insufficient escrow, or Horizon error — fix and retry.
+
+**Already complete (200):** idempotent — `status: already_complete` if `stellar_release_tx` exists.
+
+4. **Confirm on-chain:** `stellar_release_tx` visible on Horizon.
+5. **Confirm state:** `COMPLETE` (set only by escrow release logic, never manually).
+6. **Verify audit logs:** `release_retry_started`, `release_retry_succeeded` (or `release_retry_blocked` / `release_retry_failed`).
 
 ### Dispute-origin RELEASE_BLOCKED
 
-If the transaction reached `RELEASE_BLOCKED` from `DISPUTE_RELEASE_PENDING`:
-
-- After fixing the trader trustline, re-trigger release via dispute workflow:
-  - `POST /api/v1/admin/disputes/:id/resolve` with `resolution: RESOLVED_FOR_TRADER` (if dispute still open), **or**
-  - Bull `releaseQueue` may retry automatically (check job logs).
-
-### Normal confirm-receipt RELEASE_BLOCKED
-
-If blocked after user confirm-receipt (`USER_CONFIRMATION_PENDING` → `RELEASE_BLOCKED`):
-
-- User **cannot** call confirm-receipt again (state guard returns **409**).
-- User **cannot** open a dispute from `RELEASE_BLOCKED` (disputable states are `FIAT_PAYOUT_SUBMITTED`, `USER_CONFIRMATION_PENDING` only).
-
-**Known operational gap:** There is currently **no** `POST /admin/escrow/release-retry/:transactionId` HTTP endpoint. Escalate to engineering for an approved recovery that transitions back to a retryable state after the trustline fix, or implement a release-retry endpoint in a future phase.
-
-3. **Confirm on-chain success:** `stellar_release_tx` populated on Horizon.
-4. **Confirm terminal state:** `state` = `COMPLETE` only after successful release.
+Same endpoint applies. If the dispute is still open, you may alternatively use `POST /api/v1/admin/disputes/:id/resolve` with `RESOLVED_FOR_TRADER` after fixing the trustline.
 
 ---
 
-## Expected audit events (successful recovery)
+## Expected audit events
 
 | Action | When |
 |--------|------|
-| `escrow_release` | USDC release succeeded |
+| `release_retry_started` | Admin initiated retry |
+| `release_retry_succeeded` | On-chain release completed → COMPLETE |
+| `release_retry_blocked` | Still blocked (e.g. missing trustline) |
+| `release_retry_failed` | Network/on-chain error |
+| `release_retry_wrong_state` | Not RELEASE_BLOCKED |
+| `escrow_release` | System release success (also logged by releaseToTrader) |
 | `escrow_release_blocked` | Initial block (already present) |
-| `dispute_resolve_trader` | If recovered via dispute path |
 
 ---
 

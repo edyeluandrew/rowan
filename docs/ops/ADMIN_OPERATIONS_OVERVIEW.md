@@ -65,6 +65,7 @@ All admin routes require `Authorization: Bearer <admin JWT>` unless noted.
 | `POST /api/v1/admin/disputes/:id/resolve` | Escrow-integrated dispute settlement |
 | `POST /api/v1/admin/transactions/:id/retry-refund` | USDC refund retry (user-win) |
 | `POST /api/v1/admin/escrow/refund-retry/:transactionId` | XLM refund retry (pre-swap / FAILED) |
+| `POST /api/v1/admin/escrow/release-retry/:transactionId` | USDC release retry (`RELEASE_BLOCKED` only) |
 
 See individual runbooks for procedure details.
 
@@ -77,7 +78,7 @@ See individual runbooks for procedure details.
 - Admin 2FA verification also writes to `admin_2fa_verification_logs`.
 - **Do not delete logs.** Export for incidents if needed.
 
-Common actions: `admin_login`, `admin_2fa_required`, `admin_2fa_success`, `dispute_resolve_user`, `dispute_resolve_trader`, `transaction_refund_retry`, `dangerous_endpoint_blocked`, `escrow_release_blocked`.
+Common actions: `admin_login`, `admin_2fa_required`, `admin_2fa_success`, `dispute_resolve_user`, `dispute_resolve_trader`, `transaction_refund_retry`, `release_retry_succeeded`, `release_retry_blocked`, `dangerous_endpoint_blocked`, `escrow_release_blocked`.
 
 ---
 

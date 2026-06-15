@@ -51,7 +51,7 @@ Honest status assessment for Rowan release tiers.
 - Fiat FX is STATIC → `warningLevel = WARNING` (expected)
 - Mobile money is manual partner payout
 - No carrier-verified payout references
-- Admin release-retry HTTP endpoint missing for some RELEASE_BLOCKED cases
+- Release retry available via `POST /admin/escrow/release-retry/:transactionId` (Phase 2H-3B)
 
 **Verdict: GO for testnet demos**
 

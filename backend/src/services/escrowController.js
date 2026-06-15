@@ -458,7 +458,7 @@ async function releaseToTrader(transactionId) {
       `SELECT t.*, tr.stellar_address as trader_stellar
        FROM transactions t
        JOIN traders tr ON tr.id = t.trader_id
-       WHERE t.id = $1 AND t.state IN ('USER_CONFIRMATION_PENDING', 'DISPUTE_RELEASE_PENDING')`,
+       WHERE t.id = $1 AND t.state IN ('USER_CONFIRMATION_PENDING', 'DISPUTE_RELEASE_PENDING', 'RELEASE_BLOCKED')`,
       [transactionId]
     );
     const transaction = txResult.rows[0];
@@ -500,24 +500,28 @@ async function releaseToTrader(transactionId) {
       );
       if (!hasTrustline) {
         logger.error(`[Escrow] Trader ${transaction.trader_id} has no USDC trustline — blocking release`);
-        // Use the ACTUAL current state as the guard source so this works for both
-        // the normal (USER_CONFIRMATION_PENDING) and dispute (DISPUTE_RELEASE_PENDING)
-        // release paths. Funds remain locked; tx is retryable from RELEASE_BLOCKED.
-        await stateMachine.transition(transactionId, transaction.state, 'RELEASE_BLOCKED', {
-          failure_reason: 'Trader missing USDC trustline',
-        });
-        await auditLogService.log({
-          actor_role: 'system',
-          action: 'escrow_release_blocked',
-          resource_type: 'transaction',
-          resource_id: transactionId,
-          new_value: { state: 'RELEASE_BLOCKED' },
-          metadata: {
-            trader_id: transaction.trader_id,
-            reason: 'Trader missing USDC trustline',
-            from_state: transaction.state,
-          },
-        });
+        if (transaction.state !== 'RELEASE_BLOCKED') {
+          await stateMachine.transition(transactionId, transaction.state, 'RELEASE_BLOCKED', {
+            failure_reason: 'Trader missing USDC trustline',
+          });
+          await auditLogService.log({
+            actor_role: 'system',
+            action: 'escrow_release_blocked',
+            resource_type: 'transaction',
+            resource_id: transactionId,
+            new_value: { state: 'RELEASE_BLOCKED' },
+            metadata: {
+              trader_id: transaction.trader_id,
+              reason: 'Trader missing USDC trustline',
+              from_state: transaction.state,
+            },
+          });
+        } else {
+          await db.query(
+            `UPDATE transactions SET failure_reason = $1, updated_at = NOW() WHERE id = $2`,
+            ['Trader missing USDC trustline', transactionId]
+          );
+        }
         return null;
       }
     } catch (trustlineErr) {
@@ -1168,10 +1172,181 @@ async function restoreTraderFloat(transaction) {
   logger.info(`[Escrow] Restored ${floatCol} +${fiatAmount} for trader ${transaction.trader_id}`);
 }
 
+const RELEASE_RETRY_ALLOWED_STATE = 'RELEASE_BLOCKED';
+
+/**
+ * [PHASE 2H-3B] Admin retry for normal-flow RELEASE_BLOCKED after root cause is fixed.
+ * Uses releaseToTrader — never marks COMPLETE without on-chain stellar_release_tx.
+ */
+async function retryReleaseBlocked(transactionId, { adminId } = {}) {
+  const txResult = await db.query(
+    `SELECT t.*, tr.stellar_address AS trader_stellar
+     FROM transactions t
+     LEFT JOIN traders tr ON tr.id = t.trader_id
+     WHERE t.id = $1`,
+    [transactionId]
+  );
+  const tx = txResult.rows[0];
+  if (!tx) {
+    const err = new Error('Transaction not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (tx.state === 'COMPLETE' && tx.stellar_release_tx) {
+    return {
+      status: 'already_complete',
+      state: 'COMPLETE',
+      releaseHash: tx.stellar_release_tx,
+    };
+  }
+
+  if (tx.state !== RELEASE_RETRY_ALLOWED_STATE) {
+    await auditLogService.log({
+      admin_id: adminId,
+      actor_role: 'admin',
+      actor_id: adminId,
+      action: 'release_retry_wrong_state',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      metadata: { current_state: tx.state, allowed_state: RELEASE_RETRY_ALLOWED_STATE },
+    });
+    const err = new Error(
+      `Release retry only allowed for ${RELEASE_RETRY_ALLOWED_STATE} (current: ${tx.state})`
+    );
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (tx.stellar_release_tx) {
+    const err = new Error('Transaction already has a release hash');
+    err.statusCode = 409;
+    throw err;
+  }
+  if (tx.stellar_refund_tx) {
+    const err = new Error('Transaction already refunded on-chain');
+    err.statusCode = 409;
+    throw err;
+  }
+  if (tx.admin_recovery_tx) {
+    const err = new Error('Transaction was admin-recovered; release retry not allowed');
+    err.statusCode = 409;
+    throw err;
+  }
+  if (!tx.trader_id) {
+    const err = new Error('Transaction has no matched trader');
+    err.statusCode = 409;
+    throw err;
+  }
+  if (!tx.trader_stellar) {
+    const err = new Error('Trader has no Stellar address configured');
+    err.statusCode = 409;
+    throw err;
+  }
+  const usdcAmount = Number(tx.usdc_amount);
+  if (!Number.isFinite(usdcAmount) || usdcAmount <= 0) {
+    const err = new Error('Transaction has no escrowed USDC amount');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  let hasTrustline = false;
+  try {
+    const traderAccount = await horizon.loadAccount(tx.trader_stellar);
+    hasTrustline = traderAccount.balances.some(
+      (b) => b.asset_code === USDC_ASSET.code && b.asset_issuer === USDC_ASSET.issuer
+    );
+  } catch (trustlineErr) {
+    if (trustlineErr?.response?.status !== 404) {
+      await auditLogService.log({
+        admin_id: adminId,
+        actor_role: 'admin',
+        actor_id: adminId,
+        action: 'release_retry_failed',
+        resource_type: 'transaction',
+        resource_id: transactionId,
+        metadata: { error: trustlineErr.message },
+      });
+      throw trustlineErr;
+    }
+  }
+  if (!hasTrustline) {
+    await auditLogService.log({
+      admin_id: adminId,
+      actor_role: 'admin',
+      actor_id: adminId,
+      action: 'release_retry_blocked',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      metadata: { reason: 'Trader missing USDC trustline' },
+    });
+    return { status: 'blocked', state: RELEASE_RETRY_ALLOWED_STATE };
+  }
+
+  await auditLogService.log({
+    admin_id: adminId,
+    actor_role: 'admin',
+    actor_id: adminId,
+    action: 'release_retry_started',
+    resource_type: 'transaction',
+    resource_id: transactionId,
+    metadata: { trader_id: tx.trader_id, usdc_amount: usdcAmount },
+  });
+
+  try {
+    const releaseHash = await releaseToTrader(transactionId);
+
+    if (releaseHash) {
+      await auditLogService.log({
+        admin_id: adminId,
+        actor_role: 'admin',
+        actor_id: adminId,
+        action: 'release_retry_succeeded',
+        resource_type: 'transaction',
+        resource_id: transactionId,
+        new_value: { state: 'COMPLETE', stellar_release_tx: releaseHash },
+        metadata: { trader_id: tx.trader_id },
+      });
+      return { status: 'complete', state: 'COMPLETE', releaseHash };
+    }
+
+    const fresh = await db.query(
+      `SELECT state, failure_reason, release_error FROM transactions WHERE id = $1`,
+      [transactionId]
+    );
+    await auditLogService.log({
+      admin_id: adminId,
+      actor_role: 'admin',
+      actor_id: adminId,
+      action: 'release_retry_blocked',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      metadata: {
+        state: fresh.rows[0]?.state,
+        failure_reason: fresh.rows[0]?.failure_reason,
+        release_error: fresh.rows[0]?.release_error,
+      },
+    });
+    return { status: 'blocked', state: fresh.rows[0]?.state || RELEASE_RETRY_ALLOWED_STATE };
+  } catch (err) {
+    await auditLogService.log({
+      admin_id: adminId,
+      actor_role: 'admin',
+      actor_id: adminId,
+      action: 'release_retry_failed',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      metadata: { error: err.message },
+    });
+    throw err;
+  }
+}
+
 export default {
   handleDeposit,
   swapXlmToUsdc,
   releaseToTrader,
+  retryReleaseBlocked,
   refundXlm,
   refundToUser,
   refundOrphanTransaction,

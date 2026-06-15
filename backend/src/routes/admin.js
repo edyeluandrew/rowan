@@ -692,6 +692,53 @@ router.post('/escrow/refund-retry/:transactionId', authAdmin, sensitiveActionLim
 });
 
 /**
+ * POST /api/v1/admin/escrow/release-retry/:transactionId
+ * [PHASE 2H-3B] Retry USDC release for RELEASE_BLOCKED transactions after root cause is fixed.
+ */
+router.post('/escrow/release-retry/:transactionId', authAdmin, sensitiveActionLimiter, async (req, res, next) => {
+  try {
+    const result = await escrowController.retryReleaseBlocked(req.params.transactionId, {
+      adminId: req.adminId,
+    });
+
+    if (result.status === 'already_complete') {
+      return res.json({
+        success: true,
+        status: 'already_complete',
+        state: result.state,
+        releaseHash: result.releaseHash,
+        transactionId: req.params.transactionId,
+      });
+    }
+
+    if (result.status === 'complete') {
+      return res.json({
+        success: true,
+        state: result.state,
+        releaseHash: result.releaseHash,
+        transactionId: req.params.transactionId,
+      });
+    }
+
+    if (result.status === 'blocked') {
+      return res.status(409).json({
+        error: 'Release still blocked',
+        state: result.state,
+        message: 'USDC could not be released. Verify trader USDC trustline, escrow balance, and Horizon connectivity.',
+        transactionId: req.params.transactionId,
+      });
+    }
+
+    return res.status(500).json({ error: 'Unexpected release retry result' });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/admin/revenue
  */
 router.get('/revenue', authAdmin, async (req, res, next) => {
