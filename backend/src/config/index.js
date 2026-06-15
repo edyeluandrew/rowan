@@ -82,11 +82,34 @@ const config = {
   // Stellar transaction fees (in stroops; 0 = use BASE_FEE)
   stellarMaxFee: process.env.STELLAR_MAX_FEE || '10000',
 
-  // USDC/fiat indicative rates (override via env for live FX feed)
+  // USDC/fiat indicative rates (STATIC fallback — Phase 2F/2H-4)
   usdcFiatRates: {
     UGX: parseFloat(process.env.USDC_RATE_UGX) || 3750,
     KES: parseFloat(process.env.USDC_RATE_KES) || 153,
     TZS: parseFloat(process.env.USDC_RATE_TZS) || 2650,
+  },
+
+  // [PHASE 2H-4] Live fiat FX provider (USDC≈USD reference rates)
+  fiatFx: {
+    provider: process.env.FIAT_FX_PROVIDER || 'exchange-rate-api',
+    apiUrl: process.env.FIAT_FX_API_URL || 'https://open.er-api.com/v6/latest/USD',
+    enabled: (process.env.FIAT_FX_ENABLED != null
+      ? process.env.FIAT_FX_ENABLED === 'true'
+      : (process.env.FIAT_FX_PROVIDER || 'exchange-rate-api') !== 'none'),
+    cacheTtlSeconds: parseInt(process.env.FX_RATE_CACHE_TTL_SECONDS, 10)
+      || parseInt(process.env.FIAT_FX_CACHE_TTL_SECONDS, 10)
+      || 300,
+    maxAgeSeconds: parseInt(process.env.FX_RATE_MAX_AGE_SECONDS, 10)
+      || parseInt(process.env.FIAT_FX_STALE_SECONDS, 10)
+      || 3600,
+    allowStaleRates: process.env.ALLOW_STALE_FX_RATES != null
+      ? process.env.ALLOW_STALE_FX_RATES === 'true'
+      : false,
+    staticRates: {
+      UGX: parseFloat(process.env.USDC_RATE_UGX) || 3750,
+      KES: parseFloat(process.env.USDC_RATE_KES) || 153,
+      TZS: parseFloat(process.env.USDC_RATE_TZS) || 2650,
+    },
   },
 
   // CORS

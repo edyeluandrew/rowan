@@ -23,7 +23,7 @@ router.get('/current', async (req, res, next) => {
 
     // [PHASE 2 UPGRADE] Use legacy rate endpoint (indicative only)
     const rate = await quoteEngine.getLegacyXlmRate(currency);
-    const fiatFx = fxService.getUsdcToFiat(currency);
+    const fiatFx = await fxService.getUsdcToFiat(currency);
 
     res.json({
       currency,
@@ -31,6 +31,9 @@ router.get('/current', async (req, res, next) => {
       usdcToFiat: fiatFx.rate,
       cryptoSource: 'stellar_dex_or_coingecko',
       fxSource: fiatFx.fxSource,
+      fxProvider: fiatFx.fxProvider,
+      fxAgeSeconds: fiatFx.fxAgeSeconds,
+      fxFetchedAt: fiatFx.fxFetchedAt,
       fxWarning: fiatFx.fxWarning,
       fiatRateSource: fiatFx.fiatRateSource,
       disclaimer: 'Indicative rate only. Request a quote for a locked rate.',

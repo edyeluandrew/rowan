@@ -124,8 +124,8 @@ export async function getLiquidityHealth() {
   if (pending.stuck_escrow_locked > 0) warnings.push(`${pending.stuck_escrow_locked} unmatched ESCROW_LOCKED tx > ${STUCK_MIN}m`);
   if (pending.refund_errors > 0) warnings.push(`${pending.refund_errors} transaction(s) have a refund_error`);
 
-  // ── [PHASE 2F] Fiat FX posture (STATIC env rates today; live provider seam) ──
-  const fiatFx = getFiatFxHealth();
+  // ── [PHASE 2H-4] Fiat FX posture (live provider + STATIC testnet fallback) ──
+  const fiatFx = await getFiatFxHealth();
   for (const w of fiatFx.warnings) warnings.push(w);
   for (const c of fiatFx.criticals) criticals.push(c);
 
@@ -141,16 +141,27 @@ export async function getLiquidityHealth() {
     fiatFx: {
       fx_source: fiatFx.fx_source,
       fx_provider: fiatFx.fx_provider,
+      configured_provider: fiatFx.configured_provider,
+      provider_description: fiatFx.provider_description,
+      coingecko_role: fiatFx.coingecko_role,
+      live_fx_enabled: fiatFx.live_fx_enabled,
       allow_static_fiat_rates: fiatFx.allow_static_fiat_rates,
+      allow_stale_fx_rates: fiatFx.allow_stale_fx_rates,
+      cache_ttl_seconds: fiatFx.cache_ttl_seconds,
+      max_age_seconds: fiatFx.max_age_seconds,
+      bundle_fetched_at: fiatFx.bundle_fetched_at,
       currencies: Object.fromEntries(
         Object.entries(fiatFx.currencies).map(([ccy, fx]) => [ccy, {
           fx_source: fx.fxSource,
           fx_rate: fx.rate,
+          fx_provider: fx.fxProvider,
           fx_warning: fx.fxWarning,
           fiat_rate_source: fx.fiatRateSource,
           fx_age_seconds: fx.fxAgeSeconds,
+          fx_fetched_at: fx.fxFetchedAt,
         }])
       ),
+      provider_rate_updated_at: fiatFx.provider_rate_updated_at,
     },
     fallbackQuotesAllowed: config.platform.allowFallbackQuotes,
     pending,

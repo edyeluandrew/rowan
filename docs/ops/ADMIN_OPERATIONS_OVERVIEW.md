@@ -43,7 +43,7 @@
 | **Private pilot** | Controlled real-money ops with verified partners | Yes (fiat leg manual) | **Not ready** |
 | **Mainnet production** | Public launch | Yes | **Not ready** |
 
-Testnet demos use **STATIC** fiat FX rates (`warningLevel = WARNING` is expected). Crypto quotes use **LIVE** path discovery on testnet.
+Testnet demos use **live fiat FX** (ExchangeRate-API, Phase 2H-4) when provider is healthy. STATIC fallback remains testnet-only with WARNING. Crypto quotes use **LIVE** path discovery on testnet.
 
 ---
 

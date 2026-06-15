@@ -1,6 +1,6 @@
 # Pilot Go / No-Go Checklist
 
-**Last updated:** Phase 2H-3 (June 2026)
+**Last updated:** Phase 2H-4 (June 2026)
 
 Honest status assessment for Rowan release tiers.
 
@@ -21,7 +21,7 @@ Honest status assessment for Rowan release tiers.
 
 | Tier | Ready? | Notes |
 |------|--------|-------|
-| **Testnet demo** | **YES** | Crypto settlement works; STATIC fiat FX WARNING expected |
+| **Testnet demo** | **YES** | Crypto settlement works; live fiat FX via ExchangeRate-API (Phase 2H-4) |
 | **Private pilot** | **NO** | Manual mobile money only; no live FX; ops gaps remain |
 | **Real-money pilot** | **NO** | Not pilot-ready |
 | **Public launch** | **NO** | Mainnet cutover incomplete |
@@ -48,7 +48,7 @@ Honest status assessment for Rowan release tiers.
 
 ### Known demo limitations
 
-- Fiat FX is STATIC → `warningLevel = WARNING` (expected)
+- [x] Live fiat FX provider integrated (Phase 2H-4 — `exchange-rate-api`; CoinGecko crypto-only)
 - Mobile money is manual partner payout
 - No carrier-verified payout references
 - Release retry available via `POST /admin/escrow/release-retry/:transactionId` (Phase 2H-3B)
@@ -61,7 +61,7 @@ Honest status assessment for Rowan release tiers.
 
 ### Required before GO
 
-- [ ] Live fiat FX provider integrated
+- [ ] Production FX provider SLA and monitoring (freshness alerts on `fx_age_seconds`)
 - [ ] Partner manual payout SLAs documented and monitored
 - [ ] Admin 2FA enabled on all ops admins (not just backend support)
 - [ ] Admin console wired for 2FA setup
@@ -81,7 +81,7 @@ Honest status assessment for Rowan release tiers.
 Everything in private pilot, plus:
 
 - [ ] Mainnet or approved production Stellar network
-- [ ] Live FX with stale-rate blocking
+- [x] Live FX with stale-rate blocking (Phase 2H-4)
 - [ ] `ALLOW_FALLBACK_QUOTES=false`
 - [ ] Production CORS allowlist
 - [ ] Secrets rotation from testnet
@@ -113,7 +113,7 @@ Everything in real-money pilot, plus:
 | Date | Tier | Decision | Approver | Notes |
 |------|------|----------|----------|-------|
 | 2026-06 | Testnet demo | **GO** | Ops | Phase 2H-3 runbooks complete |
-| 2026-06 | Real-money pilot | **NO-GO** | — | STATIC FX, manual fiat, ops gaps |
+| 2026-06 | Real-money pilot | **NO-GO** | — | Manual fiat, ops gaps, mainnet not cut over |
 
 ---
 

@@ -46,7 +46,9 @@ Top-level: `status` (`healthy` | `warning` | `degraded`), `uptime`, `db`, `memor
 | `liquidity.marketMaker.configured` | MM keys present |
 | `liquidity.pathDiscovery.available` | Live path for XLM→USDC |
 | `liquidity.quoteSource` | `LIVE` or `FALLBACK` |
-| `liquidity.fiatFx.fx_source` | e.g. `STATIC` on testnet |
+| `liquidity.fiatFx.fx_source` | Primary currency (UGX) source: `LIVE`, `STATIC`, `FALLBACK`, `UNAVAILABLE` |
+| `liquidity.fiatFx.configured_provider` | e.g. `exchange-rate-api` (Phase 2H-4) |
+| `liquidity.fiatFx.currencies.{UGX,KES,TZS}` | Per-currency rate, age, `fx_fetched_at`, warnings |
 | `liquidity.pending.*` | Pipeline counts (see below) |
 | `liquidity.warningLevel` | `OK` \| `WARNING` \| `CRITICAL` |
 | `liquidity.warnings[]` / `criticals[]` | Human-readable issues |
@@ -90,15 +92,26 @@ PATCH /api/v1/admin/rates
 
 | Level | Meaning | Typical testnet cause |
 |-------|---------|------------------------|
-| **OK** | No actionable issues | Healthy demo |
-| **WARNING** | Degraded but operable | **STATIC fiat FX** (expected on testnet), low escrow warning thresholds |
-| **CRITICAL** | Settlement risk | `release_blocked > 0`, escrow XLM critically low, Horizon down |
+| **OK** | No actionable issues | Healthy demo; **LIVE fiat FX** fresh (Phase 2H-4) |
+| **WARNING** | Degraded but operable | Low escrow thresholds, partial FX coverage, provider fetch issues with STATIC fallback |
+| **CRITICAL** | Settlement risk | `release_blocked > 0`, escrow XLM critically low, Horizon down, **mainnet stale/unavailable FX** |
 
-### Why STATIC fiat FX causes WARNING
+### Fiat FX sources (Phase 2H-4)
 
-Testnet uses env-based static USDC/fiat rates (`allowStaticFiatRates` true on testnet). Health correctly flags this as non-live FX — **expected for demos**, not a blocker.
+| `fx_source` | Meaning | Testnet | Mainnet |
+|-------------|---------|---------|---------|
+| **LIVE** | Fresh provider rate (ExchangeRate-API default) | Normal | Required |
+| **STATIC** | Env/config fallback | Allowed with WARNING | Blocked unless `ALLOW_STATIC_FIAT_RATES=true` |
+| **FALLBACK** | Stale cached live rate | Warning | CRITICAL / block quotes |
+| **UNAVAILABLE** | No rate | Warning | CRITICAL / block quotes |
 
-**Do not confuse with pilot readiness** — real-money pilots need live FX ([FUTURE_FIAT_FX_PROVIDER.md](../FUTURE_FIAT_FX_PROVIDER.md)).
+**CoinGecko** is configured for **XLM crypto fallback only** — not primary UGX/TZS fiat FX.
+
+Monitor `liquidity.fiatFx.bundle_fetched_at` and per-currency `fx_age_seconds`. No real-money pilot if rates are stale or unavailable.
+
+### Legacy note: STATIC-only testnet
+
+Before Phase 2H-4, testnet used STATIC env rates (`warningLevel = WARNING`). With live FX enabled, expect `fx_source = LIVE` and `warningLevel = OK` when crypto path is also healthy.
 
 ---
 

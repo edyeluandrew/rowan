@@ -10,11 +10,13 @@ Rowan is currently **testnet demo-ready only**. Do **not** cut over to mainnet u
 
 ### Fiat and quotes
 
-- [ ] Live fiat FX provider integrated ([FUTURE_FIAT_FX_PROVIDER.md](../FUTURE_FIAT_FX_PROVIDER.md))
+- [x] Live fiat FX provider integrated ([FUTURE_FIAT_FX_PROVIDER.md](../FUTURE_FIAT_FX_PROVIDER.md) — Phase 2H-4)
 - [ ] `ALLOW_STATIC_FIAT_RATES=false` (unless documented executive exception)
 - [ ] `ALLOW_FALLBACK_QUOTES=false`
-- [ ] `FIAT_FX_STALE_SECONDS` configured for production SLA
-- [ ] Health shows live FX source, not STATIC-only WARNING
+- [ ] `FX_RATE_MAX_AGE_SECONDS` / `FIAT_FX_STALE_SECONDS` configured for production SLA
+- [ ] `ALLOW_STALE_FX_RATES=false` on mainnet
+- [ ] Health shows live FX (`fx_source=LIVE`) for UGX/KES/TZS, not STATIC-only WARNING
+- [ ] Monitor ExchangeRate-API (or chosen provider) freshness and rate-limit failures
 
 ### Stellar network
 

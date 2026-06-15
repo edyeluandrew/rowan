@@ -1,87 +1,86 @@
-# Future Live Fiat FX Provider Plan
+# Live Fiat FX Provider — Phase 2H-4 (Implemented)
 
-**Status:** Design only — Phase 2F adds metadata seam, not live integration  
-**Last updated:** Phase 2F (June 2026)
+**Status:** Implemented on testnet (June 2026)  
+**Provider default:** `exchange-rate-api` (USD base → UGX/KES/TZS; USDC≈USD reference)
 
 ---
 
-## 1. Recommended interface
+## 1. Interface
 
 ```javascript
-// backend/src/services/fxService.js (future)
-async function getUsdcToFiat(currency) {
-  // Returns: { rate, fxSource, fxCurrency, fxAgeSeconds, fxWarning, fxProvider, fiatRateSource }
+// backend/src/services/fxService.js
+await getUsdcToFiat(currency) → {
+  rate,
+  fxSource,       // LIVE | STATIC | FALLBACK | UNAVAILABLE
+  fxProvider,
+  fxCurrency,
+  fxAgeSeconds,
+  fxFetchedAt,
+  fxWarning,
+  fiatRateSource,
 }
 ```
 
-- Single entry point for all USDC→fiat conversion (UGX, KES, TZS).
-- `quoteEngine`, `financial.js`, fraud limits, and admin health call this only — never read `config.usdcFiatRates` directly.
+- Single entry point for USDC→fiat reference rates (UGX, KES, TZS).
+- `quoteEngine`, admin health, and public rates call this — not `config.usdcFiatRates` directly for quotes.
+- Partner/trader spread is **not** applied here; live FX is Rowan’s reference/base rate. Admin-approved partner margins can be layered later.
 
 ## 2. Provider abstraction
 
-```javascript
-// fxProvider.js
-export async function fetchLiveRate(currency) { /* OpenExchangeRates, Fixer, etc. */ }
+| Provider | Role | UGX/KES/TZS |
+|----------|------|-------------|
+| `exchange-rate-api` | **Default live fiat FX** | All three via USD base |
+| `coingecko` | Optional adapter | **Partial** — UGX/TZS not in CoinGecko `supported_vs_currencies`; not suitable as primary East Africa path |
+| `none` | STATIC-only (testnet) | Falls back to env/config |
 
-// fxService.js orchestration
-// 1. Try Redis cache
-// 2. Try live provider
-// 3. Optional FALLBACK to last-good cache or STATIC (env) with loud warning
-// 4. UNAVAILABLE if no rate and production mainnet
-```
+**CoinGecko (existing config):** remains in `quoteEngine.getLegacyXlmRate()` for **XLM crypto** fallback only (`stellar` vs fiat). Verified: CoinGecko free API does not list UGX or TZS as `vs_currencies`; do not use for USDC→UGX/TZS.
 
-Suggested providers (evaluate cost/latency/UGX coverage):
+Orchestration (`fxService.js`):
 
-- Open Exchange Rates / Fixer.io (USD base → derive USDC≈USD)
-- CurrencyLayer, ExchangeRate-API
-- Local market data feeds for East Africa if available
+1. Try live provider fetch (batched bundle)
+2. Redis + in-memory cache (`fx:usdc:bundle`)
+3. On provider failure: use cached LIVE if age ≤ `FX_RATE_MAX_AGE_SECONDS`
+4. If stale: `FALLBACK` (if `ALLOW_STALE_FX_RATES`) or STATIC (testnet) or `UNAVAILABLE`
+5. Never label STATIC or stale cache as `LIVE`
 
-## 3. Redis cache TTL
+## 3. Cache TTL
 
-- **Suggested TTL:** 300 seconds (5 minutes) for live rates.
-- **Cache key:** `fx:usdc:{currency}` with payload `{ rate, fetchedAt, provider }`.
-- **Warm on startup:** optional background refresh every TTL/2.
+- **`FX_RATE_CACHE_TTL_SECONDS`** (default 300): re-fetch interval
+- Redis key: `fx:usdc:bundle` with `{ provider, fetchedAt, rates: { UGX, KES, TZS } }`
 
 ## 4. Stale-rate cutoff
 
-- **Suggested stale cutoff:** 3600 seconds (1 hour) — configurable via `FIAT_FX_STALE_SECONDS`.
-- Beyond cutoff: mark `fxSource=FALLBACK`, set `fxWarning`, emit audit/monitor event.
-- On **mainnet:** block new quotes if age > cutoff and no fresh fetch succeeded.
+- **`FX_RATE_MAX_AGE_SECONDS`** / `FIAT_FX_STALE_SECONDS` (default 3600)
+- Beyond cutoff on mainnet: block quotes (`FIAT_FX_STALE`) unless `ALLOW_STALE_FX_RATES=true` (emergency only)
 
 ## 5. Fallback behavior
 
-| Environment | Missing live | Stale cache | STATIC env |
-|-------------|--------------|-------------|------------|
-| Testnet/demo | FALLBACK → STATIC if allowed | FALLBACK + warning | STATIC + warning |
-| Mainnet prod | UNAVAILABLE (block quotes) | FALLBACK only if last-good < cutoff; else block | Block unless `ALLOW_STATIC_FIAT_RATES=true` (emergency only) |
+| Environment | Provider down + fresh cache | Stale cache | STATIC env |
+|-------------|----------------------------|-------------|------------|
+| Testnet/demo | LIVE (cached) | FALLBACK/STATIC + warning | STATIC + warning |
+| Mainnet prod | LIVE (cached if fresh) | Block / CRITICAL | Block unless `ALLOW_STATIC_FIAT_RATES=true` |
 
-Never label STATIC or stale cache as `LIVE`.
+## 6. Production blocking
 
-## 6. Production blocking behavior
+- `assertFiatFxAvailableForQuote()` blocks: `UNAVAILABLE`, mainnet `STATIC`, mainnet `FALLBACK`, mainnet age > max
+- HTTP 503 codes: `FIAT_FX_UNAVAILABLE`, `FIAT_FX_STATIC_BLOCKED`, `FIAT_FX_STALE`
 
-- `assertFiatFxAvailableForQuote()` already blocks `UNAVAILABLE` and mainnet `STATIC` (unless explicitly allowed).
-- Extend to block when `fxAgeSeconds > fiatFxStaleSeconds` on mainnet.
-- Return HTTP 503 with code `FIAT_FX_STALE` or `FIAT_FX_UNAVAILABLE`.
+## 7. Quote + DB metadata
 
-## 7. Audit / monitoring events
+Quotes store: `fx_source`, `fx_rate`, `fx_currency`, `fx_warning`, `fiat_rate_source`, `fx_provider`, `fx_fetched_at`, `fx_age_seconds` (migration 029).
 
-Emit on:
+## 8. Admin health
 
-- `fx_fetch_success` — currency, provider, rate, latency_ms
-- `fx_fetch_failure` — currency, provider, error
-- `fx_stale_rate_used` — currency, age_seconds
-- `fx_quote_blocked` — currency, reason (unavailable/stale/static)
+`/api/v1/admin/system/health` and `/api/v1/admin/rates` expose per-currency source, rate, age, `fx_fetched_at`, provider, warnings.
 
-Surface in admin health and optional Datadog/Sentry alerts when mainnet quotes blocked > N minutes.
+- Testnet STATIC only → `WARNING`
+- All currencies LIVE + fresh → `OK` (if no other issues)
+- Mainnet stale/unavailable → `CRITICAL`
 
-## 8. Admin health display requirements
+## 9. Runtime tests
 
-`/api/v1/admin/system/health` and `/api/v1/admin/rates` should show:
-
-- Per-currency: `fx_source`, `fx_rate`, `fiat_rate_source`, `fx_age_seconds`, `fx_warning`
-- Global: `fx_provider`, `allow_static_fiat_rates`
-- Include fiat FX warnings in `warningLevel` (testnet STATIC → WARNING; mainnet STATIC → CRITICAL)
+`node backend/scripts/phase2h4-runtime-tests.mjs` — Tests A–F (provider config, live fetch, quote metadata, failure modes, health, mainnet safety sim).
 
 ---
 
-**Phase 2F implementation:** `fxService.js` returns `STATIC` from env/config with full metadata. Live provider plugs in behind the same interface without quote math changes.
+**Pilot readiness:** LIVE fresh fiat FX is **required** before real-money pilot. STATIC is testnet/demo only. Monitor provider freshness and rate-limit failures.

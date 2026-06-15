@@ -229,7 +229,7 @@ async function getLegacyXlmRate(fiatCurrency = 'UGX') {
     const mmRate = await getMarketMakerRate();
     if (mmRate) {
       // Convert market maker rate (USDC/XLM) to fiat currency
-      const usdcToFiat = getUsdcToFiatRate(fiatCurrency);
+      const usdcToFiat = await getUsdcToFiatRate(fiatCurrency);
       rate = mmRate * usdcToFiat;
       logger.info(`[QuoteEngine] [FALLBACK] Using market maker rate: ${mmRate} USDC/XLM → ${rate} ${fiatCurrency}/XLM`);
     }
@@ -251,7 +251,7 @@ async function getLegacyXlmRate(fiatCurrency = 'UGX') {
         const xlmUsdcMid = (bestAsk + bestBid) / 2; // XLM price in USDC
 
         // Convert USDC → fiat using static rates (later: live FX feed)
-        const usdcToFiat = getUsdcToFiatRate(fiatCurrency);
+        const usdcToFiat = await getUsdcToFiatRate(fiatCurrency);
         rate = xlmUsdcMid * usdcToFiat;
         logger.info(`[QuoteEngine] [FALLBACK] Using DEX rate: ${xlmUsdcMid} USDC/XLM → ${rate} ${fiatCurrency}/XLM`);
       }
@@ -296,8 +296,8 @@ async function getLegacyXlmRate(fiatCurrency = 'UGX') {
   return rate;
 }
 
-/** USDC → fiat rate — delegates to fxService (STATIC today; live provider seam). */
-function getUsdcToFiatRate(fiatCurrency) {
+/** USDC → fiat rate — delegates to fxService (live provider + STATIC fallback). */
+async function getUsdcToFiatRate(fiatCurrency) {
   return fxService.getUsdcToFiatRate(fiatCurrency);
 }
 
@@ -331,7 +331,7 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
   logger.info(`[QuoteEngine] 🔄 Creating quote: xlmAmount=${xlmAmount}, network=${network}`);
 
   const fiatCurrency = networkToFiat(network);
-  const fiatFx = fxService.assertFiatFxAvailableForQuote(fiatCurrency);
+  const fiatFx = await fxService.assertFiatFxAvailableForQuote(fiatCurrency);
   const usdcToFiat = fiatFx.rate;
 
   // ── Step 1: Estimate USDC needed based on user's XLM ──
@@ -486,8 +486,9 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
         platform_fee, network, phone_hash, memo, escrow_address, expires_at,
         rate_ugx, fee_ugx, status, path_xlm_needed, path_usdc_received, quote_source,
         payout_phone, payout_name, rate_source, quote_warning,
-        fx_source, fx_rate, fx_currency, fx_warning, fiat_rate_source)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+        fx_source, fx_rate, fx_currency, fx_warning, fiat_rate_source,
+        fx_provider, fx_fetched_at, fx_age_seconds)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
      RETURNING *`,
     [
       userId, xlmAmount, fiatCurrency, 
@@ -509,6 +510,9 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
       fiatFx.fxCurrency,
       fiatFx.fxWarning,
       fiatFx.fiatRateSource,
+      fiatFx.fxProvider,
+      fiatFx.fxFetchedAt ? new Date(fiatFx.fxFetchedAt) : null,
+      fiatFx.fxAgeSeconds,
     ]
   );
 
