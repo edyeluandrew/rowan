@@ -935,6 +935,7 @@ router.get('/rates', authAdmin, async (req, res, next) => {
       recent_failed: liquidity?.pending?.recent_failed ?? null,
       liquidity_warning_level: liquidity?.warningLevel || 'OK',
       liquidity_warnings: liquidity?.warnings || [],
+      fiat_fx: liquidity?.fiatFx ?? null,
       updated_at: new Date().toISOString(),
     });
   } catch (err) { next(err); }

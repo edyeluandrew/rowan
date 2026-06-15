@@ -97,7 +97,7 @@ export const STATE_SUBTITLES = {
   QUOTE_CONFIRMED: 'Quote confirmed, waiting for XLM',
   ESCROW_LOCKED:   'XLM received — swapping to USDC',
   TRADER_MATCHED:  'OTC trader assigned — sending your money',
-  FIAT_SENT:       'Mobile money sent to your number',
+  FIAT_SENT:       'Partner reported mobile money sent — confirm receipt',
   COMPLETE:        'Done — check your mobile money balance',
 }
 

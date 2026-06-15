@@ -79,7 +79,8 @@ router.post(
         logger.error(`[Cashout] Quote creation failed:`, quoteErr.message);
         // [PHASE 2C] Honor structured unavailability errors (e.g. unsafe fallback
         // blocked) with a clean client message — do NOT create an unsettleable cashout.
-        if (quoteErr.code === 'QUOTE_UNAVAILABLE' || quoteErr.code === 'QUOTE_UNAVAILABLE_FALLBACK_CAP') {
+        if (quoteErr.code === 'QUOTE_UNAVAILABLE' || quoteErr.code === 'QUOTE_UNAVAILABLE_FALLBACK_CAP'
+            || quoteErr.code === 'FIAT_FX_UNAVAILABLE' || quoteErr.code === 'FIAT_FX_STATIC_BLOCKED') {
           return res.status(quoteErr.statusCode || 503).json({
             error: quoteErr.message,
             code: quoteErr.code,
@@ -119,6 +120,11 @@ router.post(
         rateSource: quote.rate_source || (quote.quote_source === 'horizon-path' ? 'LIVE' : 'FALLBACK'),
         pathAvailable: quote.quote_source === 'horizon-path',
         quoteWarning: quote.quote_warning || null,
+        fxSource: quote.fx_source || null,
+        fxRate: quote.fx_rate != null ? Number(quote.fx_rate) : null,
+        fxCurrency: quote.fx_currency || quote.fiat_currency || null,
+        fxWarning: quote.fx_warning || null,
+        fiatRateSource: quote.fiat_rate_source || null,
       });
     } catch (err) {
       next(err);

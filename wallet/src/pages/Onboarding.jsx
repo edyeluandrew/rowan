@@ -10,7 +10,7 @@ const slides = [
     Icon: Star,
     title: 'ROWAN',
     titleClass: 'text-rowan-yellow text-4xl font-bold tracking-widest text-center',
-    subtitle: 'Cash out XLM to mobile money instantly',
+    subtitle: 'Cash out XLM to mobile money via verified partners',
   },
   {
     Icon: Lock,

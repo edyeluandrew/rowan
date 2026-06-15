@@ -40,7 +40,7 @@ export function SocketProvider({ children }) {
       scheduleLocalNotification({
         id: Date.now(),
         title: '\uD83D\uDCB0 Payment received!',
-        body: 'Mobile money has been sent to the recipient.',
+        body: 'Your cash-out is complete. Check your mobile money account for the partner payout.',
         data,
       })
     })

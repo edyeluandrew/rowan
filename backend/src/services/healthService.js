@@ -2,6 +2,7 @@ import { server as horizon, USDC_ASSET } from '../config/stellar.js';
 import config from '../config/index.js';
 import db from '../db/index.js';
 import quoteEngine from './quoteEngine.js';
+import { getFiatFxHealth } from './fxService.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -123,6 +124,11 @@ export async function getLiquidityHealth() {
   if (pending.stuck_escrow_locked > 0) warnings.push(`${pending.stuck_escrow_locked} unmatched ESCROW_LOCKED tx > ${STUCK_MIN}m`);
   if (pending.refund_errors > 0) warnings.push(`${pending.refund_errors} transaction(s) have a refund_error`);
 
+  // ── [PHASE 2F] Fiat FX posture (STATIC env rates today; live provider seam) ──
+  const fiatFx = getFiatFxHealth();
+  for (const w of fiatFx.warnings) warnings.push(w);
+  for (const c of fiatFx.criticals) criticals.push(c);
+
   const warningLevel = criticals.length > 0 ? 'CRITICAL' : warnings.length > 0 ? 'WARNING' : 'OK';
 
   return {
@@ -132,6 +138,20 @@ export async function getLiquidityHealth() {
     marketMaker,
     pathDiscovery,
     quoteSource,
+    fiatFx: {
+      fx_source: fiatFx.fx_source,
+      fx_provider: fiatFx.fx_provider,
+      allow_static_fiat_rates: fiatFx.allow_static_fiat_rates,
+      currencies: Object.fromEntries(
+        Object.entries(fiatFx.currencies).map(([ccy, fx]) => [ccy, {
+          fx_source: fx.fxSource,
+          fx_rate: fx.rate,
+          fx_warning: fx.fxWarning,
+          fiat_rate_source: fx.fiatRateSource,
+          fx_age_seconds: fx.fxAgeSeconds,
+        }])
+      ),
+    },
     fallbackQuotesAllowed: config.platform.allowFallbackQuotes,
     pending,
     warningLevel,

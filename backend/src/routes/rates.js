@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import quoteEngine from '../services/quoteEngine.js';
+import fxService from '../services/fxService.js';
 
 const router = Router();
 
@@ -22,12 +23,16 @@ router.get('/current', async (req, res, next) => {
 
     // [PHASE 2 UPGRADE] Use legacy rate endpoint (indicative only)
     const rate = await quoteEngine.getLegacyXlmRate(currency);
+    const fiatFx = fxService.getUsdcToFiat(currency);
 
     res.json({
       currency,
       xlmRate: rate,
-      usdcToFiat: quoteEngine.getUsdcToFiatRate(currency),
-      source: 'stellar_dex',
+      usdcToFiat: fiatFx.rate,
+      cryptoSource: 'stellar_dex_or_coingecko',
+      fxSource: fiatFx.fxSource,
+      fxWarning: fiatFx.fxWarning,
+      fiatRateSource: fiatFx.fiatRateSource,
       disclaimer: 'Indicative rate only. Request a quote for a locked rate.',
       timestamp: new Date().toISOString(),
     });

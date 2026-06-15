@@ -4,6 +4,7 @@ import { server as horizon, USDC_ASSET, StellarSdk } from '../config/stellar.js'
 import { nanoid } from 'nanoid';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
+import fxService from './fxService.js';
 
 // ── N7 FIX: Top-level Asset reference instead of dynamic import ──
 const NativeAsset = StellarSdk.Asset.native();
@@ -295,13 +296,9 @@ async function getLegacyXlmRate(fiatCurrency = 'UGX') {
   return rate;
 }
 
-/**
- * USDC → fiat conversion rates.
- * [AUDIT FIX] Loaded from config (env-overridable) instead of hardcoded.
- * Phase 2: replace with live FX API.
- */
+/** USDC → fiat rate — delegates to fxService (STATIC today; live provider seam). */
 function getUsdcToFiatRate(fiatCurrency) {
-  return config.usdcFiatRates[fiatCurrency] || config.usdcFiatRates.UGX;
+  return fxService.getUsdcToFiatRate(fiatCurrency);
 }
 
 /**
@@ -334,7 +331,8 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
   logger.info(`[QuoteEngine] 🔄 Creating quote: xlmAmount=${xlmAmount}, network=${network}`);
 
   const fiatCurrency = networkToFiat(network);
-  const usdcToFiat = getUsdcToFiatRate(fiatCurrency);
+  const fiatFx = fxService.assertFiatFxAvailableForQuote(fiatCurrency);
+  const usdcToFiat = fiatFx.rate;
 
   // ── Step 1: Estimate USDC needed based on user's XLM ──
   // First, get a rough rate to understand ordering of magnitude
@@ -487,8 +485,9 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
        (user_id, xlm_amount, fiat_currency, market_rate, user_rate, fiat_amount,
         platform_fee, network, phone_hash, memo, escrow_address, expires_at,
         rate_ugx, fee_ugx, status, path_xlm_needed, path_usdc_received, quote_source,
-        payout_phone, payout_name, rate_source, quote_warning)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17,$18,$19,$20,$21)
+        payout_phone, payout_name, rate_source, quote_warning,
+        fx_source, fx_rate, fx_currency, fx_warning, fiat_rate_source)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
      RETURNING *`,
     [
       userId, xlmAmount, fiatCurrency, 
@@ -505,6 +504,11 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
       payoutName,                // payout_name (recipient name)
       rateSource,                 // [PHASE 2C] LIVE | FALLBACK
       quoteWarning,               // [PHASE 2C] indicative-rate warning (or null)
+      fiatFx.fxSource,
+      fiatFx.rate,
+      fiatFx.fxCurrency,
+      fiatFx.fxWarning,
+      fiatFx.fiatRateSource,
     ]
   );
 

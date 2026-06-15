@@ -62,6 +62,12 @@ const config = {
       ? process.env.ALLOW_FALLBACK_QUOTES === 'true'
       : (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet',
     fallbackMaxXlm: parseFloat(process.env.FALLBACK_MAX_XLM) || 1000,
+    // [PHASE 2F] Fiat FX safety. Testnet/demo allows STATIC env rates by default.
+    // Mainnet blocks STATIC quotes unless ALLOW_STATIC_FIAT_RATES=true (controlled env only).
+    allowStaticFiatRates: process.env.ALLOW_STATIC_FIAT_RATES != null
+      ? process.env.ALLOW_STATIC_FIAT_RATES === 'true'
+      : (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet',
+    fiatFxStaleSeconds: parseInt(process.env.FIAT_FX_STALE_SECONDS, 10) || 3600,
   },
 
   // USDC issuers (Stellar)

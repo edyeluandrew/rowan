@@ -61,7 +61,7 @@ export default function TransactionStatus() {
     if (!transaction) return ''
     switch (transaction.state) {
       case 'COMPLETE':
-        return 'Payment sent successfully! The mobile money transfer has been completed.'
+        return 'Transaction complete. Check your mobile money account for the partner payout.'
       case 'REFUNDED':
         return 'Your XLM has been safely returned to your wallet. No funds were lost — you can try again whenever you\u0027re ready.'
       case 'FAILED':
