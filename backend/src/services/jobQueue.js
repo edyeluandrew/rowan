@@ -131,31 +131,25 @@ refundQueue.process(async (job) => {
     };
   }
 
-  // ── [NORMAL] Release reserved float if a trader was matched ──
-  // [PHASE 2A] Prefer canonical reservation release; fall back to legacy column
-  // restore only for pre-2A transactions that never reserved via a payout setting.
-  if (tx.payout_setting_id) {
-    logger.info(`[Job:refund] Releasing reserved float (canonical) for tx ${transactionId}`);
-    await payoutSettingsService.releaseReservationForTransaction(transactionId, tx.payout_setting_id, tx.fiat_amount);
-  } else if (tx.trader_id) {
-    logger.warn(`[Job:refund] Tx ${transactionId} has trader but NULL payout_setting_id (legacy) — restoring legacy trader float`);
-    await escrowController.restoreTraderFloat(tx);
-  }
-
-  const refundHash = await escrowController.refundXlm(
-    tx.user_stellar,
-    tx.xlm_amount,
-    `Auto-refund: ${tx.failure_reason || 'No trader available'}`
+  // ── [NORMAL] Orphan-safe refund with pre/post-swap branching ──
+  const refundResult = await escrowController.refundOrphanTransaction(
+    transactionId,
+    tx.failure_reason || 'No trader available'
   );
 
-  await stateMachine.transition(transactionId, tx.state, 'REFUNDED', {
-    stellar_refund_tx: refundHash,
-  });
+  if (refundResult.status === 'refunded') {
+    await notificationService.notifyRefund(tx.user_id, tx, tx.failure_reason || 'No trader available');
+    return { refundHash: refundResult.refundHash, asset: refundResult.asset };
+  }
 
-  // [SMS Integration] notify with async fallback
-  await notificationService.notifyRefund(tx.user_id, tx, tx.failure_reason || 'No trader available');
-
-  return { refundHash };
+  logger.warn(
+    `[Job:refund] Tx ${transactionId} could not auto-refund (${refundResult.status}${refundResult.code ? '/' + refundResult.code : ''}) — left for admin review.`
+  );
+  return {
+    status: refundResult.status,
+    code: refundResult.code || null,
+    reason: refundResult.reason || null,
+  };
 });
 
 // ─── Queue: Release USDC to trader (retry on failure) ─────
@@ -266,9 +260,9 @@ reMatchQueue.process(async (job) => {
   if (tx && tx.state === 'TRADER_MATCHED' && tx.trader_id === currentTraderId && !tx.matched_at) {
     logger.info(`[Job:rematch] Trader ${currentTraderId} timed out on tx ${transactionId} — re-matching`);
 
-    // ── [C-2 FIX] Restore trader float before re-matching ──
+    // ── [PHASE 2H] Release canonical match reservation (or legacy float) before re-match ──
     const escrowController = await getEscrowController();
-    await escrowController.restoreTraderFloat(tx);
+    await escrowController.releaseMatchFloatForTransaction(tx);
 
     // Decay trader trust score
     await db.query(
@@ -282,7 +276,7 @@ reMatchQueue.process(async (job) => {
     // controlled re-queue, mirroring the decline / orphan-recovery paths.
     await db.query(
       `UPDATE transactions
-         SET trader_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL, updated_at = NOW()
+         SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL, updated_at = NOW()
        WHERE id = $1 AND state = 'TRADER_MATCHED'`,
       [transactionId]
     );
@@ -356,9 +350,9 @@ orphanRecoveryQueue.process(async () => {
   );
   for (const tx of stuckMatched.rows) {
     logger.warn(`[Job:orphan-recovery] TRADER_MATCHED orphan: tx ${tx.id} — unassigning and re-matching`);
-    await escrowController.restoreTraderFloat(tx);
+    await escrowController.releaseMatchFloatForTransaction(tx);
     await db.query(
-      `UPDATE transactions SET trader_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL
+      `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL
        WHERE id = $1 AND state = 'TRADER_MATCHED'`,
       [tx.id]
     );
@@ -366,8 +360,7 @@ orphanRecoveryQueue.process(async () => {
   }
 
   // 3. TRADER_MATCHED with no trader_id for too long → refund (no trader available)
-  // [NEW] Handle early state transition to TRADER_MATCHED (swap complete, awaiting trader match)
-  const noTraderMinutes = 5; // Give 5 minutes to find a trader, then refund
+  const noTraderMinutes = 5;
   const noTraderAvailable = await db.query(
     `SELECT t.*, u.stellar_address as user_stellar
      FROM transactions t
@@ -378,22 +371,21 @@ orphanRecoveryQueue.process(async () => {
     [noTraderMinutes]
   );
   for (const tx of noTraderAvailable.rows) {
-    logger.warn(`[Job:orphan-recovery] TRADER_MATCHED no trader: tx ${tx.id} — auto-refunding (no trader available after 5 min)`);
+    logger.warn(`[Job:orphan-recovery] TRADER_MATCHED no trader: tx ${tx.id} — orphan refund path`);
     try {
-      const refundHash = await escrowController.refundXlm(
-        tx.user_stellar, tx.xlm_amount, 'No trader available after swap'
+      const result = await escrowController.refundOrphanTransaction(
+        tx.id,
+        'Auto-refund: no trader available after swap'
       );
-      await stateMachine.transition(tx.id, 'TRADER_MATCHED', 'REFUNDED', {
-        stellar_refund_tx: refundHash,
-        failure_reason: 'Auto-refund: no trader available',
-      });
-      await notificationService.notifyRefund(tx.user_id, tx, 'No trader available — XLM refunded to wallet');
+      if (result.status === 'refunded') {
+        await notificationService.notifyRefund(tx.user_id, tx, 'No trader available — funds returned');
+      }
     } catch (err) {
       logger.error(`[Job:orphan-recovery] Refund failed for tx ${tx.id}:`, err.message);
     }
   }
 
-  // 4. ESCROW_LOCKED with no match attempt for > 2× accept timeout → refund (old flow)
+  // 4. ESCROW_LOCKED with no match attempt for stale period → orphan refund
   const escrowStaleMinutes = Math.ceil((config.platform.traderAcceptTimeoutSeconds * 2) / 60);
   const stuckEscrow = await db.query(
     `SELECT t.*, u.stellar_address as user_stellar
@@ -405,17 +397,15 @@ orphanRecoveryQueue.process(async () => {
     [escrowStaleMinutes]
   );
   for (const tx of stuckEscrow.rows) {
-    logger.warn(`[Job:orphan-recovery] ESCROW_LOCKED stale: tx ${tx.id} — auto-refunding`);
+    logger.warn(`[Job:orphan-recovery] ESCROW_LOCKED stale: tx ${tx.id} — orphan refund path`);
     try {
-      const refundHash = await escrowController.refundXlm(
-        tx.user_stellar, tx.xlm_amount, 'Orphan recovery: no trader available'
+      const result = await escrowController.refundOrphanTransaction(
+        tx.id,
+        'Auto-refund: orphan recovery (no trader match)'
       );
-      await db.query(
-        `UPDATE transactions SET state = 'REFUNDED', stellar_refund_tx = $1, refunded_at = NOW(),
-         failure_reason = 'Auto-refund: orphan recovery' WHERE id = $2`,
-        [refundHash, tx.id]
-      );
-      await notificationService.notifyRefund(tx.user_id, tx, 'No trader available — auto-refunded');
+      if (result.status === 'refunded') {
+        await notificationService.notifyRefund(tx.user_id, tx, 'No trader available — auto-refunded');
+      }
     } catch (err) {
       logger.error(`[Job:orphan-recovery] Refund failed for tx ${tx.id}:`, err.message);
     }

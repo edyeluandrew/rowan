@@ -6,6 +6,7 @@ import quoteEngine from '../services/quoteEngine.js';
 import escrowController from '../services/escrowController.js';
 import stateMachine from '../services/transactionStateMachine.js';
 import disputeService from '../services/disputeService.js';
+import auditLogService from '../services/auditLogService.js';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
 import { stroopsToUsdc } from '../utils/financial.js';
@@ -824,6 +825,33 @@ router.post('/transactions/:id/confirm-receipt', authUser, async (req, res, next
     // Attempt USDC release (releaseToTrader handles state transition to COMPLETE)
     try {
       const releaseTxHash = await escrowController.releaseToTrader(transactionId);
+
+      if (!releaseTxHash) {
+        const fresh = await db.query(
+          `SELECT state, release_error, failure_reason, stellar_release_tx FROM transactions WHERE id = $1`,
+          [transactionId]
+        );
+        const row = fresh.rows[0];
+        await auditLogService.log({
+          actor_role: 'system',
+          action: 'user_confirm_release_blocked',
+          resource_type: 'transaction',
+          resource_id: transactionId,
+          metadata: {
+            user_id: userId,
+            state: row?.state,
+            release_error: row?.release_error,
+            failure_reason: row?.failure_reason,
+          },
+        });
+        return res.status(409).json({
+          status: 'RELEASE_BLOCKED',
+          error: 'Release blocked',
+          message: 'USDC could not be released to the trader. Admin review is required before this transaction can complete.',
+          currentState: row?.state || 'RELEASE_BLOCKED',
+          transactionId,
+        });
+      }
 
       logger.info(`[User] Transaction ${transactionId} completed: USDC released, hash ${releaseTxHash}`);
 

@@ -416,6 +416,42 @@ class PayoutSettingsService {
   }
 
   /**
+   * [PHASE 2H] Release a match-time float reservation when declining / rematching /
+   * unassigning. Does NOT claim float_settled (unlike releaseReservationForTransaction).
+   * Atomically clears payout_setting_id so duplicate calls are no-ops.
+   */
+  async releaseMatchReservationIfAssigned(transactionId) {
+    const result = await db.query(
+      `WITH target AS (
+         SELECT id, payout_setting_id, fiat_amount
+         FROM transactions
+         WHERE id = $1
+           AND payout_setting_id IS NOT NULL
+           AND float_settled = FALSE
+         FOR UPDATE
+       )
+       UPDATE transactions t
+       SET payout_setting_id = NULL, updated_at = NOW()
+       FROM target src
+       WHERE t.id = src.id
+       RETURNING src.payout_setting_id, src.fiat_amount`,
+      [transactionId]
+    );
+    if (!result.rows[0]) {
+      return { released: false, reason: 'no_active_reservation' };
+    }
+    const { payout_setting_id, fiat_amount } = result.rows[0];
+    const amount = parseFloat(fiat_amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      logger.warn(`[Float] releaseMatchReservationIfAssigned: tx ${transactionId} invalid fiat_amount`);
+      return { released: false, reason: 'invalid_amount' };
+    }
+    await this.releaseReservedFloat(payout_setting_id, amount);
+    logger.info(`[Float] Released match reservation for tx ${transactionId} on setting ${payout_setting_id}`);
+    return { released: true, payoutSettingId: payout_setting_id, amount };
+  }
+
+  /**
    * [PHASE 2A] Idempotently claim the one-time "float settlement" for a transaction.
    * Uses transactions.float_settled as the guard so finalize / release-reservation
    * runs AT MOST ONCE per transaction, regardless of job retries or concurrent calls.

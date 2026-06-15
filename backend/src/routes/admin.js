@@ -280,33 +280,28 @@ router.get('/disputes', authAdmin, async (req, res, next) => {
 
 /**
  * PUT /api/v1/admin/disputes/:id/resolve
- * Resolve a dispute.
- * Body: { resolution: 'RESOLVED_FOR_USER' | 'RESOLVED_FOR_TRADER' | 'DISMISSED', adminNotes? }
+ * [PHASE 2H] Deprecated — DB-only dispute resolution bypasses escrow settlement.
+ * Use POST /api/v1/admin/disputes/:id/resolve instead.
  */
 router.put('/disputes/:id/resolve', authAdmin, async (req, res, next) => {
   try {
-    const { resolution, adminNotes } = req.body;
-    const validResolutions = ['RESOLVED_FOR_USER', 'RESOLVED_FOR_TRADER', 'DISMISSED'];
-    if (!validResolutions.includes(resolution)) {
-      return res.status(400).json({ error: `Resolution must be one of: ${validResolutions.join(', ')}` });
-    }
-
-    const result = await db.query(
-      `UPDATE disputes SET status = $1, admin_notes = $2, resolved_at = NOW() WHERE id = $3 RETURNING *`,
-      [resolution, adminNotes || null, req.params.id]
-    );
-    const dispute = result.rows[0];
-
-    // Broadcast dispute update to all admins
-    notificationService.notifyAdminDisputeUpdate(dispute, 'dispute_resolved');
-    // Log admin action
-    notificationService.notifyAdminAction(req.adminId, 'dispute_resolved', {
-      disputeId: req.params.id,
-      resolution,
-      notes: adminNotes,
+    await auditLogService.log({
+      actor_role: 'admin',
+      actor_id: req.adminId,
+      action: 'dangerous_endpoint_blocked',
+      resource_type: 'dispute',
+      resource_id: req.params.id,
+      metadata: {
+        endpoint: 'PUT /admin/disputes/:id/resolve',
+        attempted_resolution: req.body?.resolution || null,
+        redirect: 'POST /admin/disputes/:id/resolve',
+      },
     });
-
-    res.json({ success: true, disputeId: req.params.id, resolution });
+    return res.status(410).json({
+      error: 'Endpoint deprecated',
+      message: 'DB-only dispute resolution is disabled. Use POST /api/v1/admin/disputes/:id/resolve for escrow-integrated settlement.',
+      useInstead: 'POST /api/v1/admin/disputes/:id/resolve',
+    });
   } catch (err) {
     next(err);
   }
@@ -1101,37 +1096,56 @@ router.get('/transactions/:id', authAdmin, async (req, res, next) => {
 
 /**
  * POST /api/v1/admin/transactions/:id/force-refund
+ * [PHASE 2H] Blocked — must use escrow-integrated refund paths.
  */
 router.post('/transactions/:id/force-refund', authAdmin, async (req, res, next) => {
   try {
-    const tx = await db.query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
-    if (tx.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
-    if (tx.rows[0].state === 'COMPLETE' || tx.rows[0].state === 'REFUNDED') {
-      return res.status(400).json({ error: `Cannot refund transaction in ${tx.rows[0].state} state` });
-    }
-    await stateMachine.transition(req.params.id, tx.rows[0].state, 'REFUNDED', {
-      failure_reason: `Admin force refund: ${req.body.reason || ''}`
+    await auditLogService.log({
+      actor_role: 'admin',
+      actor_id: req.adminId,
+      action: 'dangerous_endpoint_blocked',
+      resource_type: 'transaction',
+      resource_id: req.params.id,
+      metadata: {
+        endpoint: 'POST /admin/transactions/:id/force-refund',
+        reason: req.body?.reason || null,
+        redirect: 'POST /admin/escrow/refund-retry/:transactionId or dispute resolve_user',
+      },
     });
-    logger.info(`[Admin] Force refunded tx ${req.params.id} by admin ${req.adminId}`);
-    res.json({ success: true, transactionId: req.params.id });
+    return res.status(409).json({
+      error: 'Force refund disabled',
+      message: 'Cannot mark REFUNDED without an on-chain refund. Use POST /api/v1/admin/escrow/refund-retry/:transactionId or resolve the dispute for the user via POST /api/v1/admin/disputes/:id/resolve.',
+      useInstead: [
+        'POST /api/v1/admin/escrow/refund-retry/:transactionId',
+        'POST /api/v1/admin/disputes/:id/resolve (resolution: RESOLVED_FOR_USER)',
+      ],
+    });
   } catch (err) { next(err); }
 });
 
 /**
  * POST /api/v1/admin/transactions/:id/force-complete
+ * [PHASE 2H] Blocked — must use escrow-integrated release paths.
  */
 router.post('/transactions/:id/force-complete', authAdmin, async (req, res, next) => {
   try {
-    const tx = await db.query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
-    if (tx.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
-    if (tx.rows[0].state === 'COMPLETE' || tx.rows[0].state === 'REFUNDED') {
-      return res.status(400).json({ error: `Cannot complete transaction in ${tx.rows[0].state} state` });
-    }
-    await stateMachine.transition(req.params.id, tx.rows[0].state, 'COMPLETE', {
-      failure_reason: `Admin force complete: ${req.body.reason || ''}`
+    await auditLogService.log({
+      actor_role: 'admin',
+      actor_id: req.adminId,
+      action: 'dangerous_endpoint_blocked',
+      resource_type: 'transaction',
+      resource_id: req.params.id,
+      metadata: {
+        endpoint: 'POST /admin/transactions/:id/force-complete',
+        reason: req.body?.reason || null,
+        redirect: 'POST /admin/disputes/:id/resolve (resolve_trader) or user confirm-receipt flow',
+      },
     });
-    logger.info(`[Admin] Force completed tx ${req.params.id} by admin ${req.adminId}`);
-    res.json({ success: true, transactionId: req.params.id });
+    return res.status(409).json({
+      error: 'Force complete disabled',
+      message: 'Cannot mark COMPLETE without an on-chain USDC release. Use the normal release flow or POST /api/v1/admin/disputes/:id/resolve with resolution RESOLVED_FOR_TRADER.',
+      useInstead: 'POST /api/v1/admin/disputes/:id/resolve (resolution: RESOLVED_FOR_TRADER)',
+    });
   } catch (err) { next(err); }
 });
 

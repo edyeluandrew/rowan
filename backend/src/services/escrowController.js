@@ -952,8 +952,201 @@ async function refundToUser(transactionId, { adminId = null, retry = false } = {
 }
 
 /**
+ * [PHASE 2H] Orphan / auto-refund handler with pre-swap vs post-swap branching.
+ * Does NOT mark REFUNDED unless on-chain refund succeeds.
+ */
+async function refundOrphanTransaction(transactionId, reason) {
+  const txResult = await db.query(
+    `SELECT t.*, u.stellar_address AS user_stellar
+     FROM transactions t
+     JOIN users u ON u.id = t.user_id
+     WHERE t.id = $1`,
+    [transactionId]
+  );
+  const tx = txResult.rows[0];
+  if (!tx) throw new Error(`Transaction ${transactionId} not found`);
+
+  if (tx.admin_recovery_tx) {
+    return { status: 'skipped', reason: 'admin_recovered' };
+  }
+  if (tx.stellar_refund_tx || tx.state === 'REFUNDED') {
+    return { status: 'skipped', reason: 'already_refunded' };
+  }
+  if (tx.stellar_release_tx || tx.state === 'COMPLETE') {
+    return { status: 'skipped', reason: 'released_or_complete' };
+  }
+  if (tx.dispute_id) {
+    return { status: 'skipped', reason: 'dispute_open' };
+  }
+
+  await releaseMatchFloatForTransaction(tx);
+
+  const postSwap = !!(tx.stellar_swap_tx && Number(tx.usdc_amount) > 0);
+
+  if (postSwap) {
+    return refundOrphanPostSwap(tx, reason);
+  }
+  return refundOrphanPreSwap(tx, reason);
+}
+
+async function userHasUsdcTrustline(stellarAddress) {
+  if (!stellarAddress) return false;
+  try {
+    const acct = await horizon.loadAccount(stellarAddress);
+    return acct.balances.some(
+      (b) => b.asset_code === USDC_ASSET.code && b.asset_issuer === USDC_ASSET.issuer
+    );
+  } catch (e) {
+    if (e?.response?.status === 404) return false;
+    throw e;
+  }
+}
+
+async function refundOrphanPostSwap(tx, reason) {
+  const usdcDecimal = Number(tx.usdc_amount);
+  if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: { reason, code: 'INVALID_USDC_AMOUNT' },
+    });
+    return { status: 'failed', code: 'INVALID_USDC_AMOUNT' };
+  }
+
+  const hasTrustline = await userHasUsdcTrustline(tx.user_stellar);
+  if (!hasTrustline) {
+    const fromState = tx.state;
+    if (stateMachine.isValidTransition(fromState, 'FAILED')) {
+      await stateMachine.transition(tx.id, fromState, 'FAILED', {
+        failure_reason: `${reason}: post_swap_user_missing_usdc_trustline`,
+        refund_error: 'ORPHAN_USDC_REFUND_BLOCKED_NO_TRUSTLINE',
+      });
+    }
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_blocked_no_trustline',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: {
+        user_stellar_address: tx.user_stellar,
+        usdc_amount: usdcDecimal,
+        reason,
+      },
+    });
+    return { status: 'blocked', code: 'NO_USDC_TRUSTLINE' };
+  }
+
+  try {
+    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+    const built = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: tx.user_stellar,
+          asset: USDC_ASSET,
+          amount: usdcDecimal.toFixed(7),
+        })
+      )
+      .addMemo(StellarSdk.Memo.text(`ORPHAN-${tx.id.replace(/-/g, '').slice(0, 12)}`))
+      .setTimeout(30)
+      .build();
+    built.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(built);
+
+    if (stateMachine.isValidTransition(tx.state, 'REFUNDED')) {
+      await stateMachine.transition(tx.id, tx.state, 'REFUNDED', {
+        stellar_refund_tx: result.hash,
+        failure_reason: reason,
+      });
+    } else {
+      await db.query(
+        `UPDATE transactions SET stellar_refund_tx = $1, failure_reason = $2, refunded_at = NOW() WHERE id = $3`,
+        [result.hash, reason, tx.id]
+      );
+    }
+
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_succeeded',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      new_value: { state: 'REFUNDED', stellar_refund_tx: result.hash },
+      metadata: { reason, usdc_amount: usdcDecimal, asset: 'USDC' },
+    });
+
+    return { status: 'refunded', refundHash: result.hash, asset: 'USDC' };
+  } catch (err) {
+    logger.error(`[Escrow] Orphan USDC refund failed for tx ${tx.id}:`, err.message);
+    await db.query(
+      `UPDATE transactions SET refund_error = $1 WHERE id = $2`,
+      [`ORPHAN_USDC_REFUND_FAILED: ${err.message}`, tx.id]
+    );
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: { reason, error: err.message, asset: 'USDC' },
+    });
+    return { status: 'failed', error: err.message };
+  }
+}
+
+async function refundOrphanPreSwap(tx, reason) {
+  try {
+    const refundHash = await refundXlm(tx.user_stellar, tx.xlm_amount, reason);
+    if (stateMachine.isValidTransition(tx.state, 'REFUNDED')) {
+      await stateMachine.transition(tx.id, tx.state, 'REFUNDED', {
+        stellar_refund_tx: refundHash,
+        failure_reason: reason,
+      });
+    } else {
+      await db.query(
+        `UPDATE transactions SET state = 'REFUNDED', stellar_refund_tx = $1, refunded_at = NOW(), failure_reason = $2 WHERE id = $3`,
+        [refundHash, reason, tx.id]
+      );
+    }
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_succeeded',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      new_value: { state: 'REFUNDED', stellar_refund_tx: refundHash },
+      metadata: { reason, asset: 'XLM' },
+    });
+    return { status: 'refunded', refundHash, asset: 'XLM' };
+  } catch (err) {
+    logger.error(`[Escrow] Orphan XLM refund failed for tx ${tx.id}:`, err.message);
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: { reason, error: err.message, asset: 'XLM' },
+    });
+    return { status: 'failed', error: err.message };
+  }
+}
+
+/**
+ * [PHASE 2H] Release canonical match reservation, or legacy trader float if pre-2A.
+ */
+async function releaseMatchFloatForTransaction(transaction) {
+  const hadPayoutSetting = !!transaction.payout_setting_id;
+  const result = await payoutSettingsService.releaseMatchReservationIfAssigned(transaction.id);
+  if (!hadPayoutSetting && transaction.trader_id) {
+    await restoreTraderFloat(transaction);
+  }
+  return result;
+}
+
+/**
  * [C-2 FIX] Restore trader float when a matched transaction is refunded/declined.
- * Must be called whenever a transaction in TRADER_MATCHED state is unassigned.
+ * Legacy path only — prefer releaseMatchFloatForTransaction for Phase 2A+ txs.
  */
 async function restoreTraderFloat(transaction) {
   if (!transaction.trader_id) return;
@@ -981,5 +1174,7 @@ export default {
   releaseToTrader,
   refundXlm,
   refundToUser,
+  refundOrphanTransaction,
+  releaseMatchFloatForTransaction,
   restoreTraderFloat,
 };

@@ -455,14 +455,13 @@ router.post('/requests/:id/decline', authTrader, async (req, res, next) => {
     if (!tx) return res.status(404).json({ error: 'Request not found or not in a declinable state' });
 
     // Unassign trader and re-match
+    await escrowController.releaseMatchFloatForTransaction(tx);
+
     await db.query(
-      `UPDATE transactions SET trader_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL
+      `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL
        WHERE id = $1`,
       [req.params.id]
     );
-
-    // ── [C-2 FIX] Restore trader float on decline ──
-    await escrowController.restoreTraderFloat(tx);
 
     // Slight trust score decay for declining
     await db.query(
