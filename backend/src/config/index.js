@@ -68,6 +68,8 @@ const config = {
       ? process.env.ALLOW_STATIC_FIAT_RATES === 'true'
       : (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet',
     fiatFxStaleSeconds: parseInt(process.env.FIAT_FX_STALE_SECONDS, 10) || 3600,
+    // [PHASE 2G] Testnet orphan USDC sweep destination (public key only — required for recovery script)
+    testnetRecoveryWalletPublicKey: process.env.TESTNET_RECOVERY_WALLET_PUBLIC_KEY,
   },
 
   // USDC issuers (Stellar)
