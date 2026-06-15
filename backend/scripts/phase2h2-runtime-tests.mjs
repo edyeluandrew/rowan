@@ -190,12 +190,12 @@ async function testD_adminRefundGuard() {
 async function testA_admin2faFlow() {
   const adminEmail = process.env.ADMIN_EMAIL;
   const adminPassword = process.env.ADMIN_PASSWORD;
-  let restored2fa = false;
   let prior2fa = null;
+  let admin = null;
 
   try {
     const { packTotpSecret, isEncryptedTotpSecret, verifyTotpFromStored } = await import('../src/utils/totpSecret.js');
-    const admin = (await pool.query(
+    admin = (await pool.query(
       `SELECT id, email FROM users WHERE role = 'admin' AND email = $1 LIMIT 1`,
       [adminEmail || '']
     )).rows[0] || (await pool.query(`SELECT id, email FROM users WHERE role = 'admin' LIMIT 1`)).rows[0];
@@ -282,16 +282,16 @@ async function testA_admin2faFlow() {
   } catch (e) {
     fail('Test A — admin 2FA flow', e);
   } finally {
-    await pool.query(`DELETE FROM admin_2fa_settings WHERE admin_id = (SELECT id FROM users WHERE role = 'admin' LIMIT 1)`);
-    if (prior2fa) {
-      await pool.query(
-        `INSERT INTO admin_2fa_settings (admin_id, totp_secret, is_enabled, enabled_at)
-         VALUES ($1, $2, $3, $4)`,
-        [prior2fa.admin_id, prior2fa.totp_secret, prior2fa.is_enabled, prior2fa.enabled_at]
-      );
-      restored2fa = true;
+    if (admin?.id) {
+      await pool.query(`DELETE FROM admin_2fa_settings WHERE admin_id = $1`, [admin.id]);
+      if (prior2fa) {
+        await pool.query(
+          `INSERT INTO admin_2fa_settings (admin_id, totp_secret, is_enabled, enabled_at, updated_at)
+           VALUES ($1, $2, $3, $4, NOW())`,
+          [prior2fa.admin_id, prior2fa.totp_secret, prior2fa.is_enabled, prior2fa.enabled_at]
+        );
+      }
     }
-    if (restored2fa) { /* noop — clarity */ }
   }
 }
 
