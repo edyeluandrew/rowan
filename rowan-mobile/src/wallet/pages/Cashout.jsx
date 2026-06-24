@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ArrowDownToLine } from 'lucide-react'
+import { ChevronLeft, ArrowDownToLine, AlertTriangle } from 'lucide-react'
 import useRates from '../hooks/useRates'
 import useWallet from '../hooks/useWallet'
 import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
 import BiometricLock from '../../shared/components/BiometricLock'
 import { getQuote } from '../api/cashout'
+import client from '../api/client'
 import { hashPhoneNumber } from '../utils/crypto'
 import { MIN_XLM_AMOUNT, NETWORKS, COUNTRY_CODES } from '../utils/constants'
 import AmountInput from '../components/cashout/AmountInput'
@@ -24,6 +25,13 @@ export default function Cashout() {
   const [recipientName, setRecipientName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [networkLimits, setNetworkLimits] = useState([])
+
+  useEffect(() => {
+    client.get('/api/v1/config/cashout-limits')
+      .then((res) => setNetworkLimits(res.data?.data?.networkLimits || []))
+      .catch(() => {})
+  }, [])
 
   const xlmAmount = parseFloat(amount) || 0
   // allRates may be array [{network, rate, fee}] or object {NETWORK_KEY: rate}
@@ -42,9 +50,19 @@ export default function Cashout() {
   const netFiat = fiatAmount - fiatFee
   const maxAmount = balance || 0
 
+  const selectedNetworkLimits = useMemo(
+    () => networkLimits.find((l) => l.network === network),
+    [networkLimits, network]
+  )
+  const maxXlmForNetwork = selectedNetworkLimits?.maxFiat && rateValue
+    ? selectedNetworkLimits.maxFiat / rateValue
+    : null
+  const amountTooLarge = selectedNetworkLimits?.maxFiat && netFiat > selectedNetworkLimits.maxFiat
+
   const canProceed =
     xlmAmount >= MIN_XLM_AMOUNT &&
     xlmAmount <= maxAmount &&
+    !amountTooLarge &&
     network &&
     phone.length >= 7 &&
     recipientName.trim().length >= 2
@@ -73,7 +91,7 @@ export default function Cashout() {
       })
       navigate('/wallet/cashout/confirm', { state: { quote, network, phone: fullPhone, recipientName: recipientName.trim() } })
     } catch (err) {
-      setError(err.message)
+      setError(err.response?.data?.error || err.message)
     } finally {
       setLoading(false)
     }
@@ -136,6 +154,19 @@ export default function Cashout() {
       </div>
 
       {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
+
+      {amountTooLarge && selectedNetworkLimits && (
+        <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-rowan-yellow shrink-0 mt-0.5" />
+          <div>
+            <p className="text-rowan-yellow text-sm font-medium">Amount too large for this network</p>
+            <p className="text-rowan-muted text-xs mt-1">
+              Maximum payout is {Math.floor(selectedNetworkLimits.maxFiat).toLocaleString()} {selectedNetworkLimits.currency}
+              {maxXlmForNetwork ? ` (~${maxXlmForNetwork.toFixed(2)} XLM at current rate)` : ''}.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Validation feedback */}
       {!canProceed && (

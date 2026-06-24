@@ -526,6 +526,62 @@ class PayoutSettingsService {
       throw err;
     }
   }
+
+  /**
+   * Aggregate active payout limits for a network (used at quote time).
+   */
+  async getActiveNetworkLimits(network, currency) {
+    const result = await db.query(
+      `SELECT
+         MIN(min_amount) AS min_fiat,
+         MAX(max_amount) AS max_fiat,
+         COUNT(*)::int AS active_traders
+       FROM trader_payout_settings ps
+       JOIN traders t ON t.id = ps.trader_id
+       WHERE ps.network = $1::mobile_network
+         AND ps.currency = $2
+         AND ps.is_active = TRUE
+         AND t.status = 'ACTIVE'
+         AND t.verification_status = 'VERIFIED'
+         AND t.stellar_address IS NOT NULL`,
+      [network, currency]
+    );
+    const row = result.rows[0];
+    const activeTraders = row?.active_traders || 0;
+    return {
+      hasTraders: activeTraders > 0,
+      minFiat: row?.min_fiat != null ? parseFloat(row.min_fiat) : null,
+      maxFiat: row?.max_fiat != null ? parseFloat(row.max_fiat) : null,
+      activeTraders,
+    };
+  }
+
+  /**
+   * All active network limits for client display (cashout-limits endpoint).
+   */
+  async getAllActiveNetworkLimits() {
+    const result = await db.query(
+      `SELECT ps.network, ps.currency,
+              MIN(ps.min_amount) AS min_fiat,
+              MAX(ps.max_amount) AS max_fiat,
+              COUNT(DISTINCT ps.trader_id)::int AS active_traders
+       FROM trader_payout_settings ps
+       JOIN traders t ON t.id = ps.trader_id
+       WHERE ps.is_active = TRUE
+         AND t.status = 'ACTIVE'
+         AND t.verification_status = 'VERIFIED'
+         AND t.stellar_address IS NOT NULL
+       GROUP BY ps.network, ps.currency
+       ORDER BY ps.network`
+    );
+    return result.rows.map((row) => ({
+      network: row.network,
+      currency: row.currency,
+      minFiat: parseFloat(row.min_fiat),
+      maxFiat: parseFloat(row.max_fiat),
+      activeTraders: row.active_traders,
+    }));
+  }
 }
 
 export default new PayoutSettingsService();

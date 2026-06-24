@@ -2,6 +2,7 @@ import { Router } from 'express';
 import config from '../config/index.js';
 import { USDC_ASSET } from '../config/stellar.js';
 import logger from '../utils/logger.js';
+import payoutSettingsService from '../services/payoutSettingsService.js';
 
 const router = Router();
 
@@ -61,9 +62,11 @@ router.get('/', (req, res) => {
  */
 router.get('/cashout-limits', async (req, res, next) => {
   try {
+    const networkLimits = await payoutSettingsService.getAllActiveNetworkLimits();
     const limits = {
       // User-facing limits
       minXlmAmount: config.platform.minXlmAmount,
+      networkLimits,
       // Quote timing
       quoteTtlSeconds: config.platform.quoteTtlSeconds,
       // Internal timing (for reference; frontend typically doesn't need this)

@@ -182,87 +182,30 @@ export default function TransactionStatus() {
     }
   }
 
-  useEffect(() => {
-    let cancelled = false
-    let pollTimer = null
-
-    const fetch = async () => {
-      try {
-        const tx = await getTransactionStatus(statusId)
-        if (!cancelled) {
-          setTransaction(tx)
-          setIsWaiting(false)
-          setLoading(false)
-          setRetryCount(0) // Reset retries on success
-
-          // ✅ FIX: Keep polling until transaction reaches terminal state
-          // so UI stays in sync with backend state changes
-          if (!TERMINAL_STATES.includes(tx.state)) {
-            console.log(`[TransactionStatus] Tx in state ${tx.state} — polling again in 3s`)
-            pollTimer = setTimeout(() => {
-              if (!cancelled) {
-                fetch() // Poll again
-              }
-            }, POLL_INTERVAL)
-          } else {
-            console.log(`[TransactionStatus] Transaction reached terminal state: ${tx.state}`)
-          }
-        }
-      } catch (err) {
-        if (!cancelled) {
-          // 404 means transaction not yet recorded — this is normal, retry (but with timeout)
-          if (err.response?.status === 404) {
-            if (retryCount >= MAX_RETRIES_ON_404) {
-              // Timeout: give up after ~2 minutes
-              setError('Transaction confirmation timeout — check your history or contact support')
-              setLoading(false)
-              console.log(`[TransactionStatus] Transaction not found after ${retryCount} retries (~2 min)`)
-            } else {
-              setIsWaiting(true)
-              setRetryCount((prev) => prev + 1)
-              console.log(`[TransactionStatus] Transaction not yet recorded (attempt ${retryCount + 1}/${MAX_RETRIES_ON_404}), retrying in 3 seconds...`)
-              // Schedule next poll
-              pollTimer = setTimeout(() => {
-                if (!cancelled) {
-                  fetch() // Retry
-                }
-              }, POLL_INTERVAL)
-            }
-          } else {
-            // Real error (not 404)
-            setError(err.message)
-            setLoading(false)
-          }
-        }
-      }
-    }
-
-    fetch()
-    return () => {
-      cancelled = true
-      if (pollTimer) clearTimeout(pollTimer)
-    }
-  }, [statusId])
   useSocketHook('transaction_update', (data) => {
-    if (data.transactionId === statusId) {
+    const txId = data.transactionId || data.id
+    if (txId === statusId || txId === id) {
       setTransaction((prev) => (prev ? { ...prev, ...data } : prev))
     }
   })
 
   useSocketHook('transaction_complete', (data) => {
-    if (data.transactionId === id) {
+    const txId = data.transactionId || data.id
+    if (txId === statusId || txId === id) {
       setTransaction((prev) => (prev ? { ...prev, state: 'COMPLETE', ...data } : prev))
     }
   })
 
   useSocketHook('transaction_refunded', (data) => {
-    if (data.transactionId === id) {
+    const txId = data.transactionId || data.id
+    if (txId === statusId || txId === id) {
       setTransaction((prev) => (prev ? { ...prev, state: 'REFUNDED', ...data } : prev))
     }
   })
 
   useSocketHook('transaction_failed', (data) => {
-    if (data.transactionId === id) {
+    const txId = data.transactionId || data.id
+    if (txId === statusId || txId === id) {
       setTransaction((prev) => (prev ? { ...prev, state: 'FAILED', ...data } : prev))
     }
   })

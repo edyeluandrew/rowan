@@ -113,6 +113,36 @@ async function matchTrader(transactionId) {
 
       const candidate = candidateResult.rows[0];
       if (!candidate) {
+        // Permanent failure: amount outside any trader's min/max — refund instead of retry loop
+        const limitsResult = await db.query(
+          `SELECT MIN(min_amount) AS min_fiat, MAX(max_amount) AS max_fiat
+           FROM trader_payout_settings ps
+           JOIN traders t ON t.id = ps.trader_id
+           WHERE ps.network = $1::mobile_network AND ps.currency = $2
+             AND ps.is_active = TRUE AND t.status = 'ACTIVE'
+             AND t.verification_status = 'VERIFIED'`,
+          [transaction.network, fiatCurrency]
+        );
+        const { min_fiat: minFiat, max_fiat: maxFiat } = limitsResult.rows[0] || {};
+        if (maxFiat != null && fiatNeeded > parseFloat(maxFiat)) {
+          logger.error(`[Matching] Tx ${transactionId} fiat ${fiatNeeded} exceeds network max ${maxFiat} — refunding`);
+          const escrowController = (await import('./escrowController.js')).default;
+          await escrowController.refundOrphanTransaction(
+            transactionId,
+            `Amount ${fiatNeeded} ${fiatCurrency} exceeds maximum payout (${maxFiat})`
+          );
+          return null;
+        }
+        if (minFiat != null && fiatNeeded < parseFloat(minFiat)) {
+          logger.error(`[Matching] Tx ${transactionId} fiat ${fiatNeeded} below network min ${minFiat} — refunding`);
+          const escrowController = (await import('./escrowController.js')).default;
+          await escrowController.refundOrphanTransaction(
+            transactionId,
+            `Amount ${fiatNeeded} ${fiatCurrency} below minimum payout (${minFiat})`
+          );
+          return null;
+        }
+
         logger.warn(`[Matching] No eligible trader/payout-setting for tx ${transactionId} (${transaction.network}/${fiatCurrency} amount ${fiatNeeded}) — enqueue retry`);
         const jobQueue = await getJobQueue();
         await jobQueue.enqueueReMatch(transactionId, null, config.platform.traderRetryDelaySeconds || 30);

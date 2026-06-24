@@ -133,19 +133,20 @@ router.get('/requests', authTrader, async (req, res, next) => {
 
     // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal, not stroops — don't divide.
     // pg returns NUMERIC as string; coerce to Number for the JSON payload.
-    const acceptTimeoutMs = 180 * 1000;  // 180 seconds (3 minutes)
-    const requests = result.rows.map(tx => ({
-      ...tx,
-      usdc_amount: Number(tx.usdc_amount) || 0,
-      xlm_amount: Number(tx.xlm_amount) || 0,
-      // Mask phone number for privacy (before acceptance)
-      payout_phone_masked: tx.payout_phone ? maskPhoneNumber(tx.payout_phone) : 'Unknown',
-      // Do NOT return full phone in list view
-      payout_phone: undefined,
-      // Generate client-side deadline props (180 seconds from now for frontend timer)
-      accept_deadline: new Date(Date.now() + acceptTimeoutMs).toISOString(),
-      expires_at: new Date(Date.now() + acceptTimeoutMs).toISOString(),
-    }));
+    const acceptTimeoutMs = (config.platform.traderAcceptTimeoutSeconds || 180) * 1000;
+    const requests = result.rows.map(tx => {
+      const matchedAt = tx.trader_matched_at ? new Date(tx.trader_matched_at).getTime() : Date.now();
+      const deadline = new Date(matchedAt + acceptTimeoutMs).toISOString();
+      return {
+        ...tx,
+        usdc_amount: Number(tx.usdc_amount) || 0,
+        xlm_amount: Number(tx.xlm_amount) || 0,
+        payout_phone_masked: tx.payout_phone ? maskPhoneNumber(tx.payout_phone) : 'Unknown',
+        payout_phone: undefined,
+        accept_deadline: deadline,
+        expires_at: deadline,
+      };
+    });
 
     // RETURN SAFE RESPONSE with success flag
     res.json({

@@ -247,7 +247,7 @@ const reMatchQueue = new Queue('rematch', {
 });
 
 reMatchQueue.process(async (job) => {
-  const { transactionId, currentTraderId } = job.data;
+  const { transactionId, currentTraderId, mode = 'accept_timeout' } = job.data;
 
   const result = await db.query(
     `SELECT * FROM transactions WHERE id = $1`,
@@ -255,9 +255,19 @@ reMatchQueue.process(async (job) => {
   );
   const tx = result.rows[0];
 
+  // Retry matching only — never regress state when no trader was assigned yet
+  if (mode === 'retry_match') {
+    if (tx && !tx.trader_id && ['ESCROW_LOCKED', 'TRADER_MATCHED'].includes(tx.state)) {
+      logger.info(`[Job:rematch] Retrying match for tx ${transactionId} (no trader assigned yet)`);
+      const { default: matchingEngine } = await import('./matchingEngine.js');
+      await matchingEngine.matchTrader(transactionId);
+    }
+    return;
+  }
+
   // Only re-match if still in TRADER_MATCHED, same trader, and NOT accepted
   // [B1] matched_at is set when trader accepts — if set, don't re-match
-  if (tx && tx.state === 'TRADER_MATCHED' && tx.trader_id === currentTraderId && !tx.matched_at) {
+  if (tx && currentTraderId && tx.state === 'TRADER_MATCHED' && tx.trader_id === currentTraderId && !tx.matched_at) {
     logger.info(`[Job:rematch] Trader ${currentTraderId} timed out on tx ${transactionId} — re-matching`);
 
     // ── [PHASE 2H] Release canonical match reservation (or legacy float) before re-match ──
@@ -443,8 +453,9 @@ function enqueueRelease(transactionId) {
  * [P1 FIX] The delay ensures this survives server restarts.
  */
 function enqueueReMatch(transactionId, currentTraderId, delaySeconds) {
+  const mode = currentTraderId ? 'accept_timeout' : 'retry_match';
   return reMatchQueue.add(
-    { transactionId, currentTraderId },
+    { transactionId, currentTraderId, mode },
     { delay: delaySeconds * 1000 }
   );
 }

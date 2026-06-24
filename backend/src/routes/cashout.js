@@ -5,6 +5,7 @@ import { cashoutStatusLimiter } from '../middleware/rateLimits.js';
 import quoteEngine from '../services/quoteEngine.js';
 import fraudMonitor from '../services/fraudMonitor.js';
 import notificationService from '../services/notificationService.js';
+import payoutSettingsService from '../services/payoutSettingsService.js';
 import config from '../config/index.js';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
@@ -60,6 +61,32 @@ router.post(
       if (!fraudCheck.allowed) {
         logger.warn(`[Cashout] Fraud check failed: ${fraudCheck.reason}`);
         return res.status(403).json({ error: fraudCheck.reason });
+      }
+
+      const networkLimits = await payoutSettingsService.getActiveNetworkLimits(network, fiatCurrency);
+      if (!networkLimits.hasTraders) {
+        return res.status(503).json({
+          error: 'No verified traders are available for this network right now. Try another network or try again later.',
+          code: 'NO_TRADERS_FOR_NETWORK',
+        });
+      }
+      if (networkLimits.maxFiat != null && fiatEstimate > networkLimits.maxFiat) {
+        return res.status(400).json({
+          error: `Amount too large. Maximum payout for this network is ${Math.floor(networkLimits.maxFiat).toLocaleString()} ${fiatCurrency}. Send less XLM and try again.`,
+          code: 'AMOUNT_ABOVE_NETWORK_MAX',
+          maxFiat: networkLimits.maxFiat,
+          minFiat: networkLimits.minFiat,
+          currency: fiatCurrency,
+        });
+      }
+      if (networkLimits.minFiat != null && fiatEstimate < networkLimits.minFiat) {
+        return res.status(400).json({
+          error: `Amount too small. Minimum payout for this network is ${Math.ceil(networkLimits.minFiat).toLocaleString()} ${fiatCurrency}.`,
+          code: 'AMOUNT_BELOW_NETWORK_MIN',
+          maxFiat: networkLimits.maxFiat,
+          minFiat: networkLimits.minFiat,
+          currency: fiatCurrency,
+        });
       }
 
       logger.info(`[Cashout] ✅ Fraud check passed. Creating quote: xlmAmount=${xlmNum}, network=${network}`);
