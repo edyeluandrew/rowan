@@ -9,8 +9,16 @@ import { formatCurrency } from '../utils/format';
 import TransactionCard from '../components/cards/TransactionCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
-const STATUS_OPTIONS = ['COMPLETED', 'FIAT_SENT', 'TRADER_MATCHED', 'EXPIRED', 'DISPUTED', 'REFUNDED'];
-const NETWORK_OPTIONS = ['MTN', 'AIRTEL', 'BANK'];
+const STATUS_OPTIONS = [
+  'COMPLETE',
+  'USER_CONFIRMATION_PENDING',
+  'FIAT_PAYOUT_SUBMITTED',
+  'TRADER_MATCHED',
+  'DISPUTE_OPENED',
+  'REFUNDED',
+  'FAILED',
+];
+const NETWORK_OPTIONS = ['MTN_UG', 'AIRTEL_UG', 'MPESA_KE', 'MPESA_TZ'];
 const DATE_OPTIONS = [
   { label: 'Today', days: 0 },
   { label: 'Last 7 days', days: 7 },
@@ -26,6 +34,7 @@ export default function History() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState(null);
   const limit = 20;
 
   /* Search & Filter state */
@@ -46,11 +55,17 @@ export default function History() {
       const list = Array.isArray(data) ? data : data.transactions || [];
       if (p === 1) {
         setTransactions(list);
+        setError(null);
       } else {
         setTransactions((prev) => [...prev, ...list]);
       }
       setHasMore(list.length === limit);
-    } catch { /* pagination silently retries on next tap */ } finally {
+    } catch (err) {
+      if (p === 1) {
+        setError(err.message || 'Failed to load history');
+        setTransactions([]);
+      }
+    } finally {
       setLoading(false);
       setLoadingMore(false);
     }
@@ -238,6 +253,18 @@ export default function History() {
         </div>
       )}
 
+      {error && (
+        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mb-4 text-rowan-red text-sm">
+          {error}
+          <button
+            onClick={() => { setLoading(true); fetchPage(1); }}
+            className="block mt-2 text-rowan-yellow underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <LoadingSpinner size={28} className="text-rowan-yellow" />
@@ -261,9 +288,9 @@ export default function History() {
         <div>
           {filtered.map((tx) => (
             <div key={tx.id}>
-              <TransactionCard key={tx.id} transaction={tx} />
+              <TransactionCard tx={tx} />
               {/* Disputed — prompt to respond */}
-              {tx.state === 'DISPUTED' && tx.dispute_id && (
+              {(tx.state === 'DISPUTE_OPENED' || tx.state === 'DISPUTED') && tx.dispute_id && (
                 <button
                   onClick={() => navigate(`/trader/disputes/${tx.dispute_id}`)}
                   className="flex items-center gap-1.5 text-rowan-red text-xs font-medium px-4 -mt-1 mb-2"

@@ -374,7 +374,7 @@ router.get('/history', authTrader, async (req, res, next) => {
 
     const result = await db.query(
       `SELECT id, usdc_amount, fiat_amount, fiat_currency, network,
-              state, completed_at, created_at
+              state, stellar_release_tx, completed_at, created_at
        FROM transactions
        WHERE trader_id = $1
        ORDER BY created_at DESC
