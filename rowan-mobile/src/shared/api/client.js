@@ -54,7 +54,10 @@ client.interceptors.response.use(
       error.response?.data?.message ||
       error.message ||
       'Request failed';
-    return Promise.reject(new Error(msg));
+    const err = new Error(msg);
+    err.status = error.response?.status;
+    err.response = error.response;
+    return Promise.reject(err);
   }
 );
 

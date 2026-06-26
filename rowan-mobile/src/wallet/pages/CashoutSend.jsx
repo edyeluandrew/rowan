@@ -80,11 +80,11 @@ export default function CashoutSend() {
       }
 
       // Navigate to transaction status using transactionId (or quoteId as fallback)
-      const statusId = transactionId || quote.quoteId
-      console.log('[CashoutSend] 🚀 Navigating to transaction status page for ID:', statusId, '(transactionId:', transactionId, 'quoteId:', quote.quoteId, ')')
-      navigate(`/wallet/transaction/${statusId}`, { 
-        state: { transactionId, quoteId: quote.quoteId, stellarTxHash },
-        replace: true 
+      const routeId = transactionId || quote.quoteId
+      console.log('[CashoutSend] 🚀 Navigating to transaction status:', routeId, 'transactionId:', transactionId, 'quoteId:', quote.quoteId)
+      navigate(`/wallet/transaction/${routeId}`, {
+        state: { transactionId: transactionId || null, quoteId: quote.quoteId, stellarTxHash },
+        replace: true,
       })
     } catch (err) {
       // Handle quote expiry (410 Gone)

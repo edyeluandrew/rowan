@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace } from 'lucide-react'
 import { getTransactionStatus, confirmReceipt, openDispute } from '../api/cashout'
@@ -20,7 +20,7 @@ export default function TransactionStatus() {
   // Use transactionId from state if available (from CashoutSend), otherwise use URL param
   // This ensures we use the correct transaction ID instead of falling back to quoteId
   const statusId = passedTransactionId || id
-  console.log('[TransactionStatus] Route ID:', id, 'Passed transactionId:', passedTransactionId, 'Using:', statusId)
+  const activeTxId = transaction?.id || passedTransactionId || id
   
   const [transaction, setTransaction] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -44,58 +44,54 @@ export default function TransactionStatus() {
   const BiometricIcon = biometricType === 'FACE_ID' ? ScanFace : Fingerprint
 
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
-  const INITIAL_WAIT_MS = 1000 // Wait 1 second before first poll to let Horizon process
+  const INITIAL_WAIT_MS = 3000 // Escrow + swap can take several seconds on testnet
+  const retryCountRef = useRef(0)
 
   useEffect(() => {
     let cancelled = false
     let pollTimer = null
     let initialWaitTimer = null
+    retryCountRef.current = 0
 
-    const fetch = async () => {
+    const isNotFound = (err) =>
+      err?.status === 404 ||
+      err?.response?.status === 404 ||
+      /transaction not found/i.test(err?.message || '')
+
+    const fetchStatus = async () => {
       try {
         const tx = await getTransactionStatus(statusId)
         if (!cancelled) {
-          console.log(`[TransactionStatus] ✅ Transaction found on attempt ${retryCount + 1}`)
+          console.log(`[TransactionStatus] ✅ Transaction found (attempt ${retryCountRef.current + 1})`)
           setTransaction(tx)
           setIsWaiting(false)
           setLoading(false)
-          setRetryCount(0) // Reset retries on success
+          setRetryCount(0)
+          retryCountRef.current = 0
 
-          // ✅ FIX: Keep polling until transaction reaches terminal state
-          // so UI stays in sync with backend state changes
           if (!TERMINAL_STATES.includes(tx.state)) {
-            console.log(`[TransactionStatus] Tx in state ${tx.state} — polling again in 3s`)
             pollTimer = setTimeout(() => {
-              if (!cancelled) {
-                fetch() // Poll again
-              }
+              if (!cancelled) fetchStatus()
             }, POLL_INTERVAL)
-          } else {
-            console.log(`[TransactionStatus] Transaction reached terminal state: ${tx.state}`)
           }
         }
       } catch (err) {
         if (!cancelled) {
-          // 404 means transaction not yet recorded — this is normal, retry (but with timeout)
-          if (err.response?.status === 404) {
-            if (retryCount >= MAX_RETRIES_ON_404) {
-              // Timeout: give up after ~2 minutes
+          if (isNotFound(err)) {
+            retryCountRef.current += 1
+            setRetryCount(retryCountRef.current)
+            if (retryCountRef.current >= MAX_RETRIES_ON_404) {
               setError('Transaction confirmation timeout — check your history or contact support')
               setLoading(false)
-              console.log(`[TransactionStatus] Transaction not found after ${retryCount} retries (~2 min)`)
             } else {
               setIsWaiting(true)
-              setRetryCount((prev) => prev + 1)
-              console.log(`[TransactionStatus] Transaction not yet recorded (attempt ${retryCount + 1}/${MAX_RETRIES_ON_404}), retrying in 3 seconds...`)
-              // Schedule next poll
+              setLoading(false)
+              console.log(`[TransactionStatus] Not yet recorded (${retryCountRef.current}/${MAX_RETRIES_ON_404}), retrying...`)
               pollTimer = setTimeout(() => {
-                if (!cancelled) {
-                  fetch() // Retry
-                }
+                if (!cancelled) fetchStatus()
               }, POLL_INTERVAL)
             }
           } else {
-            // Real error (not 404)
             setError(err.message)
             setLoading(false)
             console.error(`[TransactionStatus] Error polling: ${err.message}`)
@@ -104,12 +100,8 @@ export default function TransactionStatus() {
       }
     }
 
-    // Initial wait before first poll to let Horizon process deposit
-    console.log(`[TransactionStatus] Waiting ${INITIAL_WAIT_MS}ms before first poll to let Horizon process...`)
     initialWaitTimer = setTimeout(() => {
-      if (!cancelled) {
-        fetch()
-      }
+      if (!cancelled) fetchStatus()
     }, INITIAL_WAIT_MS)
 
     return () => {
@@ -151,7 +143,7 @@ export default function TransactionStatus() {
     setConfirming(true)
     setConfirmError(null)
     try {
-      const result = await confirmReceipt(statusId)
+      const result = await confirmReceipt(activeTxId)
       // Update transaction state
       setTransaction((prev) => (prev ? { ...prev, state: 'COMPLETE', ...result } : prev))
       setShowConfirmModal(false)
@@ -170,7 +162,7 @@ export default function TransactionStatus() {
     setDisputing(true)
     setDisputeError(null)
     try {
-      const result = await openDispute(statusId, disputeReason.trim())
+      const result = await openDispute(activeTxId, disputeReason.trim())
       // Update transaction state
       setTransaction((prev) => (prev ? { ...prev, state: 'DISPUTE_OPENED', ...result } : prev))
       setShowDisputeModal(false)
