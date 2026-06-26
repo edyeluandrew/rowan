@@ -1,4 +1,4 @@
-import { LockKeyhole, ChevronLeft, CheckCircle2 } from 'lucide-react';
+import { LockKeyhole, ChevronLeft } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getRequest, confirmRequest } from '../api/trader';
@@ -12,6 +12,7 @@ import Button from '../components/ui/Button';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import ConfirmPayoutModal from '../components/modals/ConfirmPayoutModal';
 import TraderDisputeStatusCard from '../components/disputes/TraderDisputeStatusCard';
+import UsdcReceiptCard from '../components/wallet/UsdcReceiptCard';
 
 const STEPS = ['Escrow Funded', 'Payout Sent', 'Complete'];
 
@@ -106,12 +107,19 @@ export default function RequestDetail() {
   // Listen for real-time updates
   useEffect(() => {
     const handleUpdate = (payload) => {
-      if (payload?.id === id || payload?.request_id === id) {
+      const txId = payload?.id || payload?.transactionId || payload?.request_id;
+      if (txId === id) {
         fetchTx();
       }
     };
     on('transaction_update', handleUpdate);
-    return () => off('transaction_update', handleUpdate);
+    on('tx_update', handleUpdate);
+    on('tx_complete', handleUpdate);
+    return () => {
+      off('transaction_update', handleUpdate);
+      off('tx_update', handleUpdate);
+      off('tx_complete', handleUpdate);
+    };
   }, [id, on, off, fetchTx]);
 
   // Reveal phone auto-hide after 30s
@@ -319,17 +327,12 @@ export default function RequestDetail() {
         </div>
       )}
 
-      {/* Complete state */}
+      {/* Complete state — USDC release receipt */}
       {isComplete && (
-        <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-4 text-center">
-          <CheckCircle2 size={36} className="text-rowan-green block mx-auto mb-2" />
-          <p className="text-rowan-green text-sm font-medium">Transaction Complete</p>
-          {tx.stellar_tx_hash && (
-            <p className="text-rowan-muted text-[10px] font-mono mt-1 break-all">
-              {tx.stellar_tx_hash}
-            </p>
-          )}
-        </div>
+        <UsdcReceiptCard
+          tx={tx}
+          onViewWallet={() => navigate('/trader/wallet')}
+        />
       )}
 
       {/* Confirm Payout Modal */}

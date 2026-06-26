@@ -8,9 +8,12 @@ import { getWallet, verifyWalletAddress } from '../api/wallet';
 import WalletTransactionRow from '../components/wallet/WalletTransactionRow';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
+import { COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants';
+import { useSocket } from '../context/SocketContext';
 
 export default function StellarWallet() {
   const navigate = useNavigate();
+  const { on, off } = useSocket();
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -21,15 +24,33 @@ export default function StellarWallet() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+
+    const loadWallet = async () => {
       try {
         const data = await getWallet();
-        setWallet(data);
-      } catch { setError('Failed to load wallet'); } finally {
-        setLoading(false);
+        if (!cancelled) setWallet(data);
+      } catch {
+        if (!cancelled) setError('Failed to load wallet');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    })();
-  }, []);
+    };
+
+    loadWallet();
+
+    const refreshOnComplete = () => {
+      loadWallet();
+    };
+    on('tx_complete', refreshOnComplete);
+    on('tx_update', refreshOnComplete);
+
+    return () => {
+      cancelled = true;
+      off('tx_complete', refreshOnComplete);
+      off('tx_update', refreshOnComplete);
+    };
+  }, [on, off]);
 
   const copyAddress = () => {
     const addr = wallet?.stellarAddress || wallet?.stellar_address || '';
@@ -62,6 +83,7 @@ export default function StellarWallet() {
 
   const address = wallet?.stellarAddress || wallet?.stellar_address || '';
   const balance = wallet?.usdcBalance ?? wallet?.usdc_balance ?? 0;
+  const hasTrustline = wallet?.usdc_trustline ?? wallet?.usdcTrustline;
   const txs = wallet?.recentTransactions || wallet?.recent_transactions || [];
 
   if (loading) {
@@ -126,8 +148,13 @@ export default function StellarWallet() {
           <p className="text-rowan-yellow text-3xl font-bold tabular-nums mt-1">
             {Number(balance).toFixed(2)}
           </p>
+          {hasTrustline === false && address && (
+            <p className="text-rowan-red text-xs mt-2">
+              No USDC trustline on this address — add one in your Stellar wallet before accepting trades.
+            </p>
+          )}
           <p className="text-rowan-muted text-xs mt-2">
-            Balance fetched from Stellar network. May take a few seconds to reflect recent transactions.
+            Balance fetched live from the Stellar network. May take a few seconds after a new payment.
           </p>
         </div>
 

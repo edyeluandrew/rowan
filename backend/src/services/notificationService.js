@@ -2,6 +2,7 @@ import websocket from './websocket.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import redis from '../db/redis.js';
+import db from '../db/index.js';
 
 /**
  * NotificationService — L2 internal module.
@@ -217,10 +218,39 @@ async function notifyTransactionComplete(userId, traderId, transaction, phoneNum
     message: `Cash-out complete! ${transaction.fiat_amount} ${transaction.fiat_currency} sent to your mobile money.`,
   });
 
+  const traderRow = await db.query(
+    `SELECT stellar_address FROM traders WHERE id = $1`,
+    [traderId]
+  );
+  const stellarAddress = traderRow.rows[0]?.stellar_address || null;
+
   await notifyTraderUpdate(traderId, 'tx_complete', {
     transactionId: transaction.id,
+    id: transaction.id,
+    state: 'COMPLETE',
     usdcAmount: transaction.usdc_amount,
-    message: `USDC released to your wallet.`,
+    stellarReleaseTx: transaction.stellar_release_tx,
+    stellarAddress,
+    message: `You received ${transaction.usdc_amount} USDC at your Stellar address.`,
+  });
+  // Also emit generic tx_update so trader detail screens refresh
+  websocket.emitToTrader(traderId, 'tx_update', {
+    id: transaction.id,
+    transactionId: transaction.id,
+    state: 'COMPLETE',
+    usdcAmount: transaction.usdc_amount,
+    stellarReleaseTx: transaction.stellar_release_tx,
+    stellarAddress,
+    timestamp: new Date().toISOString(),
+  });
+  websocket.emitToTrader(traderId, 'transaction_update', {
+    id: transaction.id,
+    transactionId: transaction.id,
+    state: 'COMPLETE',
+    usdcAmount: transaction.usdc_amount,
+    stellarReleaseTx: transaction.stellar_release_tx,
+    stellarAddress,
+    timestamp: new Date().toISOString(),
   });
 }
 

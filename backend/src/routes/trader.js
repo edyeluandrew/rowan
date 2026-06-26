@@ -10,8 +10,17 @@ import logger from '../utils/logger.js';
 import { stroopsToUsdc } from '../utils/financial.js';
 import { maskPhoneNumber } from '../utils/phoneMasking.js';
 import { traderLoginLimiter, sensitiveActionLimiter } from '../middleware/rateLimits.js';
+import { server as horizon, USDC_ASSET } from '../config/stellar.js';
 
 const router = Router();
+
+function usdcBalanceOf(account) {
+  if (!account?.balances) return { balance: 0, hasTrustline: false };
+  const b = account.balances.find(
+    (x) => x.asset_code === USDC_ASSET.code && x.asset_issuer === USDC_ASSET.issuer
+  );
+  return { balance: b ? Number(b.balance) : 0, hasTrustline: !!b };
+}
 
 /**
  * POST /api/v1/trader/login
@@ -174,9 +183,11 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
     const result = await db.query(
       `SELECT t.id, t.usdc_amount, t.xlm_amount, t.fiat_amount, t.fiat_currency,
               t.network, t.state, t.trader_matched_at, t.matched_at,
-              t.fiat_sent_at, t.created_at, t.user_id, t.trader_id,
-              t.payout_phone, t.payout_name
+              t.fiat_sent_at, t.created_at, t.completed_at, t.user_id, t.trader_id,
+              t.payout_phone, t.payout_name, t.stellar_release_tx,
+              tr.stellar_address
        FROM transactions t
+       JOIN traders tr ON tr.id = t.trader_id
        WHERE t.id = $1 AND t.trader_id = $2`,
       [req.params.id, req.traderId]
     );
@@ -554,21 +565,45 @@ router.get('/wallet', authTrader, async (req, res, next) => {
     const trader = traderResult.rows[0];
     if (!trader) return res.status(404).json({ error: 'Trader not found' });
 
+    let usdcBalance = parseFloat(trader.usdc_float) || 0;
+    let usdcTrustline = false;
+    let balanceSource = 'legacy';
+
+    if (trader.stellar_address) {
+      try {
+        const account = await horizon.loadAccount(trader.stellar_address);
+        const { balance, hasTrustline } = usdcBalanceOf(account);
+        usdcBalance = balance;
+        usdcTrustline = hasTrustline;
+        balanceSource = 'horizon';
+      } catch (err) {
+        const notFound = err?.response?.status === 404 || /not found/i.test(err.message || '');
+        if (!notFound) {
+          logger.warn(`[Trader] Horizon balance load failed for ${req.traderId}: ${err.message}`);
+        }
+      }
+    }
+
     // Recent completed transactions (USDC receipts to this trader)
     const txResult = await db.query(
       `SELECT id, usdc_amount, fiat_amount, fiat_currency, state,
               stellar_release_tx, completed_at, created_at
        FROM transactions
-       WHERE trader_id = $1 AND state = 'COMPLETE'
-       ORDER BY completed_at DESC
+       WHERE trader_id = $1 AND state = 'COMPLETE' AND stellar_release_tx IS NOT NULL
+       ORDER BY completed_at DESC NULLS LAST, created_at DESC
        LIMIT 20`,
       [req.traderId]
     );
 
     res.json({
       stellar_address: trader.stellar_address,
-      usdc_balance: parseFloat(trader.usdc_float) || 0,
-      recent_transactions: txResult.rows,
+      usdc_balance: usdcBalance,
+      usdc_trustline: usdcTrustline,
+      balance_source: balanceSource,
+      recent_transactions: txResult.rows.map((row) => ({
+        ...row,
+        usdc_amount: Number(row.usdc_amount) || 0,
+      })),
     });
   } catch (err) {
     next(err);

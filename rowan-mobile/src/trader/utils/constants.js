@@ -42,6 +42,20 @@ export const SOCKET_RECONNECT_ATTEMPTS = 5;
 export const SOCKET_RECONNECT_DELAY = 1000;
 export const SOCKET_RECONNECT_DELAY_MAX = 10000;
 
+/** Stellar explorer (testnet by default) */
+export const STELLAR_NETWORKS = {
+  testnet: { explorerUrl: 'https://stellar.expert/explorer/testnet' },
+  mainnet: { explorerUrl: 'https://stellar.expert/explorer/public' },
+};
+
+export const CURRENT_STELLAR_NETWORK =
+  STELLAR_NETWORKS[import.meta.env.VITE_STELLAR_NETWORK] || STELLAR_NETWORKS.testnet;
+
+export function stellarTxExplorerUrl(hash) {
+  if (!hash) return null;
+  return `${CURRENT_STELLAR_NETWORK.explorerUrl}/tx/${hash}`;
+}
+
 /** Currency flag emojis */
 export const CURRENCY_FLAGS = {
   UGX: '🇺🇬',
