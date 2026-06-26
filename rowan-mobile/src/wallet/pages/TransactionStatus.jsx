@@ -176,8 +176,31 @@ export default function TransactionStatus() {
 
   useSocketHook('transaction_update', (data) => {
     const txId = data.transactionId || data.id
-    if (txId === statusId || txId === id) {
-      setTransaction((prev) => (prev ? { ...prev, ...data } : prev))
+    if (txId === statusId || txId === id || txId === transaction?.id) {
+      setTransaction((prev) => (prev ? { ...prev, state: data.state || prev.state, ...data } : { ...data, state: data.state }))
+      setIsWaiting(false)
+      setLoading(false)
+      setError(null)
+    }
+  })
+
+  useSocketHook('tx_update', (data) => {
+    const txId = data.transactionId || data.id
+    if (txId === statusId || txId === id || txId === transaction?.id) {
+      setTransaction((prev) => (prev ? { ...prev, state: data.state || prev.state, ...data } : { ...data, state: data.state }))
+      setIsWaiting(false)
+      setLoading(false)
+      setError(null)
+    }
+  })
+
+  useSocketHook('trader_matched', (data) => {
+    const txId = data.transactionId || data.id
+    if (txId === statusId || txId === id || txId === transaction?.id) {
+      setTransaction((prev) => (prev ? { ...prev, state: 'TRADER_MATCHED', ...data } : { ...data, state: 'TRADER_MATCHED' }))
+      setIsWaiting(false)
+      setLoading(false)
+      setError(null)
     }
   })
 

@@ -114,11 +114,16 @@ async function getCachedPhoneNumber(userId) {
  * @param {object} data - notification data (includes state, message, and optional phoneNumber)
  */
 async function notifyUser(userId, event, data) {
-  // WebSocket push (primary channel)
-  websocket.emitToUser(userId, 'tx_update', {
+  const payload = {
     ...data,
     timestamp: new Date().toISOString(),
-  });
+  };
+  // WebSocket push (primary channel) — emit both event names for client compatibility
+  websocket.emitToUser(userId, 'tx_update', payload);
+  websocket.emitToUser(userId, 'transaction_update', payload);
+  if (event === 'trader_matched') {
+    websocket.emitToUser(userId, 'trader_matched', payload);
+  }
 
   logger.info(`[Notify] User ${userId} — ${event}: ${data.message || data.state}`);
 

@@ -67,6 +67,12 @@ async function matchTrader(transactionId) {
       return null;
     }
 
+    // Skip if already assigned to a trader
+    if (transaction.trader_id && transaction.state === 'TRADER_MATCHED') {
+      logger.info(`[Matching] Tx ${transactionId} already assigned to trader ${transaction.trader_id}`);
+      return { id: transaction.trader_id };
+    }
+
     const fiatNeeded = parseFloat(transaction.fiat_amount || 0);
     const fiatCurrency = transaction.fiat_currency || 'UGX';
     if (!Number.isFinite(fiatNeeded) || fiatNeeded <= 0) {
