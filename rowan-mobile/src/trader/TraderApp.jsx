@@ -5,6 +5,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { SocketProvider } from './context/SocketContext';
 
+import ErrorBoundary from './components/ui/ErrorBoundary';
 import OnboardingGate from './pages/onboarding/OnboardingGate';
 import OnboardingWizard from './pages/onboarding/OnboardingWizard';
 import AppShell from './components/layout/AppShell';
@@ -40,7 +41,7 @@ export default function TraderApp() {
           <Route element={<AppShell />}>
             <Route path="home" element={<Home />} />
             <Route path="requests" element={<Requests />} />
-            <Route path="history" element={<History />} />
+            <Route path="history" element={<ErrorBoundary title="History unavailable"><History /></ErrorBoundary>} />
             <Route path="profile" element={<Profile />} />
             <Route path="notifications" element={<Notifications />} />
           </Route>

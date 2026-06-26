@@ -10,10 +10,12 @@
  */
 export function formatCurrency(amount, currency) {
   const num = Number(amount);
-  if (currency === 'USDC' || currency === 'XLM') {
-    return `${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+  const safeNum = Number.isFinite(num) ? num : 0;
+  const code = currency || '';
+  if (code === 'USDC' || code === 'XLM') {
+    return `${safeNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${code}`;
   }
-  return `${currency} ${num.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  return `${code} ${safeNum.toLocaleString('en-US', { maximumFractionDigits: 0 })}`.trim();
 }
 
 /** Format XLM amount: "12.34 XLM" */
@@ -40,7 +42,9 @@ export function formatDate(isoString) {
 
 /** DD MMM, HH:MM  e.g. 26 Feb, 14:30 */
 export function formatDateTime(isoString) {
+  if (!isoString) return '—';
   const d = new Date(isoString);
+  if (!Number.isFinite(d.getTime())) return '—';
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
