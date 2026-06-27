@@ -6,7 +6,6 @@ import { confirmQuote } from '../api/cashout'
 import { getSecure } from '../utils/storage'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import QuoteSummary from '../components/cashout/QuoteSummary'
-import CashoutPaymentDetails from '../components/cashout/CashoutPaymentDetails'
 import Button from '../components/ui/Button'
 
 export default function CashoutSend() {
@@ -119,12 +118,6 @@ export default function CashoutSend() {
           If payment is not completed in time, your XLM is refunded automatically.
         </p>
       </div>
-
-      <CashoutPaymentDetails
-        escrowAddress={quote.escrowAddress}
-        xlmAmount={quote.xlmAmount}
-        memo={quote.memo}
-      />
 
       {quoteExpired && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mt-4">
