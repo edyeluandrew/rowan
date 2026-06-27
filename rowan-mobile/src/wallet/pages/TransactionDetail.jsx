@@ -10,6 +10,7 @@ import ReceiptConfirmationCard from '../components/disputes/ReceiptConfirmationC
 import ConfirmingReceiptCard from '../components/disputes/ConfirmingReceiptCard'
 import DisputeConfirmModal from '../components/disputes/DisputeConfirmModal'
 import { formatXlm, formatCurrency, formatDateTime, formatAddress } from '../utils/format'
+import { normalizeWalletTransaction } from '../utils/transactions'
 import { NETWORKS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 
 export default function TransactionDetail() {
@@ -29,7 +30,7 @@ export default function TransactionDetail() {
     const fetch = async () => {
       try {
         const data = await getTransactionStatus(id)
-        if (!cancelled) setTx(data)
+        if (!cancelled) setTx(normalizeWalletTransaction(data))
       } catch (err) {
         if (!cancelled) setError(err.message)
       } finally {
@@ -42,31 +43,31 @@ export default function TransactionDetail() {
 
   useSocketHook('transaction_update', (data) => {
     if (data.transactionId === id) {
-      setTx((prev) => (prev ? { ...prev, ...data } : prev))
+      setTx((prev) => (prev ? normalizeWalletTransaction({ ...prev, ...data }) : prev))
     }
   })
 
   useSocketHook('transaction_complete', (data) => {
     if (data.transactionId === id) {
-      setTx((prev) => (prev ? { ...prev, state: 'COMPLETE', ...data } : prev))
+      setTx((prev) => (prev ? normalizeWalletTransaction({ ...prev, state: 'COMPLETE', ...data }) : prev))
     }
   })
 
   useSocketHook('transaction_refunded', (data) => {
     if (data.transactionId === id) {
-      setTx((prev) => (prev ? { ...prev, state: 'REFUNDED', ...data } : prev))
+      setTx((prev) => (prev ? normalizeWalletTransaction({ ...prev, state: 'REFUNDED', ...data }) : prev))
     }
   })
 
   useSocketHook('dispute_opened', (data) => {
     if (data.transactionId === id) {
-      setTx((prev) => (prev ? { ...prev, state: 'DISPUTE_OPENED', ...data } : prev))
+      setTx((prev) => (prev ? normalizeWalletTransaction({ ...prev, state: 'DISPUTE_OPENED', ...data }) : prev))
     }
   })
 
   useSocketHook('dispute_resolved', (data) => {
     if (data.transactionId === id) {
-      setTx((prev) => (prev ? { ...prev, state: data.newState, ...data } : prev))
+      setTx((prev) => (prev ? normalizeWalletTransaction({ ...prev, state: data.newState, ...data }) : prev))
     }
   })
 

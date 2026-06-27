@@ -1,13 +1,16 @@
 import client from './client'
 
-export function getProfile() {
-  return client.get('/api/v1/user/profile')
+export async function getProfile() {
+  const { data } = await client.get('/api/v1/user/profile')
+  return data
 }
 
-export function getHistory({ page = 1, limit = 20 } = {}) {
-  return client.get('/api/v1/user/history', {
-    params: { page, limit },
+export async function getHistory({ page = 1, limit = 20 } = {}) {
+  const offset = (page - 1) * limit
+  const { data } = await client.get('/api/v1/user/history', {
+    params: { limit, offset },
   })
+  return data
 }
 
 export function getNotifications({ page = 1, limit = 20 } = {}) {

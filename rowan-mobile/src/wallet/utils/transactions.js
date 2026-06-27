@@ -1,0 +1,53 @@
+/**
+ * Normalize wallet transaction DTOs from API (snake_case) to UI shape (camelCase).
+ */
+export function normalizeWalletTransaction(tx) {
+  if (!tx || typeof tx !== 'object') return null
+
+  return {
+    id: tx.id,
+    state: tx.state,
+    network: tx.network,
+    xlmAmount: tx.xlmAmount ?? tx.xlm_amount ?? 0,
+    fiatAmount: tx.fiatAmount ?? tx.fiat_amount ?? 0,
+    currency: tx.currency ?? tx.fiat_currency ?? 'UGX',
+    createdAt: tx.createdAt ?? tx.created_at,
+    usdcAmount: tx.usdcAmount ?? tx.usdc_amount,
+    stellarDepositTx: tx.stellarDepositTx ?? tx.stellar_deposit_tx,
+    stellarReleaseTx: tx.stellarReleaseTx ?? tx.stellar_release_tx,
+    completedAt: tx.completedAt ?? tx.completed_at,
+    failedAt: tx.failedAt ?? tx.failed_at,
+    hasDispute: tx.hasDispute ?? !!tx.dispute_id,
+  }
+}
+
+export function normalizeWalletTransactions(list) {
+  if (!Array.isArray(list)) return []
+  return list.map(normalizeWalletTransaction).filter(Boolean)
+}
+
+export function normalizeWalletHistoryStats(stats) {
+  if (!stats || typeof stats !== 'object') return null
+
+  const completed = Number(stats.total_completed ?? stats.completed ?? 0)
+  const failed = Number(stats.total_failed ?? stats.failed ?? 0)
+
+  return {
+    completed,
+    total: Number(stats.total ?? completed + failed),
+    totalXlm: stats.total_xlm_cashed ?? stats.totalXlm ?? 0,
+    totalFiatReceived: stats.total_fiat_received ?? stats.totalFiatReceived ?? 0,
+  }
+}
+
+export function normalizeWalletHistoryResponse(data) {
+  if (!data || typeof data !== 'object') {
+    return { transactions: [], stats: null }
+  }
+
+  const raw = data.transactions ?? data.data?.transactions ?? []
+  return {
+    transactions: normalizeWalletTransactions(raw),
+    stats: normalizeWalletHistoryStats(data.stats),
+  }
+}
