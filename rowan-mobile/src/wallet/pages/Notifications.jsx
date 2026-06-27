@@ -1,8 +1,10 @@
-import { BellDot, Check, Clock } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, BellDot, Check, Clock } from 'lucide-react'
 import { useNotificationsContext } from '../context/NotificationsContext'
 import NotificationItem from '../components/notifications/NotificationItem'
 
 export default function Notifications() {
+  const navigate = useNavigate()
   const {
     notifications,
     unreadCount,
@@ -30,9 +32,18 @@ export default function Notifications() {
   const grouped = groupByDate(notifications)
 
   return (
-    <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
+    <div className="bg-rowan-bg min-h-screen pb-8 px-4 pt-4">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-rowan-text text-lg font-bold">Notifications</h1>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center"
+            aria-label="Back"
+          >
+            <ArrowLeft size={24} />
+          </button>
+          <h1 className="text-rowan-text text-lg font-bold">Notifications</h1>
+        </div>
         {unreadCount > 0 && (
           <button
             onClick={markAllRead}

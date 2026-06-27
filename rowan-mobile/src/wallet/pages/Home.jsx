@@ -4,11 +4,13 @@ import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import useTransactions from '../hooks/useTransactions'
 import usePushNotifications from '../hooks/usePushNotifications'
+import { useNotificationsContext } from '../context/NotificationsContext'
 import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
 import BiometricLock from '../../shared/components/BiometricLock'
 import BalanceCard from '../components/wallet/BalanceCard'
 import RateDisplay from '../components/wallet/RateDisplay'
 import ConnectionDot from '../components/ui/ConnectionDot'
+import NotificationBadge from '../components/ui/NotificationBadge'
 import TransactionCard from '../components/transactions/TransactionCard'
 import Button from '../components/ui/Button'
 
@@ -18,6 +20,7 @@ export default function Home() {
   const { balance, loading: balanceLoading, refresh: refreshBalance, publicKey } = useWallet()
   const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates()
   const { transactions, loading: txLoading } = useTransactions()
+  const { unreadCount } = useNotificationsContext()
   const { permissionGranted, dismissed, requestPermission, dismissBanner } = usePushNotifications()
 
   const recent = transactions.slice(0, 3)
@@ -35,6 +38,14 @@ export default function Home() {
         <h1 className="text-rowan-text text-lg font-bold">Rowan Wallet</h1>
         <div className="flex items-center gap-3">
           <ConnectionDot />
+          <button
+            onClick={() => navigate('/wallet/notifications')}
+            className="relative text-rowan-muted min-h-11 min-w-11 flex items-center justify-center"
+            aria-label="Notifications"
+          >
+            <Bell size={22} />
+            <NotificationBadge count={unreadCount} />
+          </button>
         </div>
       </div>
 
@@ -104,7 +115,7 @@ export default function Home() {
 
       <div className="mt-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-rowan-text text-sm font-semibold">Recent Transactions</h3>
+          <h3 className="text-rowan-text text-sm font-semibold">Recent Activity</h3>
           {recent.length > 0 && (
             <button
               onClick={() => navigate('/wallet/history')}

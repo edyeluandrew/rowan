@@ -74,7 +74,7 @@ export default function Profile() {
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
-      <h1 className="text-rowan-text text-lg font-bold mb-6">Profile</h1>
+      <h1 className="text-rowan-text text-lg font-bold mb-6">You</h1>
 
       {/* Identity card */}
       <div className="bg-rowan-surface rounded-xl p-4 mb-4">

@@ -55,11 +55,11 @@ export default function WalletApp() {
             <Route element={<AppShell />}>
               <Route path="home" element={<Home />} />
               <Route path="history" element={<History />} />
-              <Route path="notifications" element={<Notifications />} />
               <Route path="profile" element={<Profile />} />
             </Route>
 
             {/* Full-screen routes without bottom nav */}
+            <Route path="notifications" element={<Notifications />} />
             <Route path="cashout" element={<Cashout />} />
             <Route path="cashout/confirm" element={<CashoutConfirm />} />
             <Route path="cashout/send" element={<CashoutSend />} />

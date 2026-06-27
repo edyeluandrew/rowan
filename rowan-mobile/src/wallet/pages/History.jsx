@@ -26,7 +26,7 @@ export default function History() {
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
-      <h1 className="text-rowan-text text-lg font-bold mb-4">History</h1>
+      <h1 className="text-rowan-text text-lg font-bold mb-4">Activity</h1>
 
       {stats && (
         <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
