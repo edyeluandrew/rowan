@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Shield, TriangleAlert, KeyRound, Copy, CopyCheck, Coins } from 'lucide-react'
+import { Shield, TriangleAlert, KeyRound, Copy, CopyCheck } from 'lucide-react'
 import { getSecure } from '../utils/storage'
-import { CURRENT_NETWORK, COPY_FEEDBACK_TIMEOUT_MS, CLIPBOARD_AUTO_CLEAR_MS } from '../utils/constants'
+import { COPY_FEEDBACK_TIMEOUT_MS, CLIPBOARD_AUTO_CLEAR_MS } from '../utils/constants'
 import Button from '../components/ui/Button'
 
 export default function BackupWallet() {
@@ -11,8 +11,6 @@ export default function BackupWallet() {
   const [understood, setUnderstood] = useState(false)
   const [secretKey, setSecretKey] = useState('')
   const [copied, setCopied] = useState(false)
-  const [publicKey, setPublicKey] = useState('')
-  const [friendbotState, setFriendbotState] = useState('idle')
 
   useEffect(() => {
     let cancelled = false
@@ -21,13 +19,11 @@ export default function BackupWallet() {
       if (!cancelled && stored) {
         const kp = JSON.parse(stored)
         setSecretKey(kp.secretKey)
-        setPublicKey(kp.publicKey)
       }
     }
     load()
     return () => {
       cancelled = true
-      // Clear secret from state on unmount
       setSecretKey('')
     }
   }, [])
@@ -36,7 +32,6 @@ export default function BackupWallet() {
     try {
       await navigator.clipboard.writeText(secretKey)
       setCopied(true)
-      // Auto-clear clipboard after 30 seconds
       setTimeout(async () => {
         try { await navigator.clipboard.writeText('') } catch { /* ok */ }
       }, CLIPBOARD_AUTO_CLEAR_MS)
@@ -89,10 +84,8 @@ export default function BackupWallet() {
     )
   }
 
-  // Step 2 — Key display
   return (
     <div className="bg-rowan-bg min-h-screen flex flex-col px-6 pt-16">
-      {/* Screenshot warning */}
       <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mb-6 flex items-start gap-3">
         <TriangleAlert size={20} className="text-rowan-red shrink-0 mt-0.5" />
         <div>
@@ -127,35 +120,6 @@ export default function BackupWallet() {
       <p className="text-rowan-muted text-xs text-center mt-4">
         This screen will not be shown again
       </p>
-
-      {/* Friendbot — testnet only */}
-      {CURRENT_NETWORK.isTest && publicKey && (
-        <button
-          onClick={async () => {
-            if (!CURRENT_NETWORK.friendbotUrl) return
-            setFriendbotState('loading')
-            try {
-              const res = await fetch(
-                `${CURRENT_NETWORK.friendbotUrl}?addr=${encodeURIComponent(publicKey)}`
-              )
-              if (!res.ok) throw new Error('Friendbot request failed')
-              setFriendbotState('success')
-            } catch {
-              setFriendbotState('error')
-            }
-          }}
-          disabled={friendbotState === 'loading' || friendbotState === 'success'}
-          className="w-full flex items-center justify-center gap-2 bg-rowan-surface border border-rowan-yellow/30 rounded-xl px-4 py-3 min-h-11 mt-4 disabled:opacity-50"
-        >
-          <Coins size={16} className="text-rowan-yellow" />
-          <span className="text-rowan-yellow text-sm font-medium">
-            {friendbotState === 'loading' && 'Funding...'}
-            {friendbotState === 'success' && 'Funded with 10,000 XLM!'}
-            {friendbotState === 'error' && 'Failed — tap to retry'}
-            {friendbotState === 'idle' && 'Fund with Testnet XLM'}
-          </span>
-        </button>
-      )}
 
       <div className="mt-6">
         <Button onClick={() => navigate('/register')}>I have saved my secret key</Button>
