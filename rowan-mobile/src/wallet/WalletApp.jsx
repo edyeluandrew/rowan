@@ -7,7 +7,6 @@ import { useEffect } from 'react';
 import { SocketProvider } from './context/SocketContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import usePushNotifications from './hooks/usePushNotifications';
-import { CURRENT_NETWORK } from './utils/constants';
 
 import AppShell from './components/layout/AppShell';
 
@@ -46,13 +45,7 @@ export default function WalletApp() {
     <SocketProvider>
       <NotificationsProvider>
         <PushNotificationInit />
-        {CURRENT_NETWORK.isTest && (
-          <div className="fixed top-0 left-0 right-0 z-50 bg-rowan-yellow text-rowan-bg text-xs font-bold text-center py-1">
-            TESTNET — Not real funds
-          </div>
-        )}
-        <div className={CURRENT_NETWORK.isTest ? 'pt-7' : ''}>
-          <Routes>
+        <Routes>
             {/* Tab routes with bottom nav */}
             <Route element={<AppShell />}>
               <Route path="home" element={<Home />} />
@@ -78,7 +71,6 @@ export default function WalletApp() {
             {/* Catch-all within wallet */}
             <Route path="*" element={<Navigate to="home" replace />} />
           </Routes>
-        </div>
       </NotificationsProvider>
     </SocketProvider>
   );
