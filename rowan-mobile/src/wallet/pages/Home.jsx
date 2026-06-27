@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { ArrowDownToLine, Clock, Star, AlertTriangle, Bell } from 'lucide-react'
+import { ArrowDownToLine, ArrowDownLeft, Plus, Clock, Star, AlertTriangle, Bell } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import useTransactions from '../hooks/useTransactions'
@@ -58,9 +58,20 @@ export default function Home() {
         onRefresh={refreshBalance}
       />
 
-      <div className="mt-4">
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <Button variant="ghost" onClick={() => navigate('/wallet/receive')}>
+          <ArrowDownLeft size={18} />
+          Receive XLM
+        </Button>
+        <Button variant="ghost" onClick={() => navigate('/wallet/add-money')}>
+          <Plus size={18} />
+          Add money
+        </Button>
+      </div>
+
+      <div className="mt-3">
         <Button onClick={() => navigate('/wallet/cashout')}>
-          <ArrowDownToLine size={18} className="mr-2" />
+          <ArrowDownToLine size={18} />
           Cash Out
         </Button>
       </div>
@@ -137,7 +148,7 @@ export default function Home() {
             <Star size={32} className="text-rowan-muted mx-auto mb-3" />
             <p className="text-rowan-muted text-sm">No transactions yet</p>
             <p className="text-rowan-muted text-xs mt-1">
-              Cash out XLM to get started
+              Receive XLM or cash out to get started
             </p>
           </div>
         ) : (

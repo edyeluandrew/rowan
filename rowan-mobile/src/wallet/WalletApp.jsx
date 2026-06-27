@@ -18,6 +18,8 @@ import BackupWallet from './pages/BackupWallet';
 import ImportWallet from './pages/ImportWallet';
 import Register from './pages/Register';
 import Home from './pages/Home';
+import ReceiveXlm from './pages/ReceiveXlm';
+import AddMoney from './pages/AddMoney';
 import Cashout from './pages/Cashout';
 import CashoutConfirm from './pages/CashoutConfirm';
 import CashoutSend from './pages/CashoutSend';
@@ -60,6 +62,8 @@ export default function WalletApp() {
 
             {/* Full-screen routes without bottom nav */}
             <Route path="notifications" element={<Notifications />} />
+            <Route path="receive" element={<ReceiveXlm />} />
+            <Route path="add-money" element={<AddMoney />} />
             <Route path="cashout" element={<Cashout />} />
             <Route path="cashout/confirm" element={<CashoutConfirm />} />
             <Route path="cashout/send" element={<CashoutSend />} />
