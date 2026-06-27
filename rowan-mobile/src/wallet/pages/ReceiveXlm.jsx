@@ -6,6 +6,7 @@ import QRCodeDisplay from '../components/wallet/QRCodeDisplay'
 import AddressDisplay from '../components/wallet/AddressDisplay'
 import Button from '../components/ui/Button'
 import { CURRENT_NETWORK } from '../utils/constants'
+import { fundWithFriendbot } from '../utils/friendbot'
 
 export default function ReceiveXlm() {
   const navigate = useNavigate()
@@ -34,14 +35,11 @@ export default function ReceiveXlm() {
     }
   }
 
-  const fundWithFriendbot = async () => {
+  const handleFriendbot = async () => {
     if (!publicKey || !CURRENT_NETWORK.friendbotUrl) return
     setFriendbotState('loading')
     try {
-      const res = await fetch(
-        `${CURRENT_NETWORK.friendbotUrl}?addr=${encodeURIComponent(publicKey)}`
-      )
-      if (!res.ok) throw new Error('Friendbot request failed')
+      await fundWithFriendbot(publicKey)
       setFriendbotState('success')
       refresh()
     } catch {
@@ -113,7 +111,7 @@ export default function ReceiveXlm() {
 
       {CURRENT_NETWORK.isTest && (
         <button
-          onClick={fundWithFriendbot}
+          onClick={handleFriendbot}
           disabled={friendbotState === 'loading' || friendbotState === 'success'}
           className="w-full flex items-center justify-center gap-2 bg-rowan-surface border border-rowan-yellow/30 rounded-xl px-4 py-3 min-h-11 disabled:opacity-50"
         >

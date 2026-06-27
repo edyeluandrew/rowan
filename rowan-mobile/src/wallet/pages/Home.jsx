@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDownToLine, ArrowDownLeft, Plus, Clock, Star, AlertTriangle, Bell } from 'lucide-react'
+import { ArrowDownToLine, ArrowDownLeft, Plus, Clock, Star, AlertTriangle, Bell, Coins } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import useTransactions from '../hooks/useTransactions'
@@ -13,11 +14,14 @@ import ConnectionDot from '../components/ui/ConnectionDot'
 import NotificationBadge from '../components/ui/NotificationBadge'
 import TransactionCard from '../components/transactions/TransactionCard'
 import Button from '../components/ui/Button'
+import { CURRENT_NETWORK } from '../utils/constants'
+import { fundWithFriendbot } from '../utils/friendbot'
 
 export default function Home() {
   const navigate = useNavigate()
   const { isLocked } = useBiometricProtection()
   const { balance, loading: balanceLoading, refresh: refreshBalance, publicKey } = useWallet()
+  const [friendbotState, setFriendbotState] = useState('idle')
   const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates()
   const { transactions, loading: txLoading } = useTransactions()
   const { unreadCount } = useNotificationsContext()
@@ -28,6 +32,22 @@ export default function Home() {
   const fiatEquivalent = balance != null && rates?.xlmToUgx
     ? parseFloat(balance) * rates.xlmToUgx
     : null
+
+  const needsTestFunds = CURRENT_NETWORK.isTest
+    && !balanceLoading
+    && (balance == null || parseFloat(balance) < 1)
+
+  const handleFriendbot = async () => {
+    if (!publicKey) return
+    setFriendbotState('loading')
+    try {
+      await fundWithFriendbot(publicKey)
+      setFriendbotState('success')
+      refreshBalance()
+    } catch {
+      setFriendbotState('error')
+    }
+  }
 
   // Show biometric lock if app requires re-entry authentication
   if (isLocked) return <BiometricLock />
@@ -57,6 +77,26 @@ export default function Home() {
         refreshing={balanceLoading}
         onRefresh={refreshBalance}
       />
+
+      {needsTestFunds && (
+        <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4">
+          <p className="text-rowan-text text-sm font-medium">Fund your test wallet</p>
+          <p className="text-rowan-muted text-xs mt-1">
+            Your balance is empty. Get free test XLM from Stellar Friendbot to try cash out and transfers.
+          </p>
+          <button
+            onClick={handleFriendbot}
+            disabled={friendbotState === 'loading' || friendbotState === 'success'}
+            className="mt-3 w-full flex items-center justify-center gap-2 bg-rowan-yellow text-rowan-bg font-medium rounded-xl px-4 py-3 min-h-11 disabled:opacity-50"
+          >
+            <Coins size={16} />
+            {friendbotState === 'loading' && 'Funding...'}
+            {friendbotState === 'success' && 'Funded — balance updating'}
+            {friendbotState === 'error' && 'Failed — tap to retry'}
+            {friendbotState === 'idle' && 'Get testnet XLM'}
+          </button>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <Button variant="ghost" onClick={() => navigate('/wallet/receive')}>
