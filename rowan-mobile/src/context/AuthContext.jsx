@@ -9,7 +9,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { setClientToken, onLogout } from '../shared/api/client';
 import {
-  getSecure, setSecure, clearAllSecure, clearPreferences, initStorage,
+  getSecure, setSecure, removeSecure, initStorage,
 } from '../shared/utils/storage';
 
 /* ── Wallet-specific imports (lazy to avoid bundling for traders) ── */
@@ -265,8 +265,9 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     if (role === ROLE_WALLET) {
-      await clearAllSecure();
-      await clearPreferences();
+      // End session only — keep keypair on device so user can sign back in.
+      await removeSecure('rowan_token');
+      await removeSecure('rowan_user');
     }
     // Trader: nothing to clear in storage (memory-only)
     setClientToken(null);

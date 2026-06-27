@@ -6,11 +6,14 @@
  *
  * No role selector dropdown — the mode is determined by the user's action.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Star, Lock, Smartphone, ArrowRight } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { loginTrader as apiLoginTrader } from './trader/api/auth';
+import { getSecure } from './shared/utils/storage';
+import { formatAddress } from './wallet/utils/format';
+import WalletTwoFactorLoginModal from './wallet/pages/WalletTwoFactorLoginModal';
 
 const SLIDES = [
   { Icon: Star, title: 'Your Stellar Wallet', desc: 'Send, receive, and cash out XLM directly from your phone.' },
@@ -19,10 +22,15 @@ const SLIDES = [
 ];
 
 export default function Login() {
-  const { loginAsTrader } = useAuth();
+  const { loginAsTrader, loginWithWallet, setWalletAuthAfter2FA } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState('wallet'); // 'wallet' | 'trader'
   const [slide, setSlide] = useState(0);
+  const [storedPublicKey, setStoredPublicKey] = useState(null);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletError, setWalletError] = useState(null);
+  const [show2faModal, setShow2faModal] = useState(false);
+  const [tempUserId, setTempUserId] = useState(null);
 
   // Trader form state
   const [email, setEmail] = useState('');
@@ -30,6 +38,64 @@ export default function Login() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await getSecure('rowan_stellar_keypair');
+        if (!stored) return;
+        const kp = JSON.parse(stored);
+        if (kp?.publicKey) setStoredPublicKey(kp.publicKey);
+      } catch {
+        /* treat as no stored wallet */
+      }
+    })();
+  }, []);
+
+  const handleOpenWallet = async () => {
+    setWalletLoading(true);
+    setWalletError(null);
+    try {
+      const response = await loginWithWallet();
+      if (response?.requiresTwoFactorVerification === true) {
+        setTempUserId(response.userId);
+        setShow2faModal(true);
+      } else {
+        navigate('/wallet/home', { replace: true });
+      }
+    } catch (err) {
+      setWalletError(err.message || 'Could not open wallet');
+    } finally {
+      setWalletLoading(false);
+    }
+  };
+
+  const handleWalletAfter2FA = async (verifyResponse) => {
+    setWalletLoading(true);
+    setWalletError(null);
+    try {
+      const keypair = await getSecure('rowan_stellar_keypair');
+      const kpData = keypair ? JSON.parse(keypair) : null;
+      await setWalletAuthAfter2FA(
+        verifyResponse.token,
+        verifyResponse.user || { id: tempUserId },
+        kpData,
+      );
+      setShow2faModal(false);
+      setTempUserId(null);
+      navigate('/wallet/home', { replace: true });
+    } catch (err) {
+      setWalletError(err.message || 'Verification failed. Please try again.');
+    } finally {
+      setWalletLoading(false);
+    }
+  };
+
+  const handle2faCancel = () => {
+    setShow2faModal(false);
+    setTempUserId(null);
+    setWalletError('Authentication cancelled. Please try again.');
+  };
 
   const handleTraderLogin = async (e) => {
     e.preventDefault();
@@ -167,15 +233,37 @@ export default function Login() {
           >
             Next <ArrowRight size={18} />
           </button>
-        ) : (
+        ) : storedPublicKey ? (
           <>
             <button
-              onClick={() => navigate('/wallet-setup')}
-              className="flex items-center justify-center gap-2 font-bold rounded-xl py-4 w-full text-base bg-rowan-yellow text-rowan-bg min-h-11"
+              onClick={handleOpenWallet}
+              disabled={walletLoading}
+              className="flex items-center justify-center gap-2 font-bold rounded-xl py-4 w-full text-base bg-rowan-yellow text-rowan-bg min-h-11 disabled:opacity-50"
             >
-              Get Started
+              {walletLoading ? 'Opening wallet...' : 'Open my wallet'}
+            </button>
+            <p className="text-rowan-muted text-xs text-center">
+              {formatAddress(storedPublicKey)}
+            </p>
+            <button
+              onClick={() => navigate('/wallet-setup')}
+              disabled={walletLoading}
+              className="w-full text-center text-rowan-muted text-sm min-h-11"
+            >
+              Set up a different wallet
             </button>
           </>
+        ) : (
+          <button
+            onClick={() => navigate('/wallet-setup')}
+            className="flex items-center justify-center gap-2 font-bold rounded-xl py-4 w-full text-base bg-rowan-yellow text-rowan-bg min-h-11"
+          >
+            Get Started
+          </button>
+        )}
+
+        {slide === SLIDES.length - 1 && walletError && (
+          <p className="text-rowan-red text-sm text-center">{walletError}</p>
         )}
 
         {slide === SLIDES.length - 1 && (
@@ -187,6 +275,13 @@ export default function Login() {
           </button>
         )}
       </div>
+
+      <WalletTwoFactorLoginModal
+        isVisible={show2faModal}
+        userId={tempUserId}
+        onSuccess={handleWalletAfter2FA}
+        onCancel={handle2faCancel}
+      />
     </div>
   );
 }
