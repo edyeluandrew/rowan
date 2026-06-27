@@ -18,6 +18,25 @@ export function normalizeWalletTransaction(tx) {
     completedAt: tx.completedAt ?? tx.completed_at,
     failedAt: tx.failedAt ?? tx.failed_at,
     hasDispute: tx.hasDispute ?? !!tx.dispute_id,
+    fiatCurrency: tx.fiatCurrency ?? tx.fiat_currency ?? 'UGX',
+    quoteConfirmedAt: tx.quoteConfirmedAt ?? tx.quote_confirmed_at,
+    escrowLockedAt: tx.escrowLockedAt ?? tx.escrow_locked_at,
+    traderMatchedAt: tx.traderMatchedAt ?? tx.trader_matched_at,
+    fiatPayoutSubmittedAt: tx.fiatPayoutSubmittedAt ?? tx.fiat_payout_submitted_at,
+    userConfirmationPendingAt: tx.userConfirmationPendingAt ?? tx.user_confirmation_pending_at,
+  }
+}
+
+export function getTransactionStatusTimestamps(tx) {
+  if (!tx) return {}
+
+  return {
+    QUOTE_CONFIRMED: tx.quoteConfirmedAt,
+    ESCROW_LOCKED: tx.escrowLockedAt,
+    TRADER_MATCHED: tx.traderMatchedAt,
+    FIAT_PAYOUT_SUBMITTED: tx.fiatPayoutSubmittedAt,
+    USER_CONFIRMATION_PENDING: tx.userConfirmationPendingAt,
+    COMPLETE: tx.completedAt,
   }
 }
 

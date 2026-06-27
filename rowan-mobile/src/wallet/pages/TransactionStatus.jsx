@@ -7,6 +7,7 @@ import TransactionStateTracker from '../components/cashout/TransactionStateTrack
 import Button from '../components/ui/Button'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
+import { normalizeWalletTransaction, getTransactionStatusTimestamps } from '../utils/transactions'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
 const POLL_INTERVAL = 3000 // Poll every 3 seconds while waiting
@@ -16,12 +17,7 @@ export default function TransactionStatus() {
   const navigate = useNavigate()
   const location = useLocation()
   const { stellarTxHash, transactionId: passedTransactionId } = location.state || {}
-  
-  // Use transactionId from state if available (from CashoutSend), otherwise use URL param
-  // This ensures we use the correct transaction ID instead of falling back to quoteId
-  const statusId = passedTransactionId || id
-  const activeTxId = transaction?.id || passedTransactionId || id
-  
+
   const [transaction, setTransaction] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -47,6 +43,13 @@ export default function TransactionStatus() {
   const INITIAL_WAIT_MS = 3000 // Escrow + swap can take several seconds on testnet
   const retryCountRef = useRef(0)
 
+  // Prefer real transaction id from state; URL may temporarily hold quoteId while escrow processes.
+  const statusId = passedTransactionId || id
+  const activeTxId = transaction?.id || passedTransactionId || id
+
+  const mergeTransaction = (prev, patch) =>
+    normalizeWalletTransaction({ ...(prev || {}), ...(patch || {}) })
+
   useEffect(() => {
     let cancelled = false
     let pollTimer = null
@@ -60,7 +63,7 @@ export default function TransactionStatus() {
 
     const fetchStatus = async () => {
       try {
-        const tx = await getTransactionStatus(statusId)
+        const tx = normalizeWalletTransaction(await getTransactionStatus(statusId))
         if (!cancelled) {
           console.log(`[TransactionStatus] ✅ Transaction found (attempt ${retryCountRef.current + 1})`)
           setTransaction(tx)
@@ -145,7 +148,7 @@ export default function TransactionStatus() {
     try {
       const result = await confirmReceipt(activeTxId)
       // Update transaction state
-      setTransaction((prev) => (prev ? { ...prev, state: 'COMPLETE', ...result } : prev))
+      setTransaction((prev) => mergeTransaction(prev, { state: 'COMPLETE', ...result }))
       setShowConfirmModal(false)
     } catch (err) {
       setConfirmError(err.response?.data?.error || err.message || 'Confirmation failed')
@@ -164,7 +167,7 @@ export default function TransactionStatus() {
     try {
       const result = await openDispute(activeTxId, disputeReason.trim())
       // Update transaction state
-      setTransaction((prev) => (prev ? { ...prev, state: 'DISPUTE_OPENED', ...result } : prev))
+      setTransaction((prev) => mergeTransaction(prev, { state: 'DISPUTE_OPENED', ...result }))
       setShowDisputeModal(false)
       setDisputeReason('')
     } catch (err) {
@@ -174,56 +177,27 @@ export default function TransactionStatus() {
     }
   }
 
-  useSocketHook('transaction_update', (data) => {
+  const applySocketUpdate = (data, fallbackState) => {
     const txId = data.transactionId || data.id
     if (txId === statusId || txId === id || txId === transaction?.id) {
-      setTransaction((prev) => (prev ? { ...prev, state: data.state || prev.state, ...data } : { ...data, state: data.state }))
+      setTransaction((prev) =>
+        mergeTransaction(prev || { id: txId }, {
+          state: data.state || fallbackState || prev?.state,
+          ...data,
+        })
+      )
       setIsWaiting(false)
       setLoading(false)
       setError(null)
     }
-  })
+  }
 
-  useSocketHook('tx_update', (data) => {
-    const txId = data.transactionId || data.id
-    if (txId === statusId || txId === id || txId === transaction?.id) {
-      setTransaction((prev) => (prev ? { ...prev, state: data.state || prev.state, ...data } : { ...data, state: data.state }))
-      setIsWaiting(false)
-      setLoading(false)
-      setError(null)
-    }
-  })
-
-  useSocketHook('trader_matched', (data) => {
-    const txId = data.transactionId || data.id
-    if (txId === statusId || txId === id || txId === transaction?.id) {
-      setTransaction((prev) => (prev ? { ...prev, state: 'TRADER_MATCHED', ...data } : { ...data, state: 'TRADER_MATCHED' }))
-      setIsWaiting(false)
-      setLoading(false)
-      setError(null)
-    }
-  })
-
-  useSocketHook('transaction_complete', (data) => {
-    const txId = data.transactionId || data.id
-    if (txId === statusId || txId === id) {
-      setTransaction((prev) => (prev ? { ...prev, state: 'COMPLETE', ...data } : prev))
-    }
-  })
-
-  useSocketHook('transaction_refunded', (data) => {
-    const txId = data.transactionId || data.id
-    if (txId === statusId || txId === id) {
-      setTransaction((prev) => (prev ? { ...prev, state: 'REFUNDED', ...data } : prev))
-    }
-  })
-
-  useSocketHook('transaction_failed', (data) => {
-    const txId = data.transactionId || data.id
-    if (txId === statusId || txId === id) {
-      setTransaction((prev) => (prev ? { ...prev, state: 'FAILED', ...data } : prev))
-    }
-  })
+  useSocketHook('transaction_update', (data) => applySocketUpdate(data))
+  useSocketHook('tx_update', (data) => applySocketUpdate(data))
+  useSocketHook('trader_matched', (data) => applySocketUpdate(data, 'TRADER_MATCHED'))
+  useSocketHook('transaction_complete', (data) => applySocketUpdate(data, 'COMPLETE'))
+  useSocketHook('transaction_refunded', (data) => applySocketUpdate(data, 'REFUNDED'))
+  useSocketHook('transaction_failed', (data) => applySocketUpdate(data, 'FAILED'))
 
   const isTerminal = transaction && TERMINAL_STATES.includes(transaction.state)
 
@@ -277,12 +251,16 @@ export default function TransactionStatus() {
     return (
       <div className="bg-rowan-bg min-h-screen px-4 pt-4">
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => navigate(-1)} className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center">
+          <button
+            onClick={() => navigate('/wallet/home', { replace: true })}
+            className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center"
+          >
             <ChevronLeft size={24} />
           </button>
-          <h1 className="text-rowan-text text-lg font-bold">Transaction</h1>
+          <h1 className="text-rowan-text text-lg font-bold">Transaction Status</h1>
         </div>
-        <div className="bg-rowan-surface rounded-xl p-8 text-center">
+        <TransactionStateTracker currentState="QUOTE_CONFIRMED" />
+        <div className="bg-rowan-surface rounded-xl p-8 text-center mt-6">
           <div className="animate-pulse mb-4">
             <Clock size={40} className="text-rowan-yellow mx-auto" />
           </div>
@@ -340,14 +318,19 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {transaction && <TransactionStateTracker currentState={transaction.state} />}
+      {transaction && (
+        <TransactionStateTracker
+          currentState={transaction.state}
+          timestamps={getTransactionStatusTimestamps(transaction)}
+        />
+      )}
 
       {/* Confirmation prompt for FIAT_PAYOUT_SUBMITTED */}
       {transaction && transaction.state === 'FIAT_PAYOUT_SUBMITTED' && (
         <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
           <div className="text-center">
             <p className="text-rowan-text text-sm font-medium">
-              Trader says they sent {transaction.fiat_amount} {transaction.fiat_currency}
+              Trader says they sent {transaction.fiatAmount} {transaction.fiatCurrency}
             </p>
             <p className="text-rowan-muted text-xs mt-1 mb-3">
               to your {transaction.network} number
@@ -382,7 +365,7 @@ export default function TransactionStatus() {
           </Button>
           {transaction.state === 'COMPLETE' && (
             <button
-              onClick={() => navigate(`/wallet/receipt/${id}`)}
+              onClick={() => navigate(`/wallet/receipt/${activeTxId}`)}
               className="w-full flex items-center justify-center gap-2 bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 min-h-11"
             >
               <FileText size={16} className="text-rowan-text" />
