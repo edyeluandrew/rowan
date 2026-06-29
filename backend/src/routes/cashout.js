@@ -10,6 +10,9 @@ import config from '../config/index.js';
 import db from '../db/index.js';
 import redis from '../db/redis.js';
 import logger from '../utils/logger.js';
+import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
+import storageService from '../services/storageService.js';
+import { formatShortId } from '../utils/shortId.js';
 
 /** Wait briefly for Horizon watcher + escrow to create the transaction row. */
 async function resolveTransactionIdForQuote(quoteId, maxWaitMs = 20000) {
@@ -48,7 +51,23 @@ router.post(
   checkUserLimits,
   async (req, res, next) => {
     try {
-      const { xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName } = req.body;
+      const { xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName, payoutSettingId } = req.body;
+
+      logger.info(`[Cashout] getQuote called: xlmAmount=${xlmAmount}, fiatAmount=${fiatAmount}, network=${network}, phoneHash=${phoneHash?.slice(0, 8)}..., payoutSettingId=${payoutSettingId || 'auto'}`);
+
+      const activeOrder = await db.query(
+        `SELECT id, state FROM transactions
+         WHERE user_id = $1 AND state = ANY($2::text[])
+         LIMIT 1`,
+        [req.userId, USER_ACTIVE_ORDER_STATES]
+      );
+      if (activeOrder.rows[0]) {
+        return res.status(409).json({
+          error: 'active_order_exists',
+          message: 'You already have an active order in progress. Please complete or cancel it before starting a new one.',
+          transaction_id: activeOrder.rows[0].id,
+        });
+      }
 
       const hasXlm = xlmAmount != null && xlmAmount !== '';
       const hasFiat = fiatAmount != null && fiatAmount !== '';
@@ -140,6 +159,7 @@ router.post(
           phoneHash,
           payoutPhone: payoutPhone?.trim(),
           payoutName: payoutName?.trim(),
+          payoutSettingId: payoutSettingId || null,
         };
         quote = hasFiat
           ? await quoteEngine.createQuoteFromFiat({ ...quoteParams, targetNetFiat: fiatNum })
@@ -199,6 +219,7 @@ router.post(
         fxFetchedAt: quote.fx_fetched_at || null,
         fxWarning: quote.fx_warning || null,
         fiatRateSource: quote.fiat_rate_source || null,
+        payoutSettingId: quote.preferred_payout_setting_id || null,
       });
     } catch (err) {
       next(err);
@@ -287,23 +308,35 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
     logger.info(`[Cashout] status query for id: ${id}, userId: ${userId}`);
 
     let result = await db.query(
-      `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
-              quote_confirmed_at, escrow_locked_at, trader_matched_at,
-              fiat_payout_submitted_at, user_confirmation_pending_at,
-              completed_at, failed_at, created_at, dispute_id,
-              stellar_deposit_tx, stellar_release_tx
-       FROM transactions WHERE id = $1 AND user_id = $2`,
+      `SELECT t.id, t.state, t.xlm_amount, t.usdc_amount, t.fiat_amount, t.fiat_currency, t.network,
+              t.quote_confirmed_at, t.escrow_locked_at, t.trader_matched_at,
+              t.fiat_payout_submitted_at, t.user_confirmation_pending_at,
+              t.completed_at, t.failed_at, t.created_at, t.dispute_id,
+              t.stellar_deposit_tx, t.stellar_release_tx, t.payment_expires_at,
+              t.appeal_expires_at, t.appeal_archived_at, t.trader_id,
+              t.locked_rate, t.preferred_payout_setting_id,
+              t.payout_reference, t.payout_proof_url,
+              tr.name AS trader_name
+       FROM transactions t
+       LEFT JOIN traders tr ON tr.id = t.trader_id
+       WHERE t.id = $1 AND t.user_id = $2`,
       [id, userId]
     );
 
     if (result.rows.length === 0) {
       result = await db.query(
-        `SELECT id, state, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
-                quote_confirmed_at, escrow_locked_at, trader_matched_at,
-                fiat_payout_submitted_at, user_confirmation_pending_at,
-                completed_at, failed_at, created_at, dispute_id,
-                stellar_deposit_tx, stellar_release_tx
-         FROM transactions WHERE quote_id = $1 AND user_id = $2`,
+        `SELECT t.id, t.state, t.xlm_amount, t.usdc_amount, t.fiat_amount, t.fiat_currency, t.network,
+                t.quote_confirmed_at, t.escrow_locked_at, t.trader_matched_at,
+                t.fiat_payout_submitted_at, t.user_confirmation_pending_at,
+                t.completed_at, t.failed_at, t.created_at, t.dispute_id,
+                t.stellar_deposit_tx, t.stellar_release_tx, t.payment_expires_at,
+                t.appeal_expires_at, t.appeal_archived_at, t.trader_id,
+                t.locked_rate, t.preferred_payout_setting_id,
+                t.payout_reference, t.payout_proof_url,
+                tr.name AS trader_name
+         FROM transactions t
+         LEFT JOIN traders tr ON tr.id = t.trader_id
+         WHERE t.quote_id = $1 AND t.user_id = $2`,
         [id, userId]
       );
     }
@@ -313,9 +346,20 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
+    let payoutProofUrl = null;
+    if (tx.payout_proof_url) {
+      if (tx.payout_proof_url.startsWith('http')) {
+        payoutProofUrl = tx.payout_proof_url;
+      } else {
+        const signed = await storageService.getSignedUrl(tx.payout_proof_url, 60 * 60 * 24 * 7);
+        payoutProofUrl = signed?.url || null;
+      }
+    }
+
     res.json({
       id: tx.id,
       state: tx.state,
+      short_id: formatShortId(tx.id),
       xlm_amount: tx.xlm_amount != null ? parseFloat(tx.xlm_amount) : null,
       usdc_amount: tx.usdc_amount != null ? parseFloat(tx.usdc_amount) : null,
       fiat_amount: tx.fiat_amount != null ? parseFloat(tx.fiat_amount) : null,
@@ -332,6 +376,17 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
       completed_at: tx.completed_at,
       failed_at: tx.failed_at,
       created_at: tx.created_at,
+      payment_expires_at: tx.payment_expires_at,
+      appeal_expires_at: tx.appeal_expires_at,
+      appeal_archived_at: tx.appeal_archived_at,
+      trader_id: tx.trader_id,
+      trader_name: tx.trader_name,
+      disputeId: tx.dispute_id,
+      locked_rate: tx.locked_rate != null ? parseFloat(tx.locked_rate) : null,
+      preferred_payout_setting_id: tx.preferred_payout_setting_id,
+      selection_method: tx.preferred_payout_setting_id ? 'manual' : 'auto',
+      payout_reference: tx.payout_reference,
+      payout_proof_url: payoutProofUrl,
     });
   } catch (err) {
     next(err);

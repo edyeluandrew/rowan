@@ -1,31 +1,60 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ChevronLeft, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, ShieldCheck, AlertTriangle, UserCheck, Lock } from 'lucide-react'
 import QuoteSummary from '../components/cashout/QuoteSummary'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import Button from '../components/ui/Button'
+import { getActiveTransaction } from '../api/user'
+import {
+  formatLockedRateLine,
+  formatXlmRateLine,
+  getTraderDisplayName,
+} from '../utils/p2pFormat'
 
 export default function CashoutConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, network, phone, requestedFiat } = location.state || {}
+  const { quote, network, phone, requestedFiat, traderName, selectedAd } = location.state || {}
   const [expired, setExpired] = useState(false)
+  const [checkingActive, setCheckingActive] = useState(false)
+  const [activeError, setActiveError] = useState(null)
 
   if (!quote) {
     navigate('/wallet/cashout', { replace: true })
     return null
   }
 
-  const handleConfirm = () => {
+  const chosenTrader = traderName || selectedAd?.traderName
+  const rateLine = quote.fiatCurrency && quote.userRate
+    ? formatLockedRateLine(quote.fiatCurrency, quote.userRate)
+    : null
+
+  const handleConfirm = async () => {
     if (expired) return
-    navigate('/wallet/cashout/send', {
-      state: {
-        quote,
-        network,
-        phone,
-      },
-      replace: true,
-    })
+    setCheckingActive(true)
+    setActiveError(null)
+    try {
+      const data = await getActiveTransaction()
+      if (data?.active && data.transaction?.id) {
+        setActiveError('You already have an active order in progress.')
+        setTimeout(() => {
+          navigate(`/wallet/transaction/${data.transaction.id}`, { replace: true })
+        }, 1500)
+        return
+      }
+      navigate('/wallet/cashout/send', {
+        state: {
+          quote,
+          network,
+          phone,
+        },
+        replace: true,
+      })
+    } catch {
+      setActiveError('Could not verify order status. Please try again.')
+    } finally {
+      setCheckingActive(false)
+    }
   }
 
   return (
@@ -36,6 +65,31 @@ export default function CashoutConfirm() {
         </button>
         <h1 className="text-rowan-text text-lg font-bold">Confirm Quote</h1>
       </div>
+
+      {chosenTrader && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <UserCheck size={20} className="text-rowan-yellow shrink-0 mt-0.5" />
+            <div>
+              <p className="text-rowan-text text-sm font-semibold">Your chosen trader</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-rowan-text text-sm">{getTraderDisplayName(chosenTrader)}</span>
+                <ShieldCheck size={14} className="text-rowan-green" />
+              </div>
+              {rateLine && (
+                <p className="text-rowan-muted text-xs mt-2 flex items-center gap-1 flex-wrap">
+                  <span>Rate: {rateLine}</span>
+                  <Lock size={12} className="text-rowan-muted shrink-0" />
+                  <span>Locked for this order</span>
+                </p>
+              )}
+              <p className="text-rowan-muted text-xs mt-2">
+                If this trader is unavailable, we will find you the next best match automatically.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between mb-1">
         <span className="text-rowan-muted text-sm">Time to send XLM</span>
@@ -71,9 +125,15 @@ export default function CashoutConfirm() {
         </div>
       )}
 
+      {!expired && activeError && (
+        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mb-4">
+          <p className="text-rowan-red text-sm">{activeError}</p>
+        </div>
+      )}
+
       {!expired && (
         <div className="mt-8">
-          <Button onClick={handleConfirm}>
+          <Button onClick={handleConfirm} loading={checkingActive}>
             Confirm and Proceed
           </Button>
         </div>

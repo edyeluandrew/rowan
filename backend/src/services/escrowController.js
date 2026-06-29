@@ -131,8 +131,8 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
       `INSERT INTO transactions
          (quote_id, user_id, xlm_amount, fiat_amount, fiat_currency,
           network, phone_hash, state, stellar_deposit_tx, locked_rate, escrow_locked_at,
-          payout_phone, payout_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'ESCROW_LOCKED',$8,$9,NOW(),$10,$11)
+          payout_phone, payout_name, preferred_payout_setting_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'ESCROW_LOCKED',$8,$9,NOW(),$10,$11,$12)
        RETURNING *`,
       [
         quote.id, 
@@ -146,6 +146,7 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
         parseFloat(quote.user_rate),   // Ensure numeric
         quote.payout_phone,             // Payout phone from quote
         quote.payout_name,              // Payout name from quote
+        quote.preferred_payout_setting_id || null,
       ]
     );
     transaction = txResult.rows[0];
@@ -603,8 +604,10 @@ async function releaseToTrader(transactionId) {
     }
 
     // Update transaction to COMPLETE (from either USER_CONFIRMATION_PENDING or DISPUTE_RELEASE_PENDING)
+    const appealExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await stateMachine.transition(transactionId, transaction.state, 'COMPLETE', {
       stellar_release_tx: result.hash,
+      appeal_expires_at: appealExpiresAt,
     });
 
     // ── [PHASE 2A] Finalize canonical float EXACTLY ONCE ──

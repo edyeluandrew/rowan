@@ -38,7 +38,7 @@ const VALID_TRANSITIONS = {
   // land in a safe, retryable state instead of silently stalling.
   DISPUTE_RELEASE_PENDING: ['COMPLETE', 'RELEASE_BLOCKED'],  // float finalized, USDC released to trader
   FAILED:           ['REFUNDED'],
-  COMPLETE:         [], // terminal
+  COMPLETE:         ['DISPUTE_OPENED'], // post-completion appeal window
   REFUNDED:         [], // terminal
 };
 

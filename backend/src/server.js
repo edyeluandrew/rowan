@@ -26,6 +26,9 @@ import userRoutes from './routes/user.js';
 import ratesRoutes from './routes/rates.js';
 import disputesRoutes from './routes/disputes.js';
 import configRoutes from './routes/config.js';
+import chatRoutes from './routes/chat.js';
+import tradersRoutes from './routes/traders.js';
+import reviewsRoutes from './routes/reviews.js';
 
 // Services
 import websocket from './services/websocket.js';
@@ -219,6 +222,9 @@ app.use('/api/v1/trader', traderRoutes);                      // ← GENERAL pat
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/rates', ratesRoutes);
+app.use('/api/v1/chat', chatRoutes);
+app.use('/api/v1/traders', tradersRoutes);
+app.use('/api/v1/reviews', reviewsRoutes);
 
 // ─── 404 handler ────────────────────────────────────────────
 app.use((req, res) => {
@@ -406,6 +412,8 @@ async function start() {
     try {
       const { default: storageService } = await import('./services/storageService.js');
       await storageService.ensureBucket();
+      await storageService.ensureChatBucket();
+      await storageService.ensureDisputeEvidenceBucket();
     } catch (err) {
       logger.warn('[Bootstrap] Supabase Storage bucket check skipped', { error: err.message });
     }

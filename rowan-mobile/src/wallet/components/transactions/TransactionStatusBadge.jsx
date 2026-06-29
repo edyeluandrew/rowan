@@ -3,6 +3,7 @@ import {
   CircleCheckBig, RotateCcw, CircleX, ShieldAlert,
 } from 'lucide-react'
 import { TX_STATES } from '../../utils/constants'
+import { getStatusLabel } from '../../utils/p2pFormat'
 
 const ICON_MAP = {
   CircleDashed,
@@ -36,7 +37,7 @@ const COLOR_MAP = {
  * Status badge with icon mapping to TX_STATES.
  */
 export default function TransactionStatusBadge({ state, className = '' }) {
-  const stateInfo = TX_STATES[state] || { label: state, icon: 'CircleDashed' }
+  const stateInfo = TX_STATES[state] || { icon: 'CircleDashed' }
   const Icon = ICON_MAP[stateInfo.icon] || CircleDashed
   const colors = COLOR_MAP[state] || 'text-rowan-muted bg-rowan-surface'
 
@@ -45,7 +46,7 @@ export default function TransactionStatusBadge({ state, className = '' }) {
       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${colors} ${className}`}
     >
       <Icon size={12} />
-      {stateInfo.label}
+      {getStatusLabel(state)}
     </span>
   )
 }

@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ArrowDownToLine, AlertTriangle } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { ChevronLeft, ArrowDownToLine, AlertTriangle, UserCheck } from 'lucide-react'
 import useRates from '../hooks/useRates'
 import useWallet from '../hooks/useWallet'
+import useActiveTransaction from '../hooks/useActiveTransaction'
 import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
 import BiometricLock from '../../shared/components/BiometricLock'
 import { getQuote } from '../api/cashout'
@@ -17,11 +18,19 @@ import Button from '../components/ui/Button'
 
 export default function Cashout() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const {
+    selectedAd,
+    payoutSettingId: presetPayoutSettingId,
+    traderName: presetTraderName,
+    network: presetNetwork,
+  } = location.state || {}
   const { isLocked } = useBiometricProtection()
   const { allRates } = useRates()
   const { balance } = useWallet()
+  const { activeTransaction, loading: activeLoading } = useActiveTransaction()
   const [fiatAmount, setFiatAmount] = useState('')
-  const [network, setNetwork] = useState(null)
+  const [network, setNetwork] = useState(presetNetwork || null)
   const [phone, setPhone] = useState('')
   const [recipientName, setRecipientName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -35,6 +44,13 @@ export default function Cashout() {
   }, [])
 
   const netFiat = parseFloat(fiatAmount) || 0
+
+  useEffect(() => {
+    if (!activeLoading && activeTransaction?.id) {
+      navigate(`/wallet/transaction/${activeTransaction.id}`, { replace: true })
+    }
+  }, [activeLoading, activeTransaction, navigate])
+
   const selectedRate = network && allRates
     ? Array.isArray(allRates)
       ? allRates.find((r) => r.network === network)
@@ -82,6 +98,13 @@ export default function Cashout() {
     recipientName.trim().length >= 2
 
   if (isLocked) return <BiometricLock />
+  if (activeLoading) {
+    return (
+      <div className="bg-rowan-bg min-h-screen flex items-center justify-center">
+        <div className="animate-spin text-rowan-yellow w-6 h-6 border-2 border-rowan-yellow border-t-transparent rounded-full" />
+      </div>
+    )
+  }
 
   const handleGetQuote = async () => {
     if (!canProceed) return
@@ -101,6 +124,9 @@ export default function Cashout() {
         phoneHash,
         payoutPhone: fullPhone,
         payoutName: recipientName.trim(),
+        ...(presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
+          ? { payoutSettingId: presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id }
+          : {}),
       })
       navigate('/wallet/cashout/confirm', {
         state: {
@@ -109,10 +135,18 @@ export default function Cashout() {
           phone: fullPhone,
           recipientName: recipientName.trim(),
           requestedFiat: Math.round(netFiat),
+          selectedAd,
+          traderName: presetTraderName || selectedAd?.traderName,
+          payoutSettingId: presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id,
         },
       })
     } catch (err) {
-      setError(err.response?.data?.error || err.message)
+      const data = err.response?.data
+      if (data?.error === 'active_order_exists' && data?.transaction_id) {
+        navigate(`/wallet/transaction/${data.transaction_id}`, { replace: true })
+        return
+      }
+      setError(data?.message || data?.error || err.message)
     } finally {
       setLoading(false)
     }
@@ -132,6 +166,20 @@ export default function Cashout() {
         </button>
         <h1 className="text-rowan-text text-lg font-bold">Cash Out</h1>
       </div>
+
+      {(selectedAd || presetTraderName) && (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4 flex items-start gap-3">
+          <UserCheck size={18} className="text-rowan-yellow shrink-0 mt-0.5" />
+          <div>
+            <p className="text-rowan-text text-sm font-medium">
+              Trading with {presetTraderName || selectedAd?.traderName || 'selected trader'}
+            </p>
+            <p className="text-rowan-muted text-xs mt-1">
+              Your order will be matched to this trader when possible.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-6">
         <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Available to cash out</p>

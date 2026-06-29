@@ -44,6 +44,7 @@ const config = {
     traderConfirmTimeoutSeconds: parseInt(process.env.TRADER_CONFIRM_TIMEOUT_SECONDS, 10) || 300,
     traderRematchMaxAttempts: parseInt(process.env.TRADER_REMATCH_MAX_ATTEMPTS, 10) || 3,
     traderRetryDelaySeconds: parseInt(process.env.TRADER_RETRY_DELAY_SECONDS, 10) || 30,
+    paymentWindowSeconds: parseInt(process.env.PAYMENT_WINDOW_SECONDS, 10) || 900,
     rateCacheTtlSeconds: parseInt(process.env.RATE_CACHE_TTL_SECONDS, 10) || 30,
     minXlmAmount: parseFloat(process.env.MIN_XLM_AMOUNT) || 1,
     // [PHASE 4] Amount mismatch tolerance (in XLM) for deposit verification

@@ -1,162 +1,159 @@
 import { useState } from 'react'
-import { Search, SlidersHorizontal, X, Clock, AlertTriangle } from 'lucide-react'
-import useTransactions from '../hooks/useTransactions'
-import TransactionCard from '../components/transactions/TransactionCard'
-import BottomSheet from '../components/ui/BottomSheet'
-import Badge from '../components/ui/Badge'
-import { TX_STATES } from '../utils/constants'
-import { formatXlm } from '../utils/format'
-import { getInProgressTransactions } from '../utils/transactions'
+import { useNavigate } from 'react-router-dom'
+import { SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react'
+import useP2pHistory from '../hooks/useP2pHistory'
+import P2pHistoryCard from '../components/history/P2pHistoryCard'
+import HistorySkeleton from '../components/history/HistorySkeleton'
+import Button from '../components/ui/Button'
 
-const FILTER_OPTIONS = [
-  'ALL',
-  'IN_PROGRESS',
-  'COMPLETE',
-  'FIAT_PAYOUT_SUBMITTED',
-  'TRADER_MATCHED',
-  'REFUNDED',
-  'FAILED',
+const STATUS_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'completed', label: 'Completed' },
+  { id: 'cancelled', label: 'Cancelled' },
+  { id: 'refunded', label: 'Refunded' },
+  { id: 'disputed', label: 'Disputed' },
+]
+
+const RANGE_FILTERS = [
+  { id: 'all', label: 'All time' },
+  { id: 'week', label: 'This week' },
+  { id: 'month', label: 'This month' },
 ]
 
 export default function History() {
-  const { transactions, stats, loading, error, hasMore, loadMore, refresh } = useTransactions()
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('ALL')
-  const [showFilters, setShowFilters] = useState(false)
+  const navigate = useNavigate()
+  const {
+    transactions,
+    loading,
+    loadingMore,
+    error,
+    filters,
+    hasMore,
+    loadMore,
+    refresh,
+    updateFilters,
+  } = useP2pHistory()
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
-  const inProgress = getInProgressTransactions(transactions)
-
-  const filtered = transactions.filter((tx) => {
-    const matchesFilter =
-      filter === 'ALL'
-      || (filter === 'IN_PROGRESS' ? inProgress.some((p) => p.id === tx.id) : tx.state === filter)
-    const matchesSearch =
-      !search ||
-      tx.id?.toLowerCase().includes(search.toLowerCase()) ||
-      tx.network?.toLowerCase().includes(search.toLowerCase())
-    return matchesFilter && matchesSearch
-  })
+  const setStatus = (status) => updateFilters({ ...filters, status })
+  const setRange = (range) => updateFilters({ ...filters, range })
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
-      <h1 className="text-rowan-text text-lg font-bold mb-4">Activity</h1>
-
-      {stats && (
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
-          <div className="bg-rowan-surface rounded-lg px-3 py-2 shrink-0">
-            <p className="text-rowan-muted text-[10px]">Total</p>
-            <p className="text-rowan-text text-sm font-semibold">{stats.total || 0}</p>
-          </div>
-          <div className="bg-rowan-surface rounded-lg px-3 py-2 shrink-0">
-            <p className="text-rowan-muted text-[10px]">Volume</p>
-            <p className="text-rowan-text text-sm font-semibold">
-              {formatXlm(stats.totalXlm || 0)}
-            </p>
-          </div>
-          <div className="bg-rowan-surface rounded-lg px-3 py-2 shrink-0">
-            <p className="text-rowan-muted text-[10px]">Completed</p>
-            <p className="text-rowan-green text-sm font-semibold">{stats.completed || 0}</p>
-          </div>
-        </div>
-      )}
-
-      <div className="flex gap-2 mb-4">
-        <div className="flex-1 relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-rowan-muted" />
-          <input
-            type="text"
-            placeholder="Search transactions..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-rowan-surface border border-rowan-border rounded-xl pl-9 pr-4 py-3 text-rowan-text text-sm placeholder:text-rowan-muted focus:outline-none focus:border-rowan-yellow min-h-11"
-          />
-        </div>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-rowan-text text-lg font-bold">Transaction History</h1>
         <button
-          onClick={() => setShowFilters(true)}
-          className="bg-rowan-surface border border-rowan-border rounded-xl px-3 min-h-11 flex items-center justify-center"
+          type="button"
+          onClick={() => setFiltersOpen((o) => !o)}
+          className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center"
+          aria-label="Toggle filters"
         >
-          <SlidersHorizontal size={18} className="text-rowan-muted" />
+          <SlidersHorizontal size={20} />
         </button>
       </div>
 
-      {filter !== 'ALL' && (
-        <div className="flex items-center gap-2 mb-4">
-          <Badge color="yellow">
-            {filter === 'IN_PROGRESS' ? 'In progress' : TX_STATES[filter]?.label || filter}
-          </Badge>
-          <button onClick={() => setFilter('ALL')}>
-            <X size={14} className="text-rowan-muted" />
-          </button>
-        </div>
-      )}
-
-      {loading && transactions.length === 0 ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin text-rowan-muted">
-            <Clock size={20} />
-          </div>
-        </div>
-      ) : error && transactions.length === 0 ? (
-        <div className="bg-rowan-surface rounded-xl p-8 text-center">
-          <AlertTriangle size={32} className="text-rowan-red mx-auto mb-3" />
-          <p className="text-rowan-text text-sm font-medium mb-1">Failed to load transactions</p>
-          <p className="text-rowan-muted text-xs mb-3">{error}</p>
-          <button onClick={refresh} className="text-rowan-yellow text-sm font-medium underline min-h-9">
-            Retry
-          </button>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="bg-rowan-surface rounded-xl p-8 text-center">
-          <Clock size={32} className="text-rowan-muted mx-auto mb-3" />
-          <p className="text-rowan-muted text-sm">No transactions found</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filter === 'ALL' && inProgress.length > 0 && (
-            <div className="mb-4">
-              <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">In progress</p>
-              {inProgress.map((tx) => (
-                <TransactionCard key={`active-${tx.id}`} transaction={tx} />
+      {filtersOpen && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 space-y-4">
+          <div>
+            <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Status</p>
+            <div className="flex flex-wrap gap-2">
+              {STATUS_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setStatus(f.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium min-h-9 ${
+                    (filters.status || 'all') === f.id
+                      ? 'bg-rowan-yellow text-rowan-bg'
+                      : 'bg-rowan-bg text-rowan-muted border border-rowan-border'
+                  }`}
+                >
+                  {f.label}
+                </button>
               ))}
             </div>
-          )}
-          {filter === 'ALL' && inProgress.length > 0 && filtered.some((tx) => !inProgress.find((p) => p.id === tx.id)) && (
-            <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Earlier</p>
-          )}
-          {(filter === 'ALL'
-            ? filtered.filter((tx) => !inProgress.find((p) => p.id === tx.id))
-            : filtered
-          ).map((tx) => (
-            <TransactionCard key={tx.id} transaction={tx} />
-          ))}
-          {hasMore && (
-            <button
-              onClick={loadMore}
-              className="w-full text-rowan-yellow text-sm py-3 min-h-11"
-            >
-              Load More
-            </button>
-          )}
+          </div>
+          <div>
+            <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Date range</p>
+            <div className="flex flex-wrap gap-2">
+              {RANGE_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setRange(f.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium min-h-9 ${
+                    (filters.range || 'all') === f.id
+                      ? 'bg-rowan-yellow text-rowan-bg'
+                      : 'bg-rowan-bg text-rowan-muted border border-rowan-border'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFiltersOpen(false)}
+            className="flex items-center gap-1 text-rowan-muted text-xs"
+          >
+            <ChevronUp size={14} />
+            Hide filters
+          </button>
         </div>
       )}
 
-      <BottomSheet open={showFilters} onClose={() => setShowFilters(false)} title="Filter by Status">
-        <div className="space-y-2 p-4">
-          {FILTER_OPTIONS.map((opt) => (
-            <button
-              key={opt}
-              onClick={() => { setFilter(opt); setShowFilters(false) }}
-              className={`w-full text-left px-4 py-3 rounded-xl min-h-11 transition-colors ${
-                filter === opt
-                  ? 'bg-rowan-yellow/10 text-rowan-yellow border border-rowan-yellow/30'
-                  : 'bg-rowan-surface text-rowan-text'
-              }`}
-            >
-              {opt === 'ALL' ? 'All Transactions' : opt === 'IN_PROGRESS' ? 'In progress' : TX_STATES[opt]?.label || opt}
-            </button>
-          ))}
+      {!filtersOpen && (filters.status !== 'all' || filters.range !== 'all') && (
+        <button
+          type="button"
+          onClick={() => setFiltersOpen(true)}
+          className="flex items-center gap-1 text-rowan-yellow text-xs mb-4 min-h-9"
+        >
+          <ChevronDown size={14} />
+          Filters active
+        </button>
+      )}
+
+      {loading && transactions.length === 0 && <HistorySkeleton />}
+
+      {error && transactions.length === 0 && (
+        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-6 text-center">
+          <p className="text-rowan-red text-sm">{error}</p>
+          <button type="button" onClick={refresh} className="text-rowan-yellow text-sm mt-3 underline">
+            Try again
+          </button>
         </div>
-      </BottomSheet>
+      )}
+
+      {!loading && !error && transactions.length === 0 && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-8 text-center">
+          <p className="text-rowan-text text-sm font-medium">No transactions yet</p>
+          <p className="text-rowan-muted text-xs mt-2">
+            Start your first trade to see your history here
+          </p>
+          <Button className="mt-4" onClick={() => navigate('/wallet/marketplace')}>
+            Go to Marketplace
+          </Button>
+        </div>
+      )}
+
+      {transactions.length > 0 && (
+        <div className="space-y-2">
+          {transactions.map((tx) => (
+            <P2pHistoryCard key={tx.id} transaction={tx} />
+          ))}
+          {hasMore && (
+            <Button
+              variant="ghost"
+              className="w-full mt-2"
+              loading={loadingMore}
+              onClick={loadMore}
+            >
+              Load more
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

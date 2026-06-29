@@ -5,7 +5,15 @@ import notificationService from './notificationService.js';
 import stateMachine from './transactionStateMachine.js';
 import payoutSettingsService from './payoutSettingsService.js';
 import { fiatToUgx } from '../utils/financial.js';
-import logger from '../utils/logger.js';
+import websocket from './websocket.js';
+
+let chatServiceModule = null;
+async function getChatService() {
+  if (!chatServiceModule) {
+    chatServiceModule = (await import('./chatService.js')).default;
+  }
+  return chatServiceModule;
+}
 
 // Will be set by websocket module after init
 let io = null;
@@ -91,13 +99,19 @@ async function matchTrader(transactionId) {
       excludedTraderIds = await redis.smembers(`excluded-traders:${transactionId}`);
     } catch (_) { /* best-effort */ }
     const triedTraderIds = [...excludedTraderIds];
+    let skipPreferred = false;
+    const preferredSettingId = transaction.preferred_payout_setting_id;
+    const orderUserId = transaction.user_id;
     for (let attempt = 0; attempt < 6; attempt++) {
-      // ── [PHASE 2A] Canonical candidate selection from trader_payout_settings ──
-      //   • trader ACTIVE + VERIFIED + has stellar_address (can actually receive USDC)
-      //   • payout setting ACTIVE, matching network + currency
-      //   • fiat within [min_amount, max_amount]
-      //   • (available_float - reserved_float) >= fiat   (native currency — no unit mixing)
-      //   • under daily UGX limit
+      const usePreferred = !skipPreferred && preferredSettingId && attempt === 0;
+
+      const candidateParams = [transaction.network, fiatCurrency, fiatNeeded, fiatAmountUgx, triedTraderIds, orderUserId];
+      let preferredClause = '';
+      if (usePreferred) {
+        candidateParams.push(preferredSettingId);
+        preferredClause = ` AND ps.id = $${candidateParams.length}`;
+      }
+
       const candidateResult = await db.query(
         `SELECT t.id AS trader_id, t.name AS trader_name,
                 ps.id AS payout_setting_id, ps.available_float, ps.reserved_float,
@@ -116,12 +130,22 @@ async function matchTrader(transactionId) {
            AND (ps.available_float - ps.reserved_float) >= $3
            AND (t.daily_volume + $4) <= t.daily_limit_ugx
            AND t.id <> ALL($5::uuid[])
+           AND (SELECT COUNT(*) FROM transactions tx
+                  WHERE tx.trader_id = t.id
+                    AND tx.state IN ('TRADER_MATCHED','FIAT_PAYOUT_SUBMITTED','USER_CONFIRMATION_PENDING'))
+               < COALESCE(t.max_concurrent_orders, 3)
+           AND t.id NOT IN (SELECT trader_id FROM blocked_traders WHERE user_id = $6)${preferredClause}
          ORDER BY t.trust_score DESC, active_load ASC
          LIMIT 1`,
-        [transaction.network, fiatCurrency, fiatNeeded, fiatAmountUgx, triedTraderIds]
+        candidateParams
       );
 
       const candidate = candidateResult.rows[0];
+      if (!candidate && usePreferred) {
+        logger.warn(`[Matching] Preferred payout setting ${preferredSettingId} unavailable for tx ${transactionId} — falling back to auto-match`);
+        skipPreferred = true;
+        continue;
+      }
       if (!candidate) {
         // Permanent failure: amount outside any trader's min/max — refund instead of retry loop
         const limitsResult = await db.query(
@@ -211,12 +235,39 @@ async function matchTrader(transactionId) {
 
       const trader = { id: candidate.trader_id, name: candidate.trader_name };
 
+      const paymentExpiresAt = new Date(Date.now() + config.platform.paymentWindowSeconds * 1000);
+      await db.query(
+        `UPDATE transactions SET payment_expires_at = $1 WHERE id = $2`,
+        [paymentExpiresAt, transactionId]
+      );
+
+      getChatService()
+        .then((cs) => cs.sendSystemMessage(
+          transactionId,
+          'Trader matched. Mobile money payout should arrive within the payment window.'
+        ))
+        .catch((err) => logger.warn(`[Matching] Chat system message failed: ${err.message}`));
+
+      sendPaymentDetailsIfReady(transactionId).catch((err) => {
+        logger.warn(`[Matching] Payment details message failed: ${err.message}`);
+      });
+
       // ── [L-3 FIX] Notify user that a trader has been matched ──
       notificationService.notifyUser(transaction.user_id, 'trader_matched', {
         transactionId: transaction.id,
         state: 'TRADER_MATCHED',
+        paymentExpiresAt: paymentExpiresAt.toISOString(),
         message: 'A trader has been matched to your request. Mobile money payout coming soon.',
       });
+
+      notificationService.createNotification(
+        transaction.user_id,
+        'user',
+        'TRADER_MATCHED',
+        'Trader found!',
+        'A trader has been matched to your order. They will send your payment shortly.',
+        transaction.id
+      ).catch(() => {});
 
       // Notify trader via notification service
       const acceptTimeoutMs = (config.platform.traderAcceptTimeoutSeconds || 180) * 1000;
@@ -234,6 +285,8 @@ async function matchTrader(transactionId) {
         state: 'TRADER_MATCHED',
         accept_deadline: new Date(Date.now() + acceptTimeoutMs).toISOString(),
         expires_at: new Date(Date.now() + acceptTimeoutMs).toISOString(),
+        payment_expires_at: paymentExpiresAt.toISOString(),
+        paymentExpiresAt: paymentExpiresAt.toISOString(),
         expires_in: config.platform.traderAcceptTimeoutSeconds,
         expiresIn: config.platform.traderAcceptTimeoutSeconds,
         phoneHash: transaction.phone_hash,
@@ -257,6 +310,42 @@ async function matchTrader(transactionId) {
     // [PHASE 4] Use config-driven cleanup delay
     setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
   }
+}
+
+function formatFiatDisplay(amount, currency = 'UGX') {
+  const n = parseFloat(amount);
+  if (!Number.isFinite(n)) return `${currency} 0`;
+  return `${currency} ${Math.round(n).toLocaleString('en-US')}`;
+}
+
+function buildPaymentDetailsPayload(tx) {
+  const ref = tx.id ? `ROW-${tx.id.replace(/-/g, '').slice(0, 8).toUpperCase()}` : 'ROW';
+  return {
+    network: tx.network,
+    account_number: tx.payout_phone || '',
+    account_name: tx.payout_name || 'Recipient',
+    amount: formatFiatDisplay(tx.fiat_amount, tx.fiat_currency || 'UGX'),
+    reference: ref,
+  };
+}
+
+async function sendPaymentDetailsIfReady(transactionId) {
+  const txResult = await db.query(
+    `SELECT id, network, payout_phone, payout_name, fiat_amount, fiat_currency, matched_at
+     FROM transactions WHERE id = $1`,
+    [transactionId]
+  );
+  const tx = txResult.rows[0];
+  if (!tx?.payout_phone) return;
+
+  const existing = await db.query(
+    `SELECT id FROM chat_messages WHERE transaction_id = $1 AND type = 'payment_details' LIMIT 1`,
+    [transactionId]
+  );
+  if (existing.rows.length > 0) return;
+
+  const chatService = await getChatService();
+  await chatService.sendPaymentDetailsMessage(transactionId, buildPaymentDetailsPayload(tx));
 }
 
 /**
@@ -326,6 +415,9 @@ async function acceptRequest(transactionId, traderId) {
       traderId,
       config.platform.traderConfirmTimeoutSeconds
     );
+    sendPaymentDetailsIfReady(transactionId).catch((err) => {
+      logger.warn(`[Accept] Payment details message failed: ${err.message}`);
+    });
   }
 
   const userResult = await db.query(
@@ -360,36 +452,32 @@ async function confirmPayout() {
 }
 
 /**
- * Trader submits payout sent with mobile money reference.
+ * Trader submits payout sent with mobile money reference (+ optional proof image).
  * Sets state to FIAT_PAYOUT_SUBMITTED, awaiting user confirmation.
  * Does NOT release USDC yet.
- *
- * [PHASE 8] User must confirm receipt before USDC is released.
  */
-async function submitPayoutSent(transactionId, traderId, payoutReference) {
-  // [F-2 FIX] Verify trader authorization BEFORE state transition
+async function submitPayoutSent(transactionId, traderId, payoutReference, { proofStorageKey = null, proofSignedUrl = null } = {}) {
   const txCheck = await db.query(
-    `SELECT id, trader_id, state FROM transactions WHERE id = $1`,
+    `SELECT id, trader_id, state, user_id, fiat_amount, fiat_currency, network
+     FROM transactions WHERE id = $1`,
     [transactionId]
   );
   const tx = txCheck.rows[0];
-  
+
   if (!tx) {
     logger.error(`[submitPayoutSent] Transaction ${transactionId} not found`);
     const err = new Error('Transaction not found');
     err.statusCode = 404;
     throw err;
   }
-  
+
   if (tx.state !== 'TRADER_MATCHED') {
     logger.error(`[submitPayoutSent] Transaction ${transactionId} in unexpected state: ${tx.state} (expected TRADER_MATCHED)`);
-    // [B1 FIX] Invalid-state action is a client conflict (409), not a 500. This also
-    // covers re-submitting a payout on a transaction already in DISPUTE_OPENED.
     const err = new Error(`Cannot submit payout — transaction is in state ${tx.state}, expected TRADER_MATCHED`);
     err.statusCode = 409;
     throw err;
   }
-  
+
   if (tx.trader_id !== traderId) {
     logger.error(`[submitPayoutSent] Trader ${traderId} not authorized for tx ${transactionId}`);
     const err = new Error('Cannot submit payout — transaction not assigned to this trader');
@@ -398,16 +486,21 @@ async function submitPayoutSent(transactionId, traderId, payoutReference) {
   }
 
   logger.info(`[submitPayoutSent] Starting transition for tx ${transactionId}: TRADER_MATCHED → FIAT_PAYOUT_SUBMITTED`);
-  
+
+  const transitionMeta = { payout_reference: payoutReference };
+  if (proofStorageKey) {
+    transitionMeta.payout_proof_url = proofStorageKey;
+  }
+
   const transaction = await stateMachine.transition(
     transactionId,
     'TRADER_MATCHED',
     'FIAT_PAYOUT_SUBMITTED',
-    { payout_reference: payoutReference }
+    transitionMeta
   );
-  
+
   if (!transaction) {
-    logger.error(`[submitPayoutSent] State transition FAILED for tx ${transactionId} — concurrent modification or state mismatch`);
+    logger.error(`[submitPayoutSent] State transition FAILED for tx ${transactionId}`);
     const err = new Error('Cannot submit payout — state transition failed (concurrent modification)');
     err.statusCode = 409;
     throw err;
@@ -415,7 +508,26 @@ async function submitPayoutSent(transactionId, traderId, payoutReference) {
 
   logger.info(`[submitPayoutSent] ✅ Trader ${traderId} submitted payout for tx ${transactionId}, state now: ${transaction.state}`);
 
-  // Notify user that trader marked payment sent
+  const submittedAt = new Date().toISOString();
+  const proofPayload = {
+    type: 'payment_proof',
+    reference: payoutReference,
+    proof_url: proofSignedUrl || null,
+    amount: formatFiatDisplay(transaction.fiat_amount, transaction.fiat_currency || 'UGX'),
+    network: transaction.network,
+    submitted_at: submittedAt,
+  };
+
+  const chatService = await getChatService();
+  chatService.sendPaymentProofMessage(transactionId, proofPayload).catch(() => {});
+
+  websocket.emitToUser(transaction.user_id, 'payment_proof_submitted', {
+    transaction_id: transactionId,
+    transactionId,
+    reference: payoutReference,
+    proof_url: proofSignedUrl || null,
+  });
+
   notificationService.notifyUser(transaction.user_id, 'trader_sent_payout', {
     transactionId: transaction.id,
     state: 'FIAT_PAYOUT_SUBMITTED',
@@ -423,6 +535,35 @@ async function submitPayoutSent(transactionId, traderId, payoutReference) {
     fiat_currency: transaction.fiat_currency,
     message: 'Trader marked payment as sent. Please confirm receipt.',
   });
+
+  notificationService.createNotification(
+    transaction.user_id,
+    'user',
+    'FIAT_PAYOUT_SUBMITTED',
+    'Payment sent!',
+    'Your trader has sent your payment. Check your mobile money and confirm receipt.',
+    transactionId
+  ).catch(() => {});
+
+  if (proofSignedUrl) {
+    notificationService.createNotification(
+      transaction.user_id,
+      'user',
+      'payment_proof',
+      'Payment proof available',
+      'Your trader uploaded payment proof. Review and confirm receipt.',
+      transactionId
+    ).catch(() => {});
+  }
+
+  notificationService.createNotification(
+    transaction.user_id,
+    'user',
+    'USER_CONFIRMATION_PENDING',
+    'Confirm your payment',
+    'Please confirm you received your payment to complete the trade.',
+    transactionId
+  ).catch(() => {});
 
   return transaction;
 }

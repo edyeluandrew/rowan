@@ -14,6 +14,7 @@ import {
 
 /* ── Wallet-specific imports (lazy to avoid bundling for traders) ── */
 import { fetchStellarToml, verifyChallengeTransaction, signChallengeTransaction } from '../wallet/utils/sep10';
+import { getHomeDomain } from '../shared/utils/config';
 import { hashPhoneNumber } from '../wallet/utils/crypto';
 import { getChallenge, submitChallenge, registerUser } from '../wallet/api/auth';
 import { CURRENT_NETWORK } from '../wallet/utils/constants';
@@ -104,7 +105,8 @@ export function AuthProvider({ children }) {
     const kpData = JSON.parse(stored);
     const account = kpData.publicKey;
 
-    const toml = await fetchStellarToml(import.meta.env.VITE_HOME_DOMAIN);
+    const homeDomain = getHomeDomain();
+    const toml = await fetchStellarToml(homeDomain);
     const webAuthUrl = toml.webAuthEndpoint;
 
     const { transaction: challengeXdr } = await getChallenge(account, webAuthUrl);
@@ -114,7 +116,7 @@ export function AuthProvider({ children }) {
       challengeXdr,
       serverSigningKey: toml.signingKey,
       networkPassphrase: CURRENT_NETWORK.passphrase,
-      homeDomain: import.meta.env.VITE_HOME_DOMAIN,
+      homeDomain,
       clientPublicKey: account,
     });
     console.log('[Auth] Challenge verified');
@@ -151,7 +153,8 @@ export function AuthProvider({ children }) {
     const kpData = JSON.parse(stored);
     const account = kpData.publicKey;
 
-    const toml = await fetchStellarToml(import.meta.env.VITE_HOME_DOMAIN);
+    const homeDomain = getHomeDomain();
+    const toml = await fetchStellarToml(homeDomain);
     const webAuthUrl = toml.webAuthEndpoint;
 
     const { transaction: challengeXdr } = await getChallenge(account, webAuthUrl);
@@ -161,7 +164,7 @@ export function AuthProvider({ children }) {
       challengeXdr,
       serverSigningKey: toml.signingKey,
       networkPassphrase: CURRENT_NETWORK.passphrase,
-      homeDomain: import.meta.env.VITE_HOME_DOMAIN,
+      homeDomain,
       clientPublicKey: account,
     });
     console.log('[Auth] Challenge verified');
