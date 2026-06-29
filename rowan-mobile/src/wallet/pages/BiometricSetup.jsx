@@ -1,10 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Fingerprint, ScanFace, ShieldCheck, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 import useBiometrics from '../hooks/useBiometrics'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import Toggle from '../components/ui/Toggle'
-import Button from '../components/ui/Button'
 
 const TIMEOUT_OPTIONS = [
   { label: 'Immediately', value: 0 },
@@ -15,7 +14,7 @@ const TIMEOUT_OPTIONS = [
 
 export default function BiometricSetup() {
   const navigate = useNavigate()
-  const { isAvailable, isEnabled, biometricType, loading, enable, disable } = useBiometrics()
+  const { isAvailable, biometricType, loading, enable, disable } = useBiometrics()
   const { enableLock, disableLock, timeout, lockRequired } = useBiometricLock()
   const [toggling, setToggling] = useState(false)
   const [selectedTimeout, setSelectedTimeout] = useState(timeout)
@@ -23,12 +22,18 @@ export default function BiometricSetup() {
 
   const biometricLabel = biometricType === 'FACE_ID' ? 'Face ID' : 'Fingerprint'
   const BiometricIcon = biometricType === 'FACE_ID' ? ScanFace : Fingerprint
+  const isEnabled = lockRequired
 
-  const handleToggle = async () => {
+  useEffect(() => {
+    setSelectedTimeout(timeout)
+  }, [timeout])
+
+  const handleToggle = async (nextEnabled) => {
+    if (toggling || nextEnabled === isEnabled) return
     setToggling(true)
     setStatusMessage(null)
     try {
-      if (isEnabled) {
+      if (!nextEnabled) {
         await disable()
         await disableLock()
         setStatusMessage({ type: 'success', text: `${biometricLabel} unlock disabled` })
@@ -38,7 +43,7 @@ export default function BiometricSetup() {
           await enableLock(selectedTimeout)
           setStatusMessage({ type: 'success', text: `${biometricLabel} unlock enabled` })
         } else {
-          setStatusMessage({ type: 'error', text: 'Failed to enable biometric unlock' })
+          setStatusMessage({ type: 'error', text: 'Biometric verification cancelled' })
         }
       }
     } catch (err) {

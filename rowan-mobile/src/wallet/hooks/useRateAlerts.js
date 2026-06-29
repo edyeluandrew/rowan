@@ -2,6 +2,21 @@ import { useState, useEffect, useCallback } from 'react'
 import { getRateAlerts, createRateAlert, deleteRateAlert, updateRateAlert } from '../api/user'
 import { MAX_ACTIVE_ALERTS } from '../utils/constants'
 
+function normalizeAlert(row) {
+  if (!row || typeof row !== 'object') return null
+  return {
+    ...row,
+    targetRate: Number(row.targetRate ?? row.target_rate ?? 0),
+    active: row.active !== false,
+  }
+}
+
+function normalizeAlertList(payload) {
+  const raw = payload?.alerts ?? payload?.data?.alerts ?? payload
+  if (!Array.isArray(raw)) return []
+  return raw.map(normalizeAlert).filter(Boolean)
+}
+
 /**
  * Hook to manage rate alert CRUD and local state.
  */
@@ -16,9 +31,10 @@ export default function useRateAlerts() {
     setError(null)
     try {
       const data = await getRateAlerts()
-      setAlerts(data.alerts || data || [])
+      setAlerts(normalizeAlertList(data))
     } catch (err) {
-      setError(err.message || 'Failed to load rate alerts')
+      setAlerts([])
+      setError(err.response?.data?.error || err.message || 'Failed to load rate alerts')
     } finally {
       setLoading(false)
     }
@@ -34,8 +50,9 @@ export default function useRateAlerts() {
     setCreating(true)
     try {
       const data = await createRateAlert({ pair, direction, targetRate })
-      setAlerts((prev) => [data.alert || data, ...prev])
-      return data.alert || data
+      const alert = normalizeAlert(data?.alert || data)
+      if (alert) setAlerts((prev) => [alert, ...prev])
+      return alert
     } finally {
       setCreating(false)
     }
@@ -49,9 +66,10 @@ export default function useRateAlerts() {
   const toggle = useCallback(async (alertId) => {
     const alert = alerts.find((a) => a.id === alertId)
     if (!alert) return
-    const updated = await updateRateAlert(alertId, { active: !alert.active })
+    const data = await updateRateAlert(alertId, { active: !alert.active })
+    const updated = normalizeAlert(data?.alert || data)
     setAlerts((prev) =>
-      prev.map((a) => (a.id === alertId ? { ...a, active: !a.active, ...updated } : a))
+      prev.map((a) => (a.id === alertId ? { ...a, ...updated, active: !alert.active } : a))
     )
   }, [alerts])
 

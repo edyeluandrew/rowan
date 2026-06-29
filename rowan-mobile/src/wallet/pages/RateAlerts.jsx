@@ -16,12 +16,34 @@ export default function RateAlerts() {
   const { allRates } = useRates()
   const [sheetOpen, setSheetOpen] = useState(false)
 
-  /** Map a pair like "XLM/UGX" to the current rate from allRates */
+  /** Map pair like "XLM/UGX" to a display rate from allRates */
   const getCurrentRate = (pair) => {
     if (!allRates || !pair) return null
+    const [, fiat] = String(pair).split('/')
+    if (Array.isArray(allRates)) {
+      const row = allRates.find((r) => r.network?.includes(fiat) || r.currency === fiat)
+      return row?.rate ?? null
+    }
     const key = pair.replace('/', '_').toLowerCase()
-    return allRates[key] ?? null
+    const direct = allRates[key]
+    if (direct != null && typeof direct !== 'object') return Number(direct)
+    const entry = Object.entries(allRates).find(([k]) => k.toLowerCase().includes(fiat?.toLowerCase()))
+    const val = entry?.[1]
+    return val != null && typeof val !== 'object' ? Number(val) : null
   }
+
+  const rateStrip = (() => {
+    if (!allRates) return []
+    if (Array.isArray(allRates)) {
+      return allRates.map((r) => ({
+        key: r.network || r.currency || 'rate',
+        value: Number(r.rate),
+      }))
+    }
+    return Object.entries(allRates)
+      .filter(([, v]) => v != null && typeof v !== 'object')
+      .map(([key, value]) => ({ key, value: Number(value) }))
+  })()
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-4">
@@ -44,18 +66,17 @@ export default function RateAlerts() {
       </div>
 
       {/* Current rates strip */}
-      {allRates && (
+      {rateStrip.length > 0 && (
         <div className="flex gap-2 overflow-x-auto mb-6 pb-1 -mx-1 px-1">
-          {(Array.isArray(allRates)
-            ? allRates.map((r) => [r.network, r.rate])
-            : Object.entries(allRates)
-          ).map(([key, value]) => (
+          {rateStrip.map(({ key, value }) => (
             <div
               key={key}
               className="bg-rowan-surface border border-rowan-border rounded-lg px-3 py-2 text-center flex-shrink-0"
             >
               <p className="text-rowan-muted text-[10px] uppercase">{String(key).replace('_', '/')}</p>
-              <p className="text-rowan-text text-sm font-mono tabular-nums">{Number(value)?.toLocaleString()}</p>
+              <p className="text-rowan-text text-sm font-mono tabular-nums">
+                {Number.isFinite(value) ? value.toLocaleString() : '—'}
+              </p>
             </div>
           ))}
         </div>

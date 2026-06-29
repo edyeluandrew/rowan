@@ -29,20 +29,24 @@ export function markAllNotificationsRead() {
   return client.post('/api/v1/user/notifications/mark-all-read')
 }
 
-export function getRateAlerts() {
-  return client.get('/api/v1/user/rate-alerts')
+export async function getRateAlerts() {
+  const { data } = await client.get('/api/v1/user/rate-alerts')
+  return data
 }
 
-export function createRateAlert({ pair, direction, targetRate }) {
-  return client.post('/api/v1/user/rate-alerts', { pair, direction, targetRate })
+export async function createRateAlert({ pair, direction, targetRate }) {
+  const { data } = await client.post('/api/v1/user/rate-alerts', { pair, direction, targetRate })
+  return data
 }
 
-export function deleteRateAlert(alertId) {
-  return client.delete(`/api/v1/user/rate-alerts/${alertId}`)
+export async function deleteRateAlert(alertId) {
+  const { data } = await client.delete(`/api/v1/user/rate-alerts/${alertId}`)
+  return data
 }
 
-export function updateRateAlert(alertId, updates) {
-  return client.patch(`/api/v1/user/rate-alerts/${alertId}`, updates)
+export async function updateRateAlert(alertId, updates) {
+  const { data } = await client.patch(`/api/v1/user/rate-alerts/${alertId}`, updates)
+  return data
 }
 
 export function registerPushToken(token) {
