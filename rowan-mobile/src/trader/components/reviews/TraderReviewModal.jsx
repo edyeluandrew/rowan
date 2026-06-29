@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ThumbsUp, ThumbsDown, X, CircleCheckBig } from 'lucide-react';
-import { submitTraderReview } from '../api/reviews';
-import Button from '../components/ui/Button';
+import { submitTraderReview } from '../../api/reviews';
+import Button from '../ui/Button';
 
 const MAX_COMMENT = 200;
 

@@ -57,6 +57,22 @@ export function markAllNotificationsRead() {
   return client.patch('/api/v1/user/notifications/read-all').then((res) => res.data)
 }
 
+export function getRateAlerts() {
+  return client.get('/api/v1/user/rate-alerts').then((res) => res.data)
+}
+
+export function createRateAlert({ pair, direction, targetRate }) {
+  return client.post('/api/v1/user/rate-alerts', { pair, direction, targetRate }).then((res) => res.data)
+}
+
+export function updateRateAlert(alertId, updates) {
+  return client.patch(`/api/v1/user/rate-alerts/${alertId}`, updates).then((res) => res.data)
+}
+
+export function deleteRateAlert(alertId) {
+  return client.delete(`/api/v1/user/rate-alerts/${alertId}`).then((res) => res.data)
+}
+
 /** @deprecated Use getTransactionHistory — kept for legacy callers */
 export function getHistory(params = {}) {
   const page = params.page || 1
