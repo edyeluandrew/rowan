@@ -45,11 +45,15 @@ export const TX_STATES = {
   QUOTE_CONFIRMED:  { label: 'Quote Confirmed',  icon: 'CircleDot'      },
   ESCROW_LOCKED:    { label: 'XLM Received',     icon: 'Lock'           },
   TRADER_MATCHED:   { label: 'Trader Assigned',  icon: 'UserCheck'      },
-  FIAT_SENT:        { label: 'Money Sent',        icon: 'Banknote'       },
+  FIAT_PAYOUT_SUBMITTED: { label: 'Payment Sent', icon: 'Banknote' },
+  USER_CONFIRMATION_PENDING: { label: 'Confirming Receipt', icon: 'ShieldCheck' },
+  DISPUTE_OPENED:   { label: 'Dispute Opened',   icon: 'ShieldAlert'    },
+  DISPUTE_RELEASE_PENDING: { label: 'Releasing After Dispute', icon: 'ShieldAlert' },
+  DISPUTE_REFUND_PENDING: { label: 'Resolving Refund', icon: 'ShieldAlert' },
+  RELEASE_BLOCKED:  { label: 'Release Blocked',  icon: 'CircleX'        },
   COMPLETE:         { label: 'Complete',          icon: 'CircleCheckBig' },
   REFUNDED:         { label: 'Refunded',          icon: 'RotateCcw'      },
   FAILED:           { label: 'Failed',            icon: 'CircleX'        },
-  DISPUTED:         { label: 'Disputed',          icon: 'ShieldAlert'    },
 }
 
 export const KYC_LEVELS = {
@@ -89,16 +93,27 @@ export const STATE_ORDER = [
   'QUOTE_CONFIRMED',
   'ESCROW_LOCKED',
   'TRADER_MATCHED',
-  'FIAT_SENT',
+  'FIAT_PAYOUT_SUBMITTED',
+  'USER_CONFIRMATION_PENDING',
   'COMPLETE',
+  'DISPUTE_OPENED',
+  'DISPUTE_RELEASE_PENDING',
+  'DISPUTE_REFUND_PENDING',
 ]
 
 export const STATE_SUBTITLES = {
   QUOTE_CONFIRMED: 'Quote confirmed, waiting for XLM',
   ESCROW_LOCKED:   'XLM received — swapping to USDC',
   TRADER_MATCHED:  'OTC trader assigned — sending your money',
-  FIAT_SENT:       'Partner reported mobile money sent — confirm receipt',
+  FIAT_PAYOUT_SUBMITTED: 'Check your phone — confirm when MoMo arrives',
+  USER_CONFIRMATION_PENDING: 'Confirming your receipt',
+  DISPUTE_OPENED: 'Dispute opened — under review',
+  DISPUTE_RELEASE_PENDING: 'Resolving dispute',
+  DISPUTE_REFUND_PENDING: 'Processing refund',
+  RELEASE_BLOCKED: 'Needs attention — contact support',
   COMPLETE:        'Done — check your mobile money balance',
+  REFUNDED:        'Refunded to your wallet',
+  FAILED:          'Could not complete — tap for details',
 }
 
 export const ALERT_DIRECTIONS = {

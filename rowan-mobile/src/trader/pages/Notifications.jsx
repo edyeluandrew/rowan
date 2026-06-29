@@ -43,7 +43,7 @@ function groupByDate(notifications) {
 
 export default function Notifications() {
   const navigate = useNavigate();
-  const { notifications, unreadCount, markRead, markAllRead, isLoading } = useNotifications();
+  const { notifications, unreadCount, markRead, markAllRead, isLoading, handleTap } = useNotifications();
   const [filter, setFilter] = useState('all'); // 'all' | 'unread'
   const [page, setPage] = useState(1);
   const [allNotifs, setAllNotifs] = useState([]);
@@ -55,18 +55,17 @@ export default function Notifications() {
     setAllNotifs(notifications);
   }, [notifications]);
 
+  useEffect(() => {
+    if (unreadCount > 0) {
+      markAllRead();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filtered = filter === 'unread'
-    ? allNotifs.filter((n) => !n.read && !n.read_at)
+    ? allNotifs.filter((n) => !n.readAt && !n.read && !n.read_at)
     : allNotifs;
 
   const groups = groupByDate(filtered);
-
-  const handleTap = (n) => {
-    markRead([n.id]);
-    if (n.linkedTransactionId || n.transaction_id) {
-      navigate(`/trader/requests/${n.linkedTransactionId || n.transaction_id}`);
-    }
-  };
 
   const loadMore = async () => {
     const next = page + 1;

@@ -1,14 +1,24 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace } from 'lucide-react'
-import { getTransactionStatus, confirmReceipt, openDispute } from '../api/cashout'
+import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace, Lock } from 'lucide-react'
+import { getTransactionStatus, confirmReceipt, openDispute, cancelOrder } from '../api/cashout'
+import { uploadDisputeEvidence, listDisputeEvidence } from '../api/user'
+import DisputeEvidenceSection from '../components/disputes/DisputeEvidenceSection'
 import useSocketHook from '../hooks/useSocket'
 import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
+import PaymentWindowCountdown from '../components/cashout/PaymentWindowCountdown'
+import OrderChat from '../components/chat/OrderChat'
+import ReviewModal from '../components/reviews/ReviewModal'
+import { getReviewStatus } from '../api/reviews'
+import useJoinOrder from '../hooks/useJoinOrder'
+import useCountdown from '../hooks/useCountdown'
 import Button from '../components/ui/Button'
+import OrderShortId from '../components/ui/OrderShortId'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
 import { normalizeWalletTransaction, getTransactionStatusTimestamps } from '../utils/transactions'
 import { STATE_SUBTITLES } from '../utils/constants'
+import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine } from '../utils/p2pFormat'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
 const POLL_INTERVAL = 3000 // Poll every 3 seconds while waiting
@@ -40,6 +50,14 @@ export default function TransactionStatus() {
   const biometricLabel = biometricType === 'FACE_ID' ? 'Face ID' : 'Fingerprint'
   const BiometricIcon = biometricType === 'FACE_ID' ? ScanFace : Fingerprint
 
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [reviewSubmitted, setReviewSubmitted] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelNotice, setCancelNotice] = useState(null)
+  const [appealCountdown, setAppealCountdown] = useState('')
+  const [paymentProofReceived, setPaymentProofReceived] = useState(false)
+
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
   const INITIAL_WAIT_MS = 3000 // Escrow + swap can take several seconds on testnet
   const retryCountRef = useRef(0)
@@ -47,6 +65,10 @@ export default function TransactionStatus() {
   // Prefer real transaction id from state; URL may temporarily hold quoteId while escrow processes.
   const statusId = passedTransactionId || id
   const activeTxId = transaction?.id || passedTransactionId || id
+
+  useJoinOrder(activeTxId && transaction ? activeTxId : null)
+
+  const paymentCountdown = useCountdown(transaction?.paymentExpiresAt)
 
   const mergeTransaction = (prev, patch) =>
     normalizeWalletTransaction({ ...(prev || {}), ...(patch || {}) })
@@ -115,6 +137,69 @@ export default function TransactionStatus() {
     }
   }, [statusId])
 
+  useEffect(() => {
+    if (!activeTxId || transaction?.state !== 'COMPLETE' || reviewSubmitted) return
+    let cancelled = false
+    getReviewStatus(activeTxId)
+      .then((data) => {
+        if (!cancelled && !data?.submitted) setShowReviewModal(true)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [activeTxId, transaction?.state, reviewSubmitted])
+
+  useEffect(() => {
+    const expiresAt = transaction?.appealExpiresAt
+    if (!expiresAt || transaction?.state !== 'COMPLETE') {
+      setAppealCountdown('')
+      return
+    }
+    const tick = () => {
+      const diff = new Date(expiresAt).getTime() - Date.now()
+      if (diff <= 0) {
+        setAppealCountdown('')
+        return
+      }
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      setAppealCountdown(`${h}h ${m}m`)
+    }
+    tick()
+    const id = setInterval(tick, 60000)
+    return () => clearInterval(id)
+  }, [transaction?.appealExpiresAt, transaction?.state])
+
+  const appealWindowOpen = transaction?.state === 'COMPLETE'
+    && transaction?.appealExpiresAt
+    && new Date(transaction.appealExpiresAt) > new Date()
+    && !transaction?.appealArchivedAt
+
+  const paymentWindowClosing = transaction?.state === 'TRADER_MATCHED'
+    && paymentCountdown.remaining > 0
+    && paymentCountdown.remaining <= 120
+  const canShowCancel = transaction?.state === 'TRADER_MATCHED' && !paymentWindowClosing
+
+  const showDisputeAction = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
+    || appealWindowOpen
+  const showConfirmSection = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
+  const canConfirmPayment = paymentProofReceived && showConfirmSection
+
+  const handleCancelOrder = async () => {
+    setCancelling(true)
+    try {
+      await cancelOrder(activeTxId)
+      setCancelNotice('Order cancelled. Refund is being processed.')
+      setShowCancelModal(false)
+      setTransaction((prev) => mergeTransaction(prev, { state: 'REFUNDED' }))
+      setTimeout(() => navigate('/wallet/home', { replace: true }), 3000)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not cancel this order')
+      setShowCancelModal(false)
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   const handleConfirmReceipt = async () => {
     // If biometric lock is enabled, require verification first
     if (lockRequired) {
@@ -167,8 +252,11 @@ export default function TransactionStatus() {
     setDisputeError(null)
     try {
       const result = await openDispute(activeTxId, disputeReason.trim())
-      // Update transaction state
-      setTransaction((prev) => mergeTransaction(prev, { state: 'DISPUTE_OPENED', ...result }))
+      setTransaction((prev) => mergeTransaction(prev, {
+        state: 'DISPUTE_OPENED',
+        disputeId: result.disputeId,
+        ...result,
+      }))
       setShowDisputeModal(false)
       setDisputeReason('')
     } catch (err) {
@@ -177,6 +265,29 @@ export default function TransactionStatus() {
       setDisputing(false)
     }
   }
+
+  useEffect(() => {
+    if (transaction?.payoutReference || transaction?.payoutProofUrl) {
+      setPaymentProofReceived(true)
+    }
+  }, [transaction?.payoutReference, transaction?.payoutProofUrl])
+
+  useSocketHook('payment_proof_submitted', (data) => {
+    const txId = data.transaction_id || data.transactionId
+    if (txId === statusId || txId === id || txId === transaction?.id) {
+      setPaymentProofReceived(true)
+      setTransaction((prev) => mergeTransaction(prev || { id: txId }, {
+        payoutReference: data.reference ?? prev?.payoutReference,
+        payoutProofUrl: data.proof_url ?? prev?.payoutProofUrl,
+      }))
+    }
+  })
+
+  useSocketHook('chat_message', (msg) => {
+    if (msg.type === 'payment_proof' && msg.transactionId === activeTxId) {
+      setPaymentProofReceived(true)
+    }
+  })
 
   const applySocketUpdate = (data, fallbackState) => {
     const txId = data.transactionId || data.id
@@ -201,6 +312,12 @@ export default function TransactionStatus() {
   useSocketHook('transaction_failed', (data) => applySocketUpdate(data, 'FAILED'))
 
   const isTerminal = transaction && TERMINAL_STATES.includes(transaction.state)
+
+  const RATE_LOCK_STATES = ['ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING']
+  const showRateLock = transaction && RATE_LOCK_STATES.includes(transaction.state)
+  const lockedRateLine = transaction?.lockedRate
+    ? formatLockedRateLine(transaction.fiatCurrency || transaction.currency || 'UGX', transaction.lockedRate)
+    : null
 
   const terminalMessage = () => {
     if (!transaction) return ''
@@ -319,6 +436,40 @@ export default function TransactionStatus() {
         </div>
       )}
 
+      {cancelNotice && (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl px-4 py-3 mb-4">
+          <p className="text-rowan-yellow text-sm text-center">{cancelNotice}</p>
+        </div>
+      )}
+
+      {transaction && !isTerminal && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 mb-4 text-center">
+          <p className="text-rowan-text text-sm font-semibold">{getStatusLabel(transaction.state)}</p>
+          {STATE_SUBTITLES[transaction.state] && (
+            <p className="text-rowan-muted text-xs mt-1">{STATE_SUBTITLES[transaction.state]}</p>
+          )}
+          <div className="mt-2 flex justify-center">
+            <OrderShortId transactionId={activeTxId} />
+          </div>
+        </div>
+      )}
+
+      {showRateLock && lockedRateLine && (
+        <div className="bg-rowan-surface/50 border border-rowan-border rounded-xl px-4 py-3 mb-4">
+          <div className="flex items-start gap-2">
+            <Lock size={14} className="text-rowan-muted shrink-0 mt-0.5" />
+            <div>
+              <p className="text-rowan-text text-xs font-medium">
+                Rate locked at {lockedRateLine}
+              </p>
+              <p className="text-rowan-muted text-[11px] mt-0.5">
+                Your rate is guaranteed for this order.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {transaction && (
         <TransactionStateTracker
           currentState={transaction.state}
@@ -326,42 +477,143 @@ export default function TransactionStatus() {
         />
       )}
 
-      {transaction && !isTerminal && STATE_SUBTITLES[transaction.state] && (
-        <p className="text-rowan-muted text-xs text-center mt-4 px-2">
-          {STATE_SUBTITLES[transaction.state]}
-        </p>
+      {transaction?.state === 'TRADER_MATCHED' && transaction.paymentExpiresAt && (
+        <PaymentWindowCountdown expiresAt={transaction.paymentExpiresAt} />
       )}
 
-      {/* Confirmation prompt for FIAT_PAYOUT_SUBMITTED */}
-      {transaction && transaction.state === 'FIAT_PAYOUT_SUBMITTED' && (
+      {transaction && !isTerminal && activeTxId && (
+        <div className="my-4">
+          <OrderChat
+            transactionId={activeTxId}
+            txState={transaction.state}
+            counterpartyName={getTraderDisplayName(transaction.traderName)}
+            viewerRole="user"
+          />
+        </div>
+      )}
+
+      {transaction?.state === 'TRADER_MATCHED' && paymentWindowClosing && (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl px-4 py-3 my-4">
+          <p className="text-rowan-yellow text-xs text-center">
+            Payment window closing — please wait or raise a dispute if payment is not received.
+          </p>
+        </div>
+      )}
+
+      {canShowCancel && (
+        <div className="my-4">
+          <button
+            type="button"
+            onClick={() => setShowCancelModal(true)}
+            className="w-full border border-rowan-red/50 text-rowan-red rounded-xl px-4 py-3 min-h-11 text-sm font-medium bg-transparent"
+          >
+            Cancel Order
+          </button>
+        </div>
+      )}
+
+      {transaction?.state === 'DISPUTE_OPENED' && transaction?.disputeId && (
+        <DisputeEvidenceSection
+          disputeId={transaction.disputeId}
+          uploadEvidence={uploadDisputeEvidence}
+          listEvidence={listDisputeEvidence}
+        />
+      )}
+
+      {transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
         <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
           <div className="text-center">
             <p className="text-rowan-text text-sm font-medium">
-              Trader says they sent {transaction.fiatAmount} {transaction.fiatCurrency}
+              {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} sent to your {getNetworkLabel(transaction.network)} account
             </p>
-            <p className="text-rowan-muted text-xs mt-1 mb-3">
-              to your {transaction.network} number
+            <p className="text-rowan-muted text-xs mt-2">
+              Check your mobile money balance. If the payment has not arrived, you can raise a dispute.
             </p>
           </div>
-          <p className="text-rowan-text text-sm text-center">
+          {showConfirmSection && (
+            <Button
+              variant="primary"
+              size="lg"
+              disabled={!canConfirmPayment}
+              onClick={() => canConfirmPayment && setShowConfirmModal(true)}
+              className={!canConfirmPayment ? 'opacity-50' : ''}
+            >
+              {canConfirmPayment ? 'Confirm Payment Received' : 'Waiting for trader payment proof...'}
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            className="text-rowan-red border-rowan-red w-full"
+            onClick={() => setShowDisputeModal(true)}
+          >
+            Raise a Dispute
+          </Button>
+        </div>
+      )}
+
+      {transaction?.state === 'USER_CONFIRMATION_PENDING' && (
+        <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
+          <div className="text-center">
+            <p className="text-rowan-text text-sm font-medium">
+              {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} sent to your {getNetworkLabel(transaction.network)} account
+            </p>
+            <p className="text-rowan-muted text-xs mt-2">
+              Check your mobile money balance, then confirm below.
+            </p>
+          </div>
+          <p className="text-rowan-text text-sm text-center font-medium">
             Did you receive the money?
           </p>
           <div className="flex flex-col gap-2">
             <Button
               variant="primary"
               size="lg"
-              onClick={() => setShowConfirmModal(true)}
+              disabled={!canConfirmPayment}
+              onClick={() => canConfirmPayment && setShowConfirmModal(true)}
+              className={!canConfirmPayment ? 'opacity-50' : ''}
             >
-              Yes, I Received It
+              {canConfirmPayment ? 'Confirm Payment Received' : 'Waiting for trader payment proof...'}
             </Button>
-            <Button
-              variant="ghost"
-              className="text-rowan-red border-rowan-red"
-              onClick={() => setShowDisputeModal(true)}
-            >
-              I Did Not Receive It
-            </Button>
+            {showDisputeAction && (
+              <Button
+                variant="ghost"
+                className="text-rowan-red border-rowan-red"
+                onClick={() => setShowDisputeModal(true)}
+              >
+                Raise a Dispute
+              </Button>
+            )}
           </div>
+        </div>
+      )}
+
+      {transaction?.state === 'COMPLETE' && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 my-4">
+          {appealWindowOpen ? (
+            <>
+              <p className="text-rowan-muted text-xs text-center">
+                You can raise a dispute within 24 hours if you have an issue.
+              </p>
+              {appealCountdown && (
+                <p className="text-rowan-yellow text-xs text-center mt-2 font-medium">
+                  Appeal window closes in {appealCountdown}
+                </p>
+              )}
+              <Button
+                variant="ghost"
+                className="text-rowan-red border-rowan-red mt-4 w-full"
+                onClick={() => setShowDisputeModal(true)}
+              >
+                Raise a Dispute
+              </Button>
+            </>
+          ) : (
+            <p className="text-rowan-muted text-xs text-center">
+              {transaction.appealArchivedAt || (transaction.appealExpiresAt && new Date(transaction.appealExpiresAt) <= new Date())
+                ? 'This order is complete and archived.'
+                : 'This order is complete.'}
+            </p>
+          )}
         </div>
       )}
 
@@ -387,6 +639,36 @@ export default function TransactionStatus() {
               Try another cash out
             </button>
           )}
+        </div>
+      )}
+
+      {/* Cancel Order Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end" onClick={() => setShowCancelModal(false)}>
+          <div
+            className="bg-rowan-surface rounded-t-2xl p-6 w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-9 h-1 bg-rowan-border rounded-full mx-auto mb-6" />
+            <h3 className="text-rowan-text font-bold text-lg">Cancel this order?</h3>
+            <p className="text-rowan-muted text-sm mt-3 mb-4">
+              Are you sure you want to cancel? Your XLM will be refunded within a few minutes.
+            </p>
+            <div className="flex flex-col gap-3">
+              <Button
+                variant="primary"
+                className="bg-rowan-red hover:bg-rowan-red/80"
+                size="lg"
+                loading={cancelling}
+                onClick={handleCancelOrder}
+              >
+                Yes, cancel order
+              </Button>
+              <Button variant="ghost" onClick={() => setShowCancelModal(false)}>
+                Keep waiting
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -522,6 +804,15 @@ export default function TransactionStatus() {
             </div>
           </div>
         </div>
+      )}
+
+      {showReviewModal && (
+        <ReviewModal
+          transactionId={activeTxId}
+          traderName={transaction?.traderName}
+          onClose={() => setShowReviewModal(false)}
+          onSubmitted={() => setReviewSubmitted(true)}
+        />
       )}
     </div>
   )

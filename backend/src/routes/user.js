@@ -21,8 +21,19 @@ import {
 } from '../handlers/totp.js';
 import { packTotpSecret, verifyTotpFromStored, upgradeTotpSecretIfPlaintext } from '../utils/totpSecret.js';
 import { sensitiveActionLimiter } from '../middleware/rateLimits.js';
+import multer from 'multer';
+import notificationService from '../services/notificationService.js';
+import websocket from '../services/websocket.js';
+import { formatShortId } from '../utils/shortId.js';
+import disputeEvidenceService from '../services/disputeEvidenceService.js';
+import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 
 const router = Router();
+
+const evidenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 /* ── Rate limiters for 2FA security ── */
 const twoFactorSetupLimiter = rateLimit({
@@ -129,6 +140,18 @@ router.get('/profile', authUser, async (req, res, next) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 /**
+ * GET /api/v1/user/notifications/unread
+ */
+router.get('/notifications/unread', authUser, async (req, res, next) => {
+  try {
+    const count = await notificationService.unreadCount(req.userId, 'user');
+    res.json({ count });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/user/notifications
  * Paginated list of the user's notifications (newest first).
  * Query: ?page=1&limit=20
@@ -139,30 +162,57 @@ router.get('/notifications', authUser, async (req, res, next) => {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
     const offset = (page - 1) * limit;
 
-    const [notifs, countResult] = await Promise.all([
-      db.query(
-        `SELECT id, type, title, body, data, read_at, created_at
-         FROM notifications
-         WHERE user_id = $1
-         ORDER BY created_at DESC
-         LIMIT $2 OFFSET $3`,
-        [req.userId, limit, offset]
-      ),
-      db.query(
-        `SELECT COUNT(*) as total FROM notifications WHERE user_id = $1`,
-        [req.userId]
-      ),
-    ]);
-
+    const rows = await notificationService.listNotifications(req.userId, 'user', limit, offset);
+    const countResult = await db.query(
+      `SELECT COUNT(*) as total FROM notifications WHERE user_id = $1`,
+      [req.userId]
+    );
     const total = parseInt(countResult.rows[0].total);
 
+    const notifications = rows.map((n) => ({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      body: n.body,
+      transaction_id: n.transaction_id,
+      transactionId: n.transaction_id,
+      read_at: n.read_at,
+      readAt: n.read_at,
+      created_at: n.created_at,
+      createdAt: n.created_at,
+    }));
+
     res.json({
-      notifications: notifs.rows,
+      notifications,
       page,
       limit,
       total,
       hasMore: offset + limit < total,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/v1/user/notifications/:id/read
+ */
+router.patch('/notifications/:id/read', authUser, async (req, res, next) => {
+  try {
+    await notificationService.markRead(req.params.id, req.userId, 'user');
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/v1/user/notifications/read-all
+ */
+router.patch('/notifications/read-all', authUser, async (req, res, next) => {
+  try {
+    await notificationService.markAllRead(req.userId, 'user');
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }
@@ -861,11 +911,15 @@ router.post('/transactions/:id/confirm-receipt', authUser, sensitiveActionLimite
 
       logger.info(`[User] Transaction ${transactionId} completed: USDC released, hash ${releaseTxHash}`);
 
+      const chatService = (await import('../services/chatService.js')).default;
+      chatService.sendSystemMessage(transactionId, 'Payment confirmed. Transaction complete.').catch(() => {});
+
       res.json({
         status: 'COMPLETE',
         message: 'Receipt confirmed. USDC has been released to the trader.',
         stellarReleaseTx: releaseTxHash,
         transactionId: transactionId,
+        appealExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       });
     } catch (releaseErr) {
       logger.error(`[User] Escrow release failed for tx ${transactionId}:`, releaseErr.message);
@@ -886,6 +940,352 @@ router.post('/transactions/:id/confirm-receipt', authUser, sensitiveActionLimite
       });
     }
   } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/user/transactions/active
+ * Returns the user's current in-progress order, if any.
+ */
+router.get('/transactions/active', authUser, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT id, state, xlm_amount, fiat_amount, fiat_currency, network, created_at
+       FROM transactions
+       WHERE user_id = $1 AND state = ANY($2::text[])
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [req.userId, USER_ACTIVE_ORDER_STATES]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      return res.json({ active: false, transaction: null });
+    }
+    res.json({
+      active: true,
+      transaction: {
+        id: row.id,
+        state: row.state,
+        xlm_amount: row.xlm_amount != null ? parseFloat(row.xlm_amount) : null,
+        fiat_amount: row.fiat_amount != null ? parseFloat(row.fiat_amount) : null,
+        fiat_currency: row.fiat_currency,
+        network: row.network,
+        created_at: row.created_at,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/user/transactions/history
+ * Paginated P2P transaction history with trader and review metadata.
+ */
+router.get('/transactions/history', authUser, async (req, res, next) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+    const { status, range } = req.query;
+
+    const params = [req.userId];
+    const conditions = ['t.user_id = $1'];
+
+    if (status === 'completed') {
+      conditions.push(`t.state = 'COMPLETE'`);
+    } else if (status === 'cancelled') {
+      conditions.push(`t.state = 'FAILED'`);
+    } else if (status === 'refunded') {
+      conditions.push(`t.state = 'REFUNDED'`);
+    } else if (status === 'disputed') {
+      conditions.push(`(t.dispute_id IS NOT NULL OR t.state IN ('DISPUTE_OPENED', 'DISPUTE_REFUND_PENDING', 'DISPUTE_RELEASE_PENDING'))`);
+    }
+
+    if (range === 'week') {
+      conditions.push(`t.created_at >= NOW() - INTERVAL '7 days'`);
+    } else if (range === 'month') {
+      conditions.push(`t.created_at >= NOW() - INTERVAL '30 days'`);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const countResult = await db.query(
+      `SELECT COUNT(*)::int AS total FROM transactions t WHERE ${whereClause}`,
+      params
+    );
+    const total = countResult.rows[0]?.total || 0;
+
+    params.push(limit, offset);
+    const result = await db.query(
+      `SELECT
+         t.id,
+         t.state,
+         t.xlm_amount,
+         t.fiat_amount,
+         t.fiat_currency,
+         t.locked_rate,
+         t.network,
+         t.created_at,
+         t.completed_at,
+         t.dispute_id,
+         t.preferred_payout_setting_id,
+         t.trader_id,
+         tr.name AS trader_name,
+         EXISTS (
+           SELECT 1 FROM reviews r
+           WHERE r.transaction_id = t.id AND r.reviewer_id = t.user_id
+         ) AS review_submitted
+       FROM transactions t
+       LEFT JOIN traders tr ON tr.id = t.trader_id
+       WHERE ${whereClause}
+       ORDER BY t.created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+
+    const transactions = result.rows.map((row) => {
+      const shortRef = row.id.replace(/-/g, '').slice(0, 8).toUpperCase();
+      let durationMinutes = null;
+      if (row.completed_at && row.created_at) {
+        durationMinutes = Math.max(
+          1,
+          Math.round((new Date(row.completed_at) - new Date(row.created_at)) / 60000)
+        );
+      }
+      return {
+        id: row.id,
+        short_id: `ROW-${shortRef}`,
+        state: row.state,
+        xlm_amount: row.xlm_amount != null ? parseFloat(row.xlm_amount) : null,
+        fiat_amount: row.fiat_amount != null ? parseFloat(row.fiat_amount) : null,
+        currency: row.fiat_currency,
+        rate: row.locked_rate != null ? parseFloat(row.locked_rate) : null,
+        trader_name: row.trader_name,
+        trader_id: row.trader_id,
+        payment_method: row.network,
+        created_at: row.created_at,
+        completed_at: row.completed_at,
+        duration_minutes: durationMinutes,
+        review_submitted: !!row.review_submitted,
+        was_disputed: !!row.dispute_id,
+        selection_method: row.preferred_payout_setting_id ? 'manual' : 'auto',
+      };
+    });
+
+    res.json({
+      transactions,
+      total,
+      page,
+      pages: Math.max(1, Math.ceil(total / limit)),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/user/transactions/:id/cancel
+ * Buyer cancels before trader submits payout (TRADER_MATCHED only).
+ */
+router.post('/transactions/:id/cancel', authUser, sensitiveActionLimiter, async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    const userId = req.userId;
+
+    let txResult = await db.query(
+      `SELECT * FROM transactions WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+    if (!txResult.rows[0]) {
+      txResult = await db.query(
+        `SELECT * FROM transactions WHERE quote_id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+    }
+    const tx = txResult.rows[0];
+    if (!tx) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    if (tx.state !== 'TRADER_MATCHED') {
+      return res.status(409).json({
+        error: 'Cancellation is no longer available. Please raise a dispute if you have an issue.',
+      });
+    }
+
+    if (tx.payment_expires_at) {
+      const closingThreshold = new Date(new Date(tx.payment_expires_at).getTime() - 2 * 60 * 1000);
+      if (new Date() > closingThreshold) {
+        return res.status(409).json({
+          error: 'Payment window is closing. Please wait for it to expire or raise a dispute.',
+        });
+      }
+    }
+
+    const transactionId = tx.id;
+
+    await escrowController.releaseMatchFloatForTransaction(tx);
+
+    const failed = await stateMachine.transition(transactionId, 'TRADER_MATCHED', 'FAILED', {
+      failure_reason: 'Cancelled by buyer',
+    });
+    if (!failed) {
+      return res.status(409).json({
+        error: 'Cancellation is no longer available. Please raise a dispute if you have an issue.',
+      });
+    }
+
+    const refundResult = await escrowController.refundOrphanTransaction(transactionId, 'Cancelled by buyer');
+
+    const chatService = (await import('../services/chatService.js')).default;
+    chatService.sendSystemMessage(
+      transactionId,
+      'Order was cancelled by the buyer. XLM has been refunded.'
+    ).catch(() => {});
+
+    const fresh = await db.query(`SELECT state FROM transactions WHERE id = $1`, [transactionId]);
+    const finalState = fresh.rows[0]?.state || 'FAILED';
+
+    websocket.emitToUser(userId, 'transaction_update', {
+      transactionId,
+      id: transactionId,
+      state: finalState,
+      message: 'Order cancelled by buyer',
+    });
+    if (tx.trader_id) {
+      websocket.emitToTrader(tx.trader_id, 'transaction_update', {
+        transactionId,
+        id: transactionId,
+        state: finalState,
+        message: 'This order was cancelled by the buyer.',
+      });
+      notificationService.createNotification(
+        tx.trader_id,
+        'trader',
+        'order_cancelled',
+        'Order cancelled',
+        `The buyer cancelled order ${formatShortId(transactionId)}. Your float has been released.`,
+        transactionId
+      ).catch(() => {});
+    }
+
+    res.json({
+      status: finalState,
+      message: 'Order cancelled. Refund is being processed.',
+      transactionId,
+      refundStatus: refundResult?.status || 'pending',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/user/blocked-traders/:traderId
+ */
+router.post('/blocked-traders/:traderId', authUser, async (req, res, next) => {
+  try {
+    const userId = req.userId;
+    const { traderId } = req.params;
+    const traderCheck = await db.query(`SELECT id FROM traders WHERE id = $1`, [traderId]);
+    if (!traderCheck.rows[0]) {
+      return res.status(404).json({ error: 'Trader not found' });
+    }
+    await db.query(
+      `INSERT INTO blocked_traders (user_id, trader_id)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, trader_id) DO NOTHING`,
+      [userId, traderId]
+    );
+    res.json({ success: true, message: 'Trader blocked' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DELETE /api/v1/user/blocked-traders/:traderId
+ */
+router.delete('/blocked-traders/:traderId', authUser, async (req, res, next) => {
+  try {
+    await db.query(
+      `DELETE FROM blocked_traders WHERE user_id = $1 AND trader_id = $2`,
+      [req.userId, req.params.traderId]
+    );
+    res.json({ success: true, message: 'Trader unblocked' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/user/blocked-traders
+ */
+router.get('/blocked-traders', authUser, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT bt.id, bt.trader_id, bt.created_at, t.name AS trader_name
+       FROM blocked_traders bt
+       JOIN traders t ON t.id = bt.trader_id
+       WHERE bt.user_id = $1
+       ORDER BY bt.created_at DESC`,
+      [req.userId]
+    );
+    res.json({
+      blockedTraders: result.rows.map((row) => ({
+        id: row.id,
+        traderId: row.trader_id,
+        traderName: row.trader_name,
+        createdAt: row.created_at,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/user/disputes/:disputeId/evidence
+ */
+router.post(
+  '/disputes/:disputeId/evidence',
+  authUser,
+  evidenceUpload.single('file'),
+  async (req, res, next) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Evidence file is required' });
+      }
+      const evidence = await disputeEvidenceService.uploadEvidence(
+        req.params.disputeId,
+        { userId: req.userId },
+        req.file
+      );
+      res.status(201).json({ success: true, evidence });
+    } catch (err) {
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/v1/user/disputes/:disputeId/evidence
+ */
+router.get('/disputes/:disputeId/evidence', authUser, async (req, res, next) => {
+  try {
+    const evidence = await disputeEvidenceService.listEvidence(req.params.disputeId, {
+      userId: req.userId,
+    });
+    res.json({ evidence });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     next(err);
   }
 });
@@ -913,7 +1313,8 @@ router.post('/transactions/:id/dispute', authUser, async (req, res, next) => {
 
     // Fetch transaction by ID first
     let txResult = await db.query(
-      `SELECT id, user_id, state, trader_id, usdc_amount, fiat_amount, fiat_currency
+      `SELECT id, user_id, state, trader_id, usdc_amount, fiat_amount, fiat_currency,
+              appeal_expires_at, appeal_archived_at
        FROM transactions WHERE id = $1 AND user_id = $2`,
       [id, userId]
     );
@@ -924,7 +1325,8 @@ router.post('/transactions/:id/dispute', authUser, async (req, res, next) => {
     if (!transaction) {
       logger.info(`[User] Transaction not found by ID, trying quote_id: ${id}`);
       txResult = await db.query(
-        `SELECT id, user_id, state, trader_id, usdc_amount, fiat_amount, fiat_currency
+        `SELECT id, user_id, state, trader_id, usdc_amount, fiat_amount, fiat_currency,
+                appeal_expires_at, appeal_archived_at
          FROM transactions WHERE quote_id = $1 AND user_id = $2`,
         [id, userId]
       );

@@ -3,8 +3,19 @@ import jwt from 'jsonwebtoken';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import matchingEngine from '../services/matchingEngine.js';
+import db from '../db/index.js';
+import { isTraderOnline, formatLastSeenLabel } from '../utils/traderOnline.js';
 
 let io = null;
+
+async function touchTraderLastSeen(traderId) {
+  if (!traderId) return;
+  try {
+    await db.query(`UPDATE traders SET last_seen_at = NOW() WHERE id = $1`, [traderId]);
+  } catch (err) {
+    logger.warn(`[WS] Failed to update last_seen_at for trader ${traderId}: ${err.message}`);
+  }
+}
 
 /**
  * Initialize Socket.io on top of the HTTP server.
@@ -48,6 +59,7 @@ function init(httpServer) {
       logger.info(`[WS] User ${socket.userId} connected`);
     } else if (socket.role === 'trader') {
       socket.join(`trader:${socket.userId}`);
+      touchTraderLastSeen(socket.userId);
       logger.info(`[WS] Trader ${socket.userId} connected`);
     } else if (socket.role === 'admin') {
       socket.join('admin');
@@ -63,7 +75,32 @@ function init(httpServer) {
     });
 
     socket.on('disconnect', () => {
+      if (socket.role === 'trader') {
+        touchTraderLastSeen(socket.userId);
+      }
       logger.info(`[WS] ${socket.role} ${socket.userId} disconnected`);
+    });
+
+    // Join order chat room (verified participant only)
+    socket.on('join_order', async ({ transactionId }) => {
+      if (!transactionId) return;
+      try {
+        const db = (await import('../db/index.js')).default;
+        const result = await db.query(
+          `SELECT user_id, trader_id FROM transactions WHERE id = $1`,
+          [transactionId]
+        );
+        const tx = result.rows[0];
+        if (!tx) return;
+        const isUser = socket.role === 'user' && tx.user_id === socket.userId;
+        const isTrader = socket.role === 'trader' && tx.trader_id === socket.userId;
+        if (isUser || isTrader) {
+          socket.join(`order:${transactionId}`);
+          logger.info(`[WS] ${socket.role} ${socket.userId} joined order:${transactionId}`);
+        }
+      } catch (err) {
+        logger.warn(`[WS] join_order failed: ${err.message}`);
+      }
     });
   });
 
@@ -96,6 +133,13 @@ function emitToTrader(traderId, event, data) {
 }
 
 /**
+ * Emit to all participants in an order chat room.
+ */
+function emitToOrder(transactionId, event, data) {
+  if (io) io.to(`order:${transactionId}`).emit(event, data);
+}
+
+/**
  * Broadcast an event to all connected sockets of a given role.
  * Used for admin notifications (e.g., new trader submissions).
  */
@@ -109,4 +153,4 @@ function broadcast(role, event, data) {
   }
 }
 
-export default { init, getIo, emitToUser, emitToTrader, broadcast };
+export default { init, getIo, emitToUser, emitToTrader, emitToOrder, broadcast, isTraderOnline, formatLastSeenLabel };

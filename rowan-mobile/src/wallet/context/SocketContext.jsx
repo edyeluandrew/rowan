@@ -107,6 +107,12 @@ export function SocketProvider({ children }) {
     }
   }, [])
 
+  const joinOrder = useCallback((transactionId) => {
+    if (transactionId) {
+      socketRef.current?.emit('join_order', { transactionId })
+    }
+  }, [])
+
   const on = useCallback((event, handler) => {
     socketRef.current?.on(event, handler)
   }, [])
@@ -116,7 +122,7 @@ export function SocketProvider({ children }) {
   }, [])
 
   return (
-    <SocketContext.Provider value={{ socket: socketRef.current, isConnected, on, off }}>
+    <SocketContext.Provider value={{ socket: socketRef.current, isConnected, on, off, joinOrder }}>
       {children}
     </SocketContext.Provider>
   )

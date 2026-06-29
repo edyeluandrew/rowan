@@ -119,13 +119,121 @@ async function saveFile(buffer, originalName, traderId) {
  * @param {string} storageKey - the key returned by saveFile()
  * @returns {Promise<{ key: string, url: string, expiresAt: string } | null>}
  */
-async function getSignedUrl(storageKey) {
+const CHAT_BUCKET = process.env.CHAT_IMAGE_BUCKET || 'order-chat';
+const DISPUTE_EVIDENCE_BUCKET = process.env.DISPUTE_EVIDENCE_BUCKET || 'dispute-evidence';
+
+async function ensureChatBucket() {
+  if (!supabase) return;
+  try {
+    const { data: existing } = await supabase.storage.getBucket(CHAT_BUCKET);
+    if (existing) return;
+  } catch {
+    /* create below */
+  }
+  const { error } = await supabase.storage.createBucket(CHAT_BUCKET, {
+    public: false,
+    fileSizeLimit: 5 * 1024 * 1024,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+  });
+  if (error && !error.message?.includes('already exists')) {
+    logger.error(`[Storage] Failed to create chat bucket "${CHAT_BUCKET}":`, error.message);
+  }
+}
+
+/**
+ * Upload a chat payment-proof image.
+ */
+async function saveChatImage(buffer, originalName, transactionId) {
+  if (!supabase) {
+    throw new Error('Storage not configured — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+  }
+  const ext = path.extname(originalName).toLowerCase() || '.jpg';
+  if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+    throw new Error('Invalid image type');
+  }
+  if (buffer.length > 5 * 1024 * 1024) {
+    throw new Error('Image too large (max 5MB)');
+  }
+  const MIME_MAP = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.png': 'image/png', '.webp': 'image/webp',
+  };
+  const storageKey = `chat/${transactionId}/${crypto.randomUUID()}${ext}`;
+  const { error } = await supabase.storage
+    .from(CHAT_BUCKET)
+    .upload(storageKey, buffer, {
+      contentType: MIME_MAP[ext] || 'image/jpeg',
+      upsert: false,
+    });
+  if (error) throw new Error(`Chat image upload failed: ${error.message}`);
+  return storageKey;
+}
+
+function resolveBucket(storageKey) {
+  if (storageKey.startsWith('chat/')) return CHAT_BUCKET;
+  if (storageKey.startsWith('disputes/')) return DISPUTE_EVIDENCE_BUCKET;
+  return BUCKET;
+}
+
+async function ensureDisputeEvidenceBucket() {
+  if (!supabase) return;
+  try {
+    const { data: existing } = await supabase.storage.getBucket(DISPUTE_EVIDENCE_BUCKET);
+    if (existing) return;
+  } catch {
+    /* create below */
+  }
+  const { error } = await supabase.storage.createBucket(DISPUTE_EVIDENCE_BUCKET, {
+    public: false,
+    fileSizeLimit: MAX_FILE_SIZE,
+    allowedMimeTypes: [
+      'image/jpeg', 'image/png', 'image/webp', 'application/pdf',
+    ],
+  });
+  if (error && !error.message?.includes('already exists')) {
+    logger.error(`[Storage] Failed to create dispute evidence bucket "${DISPUTE_EVIDENCE_BUCKET}":`, error.message);
+  }
+}
+
+/**
+ * Upload dispute evidence file.
+ */
+async function saveDisputeEvidence(buffer, originalName, disputeId, uploaderRole) {
+  if (!supabase) {
+    throw new Error('Storage not configured — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+  }
+  const ext = path.extname(originalName).toLowerCase() || '.bin';
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    throw new Error(`File type ${ext} not allowed. Allowed: ${ALLOWED_EXTENSIONS.join(', ')}`);
+  }
+  if (buffer.length > MAX_FILE_SIZE) {
+    throw new Error(`File too large (${(buffer.length / 1024 / 1024).toFixed(1)}MB). Max: 10MB`);
+  }
+  const MIME_MAP = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.png': 'image/png', '.webp': 'image/webp',
+    '.pdf': 'application/pdf',
+  };
+  const storageKey = `disputes/${disputeId}/${uploaderRole}/${crypto.randomUUID()}${ext}`;
+  const { error } = await supabase.storage
+    .from(DISPUTE_EVIDENCE_BUCKET)
+    .upload(storageKey, buffer, {
+      contentType: MIME_MAP[ext] || 'application/octet-stream',
+      upsert: false,
+    });
+  if (error) throw new Error(`Dispute evidence upload failed: ${error.message}`);
+  return storageKey;
+}
+
+async function getSignedUrl(storageKey, expirySecondsOverride = null) {
   if (!storageKey || !supabase) return null;
 
-  const expirySeconds = config.traderVerification.docUrlExpirySeconds;
+  const expirySeconds = expirySecondsOverride
+    || config.traderVerification.docUrlExpirySeconds;
+  const bucket = resolveBucket(storageKey);
 
   const { data, error } = await supabase.storage
-    .from(BUCKET)
+    .from(bucket)
     .createSignedUrl(storageKey, expirySeconds);
 
   if (error) {
@@ -161,7 +269,11 @@ async function deleteFile(storageKey) {
 
 export default {
   ensureBucket,
+  ensureChatBucket,
+  ensureDisputeEvidenceBucket,
   saveFile,
+  saveChatImage,
+  saveDisputeEvidence,
   getSignedUrl,
   deleteFile,
 };

@@ -25,6 +25,22 @@ export function normalizeWalletTransaction(tx) {
     matchedAt: tx.matchedAt ?? tx.matched_at,
     fiatPayoutSubmittedAt: tx.fiatPayoutSubmittedAt ?? tx.fiat_payout_submitted_at,
     userConfirmationPendingAt: tx.userConfirmationPendingAt ?? tx.user_confirmation_pending_at,
+    paymentExpiresAt: tx.paymentExpiresAt ?? tx.payment_expires_at,
+    traderName: tx.traderName ?? tx.trader_name,
+    traderId: tx.traderId ?? tx.trader_id,
+    disputeId: tx.disputeId ?? tx.dispute_id,
+    appealExpiresAt: tx.appealExpiresAt ?? tx.appeal_expires_at,
+    appealArchivedAt: tx.appealArchivedAt ?? tx.appeal_archived_at,
+    lockedRate: tx.lockedRate ?? tx.locked_rate ?? tx.rate,
+    selectionMethod: tx.selectionMethod ?? tx.selection_method
+      ?? (tx.preferred_payout_setting_id ? 'manual' : 'auto'),
+    shortId: tx.shortId ?? tx.short_id,
+    payoutReference: tx.payoutReference ?? tx.payout_reference,
+    payoutProofUrl: tx.payoutProofUrl ?? tx.payout_proof_url,
+    durationMinutes: tx.durationMinutes ?? tx.duration_minutes,
+    reviewSubmitted: tx.reviewSubmitted ?? tx.review_submitted,
+    wasDisputed: tx.wasDisputed ?? tx.was_disputed ?? !!tx.dispute_id,
+    paymentMethod: tx.paymentMethod ?? tx.payment_method ?? tx.network,
   }
 }
 
@@ -61,13 +77,18 @@ export function normalizeWalletHistoryStats(stats) {
 }
 
 /** States where cashout is still in flight (not terminal). */
-export const IN_PROGRESS_TX_STATES = [
+export const USER_ACTIVE_ORDER_STATES = [
+  'QUOTE_REQUESTED',
   'QUOTE_CONFIRMED',
   'ESCROW_LOCKED',
   'TRADER_MATCHED',
   'FIAT_PAYOUT_SUBMITTED',
   'USER_CONFIRMATION_PENDING',
   'DISPUTE_OPENED',
+]
+
+export const IN_PROGRESS_TX_STATES = [
+  ...USER_ACTIVE_ORDER_STATES,
   'DISPUTE_RELEASE_PENDING',
   'DISPUTE_REFUND_PENDING',
   'RELEASE_BLOCKED',
@@ -83,6 +104,27 @@ export function isTransactionInProgress(tx) {
 export function getInProgressTransactions(transactions) {
   if (!Array.isArray(transactions)) return []
   return transactions.filter(isTransactionInProgress)
+}
+
+export function normalizeP2pHistoryItem(tx) {
+  if (!tx || typeof tx !== 'object') return null
+  return normalizeWalletTransaction({
+    ...tx,
+    fiat_currency: tx.currency ?? tx.fiat_currency,
+    trader_name: tx.trader_name,
+  })
+}
+
+export function normalizeP2pHistoryResponse(data) {
+  if (!data || typeof data !== 'object') {
+    return { transactions: [], total: 0, page: 1, pages: 1 }
+  }
+  return {
+    transactions: (data.transactions || []).map(normalizeP2pHistoryItem).filter(Boolean),
+    total: data.total ?? 0,
+    page: data.page ?? 1,
+    pages: data.pages ?? 1,
+  }
 }
 
 export function normalizeWalletHistoryResponse(data) {

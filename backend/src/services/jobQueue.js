@@ -292,7 +292,7 @@ reMatchQueue.process(async (job) => {
     // controlled re-queue, mirroring the decline / orphan-recovery paths.
     await db.query(
       `UPDATE transactions
-         SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL, updated_at = NOW()
+         SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL, payment_expires_at = NULL, updated_at = NOW()
        WHERE id = $1 AND state = 'TRADER_MATCHED'`,
       [transactionId]
     );
@@ -359,7 +359,7 @@ async function handlePayoutTimeout(transactionId, traderId) {
 
   await db.query(
     `UPDATE transactions
-       SET trader_id = NULL, payout_setting_id = NULL, matched_at = NULL,
+       SET trader_id = NULL, payout_setting_id = NULL, matched_at = NULL, payment_expires_at = NULL,
            state = 'ESCROW_LOCKED', trader_matched_at = NULL, updated_at = NOW()
      WHERE id = $1 AND state = 'TRADER_MATCHED'`,
     [transactionId]
@@ -391,7 +391,7 @@ async function handlePayoutTimeout(transactionId, traderId) {
  * Runs every minute so we are not solely dependent on Bull delayed jobs on Render.
  */
 async function scanPayoutTimeouts() {
-  const payoutTimeoutSeconds = config.platform.traderConfirmTimeoutSeconds;
+  const payoutTimeoutSeconds = config.platform.paymentWindowSeconds;
   const stuck = await db.query(
     `SELECT t.id, t.trader_id
      FROM transactions t
@@ -483,7 +483,7 @@ orphanRecoveryQueue.process(async () => {
     logger.warn(`[Job:orphan-recovery] TRADER_MATCHED orphan: tx ${tx.id} — unassigning and re-matching`);
     await escrowController.releaseMatchFloatForTransaction(tx);
     await db.query(
-      `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL
+      `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL, payment_expires_at = NULL
        WHERE id = $1 AND state = 'TRADER_MATCHED'`,
       [tx.id]
     );
@@ -491,7 +491,7 @@ orphanRecoveryQueue.process(async () => {
   }
 
   // 5. TRADER_MATCHED, accepted, but no MoMo payout → payout timeout re-match / refund
-  const payoutTimeoutSeconds = config.platform.traderConfirmTimeoutSeconds;
+  const payoutTimeoutSeconds = config.platform.paymentWindowSeconds;
   const stuckPayout = await db.query(
     `SELECT t.id, t.trader_id
      FROM transactions t
@@ -590,6 +590,69 @@ payoutTimeoutScanQueue.process(async () => {
 payoutTimeoutScanQueue.add({}, {
   repeat: { cron: '* * * * *' },
   jobId: 'payout-timeout-scan',
+});
+
+// ─── Queue: Archive completed transactions after appeal window ───
+const appealArchiveQueue = new Queue('appeal-archive', defaultOpts);
+
+appealArchiveQueue.process(async () => {
+  const result = await db.query(
+    `UPDATE transactions
+     SET appeal_archived_at = NOW()
+     WHERE state = 'COMPLETE'
+       AND appeal_expires_at IS NOT NULL
+       AND appeal_expires_at < NOW()
+       AND appeal_archived_at IS NULL
+     RETURNING id`
+  );
+  if (result.rows.length > 0) {
+    logger.info(`[Job:appeal-archive] Archived ${result.rows.length} completed transaction(s)`);
+  }
+});
+
+appealArchiveQueue.add({}, {
+  repeat: { cron: '0 * * * *' },
+  jobId: 'appeal-archive-hourly',
+});
+
+// ─── Queue: Appeal window closing soon (1 hour left) ───
+const appealReminderQueue = new Queue('appeal-reminder', defaultOpts);
+
+appealReminderQueue.process(async () => {
+  const { formatShortId } = await import('../utils/shortId.js');
+  const result = await db.query(
+    `SELECT id, user_id, appeal_expires_at
+     FROM transactions
+     WHERE state = 'COMPLETE'
+       AND appeal_expires_at IS NOT NULL
+       AND appeal_expires_at > NOW()
+       AND appeal_expires_at <= NOW() + INTERVAL '1 hour'
+       AND appeal_archived_at IS NULL`
+  );
+
+  for (const tx of result.rows) {
+    const redisKey = `appeal_reminder_sent:${tx.id}`;
+    try {
+      const sent = await import('../db/redis.js').then((m) => m.default.get(redisKey));
+      if (sent) continue;
+      await notificationService.createNotification(
+        tx.user_id,
+        'user',
+        'appeal_expires_soon',
+        'Appeal window closing',
+        `You have 1 hour left to raise a dispute on order ${formatShortId(tx.id)}.`,
+        tx.id
+      );
+      await import('../db/redis.js').then((m) => m.default.set(redisKey, '1', 'EX', 7200));
+    } catch (err) {
+      logger.warn(`[Job:appeal-reminder] Failed for tx ${tx.id}:`, err.message);
+    }
+  }
+});
+
+appealReminderQueue.add({}, {
+  repeat: { cron: '0 * * * *' },
+  jobId: 'appeal-reminder-hourly',
 });
 
 /**

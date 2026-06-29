@@ -3,6 +3,7 @@ import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import redis from '../db/redis.js';
 import db from '../db/index.js';
+import { formatShortId } from '../utils/shortId.js';
 
 /**
  * NotificationService — L2 internal module.
@@ -107,6 +108,129 @@ async function getCachedPhoneNumber(userId) {
 }
 
 /**
+ * Persist an in-app notification and push via WebSocket.
+ */
+async function createNotification(userId, userRole, type, title, body, transactionId = null) {
+  if (!userId || !title) return null;
+
+  let row;
+  if (userRole === 'trader') {
+    const result = await db.query(
+      `INSERT INTO trader_inapp_notifications (trader_id, type, title, body, transaction_id)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, type, title, body, transaction_id, read_at, created_at`,
+      [userId, type, title, body, transactionId]
+    );
+    row = result.rows[0];
+    websocket.emitToTrader(userId, 'new_notification', {
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      body: row.body,
+      transaction_id: row.transaction_id,
+      created_at: row.created_at,
+    });
+  } else {
+    const result = await db.query(
+      `INSERT INTO notifications (user_id, user_role, type, title, body, transaction_id)
+       VALUES ($1, 'user', $2, $3, $4, $5)
+       RETURNING id, type, title, body, transaction_id, read_at, created_at`,
+      [userId, type, title, body, transactionId]
+    );
+    row = result.rows[0];
+    websocket.emitToUser(userId, 'new_notification', {
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      body: row.body,
+      transaction_id: row.transaction_id,
+      created_at: row.created_at,
+    });
+  }
+
+  logger.info(`[Notify] In-app ${userRole} ${userId} — ${type}: ${title}`);
+  return row;
+}
+
+async function markRead(notificationId, userId, userRole) {
+  if (userRole === 'trader') {
+    await db.query(
+      `UPDATE trader_inapp_notifications SET read_at = now()
+       WHERE id = $1 AND trader_id = $2 AND read_at IS NULL`,
+      [notificationId, userId]
+    );
+  } else {
+    await db.query(
+      `UPDATE notifications SET read_at = now()
+       WHERE id = $1 AND user_id = $2 AND read_at IS NULL`,
+      [notificationId, userId]
+    );
+  }
+}
+
+async function markAllRead(userId, userRole) {
+  if (userRole === 'trader') {
+    await db.query(
+      `UPDATE trader_inapp_notifications SET read_at = now()
+       WHERE trader_id = $1 AND read_at IS NULL`,
+      [userId]
+    );
+  } else {
+    await db.query(
+      `UPDATE notifications SET read_at = now()
+       WHERE user_id = $1 AND read_at IS NULL`,
+      [userId]
+    );
+  }
+}
+
+async function listNotifications(userId, userRole, limit = 20, offset = 0) {
+  if (userRole === 'trader') {
+    const result = await db.query(
+      `SELECT id, type, title, body, transaction_id, read_at, created_at
+       FROM trader_inapp_notifications
+       WHERE trader_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
+    );
+    return result.rows;
+  }
+  const result = await db.query(
+    `SELECT id, type, title, body, transaction_id, read_at, created_at, data
+     FROM notifications
+     WHERE user_id = $1 AND (user_role = 'user' OR user_role IS NULL)
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [userId, limit, offset]
+  );
+  return result.rows;
+}
+
+async function unreadCount(userId, userRole) {
+  if (userRole === 'trader') {
+    const result = await db.query(
+      `SELECT COUNT(*)::int AS cnt FROM trader_inapp_notifications
+       WHERE trader_id = $1 AND read_at IS NULL`,
+      [userId]
+    );
+    return result.rows[0]?.cnt || 0;
+  }
+  const result = await db.query(
+    `SELECT COUNT(*)::int AS cnt FROM notifications
+     WHERE user_id = $1 AND read_at IS NULL`,
+    [userId]
+  );
+  return result.rows[0]?.cnt || 0;
+}
+
+function formatFiatForNotify(amount, currency = 'UGX') {
+  const n = parseFloat(amount);
+  if (!Number.isFinite(n)) return currency;
+  return `${currency} ${Math.round(n).toLocaleString('en-US')}`;
+}
+
+/**
  * Notify a wallet user of a transaction status change.
  * Supports SMS fallback for offline users on transaction completion/refund.
  *
@@ -149,9 +273,20 @@ async function notifyTraderNewRequest(traderId, requestData) {
     timestamp: new Date().toISOString(),
   });
 
-  // Also save to database for persistent access
+  const shortId = formatShortId(requestData.transactionId || requestData.id);
+  const fiatLabel = formatFiatForNotify(requestData.fiatAmount || requestData.fiat_amount, requestData.fiatCurrency || requestData.fiat_currency || 'UGX');
+
+  createNotification(
+    traderId,
+    'trader',
+    'new_request',
+    'New order!',
+    `You have a new P2P order for ${fiatLabel}. Accept within 3 minutes.`,
+    requestData.transactionId || requestData.id
+  ).catch(() => {});
+
+  // Legacy trader_notifications table (backward compat)
   try {
-    const db = (await import('../db/index.js')).default;
     await db.query(
       `INSERT INTO trader_notifications (trader_id, type, title, body)
        VALUES ($1, $2, $3, $4)`,
@@ -214,9 +349,28 @@ async function notifyTransactionComplete(userId, traderId, transaction, phoneNum
     state: 'COMPLETE',
     fiatAmount: transaction.fiat_amount,
     fiatCurrency: transaction.fiat_currency,
-    phoneNumber, // Include phone for SMS fallback
+    phoneNumber,
     message: `Cash-out complete! ${transaction.fiat_amount} ${transaction.fiat_currency} sent to your mobile money.`,
   });
+
+  const fiatLabel = formatFiatForNotify(transaction.fiat_amount, transaction.fiat_currency || 'UGX');
+  createNotification(
+    userId,
+    'user',
+    'COMPLETE',
+    'Trade complete!',
+    `Your trade is complete. You received ${fiatLabel}.`,
+    transaction.id
+  ).catch(() => {});
+
+  createNotification(
+    traderId,
+    'trader',
+    'COMPLETE',
+    'Trade complete!',
+    'Trade complete. XLM has been released to your wallet.',
+    transaction.id
+  ).catch(() => {});
 
   const traderRow = await db.query(
     `SELECT stellar_address FROM traders WHERE id = $1`,
@@ -474,4 +628,10 @@ export default {
   notifyTrader,
   cacheUserPhoneNumber,
   getCachedPhoneNumber,
+  createNotification,
+  markRead,
+  markAllRead,
+  listNotifications,
+  unreadCount,
+  formatFiatForNotify,
 };

@@ -36,6 +36,9 @@ export default function CashoutInProgressBanner({ transaction }) {
               {fiatLabel}
             </p>
             <p className="text-rowan-muted text-xs mt-1 truncate">{subtitle}</p>
+            <p className="text-rowan-muted text-xs mt-1">
+              Complete or cancel it before starting a new trade.
+            </p>
           </div>
         </div>
         <ChevronRight size={18} className="text-rowan-muted shrink-0 mt-1" />

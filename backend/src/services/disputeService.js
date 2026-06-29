@@ -56,17 +56,32 @@ async function createDispute(transactionId, userId, traderId, reason) {
   if (tx.user_id !== userId) throw new Error('Transaction does not belong to this user');
   if (tx.trader_id !== traderId) throw new Error('Transaction does not belong to this trader');
 
-  // 1b. Only allow disputes while awaiting/after payout but before settlement.
-  // Valid source states: FIAT_PAYOUT_SUBMITTED, USER_CONFIRMATION_PENDING.
-  // (If a dispute is already open the tx is in DISPUTE_OPENED, which also fails
-  //  this check — a second layer of duplicate protection.)
-  const DISPUTABLE_STATES = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'];
+  // 1b. Disputable states: active payout flow OR completed within appeal window.
+  const DISPUTABLE_STATES = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'COMPLETE'];
   if (!DISPUTABLE_STATES.includes(tx.state)) {
     const err = new Error(
       `Cannot open a dispute in state ${tx.state}. A dispute can only be opened after the partner has submitted the mobile money payout and before the cash-out is settled.`
     );
     err.statusCode = 409;
     throw err;
+  }
+
+  if (tx.state === 'COMPLETE') {
+    const appealCheck = await db.query(
+      `SELECT appeal_expires_at, appeal_archived_at FROM transactions WHERE id = $1`,
+      [transactionId]
+    );
+    const appeal = appealCheck.rows[0] || {};
+    if (appeal.appeal_archived_at) {
+      const err = new Error('The appeal window for this order has closed.');
+      err.statusCode = 409;
+      throw err;
+    }
+    if (appeal.appeal_expires_at && new Date(appeal.appeal_expires_at) < new Date()) {
+      const err = new Error('The appeal window for this order has closed.');
+      err.statusCode = 409;
+      throw err;
+    }
   }
 
   // 2. Check if dispute already exists
@@ -120,6 +135,14 @@ async function createDispute(transactionId, userId, traderId, reason) {
     },
   });
 
+  try {
+    const chatService = (await import('./chatService.js')).default;
+    await chatService.sendSystemMessage(
+      transactionId,
+      'A dispute has been raised. Our support team will review your chat history.'
+    );
+  } catch (_) { /* best-effort */ }
+
   // 6. Notify trader
   await notificationService.notifyTrader(traderId, 'dispute_opened', {
     dispute_id: dispute.id,
@@ -127,6 +150,27 @@ async function createDispute(transactionId, userId, traderId, reason) {
     user_claim: reason,
     response_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
   });
+
+  const { formatShortId } = await import('../utils/shortId.js');
+  const shortId = formatShortId(transactionId);
+
+  notificationService.createNotification(
+    userId,
+    'user',
+    'DISPUTE_OPENED',
+    'Dispute opened',
+    'Your dispute has been received. Our team will review within 24 hours.',
+    transactionId
+  ).catch(() => {});
+
+  notificationService.createNotification(
+    traderId,
+    'trader',
+    'DISPUTE_OPENED',
+    'Dispute raised',
+    `The buyer has raised a dispute on order ${shortId}. Please provide evidence.`,
+    transactionId
+  ).catch(() => {});
 
   // 7. Notify admin
   await notificationService.notifyAdmins('dispute_created', {
@@ -425,6 +469,22 @@ async function adminAction(disputeId, adminId, action, actionData = {}) {
       dispute_id: disputeId,
       reason: actionData.reason,
     });
+    notificationService.createNotification(
+      dispute.user_id,
+      'user',
+      'DISPUTE_RESOLVED',
+      'Dispute resolved',
+      `Your dispute has been resolved. ${actionData.reason || 'Funds have been refunded to your wallet.'}`,
+      dispute.transaction_id
+    ).catch(() => {});
+    notificationService.createNotification(
+      dispute.trader_id,
+      'trader',
+      'DISPUTE_RESOLVED',
+      'Dispute resolved',
+      'The dispute on your order has been resolved.',
+      dispute.transaction_id
+    ).catch(() => {});
   } else if (action === 'resolve_trader') {
     await notificationService.notifyTrader(dispute.trader_id, 'dispute_resolved_trader_favour', {
       dispute_id: disputeId,
@@ -434,6 +494,22 @@ async function adminAction(disputeId, adminId, action, actionData = {}) {
       dispute_id: disputeId,
       reason: actionData.reason,
     });
+    notificationService.createNotification(
+      dispute.user_id,
+      'user',
+      'DISPUTE_RESOLVED',
+      'Dispute resolved',
+      `Your dispute has been resolved. ${actionData.reason || 'The trade was completed in favour of the trader.'}`,
+      dispute.transaction_id
+    ).catch(() => {});
+    notificationService.createNotification(
+      dispute.trader_id,
+      'trader',
+      'DISPUTE_RESOLVED',
+      'Dispute resolved',
+      'The dispute on your order has been resolved.',
+      dispute.transaction_id
+    ).catch(() => {});
   } else if (action === 'escalate') {
     await notificationService.notifyAdmins('dispute_escalated', {
       dispute_id: disputeId,

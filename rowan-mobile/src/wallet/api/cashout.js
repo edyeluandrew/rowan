@@ -1,11 +1,12 @@
 import client from './client'
 
-export function getQuote({ xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName }) {
+export function getQuote({ xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName, payoutSettingId }) {
   const body = {
     network,
     phoneHash,
     payoutPhone,
     payoutName,
+    ...(payoutSettingId ? { payoutSettingId } : {}),
   }
   if (fiatAmount != null) {
     body.fiatAmount = Number(fiatAmount)
@@ -46,4 +47,8 @@ export function confirmReceipt(transactionId) {
 
 export function openDispute(transactionId, reason) {
   return client.post(`/api/v1/user/transactions/${transactionId}/dispute`, { reason }).then(res => res.data)
+}
+
+export function cancelOrder(transactionId) {
+  return client.post(`/api/v1/user/transactions/${transactionId}/cancel`).then(res => res.data)
 }

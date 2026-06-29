@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDownToLine, ArrowDownLeft, Plus, Clock, Star, AlertTriangle, Bell, Coins } from 'lucide-react'
+import { ArrowDownToLine, ArrowDownLeft, Plus, Clock, Star, AlertTriangle, Bell, Coins, UserCheck } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import useUserCountry from '../hooks/useUserCountry'
+import useActiveTransaction from '../hooks/useActiveTransaction'
 import useTransactions from '../hooks/useTransactions'
 import usePushNotifications from '../hooks/usePushNotifications'
 import { useNotificationsContext } from '../context/NotificationsContext'
@@ -26,6 +27,7 @@ export default function Home() {
   const { isLocked } = useBiometricProtection()
   const { balance, loading: balanceLoading, refresh: refreshBalance, publicKey } = useWallet()
   const { country, fiatCurrency, ready: countryReady } = useUserCountry()
+  const { hasActiveOrder } = useActiveTransaction()
   const [friendbotState, setFriendbotState] = useState('idle')
   const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates(fiatCurrency)
   const { transactions, loading: txLoading } = useTransactions()
@@ -126,6 +128,15 @@ export default function Home() {
         <Button onClick={() => navigate('/wallet/cashout')}>
           <ArrowDownToLine size={18} />
           Cash Out
+        </Button>
+        <Button
+          variant="ghost"
+          className="mt-2"
+          onClick={() => navigate('/wallet/marketplace')}
+          disabled={hasActiveOrder}
+        >
+          <UserCheck size={18} />
+          Choose a trader
         </Button>
       </div>
 

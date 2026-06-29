@@ -21,11 +21,15 @@ const COLOR_MAP = {
   QUOTE_CONFIRMED: 'text-rowan-muted bg-rowan-surface',
   ESCROW_LOCKED:   'text-rowan-yellow bg-rowan-yellow/10',
   TRADER_MATCHED:  'text-rowan-yellow bg-rowan-yellow/10',
-  FIAT_SENT:       'text-rowan-green bg-rowan-green/10',
+  FIAT_PAYOUT_SUBMITTED: 'text-rowan-green bg-rowan-green/10',
+  USER_CONFIRMATION_PENDING: 'text-rowan-green bg-rowan-green/10',
+  DISPUTE_OPENED:  'text-rowan-red bg-rowan-red/10',
+  DISPUTE_RELEASE_PENDING: 'text-rowan-yellow bg-rowan-yellow/10',
+  DISPUTE_REFUND_PENDING: 'text-rowan-yellow bg-rowan-yellow/10',
+  RELEASE_BLOCKED: 'text-rowan-red bg-rowan-red/10',
   COMPLETE:        'text-rowan-green bg-rowan-green/10',
   REFUNDED:        'text-rowan-yellow bg-rowan-yellow/10',
   FAILED:          'text-rowan-red bg-rowan-red/10',
-  DISPUTED:        'text-rowan-red bg-rowan-red/10',
 }
 
 /**

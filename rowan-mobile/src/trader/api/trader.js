@@ -31,9 +31,14 @@ export async function confirmRequest(id) {
 }
 
 /** POST /api/v1/trader/requests/:id/payout-sent */
-export async function submitPayoutSent(id, reference) {
-  const { data } = await client.post(`/api/v1/trader/requests/${id}/payout-sent`, {
-    reference,
+export async function submitPayoutSent(id, reference, proofFile = null) {
+  const form = new FormData();
+  form.append('reference', reference);
+  if (proofFile) {
+    form.append('proof_image', proofFile);
+  }
+  const { data } = await client.post(`/api/v1/trader/requests/${id}/payout-sent`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
   });
   return data;
 }

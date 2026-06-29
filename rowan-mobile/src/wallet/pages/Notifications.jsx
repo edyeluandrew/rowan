@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BellDot, Check, Clock } from 'lucide-react'
+import { useEffect } from 'react'
+import { ArrowLeft, BellDot, Check } from 'lucide-react'
 import { useNotificationsContext } from '../context/NotificationsContext'
 import NotificationItem from '../components/notifications/NotificationItem'
+import NotificationSkeleton from '../components/notifications/NotificationSkeleton'
 
 export default function Notifications() {
   const navigate = useNavigate()
@@ -11,9 +13,15 @@ export default function Notifications() {
     loading,
     hasMore,
     loadMore,
-    markRead,
     markAllRead,
+    handleTap,
   } = useNotificationsContext()
+
+  useEffect(() => {
+    if (unreadCount > 0) {
+      markAllRead()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const groupByDate = (items) => {
     const groups = {}
@@ -56,17 +64,13 @@ export default function Notifications() {
       </div>
 
       {loading && notifications.length === 0 ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin text-rowan-muted">
-            <Clock size={20} />
-          </div>
-        </div>
+        <NotificationSkeleton />
       ) : notifications.length === 0 ? (
         <div className="bg-rowan-surface rounded-xl p-8 text-center">
           <BellDot size={32} className="text-rowan-muted mx-auto mb-3" />
           <p className="text-rowan-muted text-sm">No notifications yet</p>
           <p className="text-rowan-muted text-xs mt-1">
-            You&apos;ll be notified about transaction updates
+            Your order updates will appear here.
           </p>
         </div>
       ) : (
@@ -79,9 +83,7 @@ export default function Notifications() {
                   <NotificationItem
                     key={item.id}
                     notification={item}
-                    onTap={() => {
-                      if (!item.readAt) markRead([item.id])
-                    }}
+                    onTap={() => handleTap(item)}
                   />
                 ))}
               </div>

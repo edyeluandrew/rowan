@@ -10,9 +10,28 @@ import logger from '../utils/logger.js';
 import { stroopsToUsdc } from '../utils/financial.js';
 import { maskPhoneNumber } from '../utils/phoneMasking.js';
 import { traderLoginLimiter, sensitiveActionLimiter } from '../middleware/rateLimits.js';
+import multer from 'multer';
+import disputeEvidenceService from '../services/disputeEvidenceService.js';
+import storageService from '../services/storageService.js';
+import notificationService from '../services/notificationService.js';
+import { formatShortId } from '../utils/shortId.js';
 import { server as horizon, USDC_ASSET } from '../config/stellar.js';
 
 const router = Router();
+
+const evidenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+const payoutProofUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = ['image/jpeg', 'image/png', 'image/jpg'].includes(file.mimetype);
+    cb(ok ? null : new Error('Only JPEG and PNG images are allowed'), ok);
+  },
+});
 
 function usdcBalanceOf(account) {
   if (!account?.balances) return { balance: 0, hasTrustline: false };
@@ -184,7 +203,7 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
       `SELECT t.id, t.usdc_amount, t.xlm_amount, t.fiat_amount, t.fiat_currency,
               t.network, t.state, t.trader_matched_at, t.matched_at,
               t.fiat_sent_at, t.created_at, t.completed_at, t.user_id, t.trader_id,
-              t.payout_phone, t.payout_name, t.stellar_release_tx,
+              t.payout_phone, t.payout_name, t.stellar_release_tx, t.payment_expires_at,
               tr.stellar_address
        FROM transactions t
        JOIN traders tr ON tr.id = t.trader_id
@@ -272,9 +291,9 @@ router.post('/requests/:id/accept', authTrader, async (req, res, next) => {
  * [B4 FIX] Wraps escrow release in try/catch. On failure, enqueues a
  * Bull retry job so the trader still receives their USDC.
  */
-router.post('/requests/:id/payout-sent', authTrader, sensitiveActionLimiter, async (req, res, next) => {
+router.post('/requests/:id/payout-sent', authTrader, sensitiveActionLimiter, payoutProofUpload.single('proof_image'), async (req, res, next) => {
   try {
-    const { reference } = req.body;
+    const reference = req.body?.reference;
 
     if (!reference || typeof reference !== 'string' || reference.trim().length === 0) {
       return res.status(400).json({
@@ -283,10 +302,24 @@ router.post('/requests/:id/payout-sent', authTrader, sensitiveActionLimiter, asy
       });
     }
 
+    let proofStorageKey = null;
+    let proofSignedUrl = null;
+
+    if (req.file) {
+      proofStorageKey = await storageService.saveChatImage(
+        req.file.buffer,
+        req.file.originalname,
+        req.params.id
+      );
+      const signed = await storageService.getSignedUrl(proofStorageKey, 60 * 60 * 24 * 30);
+      proofSignedUrl = signed?.url || null;
+    }
+
     const transaction = await matchingEngine.submitPayoutSent(
       req.params.id,
       req.traderId,
-      reference.trim()
+      reference.trim(),
+      { proofStorageKey, proofSignedUrl }
     );
 
     res.json({
@@ -296,12 +329,11 @@ router.post('/requests/:id/payout-sent', authTrader, sensitiveActionLimiter, asy
         id: transaction.id,
         state: transaction.state,
         payout_reference: transaction.payout_reference,
+        payout_proof_url: proofSignedUrl,
+        short_id: formatShortId(transaction.id),
       },
     });
   } catch (err) {
-    // [B1 FIX] Honor explicit status codes (404/409/403) so invalid trader actions
-    // — e.g. payout-sent on a transaction already in DISPUTE_OPENED — return a clean
-    // client error instead of a generic HTTP 500.
     if (err.statusCode) {
       return res.status(err.statusCode).json({ error: err.message });
     }
@@ -766,39 +798,76 @@ router.get('/performance/networks', authTrader, async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/trader/notifications/unread
+ */
+router.get('/notifications/unread', authTrader, async (req, res, next) => {
+  try {
+    const count = await notificationService.unreadCount(req.traderId, 'trader');
+    res.json({ count });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/trader/notifications
- * List trader notifications with pagination.
  */
 router.get('/notifications', authTrader, async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, parseInt(req.query.limit) || 50);
-    const unreadOnly = req.query.unreadOnly === 'true';
     const offset = (page - 1) * limit;
 
-    const whereClause = unreadOnly ? 'AND is_read = FALSE' : '';
-    
-    const result = await db.query(
-      `SELECT id, type, title, body, is_read, created_at
-       FROM trader_notifications
-       WHERE trader_id = $1 ${whereClause}
-       ORDER BY created_at DESC
-       LIMIT $2 OFFSET $3`,
-      [req.traderId, limit, offset]
-    );
-
+    const rows = await notificationService.listNotifications(req.traderId, 'trader', limit, offset);
     const countResult = await db.query(
-      `SELECT COUNT(*) as total FROM trader_notifications
-       WHERE trader_id = $1 ${whereClause}`,
+      `SELECT COUNT(*) as total FROM trader_inapp_notifications WHERE trader_id = $1`,
       [req.traderId]
     );
 
+    const notifications = rows.map((n) => ({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      body: n.body,
+      transaction_id: n.transaction_id,
+      transactionId: n.transaction_id,
+      read_at: n.read_at,
+      readAt: n.read_at,
+      is_read: !!n.read_at,
+      created_at: n.created_at,
+      createdAt: n.created_at,
+    }));
+
     res.json({
-      notifications: result.rows,
+      notifications,
       total: parseInt(countResult.rows[0].total),
       page,
       limit,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/v1/trader/notifications/:id/read
+ */
+router.patch('/notifications/:id/read', authTrader, async (req, res, next) => {
+  try {
+    await notificationService.markRead(req.params.id, req.traderId, 'trader');
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/v1/trader/notifications/read-all
+ */
+router.patch('/notifications/read-all', authTrader, async (req, res, next) => {
+  try {
+    await notificationService.markAllRead(req.traderId, 'trader');
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }
@@ -816,14 +885,9 @@ router.post('/notifications/mark-read', authTrader, async (req, res, next) => {
       return res.status(400).json({ error: 'notificationIds array required' });
     }
 
-    await db.query(
-      `UPDATE trader_notifications
-         SET is_read = TRUE, updated_at = NOW()
-       WHERE trader_id = $1
-         AND id = ANY($2::uuid[])
-         AND is_read = FALSE`,
-      [req.traderId, notificationIds]
-    );
+    for (const nid of notificationIds) {
+      await notificationService.markRead(nid, req.traderId, 'trader');
+    }
 
     res.json({ success: true });
   } catch (err) {
@@ -833,16 +897,10 @@ router.post('/notifications/mark-read', authTrader, async (req, res, next) => {
 
 /**
  * POST /api/v1/trader/notifications/mark-all-read
- * Mark all of the trader's unread notifications as read.
  */
 router.post('/notifications/mark-all-read', authTrader, async (req, res, next) => {
   try {
-    await db.query(
-      `UPDATE trader_notifications
-         SET is_read = TRUE, updated_at = NOW()
-       WHERE trader_id = $1 AND is_read = FALSE`,
-      [req.traderId]
-    );
+    await notificationService.markAllRead(req.traderId, 'trader');
     res.json({ success: true });
   } catch (err) {
     next(err);
@@ -902,5 +960,49 @@ router.get('/float/health', authTrader, async (req, res, next) => {
     next(err);
   }
 });
+
+/**
+ * GET /api/v1/trader/disputes/:disputeId/evidence
+ */
+router.get('/disputes/:disputeId/evidence', authTrader, async (req, res, next) => {
+  try {
+    const evidence = await disputeEvidenceService.listEvidence(req.params.disputeId, {
+      traderId: req.userId,
+    });
+    res.json({ evidence });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/trader/disputes/:disputeId/evidence
+ */
+router.post(
+  '/disputes/:disputeId/evidence',
+  authTrader,
+  evidenceUpload.single('file'),
+  async (req, res, next) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Evidence file is required' });
+      }
+      const evidence = await disputeEvidenceService.uploadEvidence(
+        req.params.disputeId,
+        { traderId: req.userId },
+        req.file
+      );
+      res.status(201).json({ success: true, evidence });
+    } catch (err) {
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
+      next(err);
+    }
+  }
+);
 
 export default router;
