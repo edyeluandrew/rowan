@@ -286,7 +286,7 @@ async function testC_rematchReservation() {
   }
 }
 
-async function testD_postSwapOrphanNoXlmRefund() {
+async function testD_postSwapOrphanXlmRefund() {
   const client = await pool.connect();
   const ids = { txIds: [], quoteIds: [] };
   try {
@@ -309,8 +309,8 @@ async function testD_postSwapOrphanNoXlmRefund() {
       'Phase2H1 test post-swap orphan'
     );
 
-    assert(result.status !== 'refunded' || result.asset === 'USDC', 'Post-swap must not XLM-refund');
-    assert(result.asset !== 'XLM', 'Must not use XLM refund path when swap exists');
+    assert(result.status !== 'refunded' || result.asset === 'XLM', 'Post-swap orphan refund must return XLM to user');
+    assert(result.status !== 'blocked' || result.code !== 'NO_USDC_TRUSTLINE', 'Must not block on missing USDC trustline');
 
     const txAfter = (await client.query(`SELECT state, stellar_refund_tx FROM transactions WHERE id = $1`, [throwaway.txId])).rows[0];
     assert(txAfter.state !== 'REFUNDED' || txAfter.stellar_refund_tx, 'Must not mark REFUNDED without on-chain hash');
@@ -322,8 +322,8 @@ async function testD_postSwapOrphanNoXlmRefund() {
     assert(audit.rows.length > 0, 'Orphan audit log expected');
 
     pass(
-      'Test D — post-swap orphan refund logic',
-      `status=${result.status}, audit=${audit.rows[0].action}, no false XLM refund`
+      'Test D — post-swap orphan XLM refund path',
+      `status=${result.status}, asset=${result.asset || 'n/a'}, audit=${audit.rows[0].action}`
     );
   } catch (e) {
     fail('Test D — post-swap orphan refund logic', e);
@@ -460,7 +460,7 @@ console.log('Phase 2H-1 runtime tests (testnet throwaway only)\n');
 await testA_releaseBlockedOnConfirm();
 await testB_declineReleasesCanonicalFloat();
 await testC_rematchReservation();
-await testD_postSwapOrphanNoXlmRefund();
+await testD_postSwapOrphanXlmRefund();
 await testE_dangerousEndpointGuard();
 
 console.log('\n--- Summary ---');

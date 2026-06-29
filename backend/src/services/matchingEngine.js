@@ -316,6 +316,12 @@ async function acceptRequest(transactionId, traderId) {
     }
   } else {
     logger.info(`[Accept] ✅ Accepted: matched_at set to ${transaction.matched_at}`);
+    const jobQueue = await getJobQueue();
+    await jobQueue.enqueuePayoutTimeout(
+      transactionId,
+      traderId,
+      config.platform.traderConfirmTimeoutSeconds
+    );
   }
 
   const userResult = await db.query(

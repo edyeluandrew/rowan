@@ -415,6 +415,50 @@ async function swapXlmToUsdc(xlmAmount, quote) {
 }
 
 /**
+ * Refund post-swap escrow USDC to the user as native XLM via path payment.
+ * Casual wallets need no USDC trustline — destination receives XLM only.
+ */
+async function swapUsdcToXlmForRefund(userStellarAddress, usdcAmount, xlmAmount, memoText) {
+  const usdcDecimal = Number(usdcAmount);
+  const xlmDecimal = Number(xlmAmount);
+  if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+    throw new Error(`Invalid USDC amount: ${usdcAmount}`);
+  }
+  if (!Number.isFinite(xlmDecimal) || xlmDecimal <= 0) {
+    throw new Error(`Invalid XLM amount: ${xlmAmount}`);
+  }
+
+  const sendMax = (usdcDecimal * 1.02).toFixed(7);
+  const destAmount = xlmDecimal.toFixed(7);
+
+  const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+  const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
+    fee: config.stellarMaxFee,
+    networkPassphrase,
+  })
+    .addOperation(
+      StellarSdk.Operation.pathPaymentStrictReceive({
+        sendAsset: USDC_ASSET,
+        sendMax,
+        destination: userStellarAddress,
+        destAsset: StellarSdk.Asset.native(),
+        destAmount,
+        path: [],
+      })
+    )
+    .addMemo(StellarSdk.Memo.text(memoText))
+    .setTimeout(30)
+    .build();
+
+  tx.sign(escrowKeypair);
+  const result = await horizon.submitTransaction(tx);
+  logger.info(
+    `[Escrow] USDC→XLM orphan refund: ${destAmount} XLM to ${userStellarAddress} — tx: ${result.hash}`
+  );
+  return result.hash;
+}
+
+/**
  * Release USDC from escrow to a trader's Stellar address.
  * Called after trader confirms fiat payout.
  *
@@ -626,8 +670,7 @@ async function releaseToTrader(transactionId) {
 }
 
 /**
- * Refund XLM back to the user.
- * Swaps USDC back to XLM if necessary, then sends to user's address.
+ * Refund native XLM from escrow to the user (pre-swap path only).
  */
 async function refundXlm(userStellarAddress, xlmAmount, reason) {
   try {
@@ -986,6 +1029,7 @@ async function userHasUsdcTrustline(stellarAddress) {
 
 async function refundOrphanPostSwap(tx, reason) {
   const usdcDecimal = Number(tx.usdc_amount);
+  const xlmDecimal = Number(tx.xlm_amount);
   if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
     await auditLogService.log({
       actor_role: 'system',
@@ -996,58 +1040,36 @@ async function refundOrphanPostSwap(tx, reason) {
     });
     return { status: 'failed', code: 'INVALID_USDC_AMOUNT' };
   }
-
-  const hasTrustline = await userHasUsdcTrustline(tx.user_stellar);
-  if (!hasTrustline) {
-    const fromState = tx.state;
-    if (stateMachine.isValidTransition(fromState, 'FAILED')) {
-      await stateMachine.transition(tx.id, fromState, 'FAILED', {
-        failure_reason: `${reason}: post_swap_user_missing_usdc_trustline`,
-        refund_error: 'ORPHAN_USDC_REFUND_BLOCKED_NO_TRUSTLINE',
-      });
-    }
+  if (!Number.isFinite(xlmDecimal) || xlmDecimal <= 0) {
     await auditLogService.log({
       actor_role: 'system',
-      action: 'orphan_refund_blocked_no_trustline',
+      action: 'orphan_refund_failed',
       resource_type: 'transaction',
       resource_id: tx.id,
-      metadata: {
-        user_stellar_address: tx.user_stellar,
-        usdc_amount: usdcDecimal,
-        reason,
-      },
+      metadata: { reason, code: 'INVALID_XLM_AMOUNT' },
     });
-    return { status: 'blocked', code: 'NO_USDC_TRUSTLINE' };
+    return { status: 'failed', code: 'INVALID_XLM_AMOUNT' };
   }
 
+  const memoText = `ORPHAN-${tx.id.replace(/-/g, '').slice(0, 12)}`;
+
   try {
-    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
-    const built = new StellarSdk.TransactionBuilder(escrowAccount, {
-      fee: config.stellarMaxFee,
-      networkPassphrase,
-    })
-      .addOperation(
-        StellarSdk.Operation.payment({
-          destination: tx.user_stellar,
-          asset: USDC_ASSET,
-          amount: usdcDecimal.toFixed(7),
-        })
-      )
-      .addMemo(StellarSdk.Memo.text(`ORPHAN-${tx.id.replace(/-/g, '').slice(0, 12)}`))
-      .setTimeout(30)
-      .build();
-    built.sign(escrowKeypair);
-    const result = await horizon.submitTransaction(built);
+    const refundHash = await swapUsdcToXlmForRefund(
+      tx.user_stellar,
+      usdcDecimal,
+      xlmDecimal,
+      memoText
+    );
 
     if (stateMachine.isValidTransition(tx.state, 'REFUNDED')) {
       await stateMachine.transition(tx.id, tx.state, 'REFUNDED', {
-        stellar_refund_tx: result.hash,
+        stellar_refund_tx: refundHash,
         failure_reason: reason,
       });
     } else {
       await db.query(
         `UPDATE transactions SET stellar_refund_tx = $1, failure_reason = $2, refunded_at = NOW() WHERE id = $3`,
-        [result.hash, reason, tx.id]
+        [refundHash, reason, tx.id]
       );
     }
 
@@ -1056,23 +1078,23 @@ async function refundOrphanPostSwap(tx, reason) {
       action: 'orphan_refund_succeeded',
       resource_type: 'transaction',
       resource_id: tx.id,
-      new_value: { state: 'REFUNDED', stellar_refund_tx: result.hash },
-      metadata: { reason, usdc_amount: usdcDecimal, asset: 'USDC' },
+      new_value: { state: 'REFUNDED', stellar_refund_tx: refundHash },
+      metadata: { reason, usdc_amount: usdcDecimal, xlm_amount: xlmDecimal, asset: 'XLM' },
     });
 
-    return { status: 'refunded', refundHash: result.hash, asset: 'USDC' };
+    return { status: 'refunded', refundHash, asset: 'XLM' };
   } catch (err) {
-    logger.error(`[Escrow] Orphan USDC refund failed for tx ${tx.id}:`, err.message);
+    logger.error(`[Escrow] Orphan USDC→XLM refund failed for tx ${tx.id}:`, err.message);
     await db.query(
       `UPDATE transactions SET refund_error = $1 WHERE id = $2`,
-      [`ORPHAN_USDC_REFUND_FAILED: ${err.message}`, tx.id]
+      [`ORPHAN_XLM_REFUND_FAILED: ${err.message}`, tx.id]
     );
     await auditLogService.log({
       actor_role: 'system',
       action: 'orphan_refund_failed',
       resource_type: 'transaction',
       resource_id: tx.id,
-      metadata: { reason, error: err.message, asset: 'USDC' },
+      metadata: { reason, error: err.message, asset: 'XLM' },
     });
     return { status: 'failed', error: err.message };
   }

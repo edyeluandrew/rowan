@@ -1,6 +1,7 @@
 import Queue from 'bull';
 import config from '../config/index.js';
 import db from '../db/index.js';
+import redis from '../db/redis.js';
 import websocket from '../services/websocket.js';
 import notificationService from '../services/notificationService.js';
 import stateMachine from './transactionStateMachine.js';
@@ -249,6 +250,11 @@ const reMatchQueue = new Queue('rematch', {
 reMatchQueue.process(async (job) => {
   const { transactionId, currentTraderId, mode = 'accept_timeout' } = job.data;
 
+  if (mode === 'payout_timeout') {
+    await handlePayoutTimeout(transactionId, currentTraderId);
+    return;
+  }
+
   const result = await db.query(
     `SELECT * FROM transactions WHERE id = $1`,
     [transactionId]
@@ -296,6 +302,79 @@ reMatchQueue.process(async (job) => {
     await matchingEngine.matchTrader(transactionId);
   }
 });
+
+const REMATCH_COUNT_KEY = (transactionId) => `payout-rematch:${transactionId}`;
+
+/**
+ * Trader accepted but did not submit MoMo within TRADER_CONFIRM_TIMEOUT_SECONDS.
+ * Re-match another trader, or auto-refund after TRADER_REMATCH_MAX_ATTEMPTS.
+ */
+async function handlePayoutTimeout(transactionId, traderId) {
+  const result = await db.query(
+    `SELECT t.*, u.stellar_address AS user_stellar
+     FROM transactions t
+     JOIN users u ON u.id = t.user_id
+     WHERE t.id = $1`,
+    [transactionId]
+  );
+  const tx = result.rows[0];
+  if (!tx) return;
+  if (tx.state !== 'TRADER_MATCHED' || tx.trader_id !== traderId) return;
+  if (!tx.matched_at || tx.fiat_payout_submitted_at) return;
+
+  const maxAttempts = config.platform.traderRematchMaxAttempts;
+  const countKey = REMATCH_COUNT_KEY(transactionId);
+  const attemptCount = parseInt(await redis.get(countKey) || '0', 10);
+
+  const escrowController = await getEscrowController();
+
+  if (attemptCount >= maxAttempts) {
+    const reason = 'Auto-refund: trader payout timeout (max re-match attempts reached)';
+    logger.warn(`[Job:rematch] Payout timeout max attempts (${maxAttempts}) for tx ${transactionId} — refunding`);
+
+    await db.query(
+      `UPDATE transactions SET failure_reason = $1 WHERE id = $2`,
+      [reason, transactionId]
+    );
+
+    const refundResult = await escrowController.refundOrphanTransaction(transactionId, reason);
+    if (refundResult.status === 'refunded') {
+      await notificationService.notifyRefund(tx.user_id, tx, reason);
+    }
+    await redis.del(countKey);
+    return;
+  }
+
+  logger.info(
+    `[Job:rematch] Trader ${traderId} payout timeout on tx ${transactionId} — re-matching (attempt ${attemptCount + 1}/${maxAttempts})`
+  );
+
+  await escrowController.releaseMatchFloatForTransaction(tx);
+
+  await db.query(
+    `UPDATE traders SET trust_score = GREATEST(0, trust_score - 2) WHERE id = $1`,
+    [traderId]
+  );
+
+  await db.query(
+    `UPDATE transactions
+       SET trader_id = NULL, payout_setting_id = NULL, matched_at = NULL,
+           state = 'ESCROW_LOCKED', trader_matched_at = NULL, updated_at = NOW()
+     WHERE id = $1 AND state = 'TRADER_MATCHED'`,
+    [transactionId]
+  );
+
+  await redis.incr(countKey);
+  await redis.expire(countKey, 86400);
+
+  const { default: matchingEngine } = await import('./matchingEngine.js');
+  await matchingEngine.matchTrader(transactionId);
+
+  await notificationService.notifyUser(tx.user_id, 'trader_rematch', {
+    transactionId,
+    message: 'Your trader did not send mobile money in time. Finding another trader…',
+  });
+}
 
 // ─── Queue: Reset trader daily volumes at midnight ────────
 const dailyResetQueue = new Queue('daily-reset', defaultOpts);
@@ -369,6 +448,26 @@ orphanRecoveryQueue.process(async () => {
     await matchingEngine.matchTrader(tx.id);
   }
 
+  // 5. TRADER_MATCHED, accepted, but no MoMo payout → payout timeout re-match / refund
+  const payoutTimeoutSeconds = config.platform.traderConfirmTimeoutSeconds;
+  const stuckPayout = await db.query(
+    `SELECT t.id, t.trader_id
+     FROM transactions t
+     WHERE t.state = 'TRADER_MATCHED'
+       AND t.matched_at IS NOT NULL
+       AND t.fiat_payout_submitted_at IS NULL
+       AND t.matched_at < NOW() - INTERVAL '1 second' * $1`,
+    [payoutTimeoutSeconds]
+  );
+  for (const tx of stuckPayout.rows) {
+    logger.warn(`[Job:orphan-recovery] Payout timeout orphan: tx ${tx.id} — handlePayoutTimeout`);
+    try {
+      await handlePayoutTimeout(tx.id, tx.trader_id);
+    } catch (err) {
+      logger.error(`[Job:orphan-recovery] Payout timeout handling failed for tx ${tx.id}:`, err.message);
+    }
+  }
+
   // 3. TRADER_MATCHED with no trader_id for too long → refund (no trader available)
   const noTraderMinutes = 5;
   const noTraderAvailable = await db.query(
@@ -424,6 +523,7 @@ orphanRecoveryQueue.process(async () => {
   return {
     fiatSentFlagged: stuckFiatSent.rows.length,
     matchedRecovered: stuckMatched.rows.length,
+    payoutTimeoutRecovered: stuckPayout.rows.length,
     escrowRefunded: stuckEscrow.rows.length,
   };
 });
@@ -457,6 +557,19 @@ function enqueueReMatch(transactionId, currentTraderId, delaySeconds) {
   return reMatchQueue.add(
     { transactionId, currentTraderId, mode },
     { delay: delaySeconds * 1000 }
+  );
+}
+
+/**
+ * Schedule payout-timeout handling after trader accepts (MoMo not submitted in time).
+ */
+function enqueuePayoutTimeout(transactionId, traderId, delaySeconds) {
+  return reMatchQueue.add(
+    { transactionId, currentTraderId: traderId, mode: 'payout_timeout' },
+    {
+      delay: delaySeconds * 1000,
+      jobId: `payout-timeout:${transactionId}:${traderId}`,
+    }
   );
 }
 
@@ -499,6 +612,7 @@ export default {
   enqueueRefund,
   enqueueRelease,
   enqueueReMatch,
+  enqueuePayoutTimeout,
   enqueueTrustDecay,
   enqueueDisputeRefund,
   enqueueDisputeRelease,
