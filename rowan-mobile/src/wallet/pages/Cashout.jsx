@@ -103,7 +103,13 @@ export default function Cashout() {
         payoutName: recipientName.trim(),
       })
       navigate('/wallet/cashout/confirm', {
-        state: { quote, network, phone: fullPhone, recipientName: recipientName.trim() },
+        state: {
+          quote,
+          network,
+          phone: fullPhone,
+          recipientName: recipientName.trim(),
+          requestedFiat: Math.round(netFiat),
+        },
       })
     } catch (err) {
       setError(err.response?.data?.error || err.message)

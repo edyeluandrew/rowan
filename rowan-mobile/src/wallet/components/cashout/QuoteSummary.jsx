@@ -5,8 +5,10 @@ import { maskPhoneNumber } from '../../utils/crypto'
 /**
  * Full quote breakdown card showing the exchange visualization.
  */
-export default function QuoteSummary({ quote, phone }) {
+export default function QuoteSummary({ quote, phone, requestedFiat }) {
   const network = NETWORKS[quote.network] || {}
+  const displayFiat = requestedFiat ?? quote.requestedFiatAmount ?? quote.fiatAmount
+  const currency = quote.fiatCurrency || network.currency || 'UGX'
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5">
@@ -17,7 +19,7 @@ export default function QuoteSummary({ quote, phone }) {
         </div>
         <div>
           <p className="text-rowan-muted text-xs">You send</p>
-          <p className="text-rowan-text text-2xl font-bold tabular-nums">{quote.xlmAmount} XLM</p>
+          <p className="text-rowan-text text-2xl font-bold tabular-nums">{Number(quote.xlmAmount).toFixed(4)} XLM</p>
         </div>
       </div>
 
@@ -31,9 +33,9 @@ export default function QuoteSummary({ quote, phone }) {
           <Smartphone size={20} className="text-rowan-green" />
         </div>
         <div>
-          <p className="text-rowan-muted text-xs">You receive</p>
+          <p className="text-rowan-muted text-xs">You receive on mobile money</p>
           <p className="text-rowan-green text-2xl font-bold tabular-nums">
-            {Number(quote.fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {quote.fiatCurrency}
+            {Number(displayFiat).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
           </p>
         </div>
       </div>
@@ -41,7 +43,7 @@ export default function QuoteSummary({ quote, phone }) {
       {/* Details */}
       <div className="border-t border-rowan-border mt-4 pt-4 space-y-2">
         <DetailRow label="Rate" value={`1 XLM = ${quote.fiatCurrency} ${quote.userRate ? Number(quote.userRate).toLocaleString('en-US', { maximumFractionDigits: 2 }) : 'N/A'}`} />
-        <DetailRow label="Platform fee" value={`${quote.platformFee ? Number(quote.platformFee).toFixed(6) : '0'} XLM`} />
+        <DetailRow label="Platform fee" value={`${quote.platformFee ? Number(quote.platformFee).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '0'} ${currency}`} />
         <DetailRow label="Network" value={network.label || quote.network} />
         <DetailRow label="Estimated delivery" value={ESTIMATED_DELIVERY} />
         {phone && <DetailRow label="Phone" value={maskPhoneNumber(phone)} />}
@@ -52,7 +54,7 @@ export default function QuoteSummary({ quote, phone }) {
         <div className="flex justify-between py-1">
           <span className="text-rowan-muted text-sm font-medium">You receive</span>
           <span className="text-rowan-green text-sm font-bold tabular-nums">
-            {Number(quote.fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {quote.fiatCurrency}
+            {Number(displayFiat).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
           </span>
         </div>
       </div>

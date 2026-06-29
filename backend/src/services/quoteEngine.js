@@ -348,75 +348,11 @@ async function computeQuoteFromXlm(xlmAmount, network) {
   
   logger.info(`[QuoteEngine]📊 Planning path discovery: estimatedUsdcTarget=${estimatedUsdcTarget}, usdcTargetForPath=${usdcTargetForPath}`);
 
-  // ── Step 3: DISCOVER ACTUAL EXECUTABLE PATH ──
-  // Attempt to use market maker's configured liquidity via Horizon path discovery
-  // This requires active offers in the market maker account (set up in Stellar Lab)
-  let pathResult = await getXlmRateFromPath(usdcTargetForPath);
-  
-  if (!pathResult) {
-    logger.warn('[QuoteEngine] ⚠️  No valid path returned from Horizon');
-    logger.warn('[QuoteEngine] 💡 To restore executable quotes:');
-    logger.warn('[QuoteEngine]    1. Verify the market maker has resting offers (selling: USDC / buying: XLM)');
-    logger.warn('[QuoteEngine]    2. Verify the orderbook has sufficient depth for target USDC');
-    logger.warn('[QuoteEngine]    3. Verify USDC asset issuer matches Horizon path query');
-    logger.info('[QuoteEngine] 📌 Generating non-executable legacy-fallback quote (escrow swap will REFUSE this quote)...');
-    
-    // FALLBACK: Calculate quote using configured rates directly
-    // This is acceptable for controlled trading environments where rates are stable
-    try {
-      const legacyRate = await getLegacyXlmRate(fiatCurrency); // fiat/XLM rate
-      const xlmToUsdcRate = legacyRate / usdcToFiat; // Convert to USDC/XLM
-      
-      // Use direct rate calculation
-      // xlmNeeded = usdcNeeded / (USDC/XLM rate)
-      const simulatedUsdcNeeded = usdcTargetForPath;
-      const simulatedXlmNeeded = simulatedUsdcNeeded / xlmToUsdcRate;
-      
-      pathResult = {
-        xlmRate: xlmToUsdcRate,
-        pathData: {
-          xlmNeeded: simulatedXlmNeeded,
-          usdcReceived: simulatedUsdcNeeded,
-          path: [],
-          source: 'legacy-fallback',
-        },
-        source: 'legacy-fallback',
-      };
-      
-      logger.warn('[QuoteEngine] ⚠️  Using FALLBACK legacy rate: ' + xlmToUsdcRate + ' XLM/USDC');
-      logger.warn('[QuoteEngine] ⚠️  Quotes may be less accurate than usual. Please restore Horizon path discovery.');
-    } catch (fallbackErr) {
-      logger.error('[QuoteEngine] ❌ Legacy rate fallback also failed:', fallbackErr.message);
-      throw new Error('Unable to generate quote: Path discovery failed and no legacy rate available. Please ensure escrow account is properly configured with USDC trustline.');
-    }
-  }
-
-  const { xlmRate, pathData } = pathResult;
-
-  // ── [PHASE 2C] Classify rate source + enforce fallback safety ──
-  // LIVE  = priced from a real Horizon strict-receive path (executable liquidity).
-  // FALLBACK = priced from legacy/indicative rates (path discovery unavailable).
-  const rateSource = pathData.source === 'horizon-path' ? 'LIVE' : 'FALLBACK';
-  let quoteWarning = null;
-  if (rateSource === 'FALLBACK') {
-    quoteWarning = 'Rate is indicative (live market liquidity was unavailable at quote time).';
-    // Mainnet (real funds): never settle a mispriced fallback quote unless explicitly allowed.
-    if (config.stellar.isMainnet && !config.platform.allowFallbackQuotes) {
-      const err = new Error('Quote temporarily unavailable: live market liquidity is required for cash-out right now. Please try again shortly.');
-      err.statusCode = 503;
-      err.code = 'QUOTE_UNAVAILABLE';
-      throw err;
-    }
-    // Even where fallback is allowed (testnet/demo), cap the amount so a bad rate
-    // can only affect small test/demo cash-outs.
-    if (config.platform.allowFallbackQuotes && xlmAmount > config.platform.fallbackMaxXlm) {
-      const err = new Error(`Quote temporarily unavailable for this amount: live liquidity is required for cash-outs above ${config.platform.fallbackMaxXlm} XLM. Please try a smaller amount or try again shortly.`);
-      err.statusCode = 503;
-      err.code = 'QUOTE_UNAVAILABLE_FALLBACK_CAP';
-      throw err;
-    }
-    logger.warn(`[QuoteEngine] ⚠️  FALLBACK quote allowed (network=${config.stellar.network}, xlm=${xlmAmount}, cap=${config.platform.fallbackMaxXlm}). Marked rate_source=FALLBACK.`);
-  }
+  const { xlmRate, pathData, rateSource, quoteWarning } = await discoverPathForUsdcTarget(
+    usdcTargetForPath,
+    fiatCurrency,
+    xlmAmount
+  );
 
   // ── Step 4: Apply configured SLIPPAGE TOLERANCE (PHASE 1 SPRINT) ──
   // [PHASE 1] Use slippage from config, not hardcoded constant
@@ -425,22 +361,18 @@ async function computeQuoteFromXlm(xlmAmount, network) {
   
   logger.info(`[QuoteEngine] 📐 Slippage calculation: xlmNeeded=${pathData.xlmNeeded}, slippage=${config.platform.quoteSlippagePercent}%, xlmWithSlippage=${xlmWithSlippage}`);
 
-  // ── Step 5: Derive actual fiat from REAL path ──
+  // ── Step 5: Derive fiat from path USDC (trader settlement amount) ──
   const actualUsdcReceived = pathData.usdcReceived;
-  const userRate = actualUsdcReceived * usdcToFiat; // XLM → fiat rate (before spread)
-  
-  // Apply spread to user-facing rate
   const spreadMultiplierUser = 1 - (spreadPercent / 100);
-  const userRateAfterSpread = userRate * spreadMultiplierUser;
-  
-  // Calculate user's actual fiat
-  const grossFiatActual = pathData.xlmNeeded * userRateAfterSpread;
+  const fiatPerXlm = (actualUsdcReceived / pathData.xlmNeeded) * usdcToFiat;
+  const userRateAfterSpread = fiatPerXlm * spreadMultiplierUser;
+  const grossFiatActual = actualUsdcReceived * usdcToFiat * spreadMultiplierUser;
   const platformFeeActual = grossFiatActual * (feePercent / 100);
   const fiatAmountActual = grossFiatActual - platformFeeActual;
-  
+
   logger.info(`[QuoteEngine]💰 Fiat breakdown:`);
-  logger.info(`  - USDC received (from path): ${actualUsdcReceived}`);
-  logger.info(`  - Gross fiat (before spread): ${grossFiatActual}`);
+  logger.info(`  - USDC for trader (from path): ${actualUsdcReceived}`);
+  logger.info(`  - Gross fiat (after spread): ${grossFiatActual}`);
   logger.info(`  - Platform fee: ${platformFeeActual}`);
   logger.info(`  - Net fiat to user: ${fiatAmountActual}`);
 
@@ -572,9 +504,129 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
   });
 }
 
+function normalizeLockedFiatAmount(amount, fiatCurrency) {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`Invalid fiat amount: ${amount}`);
+  if (fiatCurrency === 'KES') return parseFloat(n.toFixed(2));
+  return Math.round(n);
+}
+
+/**
+ * Discover XLM→USDC path for a USDC target (trader receives this USDC from escrow).
+ */
+async function discoverPathForUsdcTarget(usdcTargetForPath, fiatCurrency, capReferenceXlm) {
+  let pathResult = await getXlmRateFromPath(usdcTargetForPath);
+
+  if (!pathResult) {
+    logger.warn('[QuoteEngine] ⚠️  No valid path returned from Horizon — trying legacy fallback');
+    try {
+      const legacyRate = await getLegacyXlmRate(fiatCurrency);
+      const usdcToFiat = (await fxService.assertFiatFxAvailableForQuote(fiatCurrency)).rate;
+      const xlmToUsdcRate = legacyRate / usdcToFiat;
+      const simulatedXlmNeeded = usdcTargetForPath / xlmToUsdcRate;
+      pathResult = {
+        xlmRate: xlmToUsdcRate,
+        pathData: {
+          xlmNeeded: simulatedXlmNeeded,
+          usdcReceived: usdcTargetForPath,
+          path: [],
+          source: 'legacy-fallback',
+        },
+        source: 'legacy-fallback',
+      };
+    } catch (fallbackErr) {
+      logger.error('[QuoteEngine] ❌ Legacy rate fallback failed:', fallbackErr.message);
+      throw new Error('Unable to generate quote: Path discovery failed and no legacy rate available.');
+    }
+  }
+
+  const { xlmRate, pathData } = pathResult;
+  const rateSource = pathData.source === 'horizon-path' ? 'LIVE' : 'FALLBACK';
+  let quoteWarning = null;
+  if (rateSource === 'FALLBACK') {
+    quoteWarning = 'Rate is indicative (live market liquidity was unavailable at quote time).';
+    const refXlm = capReferenceXlm ?? pathData.xlmNeeded;
+    if (config.stellar.isMainnet && !config.platform.allowFallbackQuotes) {
+      const err = new Error('Quote temporarily unavailable: live market liquidity is required for cash-out right now. Please try again shortly.');
+      err.statusCode = 503;
+      err.code = 'QUOTE_UNAVAILABLE';
+      throw err;
+    }
+    if (config.platform.allowFallbackQuotes && refXlm > config.platform.fallbackMaxXlm) {
+      const err = new Error(`Quote temporarily unavailable for this amount: live liquidity is required for cash-outs above ${config.platform.fallbackMaxXlm} XLM. Please try a smaller amount or try again shortly.`);
+      err.statusCode = 503;
+      err.code = 'QUOTE_UNAVAILABLE_FALLBACK_CAP';
+      throw err;
+    }
+  }
+
+  return { xlmRate, pathData, rateSource, quoteWarning };
+}
+
+/**
+ * Fiat-anchored quote: user specifies exact MoMo payout; solve XLM send + USDC for trader.
+ * fiat_amount on the quote = exactly what the user entered (net UGX/KES/TZS).
+ * path_usdc_received = USDC escrow swaps to and releases to the trader.
+ */
+async function computeQuoteFromTargetFiat(targetNetFiat, network) {
+  const fiatCurrency = networkToFiat(network);
+  const fiatFx = await fxService.assertFiatFxAvailableForQuote(fiatCurrency);
+  const usdcToFiat = fiatFx.rate;
+  const fiatAmountNum = normalizeLockedFiatAmount(targetNetFiat, fiatCurrency);
+
+  const spreadMultiplierUser = 1 - (spreadPercent / 100);
+  const feeMultiplier = 1 - (feePercent / 100);
+  const grossFiatBeforeSpread = fiatAmountNum / (feeMultiplier * spreadMultiplierUser);
+  const usdcTargetForPath = grossFiatBeforeSpread / usdcToFiat;
+
+  logger.info(
+    `[QuoteEngine] Fiat-anchored quote: netFiat=${fiatAmountNum} ${fiatCurrency}, ` +
+    `usdcTarget=${usdcTargetForPath}`
+  );
+
+  const { xlmRate, pathData, rateSource, quoteWarning } = await discoverPathForUsdcTarget(
+    usdcTargetForPath,
+    fiatCurrency,
+    null
+  );
+
+  const slippageMultiplier = 1 + (config.platform.quoteSlippagePercent / 100);
+  const xlmWithSlippage = pathData.xlmNeeded * slippageMultiplier;
+  const actualUsdcReceived = pathData.usdcReceived;
+  const fiatPerXlm = (actualUsdcReceived / pathData.xlmNeeded) * usdcToFiat;
+  const userRateAfterSpread = fiatPerXlm * spreadMultiplierUser;
+  const grossFiatActual = actualUsdcReceived * usdcToFiat * spreadMultiplierUser;
+  const platformFeeNum = parseFloat(Math.max(0, grossFiatActual - fiatAmountNum).toFixed(2));
+
+  const usdcToUgx = config.usdcFiatRates.UGX;
+  const xlmToUsdc = pathData.xlmNeeded / pathData.usdcReceived;
+  const rateUgx = Math.round(xlmToUsdc * usdcToUgx);
+  const feeUgx = Math.round(fiatToUgxRate(platformFeeNum, fiatCurrency));
+  const quoteSource = pathData.source === 'horizon-path' ? 'horizon-path' : 'legacy-fallback';
+
+  logger.info(`[QuoteEngine] ✅ Fiat-anchored: send ${xlmWithSlippage} XLM → ${actualUsdcReceived} USDC → ${fiatAmountNum} ${fiatCurrency} MoMo`);
+
+  return {
+    fiatCurrency,
+    fiatFx,
+    xlmRate,
+    pathData,
+    rateSource,
+    quoteWarning,
+    userRateAfterSpread,
+    fiatAmountNum,
+    platformFeeNum,
+    rateUgx,
+    feeUgx,
+    quoteSource,
+    xlmWithSlippage,
+    grossFiatActual,
+  };
+}
+
 /**
  * Create a locked quote from a target net fiat amount (mobile-money payout).
- * Solves for the XLM the user must send using iterative path pricing.
+ * The quoted fiat_amount matches the user's input; XLM and USDC are derived from the path.
  */
 async function createQuoteFromFiat({
   userId,
@@ -584,52 +636,26 @@ async function createQuoteFromFiat({
   payoutPhone,
   payoutName,
 }) {
-  const fiatCurrency = networkToFiat(network);
-  const legacyRate = await getLegacyXlmRate(fiatCurrency);
-  const minXlm = config.platform.minXlmAmount;
-  const maxXlm = config.platform.fallbackMaxXlm || 1000;
+  const computed = await computeQuoteFromTargetFiat(targetNetFiat, network);
+  const xlmAmount = Math.ceil(computed.xlmWithSlippage * 1e7) / 1e7;
 
-  let xlm = Math.max(minXlm, (targetNetFiat / legacyRate) * 1.08);
-
-  for (let i = 0; i < 10; i++) {
-    const computed = await computeQuoteFromXlm(xlm, network);
-    const ratio = targetNetFiat / Math.max(computed.fiatAmountNum, 0.01);
-    if (computed.fiatAmountNum >= targetNetFiat * 0.998 && ratio <= 1.02) {
-      const rounded = Math.ceil(xlm * 1e7) / 1e7;
-      return persistQuote({
-        userId,
-        xlmAmount: rounded,
-        network,
-        phoneHash,
-        payoutPhone,
-        payoutName,
-        computed: await computeQuoteFromXlm(rounded, network),
-        requestedNetFiat: targetNetFiat,
-      });
-    }
-    xlm = Math.min(maxXlm, Math.max(minXlm, xlm * ratio * 1.01));
-  }
-
-  const finalXlm = Math.ceil(Math.min(maxXlm, xlm) * 1e7) / 1e7;
-  const finalComputed = await computeQuoteFromXlm(finalXlm, network);
-  if (finalComputed.fiatAmountNum < targetNetFiat * 0.95) {
-    const err = new Error(
-      `Unable to reach ${targetNetFiat} ${fiatCurrency} with available liquidity. Try a smaller amount.`
-    );
-    err.statusCode = 503;
-    err.code = 'QUOTE_UNAVAILABLE';
+  if (xlmAmount < config.platform.minXlmAmount) {
+    const fiatCurrency = networkToFiat(network);
+    const err = new Error(`Amount too small. Minimum cash-out is ${config.platform.minXlmAmount} XLM equivalent.`);
+    err.statusCode = 400;
+    err.code = 'AMOUNT_BELOW_MIN';
     throw err;
   }
 
   return persistQuote({
     userId,
-    xlmAmount: finalXlm,
+    xlmAmount,
     network,
     phoneHash,
     payoutPhone,
     payoutName,
-    computed: finalComputed,
-    requestedNetFiat: targetNetFiat,
+    computed,
+    requestedNetFiat: computed.fiatAmountNum,
   });
 }
 
@@ -702,6 +728,7 @@ export default {
   createQuote,
   createQuoteFromFiat,
   computeQuoteFromXlm,
+  computeQuoteFromTargetFiat,
   getQuoteByMemo,
   networkToFiat,
   getUsdcToFiatRate,

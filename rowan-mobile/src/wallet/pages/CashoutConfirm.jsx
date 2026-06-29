@@ -8,7 +8,7 @@ import Button from '../components/ui/Button'
 export default function CashoutConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, network, phone } = location.state || {}
+  const { quote, network, phone, requestedFiat } = location.state || {}
   const [expired, setExpired] = useState(false)
 
   if (!quote) {
@@ -48,7 +48,7 @@ export default function CashoutConfirm() {
         This timer is only for sending XLM from your wallet. After that, we match a trader and send mobile money separately.
       </p>
 
-      <QuoteSummary quote={quote} phone={phone} />
+      <QuoteSummary quote={quote} phone={phone} requestedFiat={requestedFiat} />
 
       <div className="bg-rowan-surface rounded-xl p-4 mt-4 flex items-start gap-3">
         <ShieldCheck size={20} className="text-rowan-green shrink-0 mt-0.5" />
