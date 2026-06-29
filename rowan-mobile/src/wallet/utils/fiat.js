@@ -14,6 +14,13 @@ export function xlmToFiat(xlmBalance, xlmRate) {
   return xlm * rate
 }
 
+/** Conservative max net fiat cash-out from XLM balance (spread + fee buffer). */
+export function estimateMaxNetFiat(xlmBalance, xlmRate, feePercent = 1, spreadPercent = 1.25) {
+  const gross = xlmToFiat(xlmBalance, xlmRate)
+  if (gross == null) return null
+  return gross * (1 - spreadPercent / 100) * (1 - feePercent / 100)
+}
+
 export function formatFiatAmount(amount, currency, options = {}) {
   const value = Number(amount)
   if (!Number.isFinite(value)) return `— ${currency}`

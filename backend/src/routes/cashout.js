@@ -38,48 +38,62 @@ const router = Router();
 /**
  * POST /api/v1/cashout/quote
  * Request a locked exchange rate.
- * Body: { xlmAmount, network, phoneHash, payoutPhone?, payoutName? }
+ * Body: { xlmAmount | fiatAmount, network, phoneHash, payoutPhone?, payoutName? }
  */
 router.post(
   '/quote',
   authUser,
-  validate(['xlmAmount', 'network', 'phoneHash']),
-  validateTypes({ xlmAmount: 'positiveNumber', network: 'mobileNetwork', phoneHash: 'phoneHash' }),
+  validate(['network', 'phoneHash']),
+  validateTypes({ xlmAmount: 'positiveNumber', fiatAmount: 'positiveNumber', network: 'mobileNetwork', phoneHash: 'phoneHash' }),
   checkUserLimits,
   async (req, res, next) => {
     try {
-      const { xlmAmount, network, phoneHash, payoutPhone, payoutName } = req.body;
-      
-      logger.info(`[Cashout] getQuote called: xlmAmount=${xlmAmount} (type: ${typeof xlmAmount}), network=${network}, phoneHash=${phoneHash?.slice(0, 8)}...`);
+      const { xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName } = req.body;
 
-      // ── [H-5 FIX] Enforce minimum XLM amount ──
-      const xlmNum = typeof xlmAmount === 'string' ? parseFloat(xlmAmount) : xlmAmount;
-      if (!Number.isFinite(xlmNum) || xlmNum <= 0) {
-        logger.warn(`[Cashout] Invalid xlmAmount: ${xlmAmount} (parsed: ${xlmNum}, finite: ${Number.isFinite(xlmNum)})`);
+      const hasXlm = xlmAmount != null && xlmAmount !== '';
+      const hasFiat = fiatAmount != null && fiatAmount !== '';
+      if (hasXlm === hasFiat) {
         return res.status(400).json({
-          error: `XLM amount must be a positive number (got: ${xlmAmount}, type: ${typeof xlmAmount})`,
-        });
-      }
-      
-      if (xlmNum < config.platform.minXlmAmount) {
-        logger.warn(`[Cashout] xlmAmount below minimum: ${xlmNum} < ${config.platform.minXlmAmount}`);
-        return res.status(400).json({
-          error: `Minimum cash-out amount is ${config.platform.minXlmAmount} XLM`,
+          error: 'Provide exactly one of xlmAmount or fiatAmount (net mobile-money amount you want to receive).',
+          code: 'AMOUNT_MODE_REQUIRED',
         });
       }
 
-      // Run fraud checks before creating quote
-      // [PHASE 2 UPGRADE] Use legacy rate for fraud estimate (real path will be discovered during quote creation)
       const fiatCurrency = quoteEngine.networkToFiat(network);
-      let currentRate;
-      try {
-        currentRate = await quoteEngine.getLegacyXlmRate(fiatCurrency);
-      } catch (err) {
-        logger.warn(`[Cashout] Legacy rate fetch for fraud check failed:`, err.message);
-        return res.status(503).json({ error: 'Unable to fetch rates. Please try again.' });
+      let xlmNum = null;
+      let fiatNum = null;
+      let fiatEstimate = null;
+
+      if (hasXlm) {
+        xlmNum = typeof xlmAmount === 'string' ? parseFloat(xlmAmount) : xlmAmount;
+        if (!Number.isFinite(xlmNum) || xlmNum <= 0) {
+          return res.status(400).json({
+            error: `XLM amount must be a positive number (got: ${xlmAmount})`,
+          });
+        }
+        if (xlmNum < config.platform.minXlmAmount) {
+          return res.status(400).json({
+            error: `Minimum cash-out amount is ${config.platform.minXlmAmount} XLM`,
+          });
+        }
+        try {
+          const currentRate = await quoteEngine.getLegacyXlmRate(fiatCurrency);
+          fiatEstimate = xlmNum * currentRate;
+        } catch (err) {
+          logger.warn(`[Cashout] Legacy rate fetch for fraud check failed:`, err.message);
+          return res.status(503).json({ error: 'Unable to fetch rates. Please try again.' });
+        }
+        logger.info(`[Cashout] getQuote (XLM): xlmAmount=${xlmNum}, network=${network}`);
+      } else {
+        fiatNum = typeof fiatAmount === 'string' ? parseFloat(fiatAmount) : fiatAmount;
+        if (!Number.isFinite(fiatNum) || fiatNum <= 0) {
+          return res.status(400).json({
+            error: `Fiat amount must be a positive number (got: ${fiatAmount})`,
+          });
+        }
+        fiatEstimate = fiatNum;
+        logger.info(`[Cashout] getQuote (fiat): fiatAmount=${fiatNum}, network=${network}`);
       }
-      
-      const fiatEstimate = xlmNum * currentRate;
       const fraudCheck = await fraudMonitor.checkTransaction(req.userId, fiatEstimate, fiatCurrency);
       if (!fraudCheck.allowed) {
         logger.warn(`[Cashout] Fraud check failed: ${fraudCheck.reason}`);
@@ -95,7 +109,9 @@ router.post(
       }
       if (networkLimits.maxFiat != null && fiatEstimate > networkLimits.maxFiat) {
         return res.status(400).json({
-          error: `Amount too large. Maximum payout for this network is ${Math.floor(networkLimits.maxFiat).toLocaleString()} ${fiatCurrency}. Send less XLM and try again.`,
+          error: hasFiat
+            ? `Amount too large. Maximum payout for this network is ${Math.floor(networkLimits.maxFiat).toLocaleString()} ${fiatCurrency}.`
+            : `Amount too large. Maximum payout for this network is ${Math.floor(networkLimits.maxFiat).toLocaleString()} ${fiatCurrency}. Send less XLM and try again.`,
           code: 'AMOUNT_ABOVE_NETWORK_MAX',
           maxFiat: networkLimits.maxFiat,
           minFiat: networkLimits.minFiat,
@@ -104,7 +120,9 @@ router.post(
       }
       if (networkLimits.minFiat != null && fiatEstimate < networkLimits.minFiat) {
         return res.status(400).json({
-          error: `Amount too small. Minimum payout for this network is ${Math.ceil(networkLimits.minFiat).toLocaleString()} ${fiatCurrency}.`,
+          error: hasFiat
+            ? `Amount too small. Minimum payout for this network is ${Math.ceil(networkLimits.minFiat).toLocaleString()} ${fiatCurrency}.`
+            : `Amount too small. Minimum payout for this network is ${Math.ceil(networkLimits.minFiat).toLocaleString()} ${fiatCurrency}. Send more XLM and try again.`,
           code: 'AMOUNT_BELOW_NETWORK_MIN',
           maxFiat: networkLimits.maxFiat,
           minFiat: networkLimits.minFiat,
@@ -112,20 +130,20 @@ router.post(
         });
       }
 
-      logger.info(`[Cashout] ✅ Fraud check passed. Creating quote: xlmAmount=${xlmNum}, network=${network}`);
+      logger.info(`[Cashout] ✅ Fraud check passed. Creating quote (mode=${hasFiat ? 'fiat' : 'xlm'})`);
       
-      // [PHASE 2] Create quote using real Horizon path discovery
-      // This will throw if no valid path is found
       let quote;
       try {
-        quote = await quoteEngine.createQuote({
+        const quoteParams = {
           userId: req.userId,
-          xlmAmount: xlmNum,
           network,
           phoneHash,
           payoutPhone: payoutPhone?.trim(),
           payoutName: payoutName?.trim(),
-        });
+        };
+        quote = hasFiat
+          ? await quoteEngine.createQuoteFromFiat({ ...quoteParams, targetNetFiat: fiatNum })
+          : await quoteEngine.createQuote({ ...quoteParams, xlmAmount: xlmNum });
       } catch (quoteErr) {
         logger.error(`[Cashout] Quote creation failed:`, quoteErr.message);
         // [PHASE 2C] Honor structured unavailability errors (e.g. unsafe fallback
@@ -167,6 +185,7 @@ router.post(
         fiatCurrency: quote.fiat_currency,
         platformFee: quote.platform_fee,
         expiresAt: quote.expires_at,
+        requestedFiatAmount: hasFiat ? fiatNum : null,
         // [PHASE 2C] Rate transparency: LIVE = priced from real liquidity,
         // FALLBACK = indicative rate (path discovery was unavailable).
         rateSource: quote.rate_source || (quote.quote_source === 'horizon-path' ? 'LIVE' : 'FALLBACK'),

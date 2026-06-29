@@ -125,10 +125,28 @@ export async function checkUserLimits(req, res, next) {
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (!user.is_active) return res.status(403).json({ error: 'Account disabled' });
 
-    const xlmAmount = parseFloat(req.body.xlmAmount);
+    const hasXlm = req.body.xlmAmount != null && req.body.xlmAmount !== '';
+    const hasFiat = req.body.fiatAmount != null && req.body.fiatAmount !== '';
+    const xlmAmount = hasXlm ? parseFloat(req.body.xlmAmount) : NaN;
+    const fiatAmount = hasFiat ? parseFloat(req.body.fiatAmount) : NaN;
+
+    const quoteEngine = (await import('../services/quoteEngine.js')).default;
+    const network = req.body.network;
+    const fiatCurrency = quoteEngine.networkToFiat(network);
+    const currentRate = await quoteEngine.getLegacyXlmRate(fiatCurrency);
+
+    let estimatedFiat;
+    let estimatedXlm;
+    if (hasFiat) {
+      estimatedFiat = fiatAmount;
+      estimatedXlm = fiatAmount / currentRate;
+    } else {
+      estimatedXlm = xlmAmount;
+      estimatedFiat = xlmAmount * currentRate;
+    }
 
     // Per-transaction limit (XLM)
-    if (xlmAmount > parseFloat(user.per_tx_limit)) {
+    if (Number.isFinite(estimatedXlm) && estimatedXlm > parseFloat(user.per_tx_limit)) {
       return res.status(400).json({
         error: `Exceeds per-transaction limit of ${user.per_tx_limit} XLM`,
       });
@@ -149,13 +167,6 @@ export async function checkUserLimits(req, res, next) {
       dailyTotalUgx += fiatToUgx(parseFloat(row.fiat_amount), row.fiat_currency);
     }
 
-    // Estimate this request's fiat in UGX for comparison
-    const quoteEngine = (await import('../services/quoteEngine.js')).default;
-    const network = req.body.network;
-    const fiatCurrency = quoteEngine.networkToFiat(network);
-    // [PHASE 2 UPGRADE] Use legacy rate for daily limit check
-    const currentRate = await quoteEngine.getLegacyXlmRate(fiatCurrency);
-    const estimatedFiat = xlmAmount * currentRate;
     const estimatedUgx = fiatToUgx(estimatedFiat, fiatCurrency);
 
     const dailyLimitUgx = parseFloat(user.daily_limit_ugx || 500000);

@@ -314,21 +314,11 @@ function fiatToUgxRate(amount, fiatCurrency) {
 }
 
 /**
- * [PHASE 2] Create a locked quote using REAL EXECUTABLE STELLAR PATHS.
- * 
- * NEW FLOW:
- * 1. User specifies XLM amount
- * 2. Calculate fiat equivalent using legacy estimates (for display)
- * 3. Convert fiat back to USDC target (what swap must achieve)
- * 4. Discover actual XLM→USDC path (strict-receive) — THIS IS THE TRUTH
- * 5. Apply 0.3% slippage tolerance to XLM amount
- * 6. Calculate actual user-facing fiat based on REAL path
- * 7. Store path data in quote for execution alignment
- * 
- * Returns the quote object with a 60-second TTL.
+ * Compute quote amounts for a given XLM input (no DB write).
+ * Used by createQuote and fiat-target binary search.
  */
-async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone, payoutName }) {
-  logger.info(`[QuoteEngine] 🔄 Creating quote: xlmAmount=${xlmAmount}, network=${network}`);
+async function computeQuoteFromXlm(xlmAmount, network) {
+  logger.info(`[QuoteEngine] Computing quote: xlmAmount=${xlmAmount}, network=${network}`);
 
   const fiatCurrency = networkToFiat(network);
   const fiatFx = await fxService.assertFiatFxAvailableForQuote(fiatCurrency);
@@ -454,32 +444,69 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
   logger.info(`  - Platform fee: ${platformFeeActual}`);
   logger.info(`  - Net fiat to user: ${fiatAmountActual}`);
 
-  // ── Step 6: Build memo and expiry ──
-  const memo = `ROWAN-qt_${nanoid(8)}`;
-  const expiresAt = new Date(Date.now() + quoteTtlSeconds * 1000);
-
-  // ── Step 7: Normalize amounts for DB ──
+  // ── Normalize amounts ──
   const usdcToUgx = config.usdcFiatRates.UGX;
-  const xlmToUsdc = pathData.xlmNeeded / pathData.usdcReceived; // Actual rate from path
-  const rateUgx = Math.round(xlmToUsdc * usdcToUgx); // XLM price in UGX
+  const xlmToUsdc = pathData.xlmNeeded / pathData.usdcReceived;
+  const rateUgx = Math.round(xlmToUsdc * usdcToUgx);
   const feeUgx = Math.round(fiatToUgxRate(platformFeeActual, fiatCurrency));
 
-  // ── Step 8: Ensure numeric values ──
   const fiatAmountNum = parseFloat(fiatAmountActual.toFixed(2));
   const platformFeeNum = parseFloat(platformFeeActual.toFixed(2));
-  
+
   logger.info(`[QuoteEngine] ✅ Amount validation: fiatAmount=${fiatAmountNum}, platformFee=${platformFeeNum}`);
-  
+
   if (!Number.isFinite(fiatAmountNum) || !Number.isFinite(platformFeeNum)) {
     throw new Error(`Invalid amounts calculated: fiatAmount=${fiatAmountActual}, platformFee=${platformFeeActual}`);
   }
 
-  // ── Step 9: PERSIST TO DB with path data (PHASE 5) ──
-  // [CORRECTNESS] quote_source MUST reflect reality. If pathData was synthesised
-  // from the legacy fallback (no Horizon path), stamp it 'legacy-fallback' so the
-  // escrow swap layer refuses to execute against it. Only quotes backed by a real
-  // Horizon-discovered path are marked 'horizon-path' and therefore executable.
   const quoteSource = pathData.source === 'horizon-path' ? 'horizon-path' : 'legacy-fallback';
+
+  return {
+    fiatCurrency,
+    fiatFx,
+    xlmRate,
+    pathData,
+    rateSource,
+    quoteWarning,
+    userRateAfterSpread,
+    fiatAmountNum,
+    platformFeeNum,
+    rateUgx,
+    feeUgx,
+    quoteSource,
+    xlmWithSlippage,
+    grossFiatActual,
+  };
+}
+
+async function persistQuote({
+  userId,
+  xlmAmount,
+  network,
+  phoneHash,
+  payoutPhone,
+  payoutName,
+  computed,
+  requestedNetFiat = null,
+}) {
+  const {
+    fiatCurrency,
+    fiatFx,
+    xlmRate,
+    pathData,
+    rateSource,
+    quoteWarning,
+    userRateAfterSpread,
+    fiatAmountNum,
+    platformFeeNum,
+    rateUgx,
+    feeUgx,
+    quoteSource,
+  } = computed;
+
+  const memo = `ROWAN-qt_${nanoid(8)}`;
+  const expiresAt = new Date(Date.now() + quoteTtlSeconds * 1000);
+
   const result = await db.query(
     `INSERT INTO quotes
        (user_id, xlm_amount, fiat_currency, market_rate, user_rate, fiat_amount,
@@ -521,9 +548,89 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
   // Also cache in Redis for fast lookup by memo
   await redis.set(`quote:${memo}`, JSON.stringify(quote), 'EX', quoteTtlSeconds);
 
-  logger.info(`[QuoteEngine] ✨ Quote created: ${quote.id} (memo: ${memo})`);
+  logger.info(
+    `[QuoteEngine] ✨ Quote created: ${quote.id} (memo: ${memo}` +
+    `${requestedNetFiat != null ? `, requestedFiat=${requestedNetFiat}, net=${fiatAmountNum}` : ''})`
+  );
 
   return quote;
+}
+
+/**
+ * Create a locked quote from a user-specified XLM amount.
+ */
+async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone, payoutName }) {
+  const computed = await computeQuoteFromXlm(xlmAmount, network);
+  return persistQuote({
+    userId,
+    xlmAmount,
+    network,
+    phoneHash,
+    payoutPhone,
+    payoutName,
+    computed,
+  });
+}
+
+/**
+ * Create a locked quote from a target net fiat amount (mobile-money payout).
+ * Solves for the XLM the user must send using iterative path pricing.
+ */
+async function createQuoteFromFiat({
+  userId,
+  targetNetFiat,
+  network,
+  phoneHash,
+  payoutPhone,
+  payoutName,
+}) {
+  const fiatCurrency = networkToFiat(network);
+  const legacyRate = await getLegacyXlmRate(fiatCurrency);
+  const minXlm = config.platform.minXlmAmount;
+  const maxXlm = config.platform.fallbackMaxXlm || 1000;
+
+  let xlm = Math.max(minXlm, (targetNetFiat / legacyRate) * 1.08);
+
+  for (let i = 0; i < 10; i++) {
+    const computed = await computeQuoteFromXlm(xlm, network);
+    const ratio = targetNetFiat / Math.max(computed.fiatAmountNum, 0.01);
+    if (computed.fiatAmountNum >= targetNetFiat * 0.998 && ratio <= 1.02) {
+      const rounded = Math.ceil(xlm * 1e7) / 1e7;
+      return persistQuote({
+        userId,
+        xlmAmount: rounded,
+        network,
+        phoneHash,
+        payoutPhone,
+        payoutName,
+        computed: await computeQuoteFromXlm(rounded, network),
+        requestedNetFiat: targetNetFiat,
+      });
+    }
+    xlm = Math.min(maxXlm, Math.max(minXlm, xlm * ratio * 1.01));
+  }
+
+  const finalXlm = Math.ceil(Math.min(maxXlm, xlm) * 1e7) / 1e7;
+  const finalComputed = await computeQuoteFromXlm(finalXlm, network);
+  if (finalComputed.fiatAmountNum < targetNetFiat * 0.95) {
+    const err = new Error(
+      `Unable to reach ${targetNetFiat} ${fiatCurrency} with available liquidity. Try a smaller amount.`
+    );
+    err.statusCode = 503;
+    err.code = 'QUOTE_UNAVAILABLE';
+    throw err;
+  }
+
+  return persistQuote({
+    userId,
+    xlmAmount: finalXlm,
+    network,
+    phoneHash,
+    payoutPhone,
+    payoutName,
+    computed: finalComputed,
+    requestedNetFiat: targetNetFiat,
+  });
 }
 
 /**
@@ -593,6 +700,8 @@ export default {
   getMarketMakerRate,
   getLegacyXlmRate,
   createQuote,
+  createQuoteFromFiat,
+  computeQuoteFromXlm,
   getQuoteByMemo,
   networkToFiat,
   getUsdcToFiatRate,

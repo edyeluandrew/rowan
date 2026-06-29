@@ -1,19 +1,20 @@
 import client from './client'
 
-export function getQuote({ xlmAmount, network, phoneHash, payoutPhone, payoutName }) {
-  console.log('[API] getQuote called with:', { xlmAmount, network, phoneHash, payoutPhone, payoutName, xlmType: typeof xlmAmount })
-  
-  return client.post('/api/v1/cashout/quote', {
-    xlmAmount: Number(xlmAmount),  // Ensure it's a number
+export function getQuote({ xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName }) {
+  const body = {
     network,
     phoneHash,
     payoutPhone,
     payoutName,
-  }).then(res => {
-    console.log('[API] ✅ getQuote response:', res.data)
-    return res.data
-  }).catch(err => {
-    console.error('[API] ❌ getQuote error:', err.response?.data || err.message)
+  }
+  if (fiatAmount != null) {
+    body.fiatAmount = Number(fiatAmount)
+  } else {
+    body.xlmAmount = Number(xlmAmount)
+  }
+
+  return client.post('/api/v1/cashout/quote', body).then(res => res.data).catch(err => {
+    console.error('[API] getQuote error:', err.response?.data || err.message)
     throw err
   })
 }
