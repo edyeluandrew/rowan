@@ -3,8 +3,19 @@ import jwt from 'jsonwebtoken';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import matchingEngine from '../services/matchingEngine.js';
+import db from '../db/index.js';
+import { isTraderOnline, formatLastSeenLabel } from '../utils/traderOnline.js';
 
 let io = null;
+
+async function touchTraderLastSeen(traderId) {
+  if (!traderId) return;
+  try {
+    await db.query(`UPDATE traders SET last_seen_at = NOW() WHERE id = $1`, [traderId]);
+  } catch (err) {
+    logger.warn(`[WS] Failed to update last_seen_at for trader ${traderId}: ${err.message}`);
+  }
+}
 
 /**
  * Initialize Socket.io on top of the HTTP server.
@@ -48,6 +59,7 @@ function init(httpServer) {
       logger.info(`[WS] User ${socket.userId} connected`);
     } else if (socket.role === 'trader') {
       socket.join(`trader:${socket.userId}`);
+      touchTraderLastSeen(socket.userId);
       logger.info(`[WS] Trader ${socket.userId} connected`);
     } else if (socket.role === 'admin') {
       socket.join('admin');
@@ -63,6 +75,9 @@ function init(httpServer) {
     });
 
     socket.on('disconnect', () => {
+      if (socket.role === 'trader') {
+        touchTraderLastSeen(socket.userId);
+      }
       logger.info(`[WS] ${socket.role} ${socket.userId} disconnected`);
     });
 
@@ -138,4 +153,4 @@ function broadcast(role, event, data) {
   }
 }
 
-export default { init, getIo, emitToUser, emitToTrader, emitToOrder, broadcast };
+export default { init, getIo, emitToUser, emitToTrader, emitToOrder, broadcast, isTraderOnline, formatLastSeenLabel };

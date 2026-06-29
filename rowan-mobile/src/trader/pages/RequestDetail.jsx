@@ -14,6 +14,8 @@ import ConfirmPayoutModal from '../components/modals/ConfirmPayoutModal';
 import TraderDisputeStatusCard from '../components/disputes/TraderDisputeStatusCard';
 import UsdcReceiptCard from '../components/wallet/UsdcReceiptCard';
 import OrderChat from '../components/chat/OrderChat';
+import DisputeEvidenceSection from '../../wallet/components/disputes/DisputeEvidenceSection';
+import { uploadTraderDisputeEvidence, listTraderDisputeEvidence } from '../api/disputes';
 import TraderReviewModal from '../components/reviews/TraderReviewModal';
 import { getTraderReviewStatus } from '../api/reviews';
 import useJoinOrder from '../hooks/useJoinOrder';
@@ -239,8 +241,22 @@ export default function RequestDetail() {
       )}
 
       {/* Order chat */}
-      {!isComplete && (
+      {(tx.state === 'REFUNDED' || tx.state === 'FAILED') && (
+        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-3 mb-4">
+          <p className="text-rowan-red text-sm">This order was cancelled by the buyer.</p>
+        </div>
+      )}
+
+      {!isComplete && tx.state !== 'REFUNDED' && tx.state !== 'FAILED' && (
         <OrderChat transactionId={tx.id} txState={tx.state || tx.status} />
+      )}
+
+      {tx.state === 'DISPUTE_OPENED' && tx.dispute_id && (
+        <DisputeEvidenceSection
+          disputeId={tx.dispute_id}
+          uploadEvidence={uploadTraderDisputeEvidence}
+          listEvidence={listTraderDisputeEvidence}
+        />
       )}
 
       {/* Dispute/Status Cards */}

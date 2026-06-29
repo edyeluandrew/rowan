@@ -413,6 +413,7 @@ async function start() {
       const { default: storageService } = await import('./services/storageService.js');
       await storageService.ensureBucket();
       await storageService.ensureChatBucket();
+      await storageService.ensureDisputeEvidenceBucket();
     } catch (err) {
       logger.warn('[Bootstrap] Supabase Storage bucket check skipped', { error: err.message });
     }

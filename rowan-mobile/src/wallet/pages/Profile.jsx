@@ -160,6 +160,16 @@ export default function Profile() {
           <ChevronRight size={16} className="text-rowan-muted" />
         </button>
         <button
+          onClick={() => navigate('/wallet/blocked-traders')}
+          className="flex items-center justify-between w-full px-4 py-3 min-h-11"
+        >
+          <div className="flex items-center gap-3">
+            <Shield size={18} className="text-rowan-muted" />
+            <span className="text-rowan-text text-sm">Blocked Traders</span>
+          </div>
+          <ChevronRight size={16} className="text-rowan-muted" />
+        </button>
+        <button
           onClick={() => navigate('/wallet/rate-alerts')}
           className="flex items-center justify-between w-full px-4 py-3 min-h-11"
         >

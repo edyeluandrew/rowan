@@ -1,10 +1,13 @@
 import db from '../db/index.js';
 import traderStatsService from './traderStatsService.js';
 
+const ACTIVE_ORDER_STATES = ['TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'];
+
 /**
  * List active trader ads (payout settings) for the wallet marketplace.
  */
 async function listAds({
+  userId = null,
   currency = null,
   network = null,
   minAmount = null,
@@ -20,8 +23,16 @@ async function listAds({
     `t.verification_status = 'VERIFIED'`,
     `t.stellar_address IS NOT NULL`,
     `(ps.available_float - ps.reserved_float) > 0`,
+    `(SELECT COUNT(*) FROM transactions tx
+        WHERE tx.trader_id = t.id
+          AND tx.state = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[]))
+      < COALESCE(t.max_concurrent_orders, 3)`,
   ];
 
+  if (userId) {
+    params.push(userId);
+    conditions.push(`t.id NOT IN (SELECT trader_id FROM blocked_traders WHERE user_id = $${params.length})`);
+  }
   if (currency) {
     params.push(currency.toUpperCase());
     conditions.push(`ps.currency = $${params.length}`);
@@ -53,6 +64,8 @@ async function listAds({
       ps.trader_id,
       t.name AS trader_name,
       t.trust_score,
+      t.last_seen_at,
+      t.max_concurrent_orders,
       ps.network,
       ps.currency,
       ps.country,
@@ -61,7 +74,10 @@ async function listAds({
       ps.available_float,
       ps.reserved_float,
       ps.rate_per_usdc,
-      (ps.available_float - ps.reserved_float) AS net_float
+      (ps.available_float - ps.reserved_float) AS net_float,
+      (SELECT COUNT(*)::int FROM transactions tx
+         WHERE tx.trader_id = t.id
+           AND tx.state = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_orders
     FROM trader_payout_settings ps
     JOIN traders t ON t.id = ps.trader_id
     WHERE ${conditions.join(' AND ')}
@@ -74,6 +90,7 @@ async function listAds({
   const ads = await Promise.all(
     result.rows.map(async (row) => {
       const stats = await traderStatsService.getTraderStats(row.trader_id);
+      const online = traderStatsService.enrichOnlineStatus(row);
       return {
         id: row.payout_setting_id,
         payoutSettingId: row.payout_setting_id,
@@ -89,8 +106,12 @@ async function listAds({
         ratePerUsdc: row.rate_per_usdc != null ? parseFloat(row.rate_per_usdc) : null,
         completionRate: stats.completionRate,
         avgReleaseMinutes: stats.avgReleaseMinutes,
+        avgResponseMinutes: stats.avgResponseMinutes,
         reviewCount: stats.reviewCount,
         positivePercent: stats.positivePercent,
+        activeOrders: row.active_orders,
+        maxConcurrentOrders: row.max_concurrent_orders,
+        ...online,
       };
     })
   );
@@ -100,7 +121,8 @@ async function listAds({
 
 async function getAdById(payoutSettingId) {
   const result = await db.query(
-    `SELECT ps.*, t.name AS trader_name, t.trust_score, t.verification_status, t.status
+    `SELECT ps.*, t.name AS trader_name, t.trust_score, t.verification_status, t.status,
+            t.last_seen_at, t.max_concurrent_orders
      FROM trader_payout_settings ps
      JOIN traders t ON t.id = ps.trader_id
      WHERE ps.id = $1 AND ps.is_active = TRUE`,
@@ -112,6 +134,7 @@ async function getAdById(payoutSettingId) {
 
   const stats = await traderStatsService.getTraderStats(row.trader_id);
   const reviews = await traderStatsService.getRecentReviews(row.trader_id, 10);
+  const online = traderStatsService.enrichOnlineStatus(row);
 
   return {
     id: row.id,
@@ -128,15 +151,19 @@ async function getAdById(payoutSettingId) {
     ratePerUsdc: row.rate_per_usdc != null ? parseFloat(row.rate_per_usdc) : null,
     stats,
     reviews,
+    ...online,
   };
 }
 
 /**
  * Validate a payout setting can serve a quote (network, amount, float).
  */
-async function validateAdForQuote(payoutSettingId, { network, currency, fiatAmount }) {
+async function validateAdForQuote(payoutSettingId, { network, currency, fiatAmount, userId = null }) {
   const result = await db.query(
-    `SELECT ps.*, t.status, t.verification_status, t.stellar_address
+    `SELECT ps.*, t.status, t.verification_status, t.stellar_address, t.max_concurrent_orders,
+            (SELECT COUNT(*)::int FROM transactions tx
+               WHERE tx.trader_id = t.id
+                 AND tx.state = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_orders
      FROM trader_payout_settings ps
      JOIN traders t ON t.id = ps.trader_id
      WHERE ps.id = $1 AND ps.is_active = TRUE`,
@@ -150,6 +177,22 @@ async function validateAdForQuote(payoutSettingId, { network, currency, fiatAmou
   }
   if (row.status !== 'ACTIVE' || row.verification_status !== 'VERIFIED' || !row.stellar_address) {
     const err = new Error('Trader is not available');
+    err.statusCode = 409;
+    throw err;
+  }
+  if (userId) {
+    const blocked = await db.query(
+      `SELECT 1 FROM blocked_traders WHERE user_id = $1 AND trader_id = $2`,
+      [userId, row.trader_id]
+    );
+    if (blocked.rows.length > 0) {
+      const err = new Error('This trader is blocked');
+      err.statusCode = 409;
+      throw err;
+    }
+  }
+  if (row.active_orders >= (row.max_concurrent_orders || 3)) {
+    const err = new Error('Trader is at capacity for new orders');
     err.statusCode = 409;
     throw err;
   }
@@ -177,4 +220,5 @@ export default {
   listAds,
   getAdById,
   validateAdForQuote,
+  ACTIVE_ORDER_STATES,
 };

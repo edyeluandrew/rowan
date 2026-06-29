@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { AlertTriangle, ChevronLeft, Clock, ShieldCheck } from 'lucide-react'
 import { buildAndSignPayment, submitTransaction } from '../utils/stellar'
 import { confirmQuote } from '../api/cashout'
 import { getSecure } from '../utils/storage'
+import useActiveTransaction from '../hooks/useActiveTransaction'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import QuoteSummary from '../components/cashout/QuoteSummary'
 import Button from '../components/ui/Button'
@@ -12,9 +13,16 @@ export default function CashoutSend() {
   const navigate = useNavigate()
   const location = useLocation()
   const { quote, network, phone } = location.state || {}
+  const { activeTransaction, loading: activeLoading } = useActiveTransaction()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [quoteExpired, setQuoteExpired] = useState(false)
+
+  useEffect(() => {
+    if (!activeLoading && activeTransaction?.id) {
+      navigate(`/wallet/transaction/${activeTransaction.id}`, { replace: true })
+    }
+  }, [activeLoading, activeTransaction, navigate])
 
   if (!quote) {
     navigate('/wallet/cashout', { replace: true })

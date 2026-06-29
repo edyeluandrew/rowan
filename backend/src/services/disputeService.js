@@ -56,17 +56,32 @@ async function createDispute(transactionId, userId, traderId, reason) {
   if (tx.user_id !== userId) throw new Error('Transaction does not belong to this user');
   if (tx.trader_id !== traderId) throw new Error('Transaction does not belong to this trader');
 
-  // 1b. Only allow disputes while awaiting/after payout but before settlement.
-  // Valid source states: FIAT_PAYOUT_SUBMITTED, USER_CONFIRMATION_PENDING.
-  // (If a dispute is already open the tx is in DISPUTE_OPENED, which also fails
-  //  this check — a second layer of duplicate protection.)
-  const DISPUTABLE_STATES = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'];
+  // 1b. Disputable states: active payout flow OR completed within appeal window.
+  const DISPUTABLE_STATES = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'COMPLETE'];
   if (!DISPUTABLE_STATES.includes(tx.state)) {
     const err = new Error(
       `Cannot open a dispute in state ${tx.state}. A dispute can only be opened after the partner has submitted the mobile money payout and before the cash-out is settled.`
     );
     err.statusCode = 409;
     throw err;
+  }
+
+  if (tx.state === 'COMPLETE') {
+    const appealCheck = await db.query(
+      `SELECT appeal_expires_at, appeal_archived_at FROM transactions WHERE id = $1`,
+      [transactionId]
+    );
+    const appeal = appealCheck.rows[0] || {};
+    if (appeal.appeal_archived_at) {
+      const err = new Error('The appeal window for this order has closed.');
+      err.statusCode = 409;
+      throw err;
+    }
+    if (appeal.appeal_expires_at && new Date(appeal.appeal_expires_at) < new Date()) {
+      const err = new Error('The appeal window for this order has closed.');
+      err.statusCode = 409;
+      throw err;
+    }
   }
 
   // 2. Check if dispute already exists

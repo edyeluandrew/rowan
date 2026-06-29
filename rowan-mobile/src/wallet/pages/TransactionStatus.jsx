@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace } from 'lucide-react'
-import { getTransactionStatus, confirmReceipt, openDispute } from '../api/cashout'
+import { getTransactionStatus, confirmReceipt, openDispute, cancelOrder } from '../api/cashout'
+import { uploadDisputeEvidence, listDisputeEvidence } from '../api/user'
+import DisputeEvidenceSection from '../components/disputes/DisputeEvidenceSection'
 import useSocketHook from '../hooks/useSocket'
 import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
 import PaymentWindowCountdown from '../components/cashout/PaymentWindowCountdown'
@@ -9,6 +11,7 @@ import OrderChat from '../components/chat/OrderChat'
 import ReviewModal from '../components/reviews/ReviewModal'
 import { getReviewStatus } from '../api/reviews'
 import useJoinOrder from '../hooks/useJoinOrder'
+import useCountdown from '../hooks/useCountdown'
 import Button from '../components/ui/Button'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
@@ -48,6 +51,10 @@ export default function TransactionStatus() {
 
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [reviewSubmitted, setReviewSubmitted] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelNotice, setCancelNotice] = useState(null)
+  const [appealCountdown, setAppealCountdown] = useState('')
 
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
   const INITIAL_WAIT_MS = 3000 // Escrow + swap can take several seconds on testnet
@@ -58,6 +65,8 @@ export default function TransactionStatus() {
   const activeTxId = transaction?.id || passedTransactionId || id
 
   useJoinOrder(activeTxId && transaction ? activeTxId : null)
+
+  const paymentCountdown = useCountdown(transaction?.paymentExpiresAt)
 
   const mergeTransaction = (prev, patch) =>
     normalizeWalletTransaction({ ...(prev || {}), ...(patch || {}) })
@@ -137,6 +146,57 @@ export default function TransactionStatus() {
     return () => { cancelled = true }
   }, [activeTxId, transaction?.state, reviewSubmitted])
 
+  useEffect(() => {
+    const expiresAt = transaction?.appealExpiresAt
+    if (!expiresAt || transaction?.state !== 'COMPLETE') {
+      setAppealCountdown('')
+      return
+    }
+    const tick = () => {
+      const diff = new Date(expiresAt).getTime() - Date.now()
+      if (diff <= 0) {
+        setAppealCountdown('')
+        return
+      }
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      setAppealCountdown(`${h}h ${m}m`)
+    }
+    tick()
+    const id = setInterval(tick, 60000)
+    return () => clearInterval(id)
+  }, [transaction?.appealExpiresAt, transaction?.state])
+
+  const appealWindowOpen = transaction?.state === 'COMPLETE'
+    && transaction?.appealExpiresAt
+    && new Date(transaction.appealExpiresAt) > new Date()
+    && !transaction?.appealArchivedAt
+
+  const paymentWindowClosing = transaction?.state === 'TRADER_MATCHED'
+    && paymentCountdown.remaining > 0
+    && paymentCountdown.remaining <= 120
+  const canShowCancel = transaction?.state === 'TRADER_MATCHED' && !paymentWindowClosing
+
+  const showDisputeAction = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
+    || appealWindowOpen
+  const showConfirmAction = transaction?.state === 'USER_CONFIRMATION_PENDING'
+
+  const handleCancelOrder = async () => {
+    setCancelling(true)
+    try {
+      await cancelOrder(activeTxId)
+      setCancelNotice('Order cancelled. Refund is being processed.')
+      setShowCancelModal(false)
+      setTransaction((prev) => mergeTransaction(prev, { state: 'REFUNDED' }))
+      setTimeout(() => navigate('/wallet/home', { replace: true }), 3000)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not cancel this order')
+      setShowCancelModal(false)
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   const handleConfirmReceipt = async () => {
     // If biometric lock is enabled, require verification first
     if (lockRequired) {
@@ -189,8 +249,11 @@ export default function TransactionStatus() {
     setDisputeError(null)
     try {
       const result = await openDispute(activeTxId, disputeReason.trim())
-      // Update transaction state
-      setTransaction((prev) => mergeTransaction(prev, { state: 'DISPUTE_OPENED', ...result }))
+      setTransaction((prev) => mergeTransaction(prev, {
+        state: 'DISPUTE_OPENED',
+        disputeId: result.disputeId,
+        ...result,
+      }))
       setShowDisputeModal(false)
       setDisputeReason('')
     } catch (err) {
@@ -341,6 +404,12 @@ export default function TransactionStatus() {
         </div>
       )}
 
+      {cancelNotice && (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl px-4 py-3 mb-4">
+          <p className="text-rowan-yellow text-sm text-center">{cancelNotice}</p>
+        </div>
+      )}
+
       {transaction && !isTerminal && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 mb-4 text-center">
           <p className="text-rowan-text text-sm font-semibold">{getStatusLabel(transaction.state)}</p>
@@ -372,8 +441,55 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {/* Confirmation prompt when payout submitted or awaiting user confirmation */}
-      {(transaction?.state === 'FIAT_PAYOUT_SUBMITTED' || transaction?.state === 'USER_CONFIRMATION_PENDING') && (
+      {transaction?.state === 'TRADER_MATCHED' && paymentWindowClosing && (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl px-4 py-3 my-4">
+          <p className="text-rowan-yellow text-xs text-center">
+            Payment window closing — please wait or raise a dispute if payment is not received.
+          </p>
+        </div>
+      )}
+
+      {canShowCancel && (
+        <div className="my-4">
+          <button
+            type="button"
+            onClick={() => setShowCancelModal(true)}
+            className="w-full border border-rowan-red/50 text-rowan-red rounded-xl px-4 py-3 min-h-11 text-sm font-medium bg-transparent"
+          >
+            Cancel Order
+          </button>
+        </div>
+      )}
+
+      {transaction?.state === 'DISPUTE_OPENED' && transaction?.disputeId && (
+        <DisputeEvidenceSection
+          disputeId={transaction.disputeId}
+          uploadEvidence={uploadDisputeEvidence}
+          listEvidence={listDisputeEvidence}
+        />
+      )}
+
+      {transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
+        <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
+          <div className="text-center">
+            <p className="text-rowan-text text-sm font-medium">
+              {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} sent to your {getNetworkLabel(transaction.network)} account
+            </p>
+            <p className="text-rowan-muted text-xs mt-2">
+              Check your mobile money balance. If the payment has not arrived, you can raise a dispute.
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            className="text-rowan-red border-rowan-red w-full"
+            onClick={() => setShowDisputeModal(true)}
+          >
+            Raise a Dispute
+          </Button>
+        </div>
+      )}
+
+      {transaction?.state === 'USER_CONFIRMATION_PENDING' && (
         <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
           <div className="text-center">
             <p className="text-rowan-text text-sm font-medium">
@@ -387,21 +503,55 @@ export default function TransactionStatus() {
             Did you receive the money?
           </p>
           <div className="flex flex-col gap-2">
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => setShowConfirmModal(true)}
-            >
-              Confirm Payment Received
-            </Button>
-            <Button
-              variant="ghost"
-              className="text-rowan-red border-rowan-red"
-              onClick={() => setShowDisputeModal(true)}
-            >
-              Raise a Dispute
-            </Button>
+            {showConfirmAction && (
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => setShowConfirmModal(true)}
+              >
+                Confirm Payment Received
+              </Button>
+            )}
+            {showDisputeAction && (
+              <Button
+                variant="ghost"
+                className="text-rowan-red border-rowan-red"
+                onClick={() => setShowDisputeModal(true)}
+              >
+                Raise a Dispute
+              </Button>
+            )}
           </div>
+        </div>
+      )}
+
+      {transaction?.state === 'COMPLETE' && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 my-4">
+          {appealWindowOpen ? (
+            <>
+              <p className="text-rowan-muted text-xs text-center">
+                You can raise a dispute within 24 hours if you have an issue.
+              </p>
+              {appealCountdown && (
+                <p className="text-rowan-yellow text-xs text-center mt-2 font-medium">
+                  Appeal window closes in {appealCountdown}
+                </p>
+              )}
+              <Button
+                variant="ghost"
+                className="text-rowan-red border-rowan-red mt-4 w-full"
+                onClick={() => setShowDisputeModal(true)}
+              >
+                Raise a Dispute
+              </Button>
+            </>
+          ) : (
+            <p className="text-rowan-muted text-xs text-center">
+              {transaction.appealArchivedAt || (transaction.appealExpiresAt && new Date(transaction.appealExpiresAt) <= new Date())
+                ? 'This order is complete and archived.'
+                : 'This order is complete.'}
+            </p>
+          )}
         </div>
       )}
 
@@ -427,6 +577,36 @@ export default function TransactionStatus() {
               Try another cash out
             </button>
           )}
+        </div>
+      )}
+
+      {/* Cancel Order Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end" onClick={() => setShowCancelModal(false)}>
+          <div
+            className="bg-rowan-surface rounded-t-2xl p-6 w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-9 h-1 bg-rowan-border rounded-full mx-auto mb-6" />
+            <h3 className="text-rowan-text font-bold text-lg">Cancel this order?</h3>
+            <p className="text-rowan-muted text-sm mt-3 mb-4">
+              Are you sure you want to cancel? Your XLM will be refunded within a few minutes.
+            </p>
+            <div className="flex flex-col gap-3">
+              <Button
+                variant="primary"
+                className="bg-rowan-red hover:bg-rowan-red/80"
+                size="lg"
+                loading={cancelling}
+                onClick={handleCancelOrder}
+              >
+                Yes, cancel order
+              </Button>
+              <Button variant="ghost" onClick={() => setShowCancelModal(false)}>
+                Keep waiting
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

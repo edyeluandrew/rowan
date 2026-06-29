@@ -5,6 +5,7 @@ import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import usePreferredFiat from '../hooks/usePreferredFiat'
 import useTransactions from '../hooks/useTransactions'
+import useActiveTransaction from '../hooks/useActiveTransaction'
 import usePushNotifications from '../hooks/usePushNotifications'
 import { useNotificationsContext } from '../context/NotificationsContext'
 import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
@@ -29,11 +30,12 @@ export default function Home() {
   const [friendbotState, setFriendbotState] = useState('idle')
   const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates(preferredFiat)
   const { transactions, loading: txLoading } = useTransactions()
+  const { activeTransaction, hasActiveOrder } = useActiveTransaction()
   const { unreadCount } = useNotificationsContext()
   const { permissionGranted, dismissed, requestPermission, dismissBanner } = usePushNotifications()
 
   const inProgress = getInProgressTransactions(transactions)
-  const activeCashout = inProgress[0] || null
+  const activeCashout = activeTransaction || inProgress[0] || null
   const recent = transactions.filter((tx) => tx.id !== activeCashout?.id).slice(0, 3)
 
   const xlmRate = rates?.xlmRate
@@ -124,14 +126,28 @@ export default function Home() {
       </div>
 
       <div className="mt-3">
-        <Button onClick={() => navigate('/wallet/cashout')}>
+        <Button
+          onClick={() => navigate('/wallet/cashout')}
+          disabled={hasActiveOrder}
+        >
           <ArrowDownToLine size={18} />
           Cash Out
         </Button>
-        <Button variant="ghost" className="mt-2" onClick={() => navigate('/wallet/marketplace')}>
+        {hasActiveOrder && (
+          <p className="text-rowan-muted text-xs text-center mt-2">Complete your current order first</p>
+        )}
+        <Button
+          variant="ghost"
+          className="mt-2"
+          onClick={() => navigate('/wallet/marketplace')}
+          disabled={hasActiveOrder}
+        >
           <UserCheck size={18} />
           Choose a trader
         </Button>
+        {hasActiveOrder && (
+          <p className="text-rowan-muted text-xs text-center mt-1">Complete your current order first</p>
+        )}
       </div>
 
       {!permissionGranted && !dismissed && (

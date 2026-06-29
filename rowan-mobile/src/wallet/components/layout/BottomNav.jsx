@@ -1,10 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import { House, ArrowDownToLine, Activity, UserCircle } from 'lucide-react'
+import { House, ArrowDownToLine, Clock, UserCircle } from 'lucide-react'
 
 const tabs = [
   { path: '/wallet/home', label: 'Home', Icon: House },
   { path: '/wallet/cashout', label: 'Cash Out', Icon: ArrowDownToLine, primary: true },
-  { path: '/wallet/history', label: 'Activity', Icon: Activity },
+  { path: '/wallet/history', label: 'History', Icon: Clock },
   { path: '/wallet/profile', label: 'You', Icon: UserCircle },
 ]
 

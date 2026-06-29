@@ -620,6 +620,29 @@ payoutTimeoutScanQueue.add({}, {
   jobId: 'payout-timeout-scan',
 });
 
+// ─── Queue: Archive completed transactions after appeal window ───
+const appealArchiveQueue = new Queue('appeal-archive', defaultOpts);
+
+appealArchiveQueue.process(async () => {
+  const result = await db.query(
+    `UPDATE transactions
+     SET appeal_archived_at = NOW()
+     WHERE state = 'COMPLETE'
+       AND appeal_expires_at IS NOT NULL
+       AND appeal_expires_at < NOW()
+       AND appeal_archived_at IS NULL
+     RETURNING id`
+  );
+  if (result.rows.length > 0) {
+    logger.info(`[Job:appeal-archive] Archived ${result.rows.length} completed transaction(s)`);
+  }
+});
+
+appealArchiveQueue.add({}, {
+  repeat: { cron: '0 * * * *' },
+  jobId: 'appeal-archive-hourly',
+});
+
 /**
  * Enqueue a refund job.
  */

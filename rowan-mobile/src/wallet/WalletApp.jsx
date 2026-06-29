@@ -16,8 +16,10 @@ import CreateWallet from './pages/CreateWallet';
 import BackupWallet from './pages/BackupWallet';
 import ImportWallet from './pages/ImportWallet';
 import Register from './pages/Register';
+import Home from './pages/Home';
 import Marketplace from './pages/Marketplace';
 import TraderProfile from './pages/TraderProfile';
+import BlockedTraders from './pages/BlockedTraders';
 import ReceiveXlm from './pages/ReceiveXlm';
 import AddMoney from './pages/AddMoney';
 import Cashout from './pages/Cashout';
@@ -61,6 +63,7 @@ export default function WalletApp() {
             <Route path="cashout" element={<Cashout />} />
             <Route path="marketplace" element={<Marketplace />} />
             <Route path="traders/:id" element={<TraderProfile />} />
+            <Route path="blocked-traders" element={<BlockedTraders />} />
             <Route path="cashout/confirm" element={<CashoutConfirm />} />
             <Route path="cashout/send" element={<CashoutSend />} />
             <Route path="transaction/:id" element={<TransactionStatus />} />

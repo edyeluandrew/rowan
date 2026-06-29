@@ -101,10 +101,11 @@ async function matchTrader(transactionId) {
     const triedTraderIds = [...excludedTraderIds];
     let skipPreferred = false;
     const preferredSettingId = transaction.preferred_payout_setting_id;
+    const orderUserId = transaction.user_id;
     for (let attempt = 0; attempt < 6; attempt++) {
       const usePreferred = !skipPreferred && preferredSettingId && attempt === 0;
 
-      const candidateParams = [transaction.network, fiatCurrency, fiatNeeded, fiatAmountUgx, triedTraderIds];
+      const candidateParams = [transaction.network, fiatCurrency, fiatNeeded, fiatAmountUgx, triedTraderIds, orderUserId];
       let preferredClause = '';
       if (usePreferred) {
         candidateParams.push(preferredSettingId);
@@ -128,7 +129,12 @@ async function matchTrader(transactionId) {
            AND $3 BETWEEN ps.min_amount AND ps.max_amount
            AND (ps.available_float - ps.reserved_float) >= $3
            AND (t.daily_volume + $4) <= t.daily_limit_ugx
-           AND t.id <> ALL($5::uuid[])${preferredClause}
+           AND t.id <> ALL($5::uuid[])
+           AND (SELECT COUNT(*) FROM transactions tx
+                  WHERE tx.trader_id = t.id
+                    AND tx.state IN ('TRADER_MATCHED','FIAT_PAYOUT_SUBMITTED','USER_CONFIRMATION_PENDING'))
+               < COALESCE(t.max_concurrent_orders, 3)
+           AND t.id NOT IN (SELECT trader_id FROM blocked_traders WHERE user_id = $6)${preferredClause}
          ORDER BY t.trust_score DESC, active_load ASC
          LIMIT 1`,
         candidateParams
@@ -242,6 +248,10 @@ async function matchTrader(transactionId) {
         ))
         .catch((err) => logger.warn(`[Matching] Chat system message failed: ${err.message}`));
 
+      sendPaymentDetailsIfReady(transactionId).catch((err) => {
+        logger.warn(`[Matching] Payment details message failed: ${err.message}`);
+      });
+
       // ── [L-3 FIX] Notify user that a trader has been matched ──
       notificationService.notifyUser(transaction.user_id, 'trader_matched', {
         transactionId: transaction.id,
@@ -291,6 +301,42 @@ async function matchTrader(transactionId) {
     // [PHASE 4] Use config-driven cleanup delay
     setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
   }
+}
+
+function formatFiatDisplay(amount, currency = 'UGX') {
+  const n = parseFloat(amount);
+  if (!Number.isFinite(n)) return `${currency} 0`;
+  return `${currency} ${Math.round(n).toLocaleString('en-US')}`;
+}
+
+function buildPaymentDetailsPayload(tx) {
+  const ref = tx.id ? `ROW-${tx.id.replace(/-/g, '').slice(0, 8).toUpperCase()}` : 'ROW';
+  return {
+    network: tx.network,
+    account_number: tx.payout_phone || '',
+    account_name: tx.payout_name || 'Recipient',
+    amount: formatFiatDisplay(tx.fiat_amount, tx.fiat_currency || 'UGX'),
+    reference: ref,
+  };
+}
+
+async function sendPaymentDetailsIfReady(transactionId) {
+  const txResult = await db.query(
+    `SELECT id, network, payout_phone, payout_name, fiat_amount, fiat_currency, matched_at
+     FROM transactions WHERE id = $1`,
+    [transactionId]
+  );
+  const tx = txResult.rows[0];
+  if (!tx?.payout_phone) return;
+
+  const existing = await db.query(
+    `SELECT id FROM chat_messages WHERE transaction_id = $1 AND type = 'payment_details' LIMIT 1`,
+    [transactionId]
+  );
+  if (existing.rows.length > 0) return;
+
+  const chatService = await getChatService();
+  await chatService.sendPaymentDetailsMessage(transactionId, buildPaymentDetailsPayload(tx));
 }
 
 /**
@@ -360,6 +406,9 @@ async function acceptRequest(transactionId, traderId) {
       traderId,
       config.platform.traderConfirmTimeoutSeconds
     );
+    sendPaymentDetailsIfReady(transactionId).catch((err) => {
+      logger.warn(`[Accept] Payment details message failed: ${err.message}`);
+    });
   }
 
   const userResult = await db.query(

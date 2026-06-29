@@ -10,9 +10,16 @@ import logger from '../utils/logger.js';
 import { stroopsToUsdc } from '../utils/financial.js';
 import { maskPhoneNumber } from '../utils/phoneMasking.js';
 import { traderLoginLimiter, sensitiveActionLimiter } from '../middleware/rateLimits.js';
+import multer from 'multer';
+import disputeEvidenceService from '../services/disputeEvidenceService.js';
 import { server as horizon, USDC_ASSET } from '../config/stellar.js';
 
 const router = Router();
+
+const evidenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 function usdcBalanceOf(account) {
   if (!account?.balances) return { balance: 0, hasTrustline: false };
@@ -899,5 +906,49 @@ router.get('/float/health', authTrader, async (req, res, next) => {
     next(err);
   }
 });
+
+/**
+ * GET /api/v1/trader/disputes/:disputeId/evidence
+ */
+router.get('/disputes/:disputeId/evidence', authTrader, async (req, res, next) => {
+  try {
+    const evidence = await disputeEvidenceService.listEvidence(req.params.disputeId, {
+      traderId: req.userId,
+    });
+    res.json({ evidence });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/trader/disputes/:disputeId/evidence
+ */
+router.post(
+  '/disputes/:disputeId/evidence',
+  authTrader,
+  evidenceUpload.single('file'),
+  async (req, res, next) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Evidence file is required' });
+      }
+      const evidence = await disputeEvidenceService.uploadEvidence(
+        req.params.disputeId,
+        { traderId: req.userId },
+        req.file
+      );
+      res.status(201).json({ success: true, evidence });
+    } catch (err) {
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
+      next(err);
+    }
+  }
+);
 
 export default router;

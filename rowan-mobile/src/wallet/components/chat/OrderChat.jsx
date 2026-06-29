@@ -5,6 +5,7 @@ import useSocketHook from '../../hooks/useSocket'
 import useJoinOrder from '../../hooks/useJoinOrder'
 import { formatMessageTime } from '../../utils/p2pFormat'
 import TransactionStatusBadge from '../transactions/TransactionStatusBadge'
+import PaymentDetailsCard from './PaymentDetailsCard'
 
 const CHAT_LOCKED_STATES = ['DISPUTE_OPENED', 'DISPUTE_REFUND_PENDING', 'DISPUTE_RELEASE_PENDING']
 const MAX_COMMENT = 500
@@ -48,6 +49,7 @@ export default function OrderChat({
           message: msg.message,
           type: msg.type,
           image_url: msg.imageUrl,
+          payload: msg.payload,
           created_at: msg.createdAt,
         }]
       })
@@ -121,6 +123,18 @@ export default function OrderChat({
             </p>
           )}
           {messages.map((msg) => {
+            if (msg.type === 'payment_details') {
+              let payload = msg.payload
+              if (typeof payload === 'string') {
+                try { payload = JSON.parse(payload) } catch { payload = null }
+              }
+              if (!payload) return null
+              return (
+                <div key={msg.id}>
+                  <PaymentDetailsCard payload={payload} viewerRole={viewerRole} />
+                </div>
+              )
+            }
             if (msg.type === 'system' || msg.sender_role === 'system') {
               return (
                 <div key={msg.id} className="text-center px-4">

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ChevronLeft, ShieldCheck, ThumbsUp, ThumbsDown, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ShieldCheck, ThumbsUp, ThumbsDown, RefreshCw, MoreVertical } from 'lucide-react'
 import { getTraderProfile, getTraderAd } from '../api/traders'
+import { blockTrader, unblockTrader } from '../api/user'
 import useRates from '../hooks/useRates'
 import {
   formatCurrency,
@@ -26,6 +27,10 @@ export default function TraderProfile() {
   const [selectedAd, setSelectedAd] = useState(preselectedAd || null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [blockConfirm, setBlockConfirm] = useState(false)
+  const [blocking, setBlocking] = useState(false)
+  const [toast, setToast] = useState(null)
 
   const loadProfile = () => {
     setLoading(true)
@@ -66,6 +71,27 @@ export default function TraderProfile() {
     })
   }
 
+  const handleBlockToggle = async () => {
+    setBlocking(true)
+    try {
+      if (profile.isBlocked) {
+        await unblockTrader(id)
+        setToast('Trader unblocked')
+        setProfile((p) => ({ ...p, isBlocked: false }))
+      } else {
+        await blockTrader(id)
+        setToast('Trader blocked')
+        setTimeout(() => navigate('/wallet/marketplace', { replace: true }), 1200)
+      }
+      setBlockConfirm(false)
+      setMenuOpen(false)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not update block status')
+    } finally {
+      setBlocking(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="bg-rowan-bg min-h-screen flex flex-col items-center justify-center gap-3">
@@ -101,23 +127,62 @@ export default function TraderProfile() {
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-32 px-4 pt-4">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-2">
         <button type="button" onClick={() => navigate(-1)} className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center">
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold flex-1 truncate">
-          {getTraderDisplayName(profile.name)}
-        </h1>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-rowan-text text-lg font-bold truncate">
+            {getTraderDisplayName(profile.name)}
+          </h1>
+          {profile.isOnline ? (
+            <p className="text-rowan-green text-xs font-medium">Online now</p>
+          ) : profile.lastSeenLabel ? (
+            <p className="text-rowan-muted text-xs">Last seen {profile.lastSeenLabel.replace(/^Active /, '')}</p>
+          ) : null}
+        </div>
         {profile.verificationStatus === 'VERIFIED' && (
           <ShieldCheck size={20} className="text-rowan-green shrink-0" />
         )}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((o) => !o)}
+            className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center"
+            aria-label="More options"
+          >
+            <MoreVertical size={20} />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-1 bg-rowan-surface border border-rowan-border rounded-xl shadow-lg z-10 min-w-[180px]">
+              <button
+                type="button"
+                onClick={() => { setMenuOpen(false); setBlockConfirm(true) }}
+                className="w-full text-left px-4 py-3 text-sm text-rowan-red min-h-11"
+              >
+                {profile.isBlocked ? 'Unblock this trader' : 'Block this trader'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {toast && (
+        <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl px-4 py-2 mb-4">
+          <p className="text-rowan-green text-sm">{toast}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 mb-6">
         <StatBox label="Total Orders" value={stats.completedOrders ?? 0} />
         <StatBox label="Completion Rate" value={formatPercent(stats.completionRate) || '0.0%'} />
         <StatBox label="Avg Release Time" value={formatDurationMinutes(stats.avgReleaseMinutes) || 'Under 1 min'} />
         <StatBox label="Positive Reviews" value={formatPercent(stats.positivePercent) || '0.0%'} />
+        <StatBox
+          label="Avg. Reply"
+          value={formatDurationMinutes(stats.avgResponseMinutes) || 'Under 1 min'}
+          className="col-span-2"
+        />
       </div>
 
       <div className="mb-6">
@@ -191,17 +256,38 @@ export default function TraderProfile() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-rowan-bg border-t border-rowan-border">
-        <Button onClick={handleTrade} disabled={!selectedAd}>
-          Trade with this trader
+        <Button onClick={handleTrade} disabled={!selectedAd || profile.isBlocked}>
+          {profile.isBlocked ? 'Trader blocked' : 'Trade with this trader'}
         </Button>
       </div>
+
+      {blockConfirm && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end" onClick={() => setBlockConfirm(false)}>
+          <div className="bg-rowan-surface rounded-t-2xl p-6 w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-rowan-text font-bold text-lg">
+              {profile.isBlocked ? 'Unblock' : 'Block'} {getTraderDisplayName(profile.name)}?
+            </h3>
+            {!profile.isBlocked && (
+              <p className="text-rowan-muted text-sm mt-3 mb-4">
+                They won&apos;t appear in your marketplace or be matched to your orders.
+              </p>
+            )}
+            <div className="flex flex-col gap-3">
+              <Button variant="primary" className="bg-rowan-red" loading={blocking} onClick={handleBlockToggle}>
+                {profile.isBlocked ? 'Unblock trader' : 'Block trader'}
+              </Button>
+              <Button variant="ghost" onClick={() => setBlockConfirm(false)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function StatBox({ label, value }) {
+function StatBox({ label, value, className = '' }) {
   return (
-    <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 text-center">
+    <div className={`bg-rowan-surface border border-rowan-border rounded-xl p-4 text-center ${className}`}>
       <p className="text-rowan-text text-xl font-bold tabular-nums">{value}</p>
       <p className="text-rowan-muted text-[10px] uppercase tracking-wider mt-1">{label}</p>
     </div>

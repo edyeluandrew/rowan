@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, RefreshCw } from 'lucide-react'
 import { listTraderAds } from '../api/traders'
+import useActiveTransaction from '../hooks/useActiveTransaction'
 import TraderAdCard from '../components/marketplace/TraderAdCard'
 import MarketplaceSkeleton from '../components/marketplace/MarketplaceSkeleton'
 import useRates from '../hooks/useRates'
@@ -13,6 +14,7 @@ const MARKETPLACE_NETWORKS = ['MTN_UG', 'AIRTEL_UG', 'MPESA_KE']
 
 export default function Marketplace() {
   const navigate = useNavigate()
+  const { activeTransaction, hasActiveOrder } = useActiveTransaction()
   const { allRates } = useRates()
   const [ads, setAds] = useState([])
   const [loading, setLoading] = useState(true)
@@ -69,6 +71,7 @@ export default function Marketplace() {
   }
 
   const handleTrade = (ad) => {
+    if (hasActiveOrder) return
     navigate('/wallet/cashout', {
       state: {
         selectedAd: ad,
@@ -105,6 +108,20 @@ export default function Marketplace() {
       <p className="text-rowan-muted text-sm text-center mb-5">
         Pick a verified trader or use auto match from Cash Out.
       </p>
+
+      {hasActiveOrder && activeTransaction && (
+        <div className="bg-rowan-yellow rounded-xl p-4 mb-4">
+          <p className="text-rowan-bg text-sm font-semibold">
+            You have an active order. Complete it before starting a new trade.
+          </p>
+          <Button
+            className="mt-3 bg-rowan-bg text-rowan-text hover:bg-rowan-bg/90"
+            onClick={() => navigate(`/wallet/transaction/${activeTransaction.id}`)}
+          >
+            View Active Order
+          </Button>
+        </div>
+      )}
 
       <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 space-y-4">
         <div>
@@ -195,13 +212,14 @@ export default function Marketplace() {
               xlmRate={lookupNetworkRate(allRates, ad.network)}
               onTrade={handleTrade}
               onViewProfile={handleViewProfile}
+              tradeDisabled={hasActiveOrder}
             />
           ))}
         </div>
       )}
 
       <div className="mt-6">
-        <Button variant="ghost" onClick={() => navigate('/wallet/cashout')}>
+        <Button variant="ghost" onClick={() => navigate('/wallet/cashout')} disabled={hasActiveOrder}>
           Use auto match instead
         </Button>
       </div>

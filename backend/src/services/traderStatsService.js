@@ -1,4 +1,5 @@
 import db from '../db/index.js';
+import { isTraderOnline, formatLastSeenLabel } from '../utils/traderOnline.js';
 
 /**
  * Aggregate trader performance stats for marketplace ads and profile pages.
@@ -27,8 +28,24 @@ async function getTraderStats(traderId) {
     [traderId]
   );
 
+  const responseStats = await db.query(
+    `WITH recent AS (
+       SELECT cm.created_at, t.created_at AS order_created
+       FROM chat_messages cm
+       JOIN transactions t ON t.id = cm.transaction_id
+       WHERE t.trader_id = $1
+         AND cm.is_first_trader_reply = TRUE
+       ORDER BY cm.created_at DESC
+       LIMIT 50
+     )
+     SELECT AVG(EXTRACT(EPOCH FROM (created_at - order_created)) / 60.0) AS avg_response_minutes
+     FROM recent`,
+    [traderId]
+  );
+
   const row = txStats.rows[0] || {};
   const reviews = reviewStats.rows[0] || {};
+  const responseRow = responseStats.rows[0] || {};
   const completed = parseInt(row.completed_count, 10) || 0;
   const settled = parseInt(row.settled_count, 10) || 0;
   const reviewCount = reviews.review_count || 0;
@@ -43,8 +60,12 @@ async function getTraderStats(traderId) {
     avgReleaseMinutes: row.avg_release_minutes != null
       ? Math.round(parseFloat(row.avg_release_minutes))
       : null,
+    avgResponseMinutes: responseRow.avg_response_minutes != null
+      ? Math.round(parseFloat(responseRow.avg_response_minutes))
+      : null,
     reviewCount,
     positivePercent,
+    activeOrders: parseInt(row.active_count, 10) || 0,
   };
 }
 
@@ -66,7 +87,17 @@ async function getRecentReviews(traderId, limit = 10) {
   }));
 }
 
+function enrichOnlineStatus(traderRow) {
+  const lastSeenAt = traderRow.last_seen_at || null;
+  return {
+    lastSeenAt,
+    isOnline: isTraderOnline(lastSeenAt),
+    lastSeenLabel: formatLastSeenLabel(lastSeenAt),
+  };
+}
+
 export default {
   getTraderStats,
   getRecentReviews,
+  enrichOnlineStatus,
 };

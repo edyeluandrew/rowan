@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, ArrowDownToLine, AlertTriangle, UserCheck } from 'lucide-react'
 import useRates from '../hooks/useRates'
 import useWallet from '../hooks/useWallet'
+import useActiveTransaction from '../hooks/useActiveTransaction'
 import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
 import BiometricLock from '../../shared/components/BiometricLock'
 import { getQuote } from '../api/cashout'
@@ -27,6 +28,7 @@ export default function Cashout() {
   const { isLocked } = useBiometricProtection()
   const { allRates } = useRates()
   const { balance } = useWallet()
+  const { activeTransaction, loading: activeLoading } = useActiveTransaction()
   const [fiatAmount, setFiatAmount] = useState('')
   const [network, setNetwork] = useState(presetNetwork || null)
   const [phone, setPhone] = useState('')
@@ -42,6 +44,13 @@ export default function Cashout() {
   }, [])
 
   const netFiat = parseFloat(fiatAmount) || 0
+
+  useEffect(() => {
+    if (!activeLoading && activeTransaction?.id) {
+      navigate(`/wallet/transaction/${activeTransaction.id}`, { replace: true })
+    }
+  }, [activeLoading, activeTransaction, navigate])
+
   const selectedRate = network && allRates
     ? Array.isArray(allRates)
       ? allRates.find((r) => r.network === network)
@@ -89,6 +98,13 @@ export default function Cashout() {
     recipientName.trim().length >= 2
 
   if (isLocked) return <BiometricLock />
+  if (activeLoading) {
+    return (
+      <div className="bg-rowan-bg min-h-screen flex items-center justify-center">
+        <div className="animate-spin text-rowan-yellow w-6 h-6 border-2 border-rowan-yellow border-t-transparent rounded-full" />
+      </div>
+    )
+  }
 
   const handleGetQuote = async () => {
     if (!canProceed) return
@@ -125,7 +141,12 @@ export default function Cashout() {
         },
       })
     } catch (err) {
-      setError(err.response?.data?.error || err.message)
+      const data = err.response?.data
+      if (data?.error === 'active_order_exists' && data?.transaction_id) {
+        navigate(`/wallet/transaction/${data.transaction_id}`, { replace: true })
+        return
+      }
+      setError(data?.message || data?.error || err.message)
     } finally {
       setLoading(false)
     }

@@ -4,6 +4,7 @@ import { ChevronLeft, ShieldCheck, AlertTriangle, UserCheck } from 'lucide-react
 import QuoteSummary from '../components/cashout/QuoteSummary'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import Button from '../components/ui/Button'
+import { getActiveTransaction } from '../api/user'
 import {
   formatXlmRateLine,
   getTraderDisplayName,
@@ -14,6 +15,8 @@ export default function CashoutConfirm() {
   const location = useLocation()
   const { quote, network, phone, requestedFiat, traderName, selectedAd } = location.state || {}
   const [expired, setExpired] = useState(false)
+  const [checkingActive, setCheckingActive] = useState(false)
+  const [activeError, setActiveError] = useState(null)
 
   if (!quote) {
     navigate('/wallet/cashout', { replace: true })
@@ -25,16 +28,32 @@ export default function CashoutConfirm() {
     ? formatXlmRateLine(quote.fiatCurrency, quote.userRate)
     : null
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (expired) return
-    navigate('/wallet/cashout/send', {
-      state: {
-        quote,
-        network,
-        phone,
-      },
-      replace: true,
-    })
+    setCheckingActive(true)
+    setActiveError(null)
+    try {
+      const data = await getActiveTransaction()
+      if (data?.active && data.transaction?.id) {
+        setActiveError('You already have an active order in progress.')
+        setTimeout(() => {
+          navigate(`/wallet/transaction/${data.transaction.id}`, { replace: true })
+        }, 1500)
+        return
+      }
+      navigate('/wallet/cashout/send', {
+        state: {
+          quote,
+          network,
+          phone,
+        },
+        replace: true,
+      })
+    } catch {
+      setActiveError('Could not verify order status. Please try again.')
+    } finally {
+      setCheckingActive(false)
+    }
   }
 
   return (
@@ -101,9 +120,15 @@ export default function CashoutConfirm() {
         </div>
       )}
 
+      {!expired && activeError && (
+        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mb-4">
+          <p className="text-rowan-red text-sm">{activeError}</p>
+        </div>
+      )}
+
       {!expired && (
         <div className="mt-8">
-          <Button onClick={handleConfirm}>
+          <Button onClick={handleConfirm} loading={checkingActive}>
             Confirm and Proceed
           </Button>
         </div>

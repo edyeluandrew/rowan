@@ -16,6 +16,7 @@ router.get('/ads', authUser, async (req, res, next) => {
   try {
     const { currency, network, minAmount, maxAmount, paymentMethod, page, limit } = req.query;
     const result = await traderAdsService.listAds({
+      userId: req.userId,
       currency,
       network,
       minAmount: minAmount != null ? parseFloat(minAmount) : null,
@@ -68,7 +69,7 @@ router.get('/:id/profile', authUser, async (req, res, next) => {
   try {
     const traderId = req.params.id;
     const traderResult = await db.query(
-      `SELECT id, name, trust_score, verification_status, created_at
+      `SELECT id, name, trust_score, verification_status, created_at, last_seen_at
        FROM traders WHERE id = $1 AND status = 'ACTIVE'`,
       [traderId]
     );
@@ -77,6 +78,12 @@ router.get('/:id/profile', authUser, async (req, res, next) => {
 
     const stats = await traderStatsService.getTraderStats(traderId);
     const reviews = await traderStatsService.getRecentReviews(traderId, 10);
+    const online = traderStatsService.enrichOnlineStatus(trader);
+
+    const blockedResult = await db.query(
+      `SELECT 1 FROM blocked_traders WHERE user_id = $1 AND trader_id = $2`,
+      [req.userId, traderId]
+    );
 
     const adsResult = await db.query(
       `SELECT id, network, currency, min_amount, max_amount,
@@ -97,6 +104,8 @@ router.get('/:id/profile', authUser, async (req, res, next) => {
         memberSince: trader.created_at,
         stats,
         reviews,
+        isBlocked: blockedResult.rows.length > 0,
+        ...online,
         ads: adsResult.rows.map((a) => ({
           payoutSettingId: a.id,
           network: a.network,

@@ -604,8 +604,10 @@ async function releaseToTrader(transactionId) {
     }
 
     // Update transaction to COMPLETE (from either USER_CONFIRMATION_PENDING or DISPUTE_RELEASE_PENDING)
+    const appealExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await stateMachine.transition(transactionId, transaction.state, 'COMPLETE', {
       stellar_release_tx: result.hash,
+      appeal_expires_at: appealExpiresAt,
     });
 
     // ── [PHASE 2A] Finalize canonical float EXACTLY ONCE ──

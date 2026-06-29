@@ -1268,6 +1268,22 @@ router.get('/disputes/:id', authAdmin, async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/admin/disputes/:disputeId/evidence
+ */
+router.get('/disputes/:disputeId/evidence', authAdmin, async (req, res, next) => {
+  try {
+    const { default: disputeEvidenceService } = await import('../services/disputeEvidenceService.js');
+    const evidence = await disputeEvidenceService.listEvidence(req.params.disputeId, { admin: true });
+    res.json({ evidence });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+/**
  * POST /api/v1/admin/disputes/:id/resolve
  *
  * P0.7: This previously did a DB-only status UPDATE and never touched escrow,

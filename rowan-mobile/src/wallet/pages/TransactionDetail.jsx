@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, Star, Smartphone, Clock, Copy, CopyCheck, AlertTriangle, FileText } from 'lucide-react'
+import { ChevronLeft, Star, Smartphone, Clock, Copy, CopyCheck, FileText, ShieldCheck } from 'lucide-react'
 import { getTransactionStatus, confirmReceipt, openDispute } from '../api/cashout'
+import { listDisputeEvidence as listUserEvidence, uploadDisputeEvidence } from '../api/user'
+import { getReviewStatus } from '../api/reviews'
+import ReviewModal from '../components/reviews/ReviewModal'
+import DisputeEvidenceSection from '../components/disputes/DisputeEvidenceSection'
+import DisputeStatusCard from '../components/disputes/DisputeStatusCard'
+import ReceiptConfirmationCard from '../components/disputes/ReceiptConfirmationCard'
+import ConfirmingReceiptCard from '../components/disputes/ConfirmingReceiptCard'
+import DisputeConfirmModal from '../components/disputes/DisputeConfirmModal'
 import useSocketHook from '../hooks/useSocket'
 import TransactionStatusBadge from '../components/transactions/TransactionStatusBadge'
 import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
@@ -10,7 +18,7 @@ import OrderChat from '../components/chat/OrderChat'
 import useJoinOrder from '../hooks/useJoinOrder'
 import { formatXlm, formatDateTime, formatAddress } from '../utils/format'
 import { formatCurrency, getTraderDisplayName } from '../utils/p2pFormat'
-import { normalizeWalletTransaction } from '../utils/transactions'
+import { normalizeWalletTransaction, getTransactionStatusTimestamps } from '../utils/transactions'
 import { NETWORKS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 
 export default function TransactionDetail() {
@@ -24,6 +32,15 @@ export default function TransactionDetail() {
   const [showDisputeModal, setShowDisputeModal] = useState(false)
   const [openingDispute, setOpeningDispute] = useState(false)
   const [disputeError, setDisputeError] = useState(null)
+  const [reviewSubmitted, setReviewSubmitted] = useState(false)
+  const [showReviewModal, setShowReviewModal] = useState(false)
+
+  useEffect(() => {
+    if (!id || !tx || tx.state !== 'COMPLETE') return
+    getReviewStatus(id)
+      .then((data) => setReviewSubmitted(!!data?.submitted))
+      .catch(() => {})
+  }, [id, tx?.state])
 
   useEffect(() => {
     let cancelled = false
@@ -72,6 +89,12 @@ export default function TransactionDetail() {
   })
 
   const inProgress = tx && !['COMPLETE', 'REFUNDED', 'FAILED'].includes(tx.state)
+  const isComplete = tx?.state === 'COMPLETE'
+  const appealWindowOpen = isComplete
+    && tx?.appealExpiresAt
+    && new Date(tx.appealExpiresAt) > new Date()
+    && !tx?.appealArchivedAt
+  const timestamps = getTransactionStatusTimestamps(tx || {})
   useJoinOrder(inProgress ? id : null)
 
   const handleCopy = async (text, field) => {
@@ -153,6 +176,35 @@ export default function TransactionDetail() {
         </div>
       </div>
 
+      {/* Trader info */}
+      {tx.traderName && (
+        <div className="bg-rowan-surface rounded-xl p-4 mb-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-rowan-muted text-xs">Trader</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-rowan-text text-sm font-semibold">
+                  {getTraderDisplayName(tx.traderName)}
+                </span>
+                <ShieldCheck size={14} className="text-rowan-green" />
+              </div>
+              <p className="text-rowan-muted text-xs mt-2">
+                {tx.selectionMethod === 'manual' ? 'You chose this trader' : 'Auto-matched'}
+              </p>
+            </div>
+            {tx.traderId && (
+              <button
+                type="button"
+                onClick={() => navigate(`/wallet/traders/${tx.traderId}`)}
+                className="text-rowan-yellow text-xs font-medium min-h-11 px-3"
+              >
+                View profile
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Dispute status cards */}
       {['DISPUTE_OPENED', 'DISPUTE_RELEASE_PENDING', 'DISPUTE_REFUND_PENDING', 'RELEASE_BLOCKED', 'REFUNDED'].includes(tx.state) && (
         <div className="mb-4">
@@ -182,7 +234,7 @@ export default function TransactionDetail() {
         <PaymentWindowCountdown expiresAt={tx.paymentExpiresAt} />
       )}
 
-      {inProgress && (
+      {(inProgress || isComplete) && (
         <div className="mb-4">
           <OrderChat
             transactionId={id}
@@ -190,6 +242,28 @@ export default function TransactionDetail() {
             counterpartyName={getTraderDisplayName(tx.traderName)}
             viewerRole="user"
           />
+        </div>
+      )}
+
+      {tx.state === 'DISPUTE_OPENED' && tx.disputeId && (
+        <DisputeEvidenceSection
+          disputeId={tx.disputeId}
+          uploadEvidence={uploadDisputeEvidence}
+          listEvidence={listUserEvidence}
+        />
+      )}
+
+      {appealWindowOpen && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
+          <p className="text-rowan-muted text-xs text-center">
+            You can still raise a dispute within the appeal window if you have an issue.
+          </p>
+        </div>
+      )}
+
+      {isComplete && tx.appealArchivedAt && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
+          <p className="text-rowan-muted text-xs text-center">This order is complete and archived.</p>
         </div>
       )}
       {disputeError && (
@@ -265,9 +339,25 @@ export default function TransactionDetail() {
 
       {/* Timeline */}
       <div className="bg-rowan-surface rounded-xl p-4 mb-4">
-        <h3 className="text-rowan-text text-sm font-semibold mb-3">Progress</h3>
-        <TransactionStateTracker currentState={tx.state} compact />
+        <h3 className="text-rowan-text text-sm font-semibold mb-3">Timeline</h3>
+        <TransactionStateTracker currentState={tx.state} timestamps={timestamps} compact />
       </div>
+
+      {isComplete && !reviewSubmitted && (
+        <button
+          type="button"
+          onClick={() => setShowReviewModal(true)}
+          className="w-full bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl px-4 py-3 min-h-11 mb-4 text-rowan-yellow text-sm font-medium"
+        >
+          Leave a review
+        </button>
+      )}
+
+      {isComplete && reviewSubmitted && (
+        <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl px-4 py-3 mb-4">
+          <p className="text-rowan-green text-sm text-center">Review submitted</p>
+        </div>
+      )}
 
       {/* Receipt button — completed transactions */}
       {tx.state === 'COMPLETE' && (
@@ -278,6 +368,18 @@ export default function TransactionDetail() {
           <FileText size={16} className="text-rowan-text" />
           <span className="text-rowan-text text-sm font-medium">View Receipt</span>
         </button>
+      )}
+
+      {showReviewModal && (
+        <ReviewModal
+          transactionId={id}
+          traderName={tx.traderName}
+          onClose={() => setShowReviewModal(false)}
+          onSubmitted={() => {
+            setReviewSubmitted(true)
+            setShowReviewModal(false)
+          }}
+        />
       )}
 
       {/* Dispute modal */}
