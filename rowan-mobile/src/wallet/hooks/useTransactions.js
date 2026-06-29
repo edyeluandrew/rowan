@@ -9,6 +9,7 @@ const HISTORY_REFRESH_EVENTS = [
   'transaction_update',
   'transaction_refunded',
   'trader_matched',
+  'trader_rematch',
   'dispute_opened',
   'dispute_resolved',
 ]

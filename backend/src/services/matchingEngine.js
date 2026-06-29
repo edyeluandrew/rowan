@@ -86,7 +86,11 @@ async function matchTrader(transactionId) {
     // and is reserved/finalized in the payout setting's OWN currency.
     const fiatAmountUgx = fiatToUgx(fiatNeeded, fiatCurrency);
 
-    const triedTraderIds = [];
+    let excludedTraderIds = [];
+    try {
+      excludedTraderIds = await redis.smembers(`excluded-traders:${transactionId}`);
+    } catch (_) { /* best-effort */ }
+    const triedTraderIds = [...excludedTraderIds];
     for (let attempt = 0; attempt < 6; attempt++) {
       // ── [PHASE 2A] Canonical candidate selection from trader_payout_settings ──
       //   • trader ACTIVE + VERIFIED + has stellar_address (can actually receive USDC)

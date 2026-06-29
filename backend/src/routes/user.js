@@ -66,7 +66,8 @@ router.get('/history', authUser, async (req, res, next) => {
     const result = await db.query(
       `SELECT t.id, t.xlm_amount, t.usdc_amount, t.fiat_amount, t.fiat_currency,
               t.network, t.state, t.locked_rate, t.stellar_deposit_tx,
-              t.escrow_locked_at, t.completed_at, t.failed_at, t.failure_reason,
+              t.escrow_locked_at, t.trader_matched_at, t.matched_at,
+              t.completed_at, t.failed_at, t.failure_reason,
               t.created_at,
               q.memo, q.platform_fee
        FROM transactions t

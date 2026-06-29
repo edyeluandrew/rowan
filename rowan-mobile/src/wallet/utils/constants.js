@@ -101,8 +101,8 @@ export const STATE_ORDER = [
 
 export const STATE_SUBTITLES = {
   QUOTE_CONFIRMED: 'Waiting for your XLM payment',
-  ESCROW_LOCKED:   'Processing your cash out',
-  TRADER_MATCHED:  'Waiting for mobile money payment',
+  ESCROW_LOCKED:   'Finding a trader for your cash out',
+  TRADER_MATCHED:  'Mobile money payout pending',
   FIAT_PAYOUT_SUBMITTED: 'Check your phone — confirm when MoMo arrives',
   USER_CONFIRMATION_PENDING: 'Confirming your receipt',
   DISPUTE_OPENED: 'Dispute opened — under review',

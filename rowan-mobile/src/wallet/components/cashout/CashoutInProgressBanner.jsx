@@ -10,7 +10,12 @@ export default function CashoutInProgressBanner({ transaction }) {
   const navigate = useNavigate()
   if (!transaction) return null
 
-  const subtitle = STATE_SUBTITLES[transaction.state] || 'Cash out in progress'
+  let subtitle = STATE_SUBTITLES[transaction.state] || 'Cash out in progress'
+  if (transaction.state === 'TRADER_MATCHED') {
+    subtitle = transaction.matchedAt
+      ? 'Trader accepted — waiting for mobile money'
+      : 'A trader is reviewing your request'
+  }
   const fiatLabel = formatFiatAmount(
     transaction.fiatAmount,
     transaction.fiatCurrency || transaction.currency || 'UGX',

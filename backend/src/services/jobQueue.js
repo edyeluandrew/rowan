@@ -304,6 +304,7 @@ reMatchQueue.process(async (job) => {
 });
 
 const REMATCH_COUNT_KEY = (transactionId) => `payout-rematch:${transactionId}`;
+const EXCLUDED_TRADERS_KEY = (transactionId) => `excluded-traders:${transactionId}`;
 
 /**
  * Trader accepted but did not submit MoMo within TRADER_CONFIRM_TIMEOUT_SECONDS.
@@ -366,15 +367,56 @@ async function handlePayoutTimeout(transactionId, traderId) {
 
   await redis.incr(countKey);
   await redis.expire(countKey, 86400);
+  await redis.sadd(EXCLUDED_TRADERS_KEY(transactionId), traderId);
+  await redis.expire(EXCLUDED_TRADERS_KEY(transactionId), 86400);
+
+  await notificationService.notifyTraderUpdate(traderId, 'request_reassigned', {
+    transactionId,
+    state: 'ESCROW_LOCKED',
+    message: 'Payout window expired — this job was returned to the queue',
+  });
 
   const { default: matchingEngine } = await import('./matchingEngine.js');
   await matchingEngine.matchTrader(transactionId);
 
   await notificationService.notifyUser(tx.user_id, 'trader_rematch', {
     transactionId,
+    state: 'ESCROW_LOCKED',
     message: 'Your trader did not send mobile money in time. Finding another trader…',
   });
 }
+
+/**
+ * Scan DB for accepted-but-unpaid jobs past TRADER_CONFIRM_TIMEOUT_SECONDS.
+ * Runs every minute so we are not solely dependent on Bull delayed jobs on Render.
+ */
+async function scanPayoutTimeouts() {
+  const payoutTimeoutSeconds = config.platform.traderConfirmTimeoutSeconds;
+  const stuck = await db.query(
+    `SELECT t.id, t.trader_id
+     FROM transactions t
+     WHERE t.state = 'TRADER_MATCHED'
+       AND t.matched_at IS NOT NULL
+       AND t.fiat_payout_submitted_at IS NULL
+       AND t.matched_at < NOW() - INTERVAL '1 second' * $1`,
+    [payoutTimeoutSeconds]
+  );
+  for (const row of stuck.rows) {
+    try {
+      await handlePayoutTimeout(row.id, row.trader_id);
+    } catch (err) {
+      logger.error(`[Job:payout-timeout-scan] Failed for tx ${row.id}:`, err.message);
+    }
+  }
+  return { scanned: stuck.rows.length };
+}
+
+reMatchQueue.on('failed', (job, err) => {
+  logger.error(
+    `[Job:rematch] Failed (mode=${job?.data?.mode}, tx=${job?.data?.transactionId}):`,
+    err.message
+  );
+});
 
 // ─── Queue: Reset trader daily volumes at midnight ────────
 const dailyResetQueue = new Queue('daily-reset', defaultOpts);
@@ -534,6 +576,22 @@ orphanRecoveryQueue.add({}, {
   jobId: 'orphan-recovery-scan',
 });
 
+// ─── Queue: Payout timeout scan (every minute) ────────────
+const payoutTimeoutScanQueue = new Queue('payout-timeout-scan', defaultOpts);
+
+payoutTimeoutScanQueue.process(async () => {
+  const result = await scanPayoutTimeouts();
+  if (result.scanned > 0) {
+    logger.info(`[Job:payout-timeout-scan] Handled ${result.scanned} stuck payout(s)`);
+  }
+  return result;
+});
+
+payoutTimeoutScanQueue.add({}, {
+  repeat: { cron: '* * * * *' },
+  jobId: 'payout-timeout-scan',
+});
+
 /**
  * Enqueue a refund job.
  */
@@ -564,13 +622,21 @@ function enqueueReMatch(transactionId, currentTraderId, delaySeconds) {
  * Schedule payout-timeout handling after trader accepts (MoMo not submitted in time).
  */
 function enqueuePayoutTimeout(transactionId, traderId, delaySeconds) {
-  return reMatchQueue.add(
+  const job = reMatchQueue.add(
     { transactionId, currentTraderId: traderId, mode: 'payout_timeout' },
     {
       delay: delaySeconds * 1000,
-      jobId: `payout-timeout:${transactionId}:${traderId}`,
+      jobId: `payout-timeout:${transactionId}:${traderId}:${Date.now()}`,
     }
   );
+  job.then(() => {
+    logger.info(
+      `[Job:rematch] Scheduled payout timeout for tx ${transactionId} trader ${traderId} in ${delaySeconds}s`
+    );
+  }).catch((err) => {
+    logger.error(`[Job:rematch] Failed to schedule payout timeout for tx ${transactionId}:`, err.message);
+  });
+  return job;
 }
 
 /**
@@ -609,6 +675,7 @@ export default {
   dailyResetQueue,
   trustDecayQueue,
   orphanRecoveryQueue,
+  payoutTimeoutScanQueue,
   enqueueRefund,
   enqueueRelease,
   enqueueReMatch,

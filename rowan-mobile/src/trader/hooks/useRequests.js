@@ -80,12 +80,14 @@ export function useRequests() {
 
     on('new_request', handleNew);
     on('request_timeout', handleTimeout);
+    on('request_reassigned', handleTimeout);
     on('request_declined_requeued', handleDeclined);
     on('transaction_update', handleUpdate);
 
     return () => {
       off('new_request', handleNew);
       off('request_timeout', handleTimeout);
+      off('request_reassigned', handleTimeout);
       off('request_declined_requeued', handleDeclined);
       off('transaction_update', handleUpdate);
     };
