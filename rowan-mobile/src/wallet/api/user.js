@@ -36,6 +36,27 @@ export function getTransactionHistory(params = {}) {
   return client.get('/api/v1/user/transactions/history', { params }).then((res) => res.data)
 }
 
+export function getNotifications({ page = 1, limit = 20 } = {}) {
+  return client.get('/api/v1/user/notifications', { params: { page, limit } }).then((res) => res.data)
+}
+
+export function getUnreadNotificationCount() {
+  return client.get('/api/v1/user/notifications/unread').then((res) => res.data?.count ?? 0)
+}
+
+export function markNotificationsRead(notificationIds) {
+  if (notificationIds.length === 1) {
+    return client.patch(`/api/v1/user/notifications/${notificationIds[0]}/read`).then((res) => res.data)
+  }
+  return Promise.all(
+    notificationIds.map((id) => client.patch(`/api/v1/user/notifications/${id}/read`))
+  ).then(() => ({ success: true }))
+}
+
+export function markAllNotificationsRead() {
+  return client.patch('/api/v1/user/notifications/read-all').then((res) => res.data)
+}
+
 /** @deprecated Use getTransactionHistory — kept for legacy callers */
 export function getHistory(params = {}) {
   const page = params.page || 1

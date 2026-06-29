@@ -1,4 +1,4 @@
-import { LockKeyhole, ChevronLeft } from 'lucide-react';
+import { LockKeyhole, ChevronLeft, Copy, CopyCheck } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getRequest, confirmRequest } from '../api/trader';
@@ -95,6 +95,7 @@ export default function RequestDetail() {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const [revealTimer, setRevealTimer] = useState(null);
+  const [copiedOrderId, setCopiedOrderId] = useState(false);
 
   const fetchTx = useCallback(async () => {
     try {
@@ -204,7 +205,22 @@ export default function RequestDetail() {
   const network = NETWORKS[tx.network] || {};
   const step = getStep();
   const isPayoutStep = step === 1;
+  const isAwaitingConfirmation = step === 2;
   const isComplete = step >= 3;
+
+  const orderShortId = tx?.id
+    ? `ROW-${tx.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`
+    : '';
+
+  const handleCopyOrderId = async () => {
+    try {
+      await navigator.clipboard.writeText(orderShortId);
+      setCopiedOrderId(true);
+      setTimeout(() => setCopiedOrderId(false), 2000);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
 
   return (
     <div className="bg-rowan-bg min-h-screen px-4 pt-4 pb-28">
@@ -216,6 +232,18 @@ export default function RequestDetail() {
         <h1 className="text-rowan-text font-semibold text-lg flex-1">Request Detail</h1>
         <Badge type="status" value={tx.state || tx.status} />
       </div>
+
+      {orderShortId && (
+        <button
+          type="button"
+          onClick={handleCopyOrderId}
+          className="flex items-center gap-1.5 text-rowan-muted text-xs mb-4 min-h-8"
+        >
+          <span>Order {orderShortId}</span>
+          {copiedOrderId ? <CopyCheck size={12} className="text-rowan-green" /> : <Copy size={12} />}
+          {copiedOrderId && <span className="text-rowan-green text-[10px]">Copied!</span>}
+        </button>
+      )}
 
       {/* USDC Escrow Banner */}
       <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-3 mb-4 flex items-center gap-2">
@@ -354,14 +382,14 @@ export default function RequestDetail() {
         </div>
       )}
 
-      {/* Confirm Payout Button */}
-      {isPayoutStep && (
-        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 text-center mb-4">
-          <p className="text-rowan-yellow text-sm font-medium">
-            Payment submitted
+      {/* Payment submitted — waiting for user */}
+      {isAwaitingConfirmation && (
+        <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-4 text-center mb-4">
+          <p className="text-rowan-green text-sm font-medium">
+            Payment proof submitted
           </p>
           <p className="text-rowan-muted text-xs mt-1">
-            Waiting for customer confirmation before USDC is released.
+            Waiting for user confirmation.
           </p>
         </div>
       )}

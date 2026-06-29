@@ -22,7 +22,9 @@ import {
 import { packTotpSecret, verifyTotpFromStored, upgradeTotpSecretIfPlaintext } from '../utils/totpSecret.js';
 import { sensitiveActionLimiter } from '../middleware/rateLimits.js';
 import multer from 'multer';
+import notificationService from '../services/notificationService.js';
 import websocket from '../services/websocket.js';
+import { formatShortId } from '../utils/shortId.js';
 import disputeEvidenceService from '../services/disputeEvidenceService.js';
 import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 
@@ -138,6 +140,18 @@ router.get('/profile', authUser, async (req, res, next) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 /**
+ * GET /api/v1/user/notifications/unread
+ */
+router.get('/notifications/unread', authUser, async (req, res, next) => {
+  try {
+    const count = await notificationService.unreadCount(req.userId, 'user');
+    res.json({ count });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/user/notifications
  * Paginated list of the user's notifications (newest first).
  * Query: ?page=1&limit=20
@@ -148,30 +162,57 @@ router.get('/notifications', authUser, async (req, res, next) => {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
     const offset = (page - 1) * limit;
 
-    const [notifs, countResult] = await Promise.all([
-      db.query(
-        `SELECT id, type, title, body, data, read_at, created_at
-         FROM notifications
-         WHERE user_id = $1
-         ORDER BY created_at DESC
-         LIMIT $2 OFFSET $3`,
-        [req.userId, limit, offset]
-      ),
-      db.query(
-        `SELECT COUNT(*) as total FROM notifications WHERE user_id = $1`,
-        [req.userId]
-      ),
-    ]);
-
+    const rows = await notificationService.listNotifications(req.userId, 'user', limit, offset);
+    const countResult = await db.query(
+      `SELECT COUNT(*) as total FROM notifications WHERE user_id = $1`,
+      [req.userId]
+    );
     const total = parseInt(countResult.rows[0].total);
 
+    const notifications = rows.map((n) => ({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      body: n.body,
+      transaction_id: n.transaction_id,
+      transactionId: n.transaction_id,
+      read_at: n.read_at,
+      readAt: n.read_at,
+      created_at: n.created_at,
+      createdAt: n.created_at,
+    }));
+
     res.json({
-      notifications: notifs.rows,
+      notifications,
       page,
       limit,
       total,
       hasMore: offset + limit < total,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/v1/user/notifications/:id/read
+ */
+router.patch('/notifications/:id/read', authUser, async (req, res, next) => {
+  try {
+    await notificationService.markRead(req.params.id, req.userId, 'user');
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/v1/user/notifications/read-all
+ */
+router.patch('/notifications/read-all', authUser, async (req, res, next) => {
+  try {
+    await notificationService.markAllRead(req.userId, 'user');
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }
@@ -1120,6 +1161,14 @@ router.post('/transactions/:id/cancel', authUser, sensitiveActionLimiter, async 
         state: finalState,
         message: 'This order was cancelled by the buyer.',
       });
+      notificationService.createNotification(
+        tx.trader_id,
+        'trader',
+        'order_cancelled',
+        'Order cancelled',
+        `The buyer cancelled order ${formatShortId(transactionId)}. Your float has been released.`,
+        transactionId
+      ).catch(() => {});
     }
 
     res.json({

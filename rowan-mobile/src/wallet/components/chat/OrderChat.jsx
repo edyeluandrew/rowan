@@ -6,6 +6,8 @@ import useJoinOrder from '../../hooks/useJoinOrder'
 import { formatMessageTime } from '../../utils/p2pFormat'
 import TransactionStatusBadge from '../transactions/TransactionStatusBadge'
 import PaymentDetailsCard from './PaymentDetailsCard'
+import PaymentProofCard from './PaymentProofCard'
+import { formatShortId } from '../../utils/p2pFormat'
 
 const CHAT_LOCKED_STATES = ['DISPUTE_OPENED', 'DISPUTE_REFUND_PENDING', 'DISPUTE_RELEASE_PENDING']
 const MAX_COMMENT = 500
@@ -25,7 +27,7 @@ export default function OrderChat({
   const bottomRef = useRef(null)
   const fileRef = useRef(null)
   const locked = CHAT_LOCKED_STATES.includes(txState)
-  const shortId = transactionId ? transactionId.slice(0, 8) : ''
+  const shortId = transactionId ? formatShortId(transactionId) : ''
 
   useJoinOrder(transactionId)
 
@@ -132,6 +134,18 @@ export default function OrderChat({
               return (
                 <div key={msg.id}>
                   <PaymentDetailsCard payload={payload} viewerRole={viewerRole} />
+                </div>
+              )
+            }
+            if (msg.type === 'payment_proof') {
+              let payload = msg.payload
+              if (typeof payload === 'string') {
+                try { payload = JSON.parse(payload) } catch { payload = null }
+              }
+              if (!payload) return null
+              return (
+                <div key={msg.id}>
+                  <PaymentProofCard payload={payload} />
                 </div>
               )
             }

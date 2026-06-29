@@ -15,6 +15,7 @@ import TransactionStatusBadge from '../components/transactions/TransactionStatus
 import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
 import PaymentWindowCountdown from '../components/cashout/PaymentWindowCountdown'
 import OrderChat from '../components/chat/OrderChat'
+import OrderShortId from '../components/ui/OrderShortId'
 import useJoinOrder from '../hooks/useJoinOrder'
 import { formatXlm, formatDateTime, formatAddress } from '../utils/format'
 import { formatCurrency, getTraderDisplayName } from '../utils/p2pFormat'
@@ -173,6 +174,9 @@ export default function TransactionDetail() {
         <div className="flex items-center justify-between">
           <TransactionStatusBadge state={tx.state} />
           <span className="text-rowan-muted text-xs">{formatDateTime(tx.createdAt)}</span>
+        </div>
+        <div className="mt-2">
+          <OrderShortId transactionId={tx.id} />
         </div>
       </div>
 

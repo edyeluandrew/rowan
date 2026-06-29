@@ -165,6 +165,17 @@ async function sendPaymentDetailsMessage(transactionId, payload) {
   });
 }
 
+/**
+ * Trader payment proof card in order chat.
+ */
+async function sendPaymentProofMessage(transactionId, payload) {
+  if (!transactionId || !payload) return null;
+  return sendSystemMessage(transactionId, 'Trader payment proof', {
+    type: 'payment_proof',
+    payload,
+  });
+}
+
 export default {
   assertParticipant,
   isChatLocked,
@@ -172,4 +183,5 @@ export default {
   sendMessage,
   sendSystemMessage,
   sendPaymentDetailsMessage,
+  sendPaymentProofMessage,
 };

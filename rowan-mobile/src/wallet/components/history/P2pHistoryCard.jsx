@@ -3,7 +3,7 @@ import {
   CheckCircle2, XCircle, Shield, RotateCcw, Clock,
 } from 'lucide-react'
 import PaymentMethodPill from '../ui/PaymentMethodPill'
-import { formatCurrency, getTraderDisplayName } from '../../utils/p2pFormat'
+import { formatCurrency, getTraderDisplayName, formatShortId } from '../../utils/p2pFormat'
 import { formatXlm } from '../../utils/format'
 
 function StatusIcon({ state, wasDisputed }) {
@@ -39,7 +39,9 @@ export default function P2pHistoryCard({ transaction: tx }) {
   const rate = tx.lockedRate || tx.rate
   const dateLabel = formatHistoryDate(tx.createdAt)
   const duration = formatDuration(tx.durationMinutes)
-  const dateLine = duration ? `${dateLabel} · ${duration}` : dateLabel
+  const dateLine = duration
+    ? `${formatShortId(tx.id)} · ${dateLabel} · ${duration}`
+    : `${formatShortId(tx.id)} · ${dateLabel}`
 
   return (
     <button

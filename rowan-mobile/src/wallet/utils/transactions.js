@@ -35,6 +35,8 @@ export function normalizeWalletTransaction(tx) {
     selectionMethod: tx.selectionMethod ?? tx.selection_method
       ?? (tx.preferred_payout_setting_id ? 'manual' : 'auto'),
     shortId: tx.shortId ?? tx.short_id,
+    payoutReference: tx.payoutReference ?? tx.payout_reference,
+    payoutProofUrl: tx.payoutProofUrl ?? tx.payout_proof_url,
     durationMinutes: tx.durationMinutes ?? tx.duration_minutes,
     reviewSubmitted: tx.reviewSubmitted ?? tx.review_submitted,
     wasDisputed: tx.wasDisputed ?? tx.was_disputed ?? !!tx.dispute_id,

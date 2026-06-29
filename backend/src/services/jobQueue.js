@@ -643,6 +643,46 @@ appealArchiveQueue.add({}, {
   jobId: 'appeal-archive-hourly',
 });
 
+// ─── Queue: Appeal window closing soon (1 hour left) ───
+const appealReminderQueue = new Queue('appeal-reminder', defaultOpts);
+
+appealReminderQueue.process(async () => {
+  const { formatShortId } = await import('../utils/shortId.js');
+  const result = await db.query(
+    `SELECT id, user_id, appeal_expires_at
+     FROM transactions
+     WHERE state = 'COMPLETE'
+       AND appeal_expires_at IS NOT NULL
+       AND appeal_expires_at > NOW()
+       AND appeal_expires_at <= NOW() + INTERVAL '1 hour'
+       AND appeal_archived_at IS NULL`
+  );
+
+  for (const tx of result.rows) {
+    const redisKey = `appeal_reminder_sent:${tx.id}`;
+    try {
+      const sent = await import('../db/redis.js').then((m) => m.default.get(redisKey));
+      if (sent) continue;
+      await notificationService.createNotification(
+        tx.user_id,
+        'user',
+        'appeal_expires_soon',
+        'Appeal window closing',
+        `You have 1 hour left to raise a dispute on order ${formatShortId(tx.id)}.`,
+        tx.id
+      );
+      await import('../db/redis.js').then((m) => m.default.set(redisKey, '1', 'EX', 7200));
+    } catch (err) {
+      logger.warn(`[Job:appeal-reminder] Failed for tx ${tx.id}:`, err.message);
+    }
+  }
+});
+
+appealReminderQueue.add({}, {
+  repeat: { cron: '0 * * * *' },
+  jobId: 'appeal-reminder-hourly',
+});
+
 /**
  * Enqueue a refund job.
  */

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace } from 'lucide-react'
+import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace, Lock } from 'lucide-react'
 import { getTransactionStatus, confirmReceipt, openDispute, cancelOrder } from '../api/cashout'
 import { uploadDisputeEvidence, listDisputeEvidence } from '../api/user'
 import DisputeEvidenceSection from '../components/disputes/DisputeEvidenceSection'
@@ -13,11 +13,12 @@ import { getReviewStatus } from '../api/reviews'
 import useJoinOrder from '../hooks/useJoinOrder'
 import useCountdown from '../hooks/useCountdown'
 import Button from '../components/ui/Button'
+import OrderShortId from '../components/ui/OrderShortId'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
 import { normalizeWalletTransaction, getTransactionStatusTimestamps } from '../utils/transactions'
 import { STATE_SUBTITLES } from '../utils/constants'
-import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName } from '../utils/p2pFormat'
+import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine } from '../utils/p2pFormat'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
 const POLL_INTERVAL = 3000 // Poll every 3 seconds while waiting
@@ -55,6 +56,7 @@ export default function TransactionStatus() {
   const [cancelling, setCancelling] = useState(false)
   const [cancelNotice, setCancelNotice] = useState(null)
   const [appealCountdown, setAppealCountdown] = useState('')
+  const [paymentProofReceived, setPaymentProofReceived] = useState(false)
 
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
   const INITIAL_WAIT_MS = 3000 // Escrow + swap can take several seconds on testnet
@@ -179,7 +181,8 @@ export default function TransactionStatus() {
 
   const showDisputeAction = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
     || appealWindowOpen
-  const showConfirmAction = transaction?.state === 'USER_CONFIRMATION_PENDING'
+  const showConfirmSection = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
+  const canConfirmPayment = paymentProofReceived && showConfirmSection
 
   const handleCancelOrder = async () => {
     setCancelling(true)
@@ -263,6 +266,29 @@ export default function TransactionStatus() {
     }
   }
 
+  useEffect(() => {
+    if (transaction?.payoutReference || transaction?.payoutProofUrl) {
+      setPaymentProofReceived(true)
+    }
+  }, [transaction?.payoutReference, transaction?.payoutProofUrl])
+
+  useSocketHook('payment_proof_submitted', (data) => {
+    const txId = data.transaction_id || data.transactionId
+    if (txId === statusId || txId === id || txId === transaction?.id) {
+      setPaymentProofReceived(true)
+      setTransaction((prev) => mergeTransaction(prev || { id: txId }, {
+        payoutReference: data.reference ?? prev?.payoutReference,
+        payoutProofUrl: data.proof_url ?? prev?.payoutProofUrl,
+      }))
+    }
+  })
+
+  useSocketHook('chat_message', (msg) => {
+    if (msg.type === 'payment_proof' && msg.transactionId === activeTxId) {
+      setPaymentProofReceived(true)
+    }
+  })
+
   const applySocketUpdate = (data, fallbackState) => {
     const txId = data.transactionId || data.id
     if (txId === statusId || txId === id || txId === transaction?.id) {
@@ -286,6 +312,12 @@ export default function TransactionStatus() {
   useSocketHook('transaction_failed', (data) => applySocketUpdate(data, 'FAILED'))
 
   const isTerminal = transaction && TERMINAL_STATES.includes(transaction.state)
+
+  const RATE_LOCK_STATES = ['ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING']
+  const showRateLock = transaction && RATE_LOCK_STATES.includes(transaction.state)
+  const lockedRateLine = transaction?.lockedRate
+    ? formatLockedRateLine(transaction.fiatCurrency || transaction.currency || 'UGX', transaction.lockedRate)
+    : null
 
   const terminalMessage = () => {
     if (!transaction) return ''
@@ -416,6 +448,25 @@ export default function TransactionStatus() {
           {STATE_SUBTITLES[transaction.state] && (
             <p className="text-rowan-muted text-xs mt-1">{STATE_SUBTITLES[transaction.state]}</p>
           )}
+          <div className="mt-2 flex justify-center">
+            <OrderShortId transactionId={activeTxId} />
+          </div>
+        </div>
+      )}
+
+      {showRateLock && lockedRateLine && (
+        <div className="bg-rowan-surface/50 border border-rowan-border rounded-xl px-4 py-3 mb-4">
+          <div className="flex items-start gap-2">
+            <Lock size={14} className="text-rowan-muted shrink-0 mt-0.5" />
+            <div>
+              <p className="text-rowan-text text-xs font-medium">
+                Rate locked at {lockedRateLine}
+              </p>
+              <p className="text-rowan-muted text-[11px] mt-0.5">
+                Your rate is guaranteed for this order.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -479,6 +530,17 @@ export default function TransactionStatus() {
               Check your mobile money balance. If the payment has not arrived, you can raise a dispute.
             </p>
           </div>
+          {showConfirmSection && (
+            <Button
+              variant="primary"
+              size="lg"
+              disabled={!canConfirmPayment}
+              onClick={() => canConfirmPayment && setShowConfirmModal(true)}
+              className={!canConfirmPayment ? 'opacity-50' : ''}
+            >
+              {canConfirmPayment ? 'Confirm Payment Received' : 'Waiting for trader payment proof...'}
+            </Button>
+          )}
           <Button
             variant="ghost"
             className="text-rowan-red border-rowan-red w-full"
@@ -503,15 +565,15 @@ export default function TransactionStatus() {
             Did you receive the money?
           </p>
           <div className="flex flex-col gap-2">
-            {showConfirmAction && (
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={() => setShowConfirmModal(true)}
-              >
-                Confirm Payment Received
-              </Button>
-            )}
+            <Button
+              variant="primary"
+              size="lg"
+              disabled={!canConfirmPayment}
+              onClick={() => canConfirmPayment && setShowConfirmModal(true)}
+              className={!canConfirmPayment ? 'opacity-50' : ''}
+            >
+              {canConfirmPayment ? 'Confirm Payment Received' : 'Waiting for trader payment proof...'}
+            </Button>
             {showDisputeAction && (
               <Button
                 variant="ghost"

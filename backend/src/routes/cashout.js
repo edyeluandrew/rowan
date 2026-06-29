@@ -11,6 +11,8 @@ import db from '../db/index.js';
 import redis from '../db/redis.js';
 import logger from '../utils/logger.js';
 import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
+import storageService from '../services/storageService.js';
+import { formatShortId } from '../utils/shortId.js';
 
 /** Wait briefly for Horizon watcher + escrow to create the transaction row. */
 async function resolveTransactionIdForQuote(quoteId, maxWaitMs = 20000) {
@@ -313,6 +315,7 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
               t.stellar_deposit_tx, t.stellar_release_tx, t.payment_expires_at,
               t.appeal_expires_at, t.appeal_archived_at, t.trader_id,
               t.locked_rate, t.preferred_payout_setting_id,
+              t.payout_reference, t.payout_proof_url,
               tr.name AS trader_name
        FROM transactions t
        LEFT JOIN traders tr ON tr.id = t.trader_id
@@ -328,6 +331,8 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
                 t.completed_at, t.failed_at, t.created_at, t.dispute_id,
                 t.stellar_deposit_tx, t.stellar_release_tx, t.payment_expires_at,
                 t.appeal_expires_at, t.appeal_archived_at, t.trader_id,
+                t.locked_rate, t.preferred_payout_setting_id,
+                t.payout_reference, t.payout_proof_url,
                 tr.name AS trader_name
          FROM transactions t
          LEFT JOIN traders tr ON tr.id = t.trader_id
@@ -341,9 +346,20 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
+    let payoutProofUrl = null;
+    if (tx.payout_proof_url) {
+      if (tx.payout_proof_url.startsWith('http')) {
+        payoutProofUrl = tx.payout_proof_url;
+      } else {
+        const signed = await storageService.getSignedUrl(tx.payout_proof_url, 60 * 60 * 24 * 7);
+        payoutProofUrl = signed?.url || null;
+      }
+    }
+
     res.json({
       id: tx.id,
       state: tx.state,
+      short_id: formatShortId(tx.id),
       xlm_amount: tx.xlm_amount != null ? parseFloat(tx.xlm_amount) : null,
       usdc_amount: tx.usdc_amount != null ? parseFloat(tx.usdc_amount) : null,
       fiat_amount: tx.fiat_amount != null ? parseFloat(tx.fiat_amount) : null,
@@ -369,6 +385,8 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
       locked_rate: tx.locked_rate != null ? parseFloat(tx.locked_rate) : null,
       preferred_payout_setting_id: tx.preferred_payout_setting_id,
       selection_method: tx.preferred_payout_setting_id ? 'manual' : 'auto',
+      payout_reference: tx.payout_reference,
+      payout_proof_url: payoutProofUrl,
     });
   } catch (err) {
     next(err);

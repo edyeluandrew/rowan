@@ -151,6 +151,27 @@ async function createDispute(transactionId, userId, traderId, reason) {
     response_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
   });
 
+  const { formatShortId } = await import('../utils/shortId.js');
+  const shortId = formatShortId(transactionId);
+
+  notificationService.createNotification(
+    userId,
+    'user',
+    'DISPUTE_OPENED',
+    'Dispute opened',
+    'Your dispute has been received. Our team will review within 24 hours.',
+    transactionId
+  ).catch(() => {});
+
+  notificationService.createNotification(
+    traderId,
+    'trader',
+    'DISPUTE_OPENED',
+    'Dispute raised',
+    `The buyer has raised a dispute on order ${shortId}. Please provide evidence.`,
+    transactionId
+  ).catch(() => {});
+
   // 7. Notify admin
   await notificationService.notifyAdmins('dispute_created', {
     dispute_id: dispute.id,
@@ -448,6 +469,22 @@ async function adminAction(disputeId, adminId, action, actionData = {}) {
       dispute_id: disputeId,
       reason: actionData.reason,
     });
+    notificationService.createNotification(
+      dispute.user_id,
+      'user',
+      'DISPUTE_RESOLVED',
+      'Dispute resolved',
+      `Your dispute has been resolved. ${actionData.reason || 'Funds have been refunded to your wallet.'}`,
+      dispute.transaction_id
+    ).catch(() => {});
+    notificationService.createNotification(
+      dispute.trader_id,
+      'trader',
+      'DISPUTE_RESOLVED',
+      'Dispute resolved',
+      'The dispute on your order has been resolved.',
+      dispute.transaction_id
+    ).catch(() => {});
   } else if (action === 'resolve_trader') {
     await notificationService.notifyTrader(dispute.trader_id, 'dispute_resolved_trader_favour', {
       dispute_id: disputeId,
@@ -457,6 +494,22 @@ async function adminAction(disputeId, adminId, action, actionData = {}) {
       dispute_id: disputeId,
       reason: actionData.reason,
     });
+    notificationService.createNotification(
+      dispute.user_id,
+      'user',
+      'DISPUTE_RESOLVED',
+      'Dispute resolved',
+      `Your dispute has been resolved. ${actionData.reason || 'The trade was completed in favour of the trader.'}`,
+      dispute.transaction_id
+    ).catch(() => {});
+    notificationService.createNotification(
+      dispute.trader_id,
+      'trader',
+      'DISPUTE_RESOLVED',
+      'Dispute resolved',
+      'The dispute on your order has been resolved.',
+      dispute.transaction_id
+    ).catch(() => {});
   } else if (action === 'escalate') {
     await notificationService.notifyAdmins('dispute_escalated', {
       dispute_id: disputeId,

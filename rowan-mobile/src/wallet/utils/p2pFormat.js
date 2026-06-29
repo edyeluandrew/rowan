@@ -37,6 +37,19 @@ export function formatDurationMinutes(minutes) {
   return m === 1 ? '1 min' : `${m} mins`
 }
 
+/** Human-readable order reference: ROW-A1B2C3D4 */
+export function formatShortId(transactionId) {
+  if (!transactionId || typeof transactionId !== 'string') return 'ROW-????????'
+  return `ROW-${transactionId.replace(/-/g, '').substring(0, 8).toUpperCase()}`
+}
+
+/** e.g. "UGX 3,680 per XLM" for rate lock display */
+export function formatLockedRateLine(currency, rate) {
+  if (!currency || rate == null || !Number.isFinite(Number(rate))) return null
+  const formatted = Number(rate).toLocaleString('en-US', { maximumFractionDigits: 0 })
+  return `${currency} ${formatted} per XLM`
+}
+
 /** e.g. "1 XLM = UGX 3,680" */
 export function formatXlmRateLine(currency, rate) {
   if (!currency || rate == null || !Number.isFinite(Number(rate))) return null
