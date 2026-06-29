@@ -57,7 +57,7 @@ router.post(
 
       const activeOrder = await db.query(
         `SELECT id, state FROM transactions
-         WHERE user_id = $1 AND state = ANY($2::text[])
+         WHERE user_id = $1 AND state::text = ANY($2::text[])
          LIMIT 1`,
         [req.userId, USER_ACTIVE_ORDER_STATES]
       );

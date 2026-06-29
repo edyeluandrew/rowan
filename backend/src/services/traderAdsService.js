@@ -26,7 +26,7 @@ async function listAds({
     `(ps.available_float - ps.reserved_float) > 0`,
     `(SELECT COUNT(*) FROM transactions tx
         WHERE tx.trader_id = t.id
-          AND tx.state = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[]))
+          AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[]))
       < COALESCE(t.max_concurrent_orders, 3)`,
   ];
 
@@ -79,7 +79,7 @@ async function listAds({
       (ps.available_float - ps.reserved_float) AS net_float,
       (SELECT COUNT(*)::int FROM transactions tx
          WHERE tx.trader_id = t.id
-           AND tx.state = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_orders
+           AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_orders
     FROM trader_payout_settings ps
     JOIN traders t ON t.id = ps.trader_id
     WHERE ${conditions.join(' AND ')}
@@ -171,7 +171,7 @@ async function validateAdForQuote(payoutSettingId, { network, currency, fiatAmou
     `SELECT ps.*, t.status, t.verification_status, t.stellar_address, t.max_concurrent_orders,
             (SELECT COUNT(*)::int FROM transactions tx
                WHERE tx.trader_id = t.id
-                 AND tx.state = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_orders
+                 AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_orders
      FROM trader_payout_settings ps
      JOIN traders t ON t.id = ps.trader_id
      WHERE ps.id = $1 AND ps.is_active = TRUE`,

@@ -953,7 +953,7 @@ router.get('/transactions/active', authUser, async (req, res, next) => {
     const result = await db.query(
       `SELECT id, state, xlm_amount, fiat_amount, fiat_currency, network, created_at
        FROM transactions
-       WHERE user_id = $1 AND state = ANY($2::text[])
+       WHERE user_id = $1 AND state::text = ANY($2::text[])
        ORDER BY created_at DESC
        LIMIT 1`,
       [req.userId, USER_ACTIVE_ORDER_STATES]
