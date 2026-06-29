@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowDownToLine, ArrowDownLeft, Plus, Clock, Star, AlertTriangle, Bell, Coins } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
+import usePreferredFiat from '../hooks/usePreferredFiat'
 import useTransactions from '../hooks/useTransactions'
 import usePushNotifications from '../hooks/usePushNotifications'
 import { useNotificationsContext } from '../context/NotificationsContext'
@@ -10,32 +11,40 @@ import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
 import BiometricLock from '../../shared/components/BiometricLock'
 import BalanceCard from '../components/wallet/BalanceCard'
 import RateDisplay from '../components/wallet/RateDisplay'
+import CashoutInProgressBanner from '../components/cashout/CashoutInProgressBanner'
 import ConnectionDot from '../components/ui/ConnectionDot'
 import NotificationBadge from '../components/ui/NotificationBadge'
 import TransactionCard from '../components/transactions/TransactionCard'
 import Button from '../components/ui/Button'
 import { CURRENT_NETWORK } from '../utils/constants'
 import { fundWithFriendbot } from '../utils/friendbot'
+import { xlmToFiat } from '../utils/fiat'
+import { getInProgressTransactions } from '../utils/transactions'
 
 export default function Home() {
   const navigate = useNavigate()
   const { isLocked } = useBiometricProtection()
   const { balance, loading: balanceLoading, refresh: refreshBalance, publicKey } = useWallet()
+  const { preferredFiat, setPreferredFiat, ready: fiatPrefReady } = usePreferredFiat()
   const [friendbotState, setFriendbotState] = useState('idle')
-  const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates()
+  const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates(preferredFiat)
   const { transactions, loading: txLoading } = useTransactions()
   const { unreadCount } = useNotificationsContext()
   const { permissionGranted, dismissed, requestPermission, dismissBanner } = usePushNotifications()
 
-  const recent = transactions.slice(0, 3)
+  const inProgress = getInProgressTransactions(transactions)
+  const activeCashout = inProgress[0] || null
+  const recent = transactions.filter((tx) => tx.id !== activeCashout?.id).slice(0, 3)
 
-  const fiatEquivalent = balance != null && rates?.xlmToUgx
-    ? parseFloat(balance) * rates.xlmToUgx
+  const xlmRate = rates?.xlmRate
+  const fiatEquivalent = balance != null && xlmRate
+    ? xlmToFiat(balance, xlmRate)
     : null
 
   const needsTestFunds = CURRENT_NETWORK.isTest
     && !balanceLoading
     && (balance == null || parseFloat(balance) < 1)
+    && !activeCashout
 
   const handleFriendbot = async () => {
     if (!publicKey) return
@@ -49,7 +58,6 @@ export default function Home() {
     }
   }
 
-  // Show biometric lock if app requires re-entry authentication
   if (isLocked) return <BiometricLock />
 
   return (
@@ -70,13 +78,19 @@ export default function Home() {
       </div>
 
       <BalanceCard
-        balance={balance}
-        fiatEquivalent={fiatEquivalent}
-        currency="UGX"
-        loading={balanceLoading}
+        fiatAmount={fiatPrefReady ? fiatEquivalent : null}
+        fiatCurrency={preferredFiat}
+        xlmBalance={balance}
+        loading={balanceLoading || ratesLoading || !fiatPrefReady}
         refreshing={balanceLoading}
-        onRefresh={refreshBalance}
+        onRefresh={() => {
+          refreshBalance()
+          retryRates()
+        }}
+        onFiatCurrencyChange={setPreferredFiat}
       />
+
+      {activeCashout && <CashoutInProgressBanner transaction={activeCashout} />}
 
       {needsTestFunds && (
         <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4">
@@ -116,7 +130,6 @@ export default function Home() {
         </Button>
       </div>
 
-      {/* Push notification permission banner */}
       {!permissionGranted && !dismissed && (
         <div className="mt-4 bg-rowan-surface border border-rowan-border rounded-xl p-4 flex items-start gap-3">
           <Bell size={20} className="text-rowan-yellow shrink-0 mt-0.5" />
@@ -167,7 +180,7 @@ export default function Home() {
       <div className="mt-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-rowan-text text-sm font-semibold">Recent Activity</h3>
-          {recent.length > 0 && (
+          {transactions.length > 0 && (
             <button
               onClick={() => navigate('/wallet/history')}
               className="text-rowan-yellow text-xs"
@@ -183,7 +196,7 @@ export default function Home() {
               <Clock size={20} />
             </div>
           </div>
-        ) : recent.length === 0 ? (
+        ) : recent.length === 0 && !activeCashout ? (
           <div className="bg-rowan-surface rounded-xl p-8 text-center">
             <Star size={32} className="text-rowan-muted mx-auto mb-3" />
             <p className="text-rowan-muted text-sm">No transactions yet</p>

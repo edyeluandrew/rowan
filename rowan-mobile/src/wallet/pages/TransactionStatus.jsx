@@ -8,6 +8,7 @@ import Button from '../components/ui/Button'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
 import { normalizeWalletTransaction, getTransactionStatusTimestamps } from '../utils/transactions'
+import { STATE_SUBTITLES } from '../utils/constants'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
 const POLL_INTERVAL = 3000 // Poll every 3 seconds while waiting
@@ -323,6 +324,12 @@ export default function TransactionStatus() {
           currentState={transaction.state}
           timestamps={getTransactionStatusTimestamps(transaction)}
         />
+      )}
+
+      {transaction && !isTerminal && STATE_SUBTITLES[transaction.state] && (
+        <p className="text-rowan-muted text-xs text-center mt-4 px-2">
+          {STATE_SUBTITLES[transaction.state]}
+        </p>
       )}
 
       {/* Confirmation prompt for FIAT_PAYOUT_SUBMITTED */}

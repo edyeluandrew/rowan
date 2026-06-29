@@ -37,21 +37,24 @@ export default function CashoutConfirm() {
         <h1 className="text-rowan-text text-lg font-bold">Confirm Quote</h1>
       </div>
 
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-rowan-muted text-sm">Quote expires in</span>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-rowan-muted text-sm">Time to send XLM</span>
         <CountdownTimer
           expiresAt={quote.expiresAt}
           onExpire={() => setExpired(true)}
         />
       </div>
+      <p className="text-rowan-muted text-xs mb-4">
+        This timer is only for sending XLM from your wallet. After that, we match a trader and send mobile money separately.
+      </p>
 
       <QuoteSummary quote={quote} phone={phone} />
 
       <div className="bg-rowan-surface rounded-xl p-4 mt-4 flex items-start gap-3">
         <ShieldCheck size={20} className="text-rowan-green shrink-0 mt-0.5" />
         <p className="text-rowan-muted text-xs">
-          Your XLM will be held in escrow until the mobile money payment is confirmed.
-          If the trader fails to pay within the SLA window, your XLM will be automatically refunded.
+          After you send XLM, funds are held safely until mobile money arrives on your phone.
+          If payment is not completed in time, your XLM will be returned to your wallet.
         </p>
       </div>
 

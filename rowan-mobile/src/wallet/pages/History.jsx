@@ -6,9 +6,11 @@ import BottomSheet from '../components/ui/BottomSheet'
 import Badge from '../components/ui/Badge'
 import { TX_STATES } from '../utils/constants'
 import { formatXlm } from '../utils/format'
+import { getInProgressTransactions } from '../utils/transactions'
 
 const FILTER_OPTIONS = [
   'ALL',
+  'IN_PROGRESS',
   'COMPLETE',
   'FIAT_PAYOUT_SUBMITTED',
   'TRADER_MATCHED',
@@ -22,8 +24,12 @@ export default function History() {
   const [filter, setFilter] = useState('ALL')
   const [showFilters, setShowFilters] = useState(false)
 
+  const inProgress = getInProgressTransactions(transactions)
+
   const filtered = transactions.filter((tx) => {
-    const matchesFilter = filter === 'ALL' || tx.state === filter
+    const matchesFilter =
+      filter === 'ALL'
+      || (filter === 'IN_PROGRESS' ? inProgress.some((p) => p.id === tx.id) : tx.state === filter)
     const matchesSearch =
       !search ||
       tx.id?.toLowerCase().includes(search.toLowerCase()) ||
@@ -75,7 +81,9 @@ export default function History() {
 
       {filter !== 'ALL' && (
         <div className="flex items-center gap-2 mb-4">
-          <Badge color="yellow">{TX_STATES[filter]?.label || filter}</Badge>
+          <Badge color="yellow">
+            {filter === 'IN_PROGRESS' ? 'In progress' : TX_STATES[filter]?.label || filter}
+          </Badge>
           <button onClick={() => setFilter('ALL')}>
             <X size={14} className="text-rowan-muted" />
           </button>
@@ -104,7 +112,21 @@ export default function History() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((tx) => (
+          {filter === 'ALL' && inProgress.length > 0 && (
+            <div className="mb-4">
+              <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">In progress</p>
+              {inProgress.map((tx) => (
+                <TransactionCard key={`active-${tx.id}`} transaction={tx} />
+              ))}
+            </div>
+          )}
+          {filter === 'ALL' && inProgress.length > 0 && filtered.some((tx) => !inProgress.find((p) => p.id === tx.id)) && (
+            <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Earlier</p>
+          )}
+          {(filter === 'ALL'
+            ? filtered.filter((tx) => !inProgress.find((p) => p.id === tx.id))
+            : filtered
+          ).map((tx) => (
             <TransactionCard key={tx.id} transaction={tx} />
           ))}
           {hasMore && (
@@ -130,7 +152,7 @@ export default function History() {
                   : 'bg-rowan-surface text-rowan-text'
               }`}
             >
-              {opt === 'ALL' ? 'All Transactions' : TX_STATES[opt]?.label || opt}
+              {opt === 'ALL' ? 'All Transactions' : opt === 'IN_PROGRESS' ? 'In progress' : TX_STATES[opt]?.label || opt}
             </button>
           ))}
         </div>

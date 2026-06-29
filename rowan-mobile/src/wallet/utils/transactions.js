@@ -59,6 +59,31 @@ export function normalizeWalletHistoryStats(stats) {
   }
 }
 
+/** States where cashout is still in flight (not terminal). */
+export const IN_PROGRESS_TX_STATES = [
+  'QUOTE_CONFIRMED',
+  'ESCROW_LOCKED',
+  'TRADER_MATCHED',
+  'FIAT_PAYOUT_SUBMITTED',
+  'USER_CONFIRMATION_PENDING',
+  'DISPUTE_OPENED',
+  'DISPUTE_RELEASE_PENDING',
+  'DISPUTE_REFUND_PENDING',
+  'RELEASE_BLOCKED',
+]
+
+export const TERMINAL_TX_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
+
+export function isTransactionInProgress(tx) {
+  const state = tx?.state
+  return state && IN_PROGRESS_TX_STATES.includes(state)
+}
+
+export function getInProgressTransactions(transactions) {
+  if (!Array.isArray(transactions)) return []
+  return transactions.filter(isTransactionInProgress)
+}
+
 export function normalizeWalletHistoryResponse(data) {
   if (!data || typeof data !== 'object') {
     return { transactions: [], stats: null }

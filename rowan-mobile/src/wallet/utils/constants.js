@@ -100,16 +100,18 @@ export const STATE_ORDER = [
 ]
 
 export const STATE_SUBTITLES = {
-  QUOTE_CONFIRMED: 'Quote confirmed, waiting for XLM',
-  ESCROW_LOCKED:   'XLM received — swapping to USDC',
-  TRADER_MATCHED:  'USDC swap complete — trader assigned',
-  FIAT_PAYOUT_SUBMITTED: 'Trader sent mobile money — confirm receipt',
-  USER_CONFIRMATION_PENDING: 'Confirming receipt with escrow...',
-  DISPUTE_OPENED: 'Dispute opened — admin is reviewing',
-  DISPUTE_RELEASE_PENDING: 'Dispute resolution in progress — releasing USDC',
-  DISPUTE_REFUND_PENDING: 'Dispute resolution in progress — finalizing',
+  QUOTE_CONFIRMED: 'Waiting for your XLM payment',
+  ESCROW_LOCKED:   'Processing your cash out',
+  TRADER_MATCHED:  'Waiting for mobile money payment',
+  FIAT_PAYOUT_SUBMITTED: 'Check your phone — confirm when MoMo arrives',
+  USER_CONFIRMATION_PENDING: 'Confirming your receipt',
+  DISPUTE_OPENED: 'Dispute opened — under review',
+  DISPUTE_RELEASE_PENDING: 'Resolving dispute',
+  DISPUTE_REFUND_PENDING: 'Processing refund',
+  RELEASE_BLOCKED: 'Needs attention — contact support',
   COMPLETE:        'Done — check your mobile money balance',
-  REFUNDED:        'Refunded — USDC not released to trader',
+  REFUNDED:        'Refunded to your wallet',
+  FAILED:          'Could not complete — tap for details',
 }
 
 export const ALERT_DIRECTIONS = {

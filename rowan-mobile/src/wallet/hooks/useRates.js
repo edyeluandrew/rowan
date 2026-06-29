@@ -5,7 +5,7 @@ import { QUOTE_REFRESH_INTERVAL } from '../utils/constants'
 /**
  * Hook to fetch and auto-refresh live exchange rates.
  */
-export default function useRates() {
+export default function useRates(preferredFiat = 'UGX') {
   const [rates, setRates] = useState(null)
   const [allRates, setAllRates] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -18,11 +18,11 @@ export default function useRates() {
     else setLoading(true)
     try {
       const [current, all] = await Promise.all([
-        getCurrentRates(),
+        getCurrentRates(preferredFiat),
         getAllRates(),
       ])
       setRates(current)
-      setAllRates(all)
+      setAllRates(all?.rates ?? all)
       setError(null)
     } catch (err) {
       setError(err)
@@ -30,7 +30,7 @@ export default function useRates() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [preferredFiat])
 
   useEffect(() => {
     fetchRates()

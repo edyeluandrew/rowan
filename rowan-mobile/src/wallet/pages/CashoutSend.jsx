@@ -98,16 +98,19 @@ export default function CashoutSend() {
         <h1 className="text-rowan-text text-lg font-bold">Send XLM</h1>
       </div>
 
-      <div className="flex items-center justify-between mb-4 bg-rowan-surface rounded-lg p-3 border border-rowan-border">
+      <div className="flex items-center justify-between mb-1 bg-rowan-surface rounded-lg p-3 border border-rowan-border">
         <div className="flex items-center gap-2">
           <Clock size={16} className="text-rowan-yellow" />
-          <span className="text-rowan-muted text-xs">Quote expires in</span>
+          <span className="text-rowan-muted text-xs">Time to send XLM</span>
         </div>
         <CountdownTimer
           expiresAt={quote.expiresAt}
           onExpire={() => setQuoteExpired(true)}
         />
       </div>
+      <p className="text-rowan-muted text-xs mb-4 px-1">
+        Send before this timer ends. Mobile money timing starts after your XLM is received.
+      </p>
 
       <QuoteSummary quote={quote} phone={phone} />
 
