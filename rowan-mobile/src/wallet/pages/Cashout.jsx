@@ -10,6 +10,8 @@ import client from '../api/client'
 import { hashPhoneNumber } from '../utils/crypto'
 import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
 import { estimateMaxNetFiat } from '../utils/fiat'
+import { getNetworksForCountry } from '../utils/country'
+import useUserCountry from '../hooks/useUserCountry'
 import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
@@ -18,7 +20,8 @@ import Button from '../components/ui/Button'
 export default function Cashout() {
   const navigate = useNavigate()
   const { isLocked } = useBiometricProtection()
-  const { allRates } = useRates()
+  const { country, fiatCurrency: userFiat } = useUserCountry()
+  const { allRates } = useRates(userFiat)
   const { balance } = useWallet()
   const [fiatAmount, setFiatAmount] = useState('')
   const [network, setNetwork] = useState(null)
@@ -34,16 +37,29 @@ export default function Cashout() {
       .catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (network && NETWORKS[network]?.country !== country) {
+      setNetwork(null)
+    }
+  }, [country, network])
+
+  const countryNetworkKeys = useMemo(
+    () => Object.keys(getNetworksForCountry(country)),
+    [country]
+  )
+
   const netFiat = parseFloat(fiatAmount) || 0
-  const selectedRate = network && allRates
-    ? Array.isArray(allRates)
-      ? allRates.find((r) => r.network === network)
-      : allRates[network] != null
-        ? { rate: allRates[network], fee: 0 }
-        : null
-    : null
+  const selectedRate = useMemo(() => {
+    if (!allRates) return null
+    const key = network || countryNetworkKeys[0]
+    if (!key) return null
+    if (Array.isArray(allRates)) {
+      return allRates.find((r) => r.network === key) || null
+    }
+    return allRates[key] != null ? { rate: allRates[key], fee: 0 } : null
+  }, [allRates, network, countryNetworkKeys])
   const rateValue = selectedRate?.rate || 0
-  const currency = network ? NETWORKS[network]?.currency : null
+  const currency = network ? NETWORKS[network]?.currency : userFiat
 
   const walletMaxNetFiat = useMemo(() => {
     if (!rateValue || balance == null) return null
@@ -169,7 +185,7 @@ export default function Cashout() {
       />
 
       <div className="mt-6">
-        <NetworkSelector selected={network} onSelect={setNetwork} />
+        <NetworkSelector selected={network} onSelect={setNetwork} country={country} />
       </div>
 
       <div className="mt-6">

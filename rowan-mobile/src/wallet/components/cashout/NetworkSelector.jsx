@@ -12,14 +12,18 @@ const NETWORK_ICONS = {
 /**
  * Grid of mobile money network cards for selection.
  */
-export default function NetworkSelector({ selected, onSelect }) {
+export default function NetworkSelector({ selected, onSelect, country = null }) {
+  const entries = Object.entries(NETWORKS).filter(
+    ([, network]) => !country || network.country === country
+  )
+
   return (
     <div>
       <p className="text-rowan-muted text-xs uppercase tracking-wider mb-3">
         Select mobile money network
       </p>
-      <div className="grid grid-cols-2 gap-3">
-        {Object.entries(NETWORKS).map(([key, network]) => {
+      <div className={`grid gap-3 ${entries.length > 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {entries.map(([key, network]) => {
           const Icon = NETWORK_ICONS[key] || Smartphone
           const isSelected = selected === key
           return (

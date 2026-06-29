@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowDownToLine, ArrowDownLeft, Plus, Clock, Star, AlertTriangle, Bell, Coins } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
-import usePreferredFiat from '../hooks/usePreferredFiat'
+import useUserCountry from '../hooks/useUserCountry'
 import useTransactions from '../hooks/useTransactions'
 import usePushNotifications from '../hooks/usePushNotifications'
 import { useNotificationsContext } from '../context/NotificationsContext'
@@ -25,9 +25,9 @@ export default function Home() {
   const navigate = useNavigate()
   const { isLocked } = useBiometricProtection()
   const { balance, loading: balanceLoading, refresh: refreshBalance, publicKey } = useWallet()
-  const { preferredFiat, setPreferredFiat, ready: fiatPrefReady } = usePreferredFiat()
+  const { country, fiatCurrency, ready: countryReady } = useUserCountry()
   const [friendbotState, setFriendbotState] = useState('idle')
-  const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates(preferredFiat)
+  const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates(fiatCurrency)
   const { transactions, loading: txLoading } = useTransactions()
   const { unreadCount } = useNotificationsContext()
   const { permissionGranted, dismissed, requestPermission, dismissBanner } = usePushNotifications()
@@ -78,16 +78,15 @@ export default function Home() {
       </div>
 
       <BalanceCard
-        fiatAmount={fiatPrefReady ? fiatEquivalent : null}
-        fiatCurrency={preferredFiat}
+        fiatAmount={countryReady ? fiatEquivalent : null}
+        fiatCurrency={fiatCurrency}
         xlmBalance={balance}
-        loading={balanceLoading || ratesLoading || !fiatPrefReady}
+        loading={balanceLoading || ratesLoading || !countryReady}
         refreshing={balanceLoading}
         onRefresh={() => {
           refreshBalance()
           retryRates()
         }}
-        onFiatCurrencyChange={setPreferredFiat}
       />
 
       {activeCashout && <CashoutInProgressBanner transaction={activeCashout} />}
@@ -173,7 +172,7 @@ export default function Home() {
             </p>
           </div>
         ) : (
-          <RateDisplay allRates={allRates} loading={ratesLoading} />
+          <RateDisplay allRates={allRates} loading={ratesLoading} country={country} />
         )}
       </div>
 

@@ -5,26 +5,32 @@ import { useAuth } from '../context/AuthContext'
 import { maskPhoneNumber } from '../utils/crypto'
 import { getSecure } from '../../shared/utils/storage'
 import { COUNTRY_CODES } from '../utils/constants'
+import { getDialCodeForCountry } from '../utils/country'
+import { persistUserCountry } from '../hooks/useUserCountry'
+import CountryPicker from '../components/settings/CountryPicker'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import WalletTwoFactorLoginModal from './WalletTwoFactorLoginModal'
 
-const countries = Object.entries(COUNTRY_CODES)
-
 export default function Register() {
   const navigate = useNavigate()
   const { registerWithWallet, loginWithWallet, setWalletAuthAfter2FA } = useAuth()
-  const [countryCode, setCountryCode] = useState('+256')
+  const [country, setCountry] = useState('UG')
   const [phone, setPhone] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
 
-  // 2FA modal state
   const [show2faModal, setShow2faModal] = useState(false)
   const [tempUserId, setTempUserId] = useState(null)
 
+  const countryCode = getDialCodeForCountry(country)
   const fullPhone = `${countryCode}${phone}`
   const masked = phone.length >= 4 ? maskPhoneNumber(fullPhone) : ''
+
+  const saveCountryAndGoHome = async () => {
+    await persistUserCountry(country)
+    navigate('/wallet/home', { replace: true })
+  }
 
   const handleRegister = async () => {
     if (!phone || phone.length < 7) return
@@ -33,13 +39,11 @@ export default function Register() {
     try {
       const response = await registerWithWallet(fullPhone)
 
-      // Check if 2FA is required (no token issued yet — only userId)
       if (response?.requiresTwoFactorVerification === true) {
         setTempUserId(response.userId)
         setShow2faModal(true)
       } else {
-        // No 2FA needed, navigate directly
-        navigate('/wallet/home', { replace: true })
+        await saveCountryAndGoHome()
       }
     } catch (err) {
       setError(err.message)
@@ -54,13 +58,11 @@ export default function Register() {
     try {
       const response = await loginWithWallet()
 
-      // Check if 2FA is required (no token issued yet — only userId)
       if (response?.requiresTwoFactorVerification === true) {
         setTempUserId(response.userId)
         setShow2faModal(true)
       } else {
-        // No 2FA needed, navigate directly
-        navigate('/wallet/home', { replace: true })
+        await saveCountryAndGoHome()
       }
     } catch (err) {
       setError(err.message)
@@ -69,11 +71,6 @@ export default function Register() {
     }
   }
 
-  /**
-   * Handle successful 2FA verification from the modal.
-   * The modal already verified the code AND received the freshly issued session
-   * token from the backend, so we just persist that session here.
-   */
   const handleAfter2FA = async (verifyResponse) => {
     setLoading(true)
     setError(null)
@@ -89,7 +86,7 @@ export default function Register() {
 
       setShow2faModal(false)
       setTempUserId(null)
-      navigate('/wallet/home', { replace: true })
+      await saveCountryAndGoHome()
     } catch (err) {
       setError(err.message || 'Verification failed. Please try again.')
     } finally {
@@ -97,10 +94,6 @@ export default function Register() {
     }
   }
 
-  /**
-   * Handle 2FA modal cancel/failure
-   * Clear temporary state and go back
-   */
   const handle2faCancel = () => {
     setShow2faModal(false)
     setTempUserId(null)
@@ -108,26 +101,22 @@ export default function Register() {
   }
 
   return (
-    <div className="bg-rowan-bg min-h-screen flex flex-col px-6 pt-16">
+    <div className="bg-rowan-bg min-h-screen flex flex-col px-6 pt-12 pb-8">
       <h2 className="text-rowan-text text-xl font-bold text-center mb-2">
-        Link your phone number
+        Set up your account
       </h2>
       <p className="text-rowan-muted text-sm text-center mb-6">
-        Your phone number is hashed before being sent. We never store it in plaintext
+        Choose your country — we&apos;ll show balances and cash out in your local mobile money currency
       </p>
 
+      <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Your country</p>
+      <CountryPicker value={country} onChange={setCountry} disabled={loading} />
+
+      <p className="text-rowan-muted text-xs uppercase tracking-wider mt-6 mb-2">Phone number</p>
       <div className="flex">
-        <select
-          value={countryCode}
-          onChange={(e) => setCountryCode(e.target.value)}
-          className="bg-rowan-surface border border-rowan-border rounded-l-xl px-3 py-4 text-rowan-text text-sm w-20 focus:outline-none"
-        >
-          {countries.map(([, info]) => (
-            <option key={info.code} value={info.code}>
-              {info.label}
-            </option>
-          ))}
-        </select>
+        <div className="bg-rowan-surface border border-rowan-border rounded-l-xl px-3 py-4 text-rowan-muted text-sm w-20 flex items-center justify-center shrink-0">
+          {COUNTRY_CODES[country]?.flag} {countryCode}
+        </div>
         <Input
           type="tel"
           inputMode="numeric"
@@ -163,7 +152,6 @@ export default function Register() {
         Already have an account?
       </button>
 
-      {/* 2FA Modal */}
       <WalletTwoFactorLoginModal
         isVisible={show2faModal}
         userId={tempUserId}

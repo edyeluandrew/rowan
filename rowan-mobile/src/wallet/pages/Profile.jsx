@@ -2,14 +2,17 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   UserCircle, Star, Shield, Copy, CopyCheck, LogOut, Volume2, VolumeX,
-  Vibrate, ShieldCheck, Clock, Fingerprint, Bell, ChevronRight, Lock
+  Vibrate, ShieldCheck, Clock, Fingerprint, Bell, ChevronRight, Lock, Globe
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import useWallet from '../hooks/useWallet'
 import useTransactions from '../hooks/useTransactions'
+import useUserCountry from '../hooks/useUserCountry'
 import { getPreference, setPreference } from '../utils/storage'
 import { formatAddress, formatXlm } from '../utils/format'
-import { KYC_LEVELS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
+import { KYC_LEVELS, COPY_FEEDBACK_TIMEOUT_MS, COUNTRY_CODES } from '../utils/constants'
+import { COUNTRY_FIAT } from '../utils/country'
+import CountryPicker from '../components/settings/CountryPicker'
 import Badge from '../components/ui/Badge'
 
 export default function Profile() {
@@ -17,6 +20,8 @@ export default function Profile() {
   const { user, logout } = useAuth()
   const { balance, publicKey } = useWallet()
   const { stats } = useTransactions()
+  const { country, setCountry } = useUserCountry()
+  const [showCountryPicker, setShowCountryPicker] = useState(false)
   const [copied, setCopied] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [vibrationEnabled, setVibrationEnabled] = useState(true)
@@ -119,6 +124,40 @@ export default function Profile() {
           <p className="text-rowan-text text-sm font-semibold">{stats?.completed || 0}</p>
           <p className="text-rowan-muted text-[10px]">Completed</p>
         </div>
+      </div>
+
+      {/* Country / market */}
+      <div className="bg-rowan-surface rounded-xl mb-4 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowCountryPicker((v) => !v)}
+          className="flex items-center justify-between w-full px-4 py-3 min-h-11"
+        >
+          <div className="flex items-center gap-3">
+            <Globe size={18} className="text-rowan-muted" />
+            <div className="text-left">
+              <span className="text-rowan-text text-sm block">Country</span>
+              <span className="text-rowan-muted text-xs">
+                {COUNTRY_CODES[country]?.flag} {COUNTRY_CODES[country]?.name} · {COUNTRY_FIAT[country]}
+              </span>
+            </div>
+          </div>
+          <ChevronRight
+            size={16}
+            className={`text-rowan-muted transition-transform ${showCountryPicker ? 'rotate-90' : ''}`}
+          />
+        </button>
+        {showCountryPicker && (
+          <div className="px-4 pb-4 border-t border-rowan-border pt-3">
+            <CountryPicker
+              value={country}
+              onChange={(code) => {
+                setCountry(code)
+                setShowCountryPicker(false)
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Settings */}

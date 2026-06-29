@@ -5,7 +5,7 @@ import Badge from '../ui/Badge'
 /**
  * Displays live exchange rates for all supported networks.
  */
-export default function RateDisplay({ allRates, loading }) {
+export default function RateDisplay({ allRates, loading, country = null }) {
   if (loading || !allRates) {
     return (
       <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
@@ -17,8 +17,11 @@ export default function RateDisplay({ allRates, loading }) {
   const rateEntries = Array.isArray(allRates)
     ? allRates
         .filter((r) => NETWORKS[r.network])
+        .filter((r) => !country || NETWORKS[r.network]?.country === country)
         .map((r) => [r.network, r.rate ?? r.price ?? r])
-    : Object.entries(allRates).filter(([key]) => NETWORKS[key])
+    : Object.entries(allRates)
+        .filter(([key]) => NETWORKS[key])
+        .filter(([key]) => !country || NETWORKS[key]?.country === country)
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
