@@ -258,6 +258,9 @@ router.post('/requests/:id/accept', authTrader, async (req, res, next) => {
     });
   } catch (err) {
     logger.error(`[Trader] ❌ Accept request ${req.params.id} failed:`, err.message);
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code || undefined });
+    }
     next(err);
   }
 });

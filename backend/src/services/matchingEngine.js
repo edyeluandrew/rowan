@@ -4,6 +4,7 @@ import config from '../config/index.js';
 import notificationService from './notificationService.js';
 import stateMachine from './transactionStateMachine.js';
 import payoutSettingsService from './payoutSettingsService.js';
+import { getTraderUsdcTrustlineStatus, assertTraderCanReceiveUsdc } from './traderStellarService.js';
 import { fiatToUgx } from '../utils/financial.js';
 import logger from '../utils/logger.js';
 
@@ -99,7 +100,7 @@ async function matchTrader(transactionId) {
       //   • (available_float - reserved_float) >= fiat   (native currency — no unit mixing)
       //   • under daily UGX limit
       const candidateResult = await db.query(
-        `SELECT t.id AS trader_id, t.name AS trader_name,
+        `SELECT t.id AS trader_id, t.name AS trader_name, t.stellar_address,
                 ps.id AS payout_setting_id, ps.available_float, ps.reserved_float,
                 (SELECT COUNT(*) FROM transactions tx
                    WHERE tx.trader_id = t.id
@@ -157,6 +158,16 @@ async function matchTrader(transactionId) {
         const jobQueue = await getJobQueue();
         await jobQueue.enqueueReMatch(transactionId, null, config.platform.traderRetryDelaySeconds || 30);
         return null;
+      }
+
+      const trustStatus = await getTraderUsdcTrustlineStatus(candidate.stellar_address);
+      if (!trustStatus.hasTrustline) {
+        logger.warn(
+          `[Matching] Skipping trader ${candidate.trader_id} (${candidate.trader_name}) — ` +
+          `no USDC trustline (${trustStatus.reason || 'unknown'})`
+        );
+        triedTraderIds.push(candidate.trader_id);
+        continue;
       }
 
       // ── Atomically assign trader + payout_setting_id (state guarded) ──
@@ -283,6 +294,14 @@ async function acceptRequest(transactionId, traderId) {
     const err = new Error(`Request already progressed to ${beforeState.state} state`);
     err.statusCode = 410; // 410 Gone — request has moved on
     throw err;
+  }
+
+  if (!beforeState?.matched_at) {
+    const traderRes = await db.query(
+      `SELECT stellar_address FROM traders WHERE id = $1`,
+      [traderId]
+    );
+    await assertTraderCanReceiveUsdc(traderRes.rows[0]?.stellar_address);
   }
   
   const result = await db.query(
