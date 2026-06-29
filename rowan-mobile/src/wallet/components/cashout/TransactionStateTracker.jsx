@@ -3,6 +3,7 @@ import {
   Check,
 } from 'lucide-react'
 import { STATE_ORDER, STATE_SUBTITLES, TX_STATES } from '../../utils/constants'
+import { getStatusLabel } from '../../utils/p2pFormat'
 import { formatDateTime } from '../../utils/format'
 
 const STATE_ICONS = {
@@ -18,11 +19,21 @@ const STATE_ICONS = {
  * Vertical timeline tracking transaction state progression.
  */
 export default function TransactionStateTracker({ currentState, timestamps }) {
-  const currentIdx = STATE_ORDER.indexOf(currentState)
+  const flowStates = STATE_ORDER.filter((s) =>
+    !['DISPUTE_OPENED', 'DISPUTE_RELEASE_PENDING', 'DISPUTE_REFUND_PENDING'].includes(s)
+  )
+  const currentIdx = flowStates.indexOf(currentState)
+  const isDispute = ['DISPUTE_OPENED', 'DISPUTE_RELEASE_PENDING', 'DISPUTE_REFUND_PENDING'].includes(currentState)
 
   return (
     <div className="space-y-0">
-      {STATE_ORDER.map((state, idx) => {
+      {isDispute && (
+        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-3 mb-4 text-center">
+          <p className="text-rowan-red text-sm font-medium">{getStatusLabel(currentState)}</p>
+          <p className="text-rowan-muted text-xs mt-1">{STATE_SUBTITLES[currentState]}</p>
+        </div>
+      )}
+      {flowStates.map((state, idx) => {
         const Icon = STATE_ICONS[state] || CircleDot
         const isCompleted = idx < currentIdx
         const isCurrent = idx === currentIdx
@@ -58,7 +69,7 @@ export default function TransactionStateTracker({ currentState, timestamps }) {
                 <p className={`text-sm font-medium ${
                   isCompleted ? 'text-rowan-green' : isCurrent ? 'text-rowan-text' : 'text-rowan-muted'
                 }`}>
-                  {TX_STATES[state]?.label || state}
+                  {TX_STATES[state]?.label || getStatusLabel(state)}
                 </p>
                 <p className="text-rowan-muted text-xs">
                   {STATE_SUBTITLES[state]}
@@ -72,7 +83,7 @@ export default function TransactionStateTracker({ currentState, timestamps }) {
             </div>
 
             {/* Connector line */}
-            {idx < STATE_ORDER.length - 1 && (
+            {idx < flowStates.length - 1 && (
               <div className="flex items-start gap-4">
                 <div className="flex justify-center w-10">
                   <div

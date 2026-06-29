@@ -4,6 +4,7 @@ import { ArrowLeft, Send } from 'lucide-react'
 import TopBar from '../../../shared/components/layout/TopBar'
 import TransactionStateTag from '../../transactions/components/TransactionStateTag'
 import DisputePriorityBadge from '../components/DisputePriorityBadge'
+import DisputeChatHistory from '../components/DisputeChatHistory'
 import ResolutionModal from '../components/ResolutionModal'
 import ConfirmDialog from '../../../shared/components/ui/ConfirmDialog'
 import CopyButton from '../../../shared/components/ui/CopyButton'
@@ -138,6 +139,10 @@ export default function DisputeDetailPage() {
                     ))}
                   </div>
                 </div>
+              )}
+
+              {dispute.transaction_id && (
+                <DisputeChatHistory transactionId={dispute.transaction_id} />
               )}
             </div>
 

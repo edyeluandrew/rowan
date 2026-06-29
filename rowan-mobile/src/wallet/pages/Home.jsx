@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDownToLine, ArrowDownLeft, Plus, Clock, Star, AlertTriangle, Bell, Coins } from 'lucide-react'
+import { ArrowDownToLine, ArrowDownLeft, Plus, Clock, Star, AlertTriangle, Bell, Coins, UserCheck } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import usePreferredFiat from '../hooks/usePreferredFiat'
@@ -127,6 +127,10 @@ export default function Home() {
         <Button onClick={() => navigate('/wallet/cashout')}>
           <ArrowDownToLine size={18} />
           Cash Out
+        </Button>
+        <Button variant="ghost" className="mt-2" onClick={() => navigate('/wallet/marketplace')}>
+          <UserCheck size={18} />
+          Choose a trader
         </Button>
       </div>
 

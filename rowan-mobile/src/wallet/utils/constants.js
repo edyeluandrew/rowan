@@ -41,19 +41,19 @@ export const NETWORKS = {
 }
 
 export const TX_STATES = {
-  QUOTE_REQUESTED:  { label: 'Quote Requested',  icon: 'CircleDashed'   },
-  QUOTE_CONFIRMED:  { label: 'Quote Confirmed',  icon: 'CircleDot'      },
-  ESCROW_LOCKED:    { label: 'XLM Received',     icon: 'Lock'           },
-  TRADER_MATCHED:   { label: 'Trader Assigned',  icon: 'UserCheck'      },
-  FIAT_PAYOUT_SUBMITTED: { label: 'Payment Sent', icon: 'Banknote' },
-  USER_CONFIRMATION_PENDING: { label: 'Confirming Receipt', icon: 'ShieldCheck' },
-  DISPUTE_OPENED:   { label: 'Dispute Opened',   icon: 'ShieldAlert'    },
-  DISPUTE_RELEASE_PENDING: { label: 'Releasing After Dispute', icon: 'ShieldAlert' },
-  DISPUTE_REFUND_PENDING: { label: 'Resolving Refund', icon: 'ShieldAlert' },
-  RELEASE_BLOCKED:  { label: 'Release Blocked',  icon: 'CircleX'        },
-  COMPLETE:         { label: 'Complete',         icon: 'CircleCheckBig' },
+  QUOTE_REQUESTED:  { label: 'Getting your rate...',  icon: 'CircleDashed'   },
+  QUOTE_CONFIRMED:  { label: 'Rate confirmed',  icon: 'CircleDot'      },
+  ESCROW_LOCKED:    { label: 'XLM secured',     icon: 'Lock'           },
+  TRADER_MATCHED:   { label: 'Trader found',  icon: 'UserCheck'      },
+  FIAT_PAYOUT_SUBMITTED: { label: 'Payment sent to you', icon: 'Banknote' },
+  USER_CONFIRMATION_PENDING: { label: 'Confirm your payment', icon: 'ShieldCheck' },
+  DISPUTE_OPENED:   { label: 'Under review',   icon: 'ShieldAlert'    },
+  DISPUTE_RELEASE_PENDING: { label: 'Under review', icon: 'ShieldAlert' },
+  DISPUTE_REFUND_PENDING: { label: 'Under review', icon: 'ShieldAlert' },
+  RELEASE_BLOCKED:  { label: 'Needs attention',  icon: 'CircleX'        },
+  COMPLETE:         { label: 'Done!',         icon: 'CircleCheckBig' },
   REFUNDED:         { label: 'Refunded',         icon: 'RotateCcw'      },
-  FAILED:           { label: 'Failed',           icon: 'CircleX'        },
+  FAILED:           { label: 'Transaction failed',           icon: 'CircleX'        },
 }
 
 export const KYC_LEVELS = {

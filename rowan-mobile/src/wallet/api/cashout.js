@@ -1,11 +1,12 @@
 import client from './client'
 
-export function getQuote({ xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName }) {
+export function getQuote({ xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName, payoutSettingId }) {
   const body = {
     network,
     phoneHash,
     payoutPhone,
     payoutName,
+    ...(payoutSettingId ? { payoutSettingId } : {}),
   }
   if (fiatAmount != null) {
     body.fiatAmount = Number(fiatAmount)

@@ -48,7 +48,9 @@ router.post(
   checkUserLimits,
   async (req, res, next) => {
     try {
-      const { xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName } = req.body;
+      const { xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName, payoutSettingId } = req.body;
+
+      logger.info(`[Cashout] getQuote called: xlmAmount=${xlmAmount}, fiatAmount=${fiatAmount}, network=${network}, phoneHash=${phoneHash?.slice(0, 8)}..., payoutSettingId=${payoutSettingId || 'auto'}`);
 
       const hasXlm = xlmAmount != null && xlmAmount !== '';
       const hasFiat = fiatAmount != null && fiatAmount !== '';
@@ -140,6 +142,7 @@ router.post(
           phoneHash,
           payoutPhone: payoutPhone?.trim(),
           payoutName: payoutName?.trim(),
+          payoutSettingId: payoutSettingId || null,
         };
         quote = hasFiat
           ? await quoteEngine.createQuoteFromFiat({ ...quoteParams, targetNetFiat: fiatNum })
@@ -199,6 +202,7 @@ router.post(
         fxFetchedAt: quote.fx_fetched_at || null,
         fxWarning: quote.fx_warning || null,
         fiatRateSource: quote.fiat_rate_source || null,
+        payoutSettingId: quote.preferred_payout_setting_id || null,
       });
     } catch (err) {
       next(err);
@@ -291,7 +295,7 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
               quote_confirmed_at, escrow_locked_at, trader_matched_at,
               fiat_payout_submitted_at, user_confirmation_pending_at,
               completed_at, failed_at, created_at, dispute_id,
-              stellar_deposit_tx, stellar_release_tx
+              stellar_deposit_tx, stellar_release_tx, payment_expires_at
        FROM transactions WHERE id = $1 AND user_id = $2`,
       [id, userId]
     );
@@ -302,7 +306,7 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
                 quote_confirmed_at, escrow_locked_at, trader_matched_at,
                 fiat_payout_submitted_at, user_confirmation_pending_at,
                 completed_at, failed_at, created_at, dispute_id,
-                stellar_deposit_tx, stellar_release_tx
+                stellar_deposit_tx, stellar_release_tx, payment_expires_at
          FROM transactions WHERE quote_id = $1 AND user_id = $2`,
         [id, userId]
       );
@@ -332,6 +336,7 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
       completed_at: tx.completed_at,
       failed_at: tx.failed_at,
       created_at: tx.created_at,
+      payment_expires_at: tx.payment_expires_at,
     });
   } catch (err) {
     next(err);

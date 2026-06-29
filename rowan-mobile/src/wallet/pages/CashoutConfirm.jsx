@@ -1,20 +1,29 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ChevronLeft, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, ShieldCheck, AlertTriangle, UserCheck } from 'lucide-react'
 import QuoteSummary from '../components/cashout/QuoteSummary'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import Button from '../components/ui/Button'
+import {
+  formatXlmRateLine,
+  getTraderDisplayName,
+} from '../utils/p2pFormat'
 
 export default function CashoutConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, network, phone, requestedFiat } = location.state || {}
+  const { quote, network, phone, requestedFiat, traderName, selectedAd } = location.state || {}
   const [expired, setExpired] = useState(false)
 
   if (!quote) {
     navigate('/wallet/cashout', { replace: true })
     return null
   }
+
+  const chosenTrader = traderName || selectedAd?.traderName
+  const rateLine = quote.fiatCurrency && quote.userRate
+    ? formatXlmRateLine(quote.fiatCurrency, quote.userRate)
+    : null
 
   const handleConfirm = () => {
     if (expired) return
@@ -36,6 +45,27 @@ export default function CashoutConfirm() {
         </button>
         <h1 className="text-rowan-text text-lg font-bold">Confirm Quote</h1>
       </div>
+
+      {chosenTrader && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <UserCheck size={20} className="text-rowan-yellow shrink-0 mt-0.5" />
+            <div>
+              <p className="text-rowan-text text-sm font-semibold">Your chosen trader</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-rowan-text text-sm">{getTraderDisplayName(chosenTrader)}</span>
+                <ShieldCheck size={14} className="text-rowan-green" />
+              </div>
+              {rateLine && (
+                <p className="text-rowan-muted text-xs mt-2">{rateLine}</p>
+              )}
+              <p className="text-rowan-muted text-xs mt-2">
+                If this trader is unavailable, we will find you the next best match automatically.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between mb-1">
         <span className="text-rowan-muted text-sm">Time to send XLM</span>

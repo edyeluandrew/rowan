@@ -7,6 +7,14 @@ import payoutSettingsService from './payoutSettingsService.js';
 import { fiatToUgx } from '../utils/financial.js';
 import logger from '../utils/logger.js';
 
+let chatServiceModule = null;
+async function getChatService() {
+  if (!chatServiceModule) {
+    chatServiceModule = (await import('./chatService.js')).default;
+  }
+  return chatServiceModule;
+}
+
 // Will be set by websocket module after init
 let io = null;
 
@@ -91,13 +99,18 @@ async function matchTrader(transactionId) {
       excludedTraderIds = await redis.smembers(`excluded-traders:${transactionId}`);
     } catch (_) { /* best-effort */ }
     const triedTraderIds = [...excludedTraderIds];
+    let skipPreferred = false;
+    const preferredSettingId = transaction.preferred_payout_setting_id;
     for (let attempt = 0; attempt < 6; attempt++) {
-      // ── [PHASE 2A] Canonical candidate selection from trader_payout_settings ──
-      //   • trader ACTIVE + VERIFIED + has stellar_address (can actually receive USDC)
-      //   • payout setting ACTIVE, matching network + currency
-      //   • fiat within [min_amount, max_amount]
-      //   • (available_float - reserved_float) >= fiat   (native currency — no unit mixing)
-      //   • under daily UGX limit
+      const usePreferred = !skipPreferred && preferredSettingId && attempt === 0;
+
+      const candidateParams = [transaction.network, fiatCurrency, fiatNeeded, fiatAmountUgx, triedTraderIds];
+      let preferredClause = '';
+      if (usePreferred) {
+        candidateParams.push(preferredSettingId);
+        preferredClause = ` AND ps.id = $${candidateParams.length}`;
+      }
+
       const candidateResult = await db.query(
         `SELECT t.id AS trader_id, t.name AS trader_name,
                 ps.id AS payout_setting_id, ps.available_float, ps.reserved_float,
@@ -115,13 +128,18 @@ async function matchTrader(transactionId) {
            AND $3 BETWEEN ps.min_amount AND ps.max_amount
            AND (ps.available_float - ps.reserved_float) >= $3
            AND (t.daily_volume + $4) <= t.daily_limit_ugx
-           AND t.id <> ALL($5::uuid[])
+           AND t.id <> ALL($5::uuid[])${preferredClause}
          ORDER BY t.trust_score DESC, active_load ASC
          LIMIT 1`,
-        [transaction.network, fiatCurrency, fiatNeeded, fiatAmountUgx, triedTraderIds]
+        candidateParams
       );
 
       const candidate = candidateResult.rows[0];
+      if (!candidate && usePreferred) {
+        logger.warn(`[Matching] Preferred payout setting ${preferredSettingId} unavailable for tx ${transactionId} — falling back to auto-match`);
+        skipPreferred = true;
+        continue;
+      }
       if (!candidate) {
         // Permanent failure: amount outside any trader's min/max — refund instead of retry loop
         const limitsResult = await db.query(
@@ -211,10 +229,24 @@ async function matchTrader(transactionId) {
 
       const trader = { id: candidate.trader_id, name: candidate.trader_name };
 
+      const paymentExpiresAt = new Date(Date.now() + config.platform.paymentWindowSeconds * 1000);
+      await db.query(
+        `UPDATE transactions SET payment_expires_at = $1 WHERE id = $2`,
+        [paymentExpiresAt, transactionId]
+      );
+
+      getChatService()
+        .then((cs) => cs.sendSystemMessage(
+          transactionId,
+          'Trader matched. Mobile money payout should arrive within the payment window.'
+        ))
+        .catch((err) => logger.warn(`[Matching] Chat system message failed: ${err.message}`));
+
       // ── [L-3 FIX] Notify user that a trader has been matched ──
       notificationService.notifyUser(transaction.user_id, 'trader_matched', {
         transactionId: transaction.id,
         state: 'TRADER_MATCHED',
+        paymentExpiresAt: paymentExpiresAt.toISOString(),
         message: 'A trader has been matched to your request. Mobile money payout coming soon.',
       });
 
@@ -234,6 +266,8 @@ async function matchTrader(transactionId) {
         state: 'TRADER_MATCHED',
         accept_deadline: new Date(Date.now() + acceptTimeoutMs).toISOString(),
         expires_at: new Date(Date.now() + acceptTimeoutMs).toISOString(),
+        payment_expires_at: paymentExpiresAt.toISOString(),
+        paymentExpiresAt: paymentExpiresAt.toISOString(),
         expires_in: config.platform.traderAcceptTimeoutSeconds,
         expiresIn: config.platform.traderAcceptTimeoutSeconds,
         phoneHash: transaction.phone_hash,
@@ -414,6 +448,12 @@ async function submitPayoutSent(transactionId, traderId, payoutReference) {
   }
 
   logger.info(`[submitPayoutSent] ✅ Trader ${traderId} submitted payout for tx ${transactionId}, state now: ${transaction.state}`);
+
+  const chatService = (await import('./chatService.js')).default;
+  chatService.sendSystemMessage(
+    transactionId,
+    'Trader marked mobile money as sent. Please confirm when you receive it.'
+  ).catch(() => {});
 
   // Notify user that trader marked payment sent
   notificationService.notifyUser(transaction.user_id, 'trader_sent_payout', {

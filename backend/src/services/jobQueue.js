@@ -483,7 +483,7 @@ orphanRecoveryQueue.process(async () => {
     logger.warn(`[Job:orphan-recovery] TRADER_MATCHED orphan: tx ${tx.id} — unassigning and re-matching`);
     await escrowController.releaseMatchFloatForTransaction(tx);
     await db.query(
-      `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL
+      `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL, payment_expires_at = NULL
        WHERE id = $1 AND state = 'TRADER_MATCHED'`,
       [tx.id]
     );
@@ -507,6 +507,34 @@ orphanRecoveryQueue.process(async () => {
       await handlePayoutTimeout(tx.id, tx.trader_id);
     } catch (err) {
       logger.error(`[Job:orphan-recovery] Payout timeout handling failed for tx ${tx.id}:`, err.message);
+    }
+  }
+
+  // 2b. TRADER_MATCHED past payment window with no payout → refund
+  const expiredPayment = await db.query(
+    `SELECT t.*, u.stellar_address as user_stellar
+     FROM transactions t
+     JOIN users u ON u.id = t.user_id
+     WHERE t.state = 'TRADER_MATCHED'
+       AND t.payment_expires_at IS NOT NULL
+       AND t.payment_expires_at < NOW()
+       AND t.fiat_payout_submitted_at IS NULL`,
+  );
+  for (const tx of expiredPayment.rows) {
+    logger.warn(`[Job:orphan-recovery] Payment window expired for tx ${tx.id} — refunding`);
+    try {
+      await escrowController.releaseMatchFloatForTransaction(tx);
+      const result = await escrowController.refundOrphanTransaction(
+        tx.id,
+        'Auto-refund: payment window expired before trader sent mobile money'
+      );
+      if (result.status === 'refunded') {
+        const chatService = (await import('./chatService.js')).default;
+        chatService.sendSystemMessage(tx.id, 'Payment window expired. Escrow refunded to your wallet.').catch(() => {});
+        await notificationService.notifyRefund(tx.user_id, tx, 'Payment window expired — funds returned');
+      }
+    } catch (err) {
+      logger.error(`[Job:orphan-recovery] Payment expiry refund failed for tx ${tx.id}:`, err.message);
     }
   }
 

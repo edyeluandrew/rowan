@@ -65,6 +65,28 @@ function init(httpServer) {
     socket.on('disconnect', () => {
       logger.info(`[WS] ${socket.role} ${socket.userId} disconnected`);
     });
+
+    // Join order chat room (verified participant only)
+    socket.on('join_order', async ({ transactionId }) => {
+      if (!transactionId) return;
+      try {
+        const db = (await import('../db/index.js')).default;
+        const result = await db.query(
+          `SELECT user_id, trader_id FROM transactions WHERE id = $1`,
+          [transactionId]
+        );
+        const tx = result.rows[0];
+        if (!tx) return;
+        const isUser = socket.role === 'user' && tx.user_id === socket.userId;
+        const isTrader = socket.role === 'trader' && tx.trader_id === socket.userId;
+        if (isUser || isTrader) {
+          socket.join(`order:${transactionId}`);
+          logger.info(`[WS] ${socket.role} ${socket.userId} joined order:${transactionId}`);
+        }
+      } catch (err) {
+        logger.warn(`[WS] join_order failed: ${err.message}`);
+      }
+    });
   });
 
   // Inject io into the matching engine so it can push events
@@ -96,6 +118,13 @@ function emitToTrader(traderId, event, data) {
 }
 
 /**
+ * Emit to all participants in an order chat room.
+ */
+function emitToOrder(transactionId, event, data) {
+  if (io) io.to(`order:${transactionId}`).emit(event, data);
+}
+
+/**
  * Broadcast an event to all connected sockets of a given role.
  * Used for admin notifications (e.g., new trader submissions).
  */
@@ -109,4 +138,4 @@ function broadcast(role, event, data) {
   }
 }
 
-export default { init, getIo, emitToUser, emitToTrader, broadcast };
+export default { init, getIo, emitToUser, emitToTrader, emitToOrder, broadcast };

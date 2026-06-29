@@ -391,6 +391,10 @@ async function computeQuoteFromXlm(xlmAmount, network) {
     throw new Error(`Invalid amounts calculated: fiatAmount=${fiatAmountActual}, platformFee=${platformFeeActual}`);
   }
 
+  // [CORRECTNESS] quote_source MUST reflect reality. If pathData was synthesised
+  // from the legacy fallback (no Horizon path), stamp it 'legacy-fallback' so the
+  // escrow swap layer refuses to execute against it. Only quotes backed by a real
+  // Horizon-discovered path are marked 'horizon-path' and therefore executable.
   const quoteSource = pathData.source === 'horizon-path' ? 'horizon-path' : 'legacy-fallback';
 
   return {
@@ -420,6 +424,7 @@ async function persistQuote({
   payoutName,
   computed,
   requestedNetFiat = null,
+  preferredPayoutSettingId = null,
 }) {
   const {
     fiatCurrency,
@@ -446,8 +451,8 @@ async function persistQuote({
         rate_ugx, fee_ugx, status, path_xlm_needed, path_usdc_received, quote_source,
         payout_phone, payout_name, rate_source, quote_warning,
         fx_source, fx_rate, fx_currency, fx_warning, fiat_rate_source,
-        fx_provider, fx_fetched_at, fx_age_seconds)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
+        fx_provider, fx_fetched_at, fx_age_seconds, preferred_payout_setting_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
      RETURNING *`,
     [
       userId, xlmAmount, fiatCurrency, 
@@ -472,6 +477,7 @@ async function persistQuote({
       fiatFx.fxProvider,
       fiatFx.fxFetchedAt ? new Date(fiatFx.fxFetchedAt) : null,
       fiatFx.fxAgeSeconds,
+      preferredPayoutSettingId,
     ]
   );
 
@@ -491,8 +497,18 @@ async function persistQuote({
 /**
  * Create a locked quote from a user-specified XLM amount.
  */
-async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone, payoutName }) {
+async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone, payoutName, payoutSettingId = null }) {
   const computed = await computeQuoteFromXlm(xlmAmount, network);
+  let preferredPayoutSettingId = null;
+  if (payoutSettingId) {
+    const traderAdsService = (await import('./traderAdsService.js')).default;
+    await traderAdsService.validateAdForQuote(payoutSettingId, {
+      network,
+      currency: computed.fiatCurrency,
+      fiatAmount: computed.fiatAmountNum,
+    });
+    preferredPayoutSettingId = payoutSettingId;
+  }
   return persistQuote({
     userId,
     xlmAmount,
@@ -501,6 +517,7 @@ async function createQuote({ userId, xlmAmount, network, phoneHash, payoutPhone,
     payoutPhone,
     payoutName,
     computed,
+    preferredPayoutSettingId,
   });
 }
 
@@ -635,6 +652,7 @@ async function createQuoteFromFiat({
   phoneHash,
   payoutPhone,
   payoutName,
+  payoutSettingId = null,
 }) {
   const computed = await computeQuoteFromTargetFiat(targetNetFiat, network);
   const xlmAmount = Math.ceil(computed.xlmWithSlippage * 1e7) / 1e7;
@@ -647,6 +665,17 @@ async function createQuoteFromFiat({
     throw err;
   }
 
+  let preferredPayoutSettingId = null;
+  if (payoutSettingId) {
+    const traderAdsService = (await import('./traderAdsService.js')).default;
+    await traderAdsService.validateAdForQuote(payoutSettingId, {
+      network,
+      currency: computed.fiatCurrency,
+      fiatAmount: computed.fiatAmountNum,
+    });
+    preferredPayoutSettingId = payoutSettingId;
+  }
+
   return persistQuote({
     userId,
     xlmAmount,
@@ -656,6 +685,7 @@ async function createQuoteFromFiat({
     payoutName,
     computed,
     requestedNetFiat: computed.fiatAmountNum,
+    preferredPayoutSettingId,
   });
 }
 

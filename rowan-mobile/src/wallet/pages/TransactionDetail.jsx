@@ -5,11 +5,11 @@ import { getTransactionStatus, confirmReceipt, openDispute } from '../api/cashou
 import useSocketHook from '../hooks/useSocket'
 import TransactionStatusBadge from '../components/transactions/TransactionStatusBadge'
 import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
-import DisputeStatusCard from '../components/disputes/DisputeStatusCard'
-import ReceiptConfirmationCard from '../components/disputes/ReceiptConfirmationCard'
-import ConfirmingReceiptCard from '../components/disputes/ConfirmingReceiptCard'
-import DisputeConfirmModal from '../components/disputes/DisputeConfirmModal'
-import { formatXlm, formatCurrency, formatDateTime, formatAddress } from '../utils/format'
+import PaymentWindowCountdown from '../components/cashout/PaymentWindowCountdown'
+import OrderChat from '../components/chat/OrderChat'
+import useJoinOrder from '../hooks/useJoinOrder'
+import { formatXlm, formatDateTime, formatAddress } from '../utils/format'
+import { formatCurrency, getTraderDisplayName } from '../utils/p2pFormat'
 import { normalizeWalletTransaction } from '../utils/transactions'
 import { NETWORKS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 
@@ -70,6 +70,9 @@ export default function TransactionDetail() {
       setTx((prev) => (prev ? normalizeWalletTransaction({ ...prev, state: data.newState, ...data }) : prev))
     }
   })
+
+  const inProgress = tx && !['COMPLETE', 'REFUNDED', 'FAILED'].includes(tx.state)
+  useJoinOrder(inProgress ? id : null)
 
   const handleCopy = async (text, field) => {
     try {
@@ -175,7 +178,20 @@ export default function TransactionDetail() {
         </div>
       )}
 
-      {/* Error message */}
+      {tx.state === 'TRADER_MATCHED' && tx.paymentExpiresAt && (
+        <PaymentWindowCountdown expiresAt={tx.paymentExpiresAt} />
+      )}
+
+      {inProgress && (
+        <div className="mb-4">
+          <OrderChat
+            transactionId={id}
+            txState={tx.state}
+            counterpartyName={getTraderDisplayName(tx.traderName)}
+            viewerRole="user"
+          />
+        </div>
+      )}
       {disputeError && (
         <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mb-4">
           <p className="text-rowan-red text-sm">{disputeError}</p>

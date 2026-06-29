@@ -25,6 +25,8 @@ export function normalizeWalletTransaction(tx) {
     matchedAt: tx.matchedAt ?? tx.matched_at,
     fiatPayoutSubmittedAt: tx.fiatPayoutSubmittedAt ?? tx.fiat_payout_submitted_at,
     userConfirmationPendingAt: tx.userConfirmationPendingAt ?? tx.user_confirmation_pending_at,
+    paymentExpiresAt: tx.paymentExpiresAt ?? tx.payment_expires_at,
+    traderName: tx.traderName ?? tx.trader_name,
   }
 }
 

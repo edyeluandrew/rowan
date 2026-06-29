@@ -120,6 +120,14 @@ async function createDispute(transactionId, userId, traderId, reason) {
     },
   });
 
+  try {
+    const chatService = (await import('./chatService.js')).default;
+    await chatService.sendSystemMessage(
+      transactionId,
+      'A dispute has been raised. Our support team will review your chat history.'
+    );
+  } catch (_) { /* best-effort */ }
+
   // 6. Notify trader
   await notificationService.notifyTrader(traderId, 'dispute_opened', {
     dispute_id: dispute.id,

@@ -7,7 +7,16 @@ import Badge from '../components/ui/Badge'
 import { TX_STATES } from '../utils/constants'
 import { formatXlm } from '../utils/format'
 
-const FILTER_OPTIONS = ['ALL', 'COMPLETE', 'FIAT_SENT', 'REFUNDED', 'FAILED']
+const FILTER_OPTIONS = [
+  'ALL',
+  'COMPLETE',
+  'TRADER_MATCHED',
+  'FIAT_PAYOUT_SUBMITTED',
+  'USER_CONFIRMATION_PENDING',
+  'DISPUTE_OPENED',
+  'REFUNDED',
+  'FAILED',
+]
 
 export default function History() {
   const { transactions, stats, loading, error, hasMore, loadMore, refresh } = useTransactions()

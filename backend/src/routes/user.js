@@ -861,6 +861,9 @@ router.post('/transactions/:id/confirm-receipt', authUser, sensitiveActionLimite
 
       logger.info(`[User] Transaction ${transactionId} completed: USDC released, hash ${releaseTxHash}`);
 
+      const chatService = (await import('../services/chatService.js')).default;
+      chatService.sendSystemMessage(transactionId, 'Payment confirmed. Transaction complete.').catch(() => {});
+
       res.json({
         status: 'COMPLETE',
         message: 'Receipt confirmed. USDC has been released to the trader.',

@@ -13,6 +13,10 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import ConfirmPayoutModal from '../components/modals/ConfirmPayoutModal';
 import TraderDisputeStatusCard from '../components/disputes/TraderDisputeStatusCard';
 import UsdcReceiptCard from '../components/wallet/UsdcReceiptCard';
+import OrderChat from '../components/chat/OrderChat';
+import TraderReviewModal from '../components/reviews/TraderReviewModal';
+import { getTraderReviewStatus } from '../api/reviews';
+import useJoinOrder from '../hooks/useJoinOrder';
 
 const STEPS = ['Escrow Funded', 'Payout Sent', 'Complete'];
 
@@ -86,6 +90,7 @@ export default function RequestDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const [revealTimer, setRevealTimer] = useState(null);
 
@@ -103,6 +108,19 @@ export default function RequestDetail() {
   useEffect(() => {
     fetchTx();
   }, [fetchTx]);
+
+  useJoinOrder(id);
+
+  useEffect(() => {
+    if (!tx || (tx.state !== 'COMPLETE' && tx.status !== 'COMPLETE')) return;
+    let cancelled = false;
+    getTraderReviewStatus(tx.id)
+      .then((data) => {
+        if (!cancelled && !data?.submitted) setShowReviewModal(true);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [tx?.id, tx?.state, tx?.status]);
 
   // Listen for real-time updates
   useEffect(() => {
@@ -213,11 +231,16 @@ export default function RequestDetail() {
       {/* Step indicator */}
       <StepIndicator currentStep={step} />
 
-      {/* SLA Countdown */}
-      {tx.sla_expires_at && !isComplete && (
+      {/* Payment window countdown */}
+      {(tx.payment_expires_at || tx.sla_expires_at) && !isComplete && step <= 1 && (
         <div className="mb-4">
-          <SlaCountdown expiresAt={tx.sla_expires_at} />
+          <SlaCountdown expiresAt={tx.payment_expires_at || tx.sla_expires_at} />
         </div>
+      )}
+
+      {/* Order chat */}
+      {!isComplete && (
+        <OrderChat transactionId={tx.id} txState={tx.state || tx.status} />
       )}
 
       {/* Dispute/Status Cards */}
@@ -342,6 +365,13 @@ export default function RequestDetail() {
         request={tx}
         onPayoutSubmitted={handlePayoutSubmitted}
       />
+
+      {showReviewModal && isComplete && (
+        <TraderReviewModal
+          transactionId={tx.id}
+          onClose={() => setShowReviewModal(false)}
+        />
+      )}
     </div>
   );
 }

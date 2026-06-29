@@ -4,11 +4,17 @@ import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Cl
 import { getTransactionStatus, confirmReceipt, openDispute } from '../api/cashout'
 import useSocketHook from '../hooks/useSocket'
 import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
+import PaymentWindowCountdown from '../components/cashout/PaymentWindowCountdown'
+import OrderChat from '../components/chat/OrderChat'
+import ReviewModal from '../components/reviews/ReviewModal'
+import { getReviewStatus } from '../api/reviews'
+import useJoinOrder from '../hooks/useJoinOrder'
 import Button from '../components/ui/Button'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
 import { normalizeWalletTransaction, getTransactionStatusTimestamps } from '../utils/transactions'
 import { STATE_SUBTITLES } from '../utils/constants'
+import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName } from '../utils/p2pFormat'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
 const POLL_INTERVAL = 3000 // Poll every 3 seconds while waiting
@@ -40,6 +46,9 @@ export default function TransactionStatus() {
   const biometricLabel = biometricType === 'FACE_ID' ? 'Face ID' : 'Fingerprint'
   const BiometricIcon = biometricType === 'FACE_ID' ? ScanFace : Fingerprint
 
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [reviewSubmitted, setReviewSubmitted] = useState(false)
+
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
   const INITIAL_WAIT_MS = 3000 // Escrow + swap can take several seconds on testnet
   const retryCountRef = useRef(0)
@@ -47,6 +56,8 @@ export default function TransactionStatus() {
   // Prefer real transaction id from state; URL may temporarily hold quoteId while escrow processes.
   const statusId = passedTransactionId || id
   const activeTxId = transaction?.id || passedTransactionId || id
+
+  useJoinOrder(activeTxId && transaction ? activeTxId : null)
 
   const mergeTransaction = (prev, patch) =>
     normalizeWalletTransaction({ ...(prev || {}), ...(patch || {}) })
@@ -114,6 +125,17 @@ export default function TransactionStatus() {
       if (initialWaitTimer) clearTimeout(initialWaitTimer)
     }
   }, [statusId])
+
+  useEffect(() => {
+    if (!activeTxId || transaction?.state !== 'COMPLETE' || reviewSubmitted) return
+    let cancelled = false
+    getReviewStatus(activeTxId)
+      .then((data) => {
+        if (!cancelled && !data?.submitted) setShowReviewModal(true)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [activeTxId, transaction?.state, reviewSubmitted])
 
   const handleConfirmReceipt = async () => {
     // If biometric lock is enabled, require verification first
@@ -319,6 +341,15 @@ export default function TransactionStatus() {
         </div>
       )}
 
+      {transaction && !isTerminal && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 mb-4 text-center">
+          <p className="text-rowan-text text-sm font-semibold">{getStatusLabel(transaction.state)}</p>
+          {STATE_SUBTITLES[transaction.state] && (
+            <p className="text-rowan-muted text-xs mt-1">{STATE_SUBTITLES[transaction.state]}</p>
+          )}
+        </div>
+      )}
+
       {transaction && (
         <TransactionStateTracker
           currentState={transaction.state}
@@ -326,24 +357,33 @@ export default function TransactionStatus() {
         />
       )}
 
-      {transaction && !isTerminal && STATE_SUBTITLES[transaction.state] && (
-        <p className="text-rowan-muted text-xs text-center mt-4 px-2">
-          {STATE_SUBTITLES[transaction.state]}
-        </p>
+      {transaction?.state === 'TRADER_MATCHED' && transaction.paymentExpiresAt && (
+        <PaymentWindowCountdown expiresAt={transaction.paymentExpiresAt} />
       )}
 
-      {/* Confirmation prompt for FIAT_PAYOUT_SUBMITTED */}
-      {transaction && transaction.state === 'FIAT_PAYOUT_SUBMITTED' && (
+      {transaction && !isTerminal && activeTxId && (
+        <div className="my-4">
+          <OrderChat
+            transactionId={activeTxId}
+            txState={transaction.state}
+            counterpartyName={getTraderDisplayName(transaction.traderName)}
+            viewerRole="user"
+          />
+        </div>
+      )}
+
+      {/* Confirmation prompt when payout submitted or awaiting user confirmation */}
+      {(transaction?.state === 'FIAT_PAYOUT_SUBMITTED' || transaction?.state === 'USER_CONFIRMATION_PENDING') && (
         <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
           <div className="text-center">
             <p className="text-rowan-text text-sm font-medium">
-              Trader says they sent {transaction.fiatAmount} {transaction.fiatCurrency}
+              {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} sent to your {getNetworkLabel(transaction.network)} account
             </p>
-            <p className="text-rowan-muted text-xs mt-1 mb-3">
-              to your {transaction.network} number
+            <p className="text-rowan-muted text-xs mt-2">
+              Check your mobile money balance, then confirm below.
             </p>
           </div>
-          <p className="text-rowan-text text-sm text-center">
+          <p className="text-rowan-text text-sm text-center font-medium">
             Did you receive the money?
           </p>
           <div className="flex flex-col gap-2">
@@ -352,14 +392,14 @@ export default function TransactionStatus() {
               size="lg"
               onClick={() => setShowConfirmModal(true)}
             >
-              Yes, I Received It
+              Confirm Payment Received
             </Button>
             <Button
               variant="ghost"
               className="text-rowan-red border-rowan-red"
               onClick={() => setShowDisputeModal(true)}
             >
-              I Did Not Receive It
+              Raise a Dispute
             </Button>
           </div>
         </div>
@@ -522,6 +562,15 @@ export default function TransactionStatus() {
             </div>
           </div>
         </div>
+      )}
+
+      {showReviewModal && (
+        <ReviewModal
+          transactionId={activeTxId}
+          traderName={transaction?.traderName}
+          onClose={() => setShowReviewModal(false)}
+          onSubmitted={() => setReviewSubmitted(true)}
+        />
       )}
     </div>
   )
