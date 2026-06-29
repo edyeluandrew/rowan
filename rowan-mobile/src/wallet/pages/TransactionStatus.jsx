@@ -16,7 +16,7 @@ import Button from '../components/ui/Button'
 import OrderShortId from '../components/ui/OrderShortId'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
-import { normalizeWalletTransaction, getTransactionStatusTimestamps } from '../utils/transactions'
+import { normalizeWalletTransaction, getTransactionStatusTimestamps, isManualP2pTransaction } from '../utils/transactions'
 import { STATE_SUBTITLES } from '../utils/constants'
 import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine } from '../utils/p2pFormat'
 
@@ -66,7 +66,7 @@ export default function TransactionStatus() {
   const statusId = passedTransactionId || id
   const activeTxId = transaction?.id || passedTransactionId || id
 
-  useJoinOrder(activeTxId && transaction ? activeTxId : null)
+  useJoinOrder(isManualP2pTransaction(transaction) ? activeTxId : null)
 
   const paymentCountdown = useCountdown(transaction?.paymentExpiresAt)
 
@@ -481,7 +481,7 @@ export default function TransactionStatus() {
         <PaymentWindowCountdown expiresAt={transaction.paymentExpiresAt} />
       )}
 
-      {transaction && !isTerminal && activeTxId && (
+      {transaction && !isTerminal && activeTxId && isManualP2pTransaction(transaction) && (
         <div className="my-4">
           <OrderChat
             transactionId={activeTxId}

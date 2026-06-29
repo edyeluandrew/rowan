@@ -19,7 +19,7 @@ import OrderShortId from '../components/ui/OrderShortId'
 import useJoinOrder from '../hooks/useJoinOrder'
 import { formatXlm, formatDateTime, formatAddress } from '../utils/format'
 import { formatCurrency, getTraderDisplayName } from '../utils/p2pFormat'
-import { normalizeWalletTransaction, getTransactionStatusTimestamps } from '../utils/transactions'
+import { normalizeWalletTransaction, getTransactionStatusTimestamps, isManualP2pTransaction } from '../utils/transactions'
 import { NETWORKS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 
 export default function TransactionDetail() {
@@ -96,7 +96,7 @@ export default function TransactionDetail() {
     && new Date(tx.appealExpiresAt) > new Date()
     && !tx?.appealArchivedAt
   const timestamps = getTransactionStatusTimestamps(tx || {})
-  useJoinOrder(inProgress ? id : null)
+  useJoinOrder(inProgress && isManualP2pTransaction(tx) ? id : null)
 
   const handleCopy = async (text, field) => {
     try {
@@ -238,7 +238,7 @@ export default function TransactionDetail() {
         <PaymentWindowCountdown expiresAt={tx.paymentExpiresAt} />
       )}
 
-      {(inProgress || isComplete) && (
+      {isManualP2pTransaction(tx) && (inProgress || isComplete) && (
         <div className="mb-4">
           <OrderChat
             transactionId={id}

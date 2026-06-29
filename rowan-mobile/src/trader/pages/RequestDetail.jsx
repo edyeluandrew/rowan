@@ -19,6 +19,7 @@ import { uploadTraderDisputeEvidence, listTraderDisputeEvidence } from '../api/d
 import TraderReviewModal from '../components/reviews/TraderReviewModal';
 import { getTraderReviewStatus } from '../api/reviews';
 import useJoinOrder from '../hooks/useJoinOrder';
+import { isManualP2pTransaction } from '../../wallet/utils/transactions';
 
 const STEPS = ['Escrow Funded', 'Payout Sent', 'Complete'];
 
@@ -112,7 +113,7 @@ export default function RequestDetail() {
     fetchTx();
   }, [fetchTx]);
 
-  useJoinOrder(id);
+  useJoinOrder(tx && isManualP2pTransaction(tx) ? id : null);
 
   useEffect(() => {
     if (!tx || (tx.state !== 'COMPLETE' && tx.status !== 'COMPLETE')) return;
@@ -275,7 +276,7 @@ export default function RequestDetail() {
         </div>
       )}
 
-      {!isComplete && tx.state !== 'REFUNDED' && tx.state !== 'FAILED' && (
+      {!isComplete && tx.state !== 'REFUNDED' && tx.state !== 'FAILED' && isManualP2pTransaction(tx) && (
         <OrderChat transactionId={tx.id} txState={tx.state || tx.status} />
       )}
 

@@ -256,12 +256,14 @@ async function matchTrader(transactionId) {
 
       const trader = { id: candidate.trader_id, name: candidate.trader_name };
 
-      getChatService()
-        .then((cs) => cs.sendSystemMessage(
-          transactionId,
-          'Trader matched. They will send your mobile money after accepting the order.'
-        ))
-        .catch((err) => logger.warn(`[Matching] Chat system message failed: ${err.message}`));
+      if (transaction.preferred_payout_setting_id) {
+        getChatService()
+          .then((cs) => cs.sendSystemMessage(
+            transactionId,
+            'Trader matched. They will send your mobile money after accepting the order.'
+          ))
+          .catch((err) => logger.warn(`[Matching] Chat system message failed: ${err.message}`));
+      }
 
       notificationService.notifyUser(transaction.user_id, 'trader_matched', {
         transactionId: transaction.id,
@@ -448,16 +450,18 @@ async function acceptRequest(transactionId, traderId) {
       traderId,
       config.platform.paymentWindowSeconds
     );
-    sendPaymentDetailsIfReady(transactionId).catch((err) => {
-      logger.warn(`[Accept] Payment details message failed: ${err.message}`);
-    });
+    if (transaction.preferred_payout_setting_id) {
+      sendPaymentDetailsIfReady(transactionId).catch((err) => {
+        logger.warn(`[Accept] Payment details message failed: ${err.message}`);
+      });
 
-    getChatService()
-      .then((cs) => cs.sendSystemMessage(
-        transactionId,
-        `Trader accepted. Mobile money should arrive within ${Math.ceil(config.platform.paymentWindowSeconds / 60)} minutes.`
-      ))
-      .catch(() => {});
+      getChatService()
+        .then((cs) => cs.sendSystemMessage(
+          transactionId,
+          `Trader accepted. Mobile money should arrive within ${Math.ceil(config.platform.paymentWindowSeconds / 60)} minutes.`
+        ))
+        .catch(() => {});
+    }
 
     transaction.payment_expires_at = paymentExpiresAt;
   }
@@ -503,7 +507,8 @@ async function confirmPayout() {
  */
 async function submitPayoutSent(transactionId, traderId, payoutReference, { proofStorageKey = null, proofSignedUrl = null } = {}) {
   const txCheck = await db.query(
-    `SELECT id, trader_id, state, user_id, fiat_amount, fiat_currency, network
+    `SELECT id, trader_id, state, user_id, fiat_amount, fiat_currency, network,
+            preferred_payout_setting_id
      FROM transactions WHERE id = $1`,
     [transactionId]
   );
@@ -553,24 +558,37 @@ async function submitPayoutSent(transactionId, traderId, payoutReference, { proo
 
   logger.info(`[submitPayoutSent] ✅ Trader ${traderId} submitted payout for tx ${transactionId}, state now: ${transaction.state}`);
 
-  const proofPayload = {
-    type: 'payment_proof',
-    reference: payoutReference,
-    proof_url: proofSignedUrl || null,
-    amount: formatFiatDisplay(transaction.fiat_amount, transaction.fiat_currency || 'UGX'),
-    network: transaction.network,
-    submitted_at: new Date().toISOString(),
-  };
+  if (tx.preferred_payout_setting_id) {
+    const proofPayload = {
+      type: 'payment_proof',
+      reference: payoutReference,
+      proof_url: proofSignedUrl || null,
+      amount: formatFiatDisplay(transaction.fiat_amount, transaction.fiat_currency || 'UGX'),
+      network: transaction.network,
+      submitted_at: new Date().toISOString(),
+    };
 
-  const chatService = await getChatService();
-  chatService.sendPaymentProofMessage(transactionId, proofPayload).catch(() => {});
+    const chatService = await getChatService();
+    chatService.sendPaymentProofMessage(transactionId, proofPayload).catch(() => {});
 
-  websocket.emitToUser(transaction.user_id, 'payment_proof_submitted', {
-    transaction_id: transactionId,
-    transactionId,
-    reference: payoutReference,
-    proof_url: proofSignedUrl || null,
-  });
+    websocket.emitToUser(transaction.user_id, 'payment_proof_submitted', {
+      transaction_id: transactionId,
+      transactionId,
+      reference: payoutReference,
+      proof_url: proofSignedUrl || null,
+    });
+
+    if (proofSignedUrl) {
+      notificationService.createNotification(
+        transaction.user_id,
+        'user',
+        'payment_proof',
+        'Payment proof available',
+        'Your trader uploaded payment proof. Review and confirm receipt.',
+        transactionId
+      ).catch(() => {});
+    }
+  }
 
   notificationService.notifyUser(transaction.user_id, 'trader_sent_payout', {
     transactionId: transaction.id,
@@ -588,17 +606,6 @@ async function submitPayoutSent(transactionId, traderId, payoutReference, { proo
     'Your trader has sent your payment. Check your mobile money and confirm receipt.',
     transactionId
   ).catch(() => {});
-
-  if (proofSignedUrl) {
-    notificationService.createNotification(
-      transaction.user_id,
-      'user',
-      'payment_proof',
-      'Payment proof available',
-      'Your trader uploaded payment proof. Review and confirm receipt.',
-      transactionId
-    ).catch(() => {});
-  }
 
   return transaction;
 }

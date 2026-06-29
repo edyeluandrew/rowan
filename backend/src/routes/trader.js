@@ -204,6 +204,7 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
               t.network, t.state, t.trader_matched_at, t.matched_at,
               t.fiat_sent_at, t.created_at, t.completed_at, t.user_id, t.trader_id,
               t.payout_phone, t.payout_name, t.stellar_release_tx, t.payment_expires_at,
+              t.preferred_payout_setting_id,
               tr.stellar_address
        FROM transactions t
        JOIN traders tr ON tr.id = t.trader_id
@@ -221,6 +222,7 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
       data: {
         ...tx,
         usdc_amount: Number(tx.usdc_amount) || 0,
+        selection_method: tx.preferred_payout_setting_id ? 'manual' : 'auto',
         // Full payout details returned only to assigned trader
         payout_phone: tx.payout_phone || 'Unknown',
         payout_name: tx.payout_name || 'Unknown',

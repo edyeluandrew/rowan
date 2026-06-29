@@ -41,7 +41,17 @@ export function normalizeWalletTransaction(tx) {
     reviewSubmitted: tx.reviewSubmitted ?? tx.review_submitted,
     wasDisputed: tx.wasDisputed ?? tx.was_disputed ?? !!tx.dispute_id,
     paymentMethod: tx.paymentMethod ?? tx.payment_method ?? tx.network,
+    preferredPayoutSettingId: tx.preferredPayoutSettingId ?? tx.preferred_payout_setting_id ?? null,
   }
+}
+
+/** Order chat is only for manual P2P (user picked a trader ad), not Express auto-match. */
+export function isManualP2pTransaction(tx) {
+  if (!tx) return false
+  const method = tx.selectionMethod ?? tx.selection_method
+  if (method === 'manual') return true
+  if (method === 'auto') return false
+  return !!(tx.preferredPayoutSettingId ?? tx.preferred_payout_setting_id)
 }
 
 export function getTransactionStatusTimestamps(tx) {
