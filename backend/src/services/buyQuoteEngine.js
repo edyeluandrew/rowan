@@ -63,6 +63,8 @@ async function persistBuyQuote({
 
   const memo = `ROWAN-buy_${nanoid(8)}`;
   const expiresAt = new Date(Date.now() + quoteTtlSeconds * 1000);
+  const rateUgx = fiatCurrency === 'UGX' ? Math.round(userRateAfterSpread) : null;
+  const feeUgx = fiatCurrency === 'UGX' ? Math.round(platformFeeNum) : null;
 
   const result = await db.query(
     `INSERT INTO quotes
@@ -87,8 +89,8 @@ async function persistBuyQuote({
       memo,
       config.stellar.escrowPublicKey,
       expiresAt,
-      fiatCurrency === 'UGX' ? userRateAfterSpread : null,
-      fiatCurrency === 'UGX' ? platformFeeNum : null,
+      rateUgx,
+      feeUgx,
       usdcAmount,
       rateSource,
       quoteWarning,
