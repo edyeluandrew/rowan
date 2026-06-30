@@ -3,13 +3,25 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, Coins, UserCheck } from 'lucide-react'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import useUserCountry from '../hooks/useUserCountry'
+import useRates from '../hooks/useRates'
 import { getBuyQuote } from '../api/buy'
 import { hashPhoneNumber } from '../utils/crypto'
 import { NETWORKS } from '../utils/constants'
-import { getNetworksForCountry } from '../utils/country'
 import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
 import Button from '../components/ui/Button'
+import PaymentMethodPill from '../components/ui/PaymentMethodPill'
+
+/** Match backend buy quote fee/spread for indicative USDC estimate */
+const FEE_FACTOR = 0.99
+const SPREAD_FACTOR = 0.99
+
+function estimateUsdcFromFiat(fiatAmount, usdcToFiat) {
+  if (!Number.isFinite(fiatAmount) || fiatAmount <= 0 || !Number.isFinite(usdcToFiat) || usdcToFiat <= 0) {
+    return 0
+  }
+  return (fiatAmount * FEE_FACTOR * SPREAD_FACTOR) / usdcToFiat
+}
 
 export default function Buy() {
   const navigate = useNavigate()
@@ -22,13 +34,17 @@ export default function Buy() {
   } = location.state || {}
 
   const { country, fiatCurrency: userFiat } = useUserCountry()
+  const { rates } = useRates(userFiat)
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
+
+  const adNetwork = presetNetwork || selectedAd?.network || null
   const [fiatAmount, setFiatAmount] = useState('')
-  const [network, setNetwork] = useState(presetNetwork || null)
+  const [network, setNetwork] = useState(adNetwork)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
   const payoutSettingId = presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
+  const networkLocked = !!adNetwork
 
   useEffect(() => {
     if (!payoutSettingId) {
@@ -37,15 +53,14 @@ export default function Buy() {
   }, [payoutSettingId, navigate])
 
   useEffect(() => {
+    if (adNetwork) setNetwork(adNetwork)
+  }, [adNetwork])
+
+  useEffect(() => {
     if (!activeLoading && activeTransaction?.id) {
       navigate(`/wallet/transaction/${activeTransaction.id}`, { replace: true })
     }
   }, [activeLoading, activeTransaction, navigate])
-
-  const countryNetworks = useMemo(
-    () => Object.keys(getNetworksForCountry(country)),
-    [country]
-  )
 
   const netFiat = parseFloat(fiatAmount) || 0
   const currency = network ? NETWORKS[network]?.currency : userFiat
@@ -53,6 +68,19 @@ export default function Buy() {
   const maxNetFiat = selectedAd?.maxAmount ?? null
   const belowMin = minNetFiat != null && netFiat > 0 && netFiat < minNetFiat
   const exceedsMax = maxNetFiat != null && netFiat > maxNetFiat
+
+  const usdcToFiat = useMemo(() => {
+    if (selectedAd?.ratePerUsdc && Number(selectedAd.ratePerUsdc) > 0) {
+      return Number(selectedAd.ratePerUsdc)
+    }
+    if (rates?.usdcToFiat && Number(rates.usdcToFiat) > 0) {
+      return Number(rates.usdcToFiat)
+    }
+    return null
+  }, [selectedAd?.ratePerUsdc, rates?.usdcToFiat])
+
+  const usdcEstimate = estimateUsdcFromFiat(netFiat, usdcToFiat)
+  const platformFeeFiat = netFiat > 0 ? netFiat * 0.01 : 0
 
   const canProceed =
     payoutSettingId &&
@@ -82,7 +110,7 @@ export default function Buy() {
           },
           network,
           traderName: presetTraderName || selectedAd?.traderName,
-          selectedAd: selectedAd,
+          selectedAd,
         },
       })
     } catch (err) {
@@ -114,32 +142,44 @@ export default function Buy() {
       <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">
         <Coins size={20} className="text-rowan-yellow shrink-0 mt-0.5" />
         <p className="text-rowan-muted text-sm">
-          Enter how much mobile money you will send. You receive USDC in your wallet after the trader confirms payment.
+          Pay mobile money, receive USDC in your wallet after the trader confirms payment.
         </p>
       </div>
 
-      <NetworkSelector
-        networks={countryNetworks}
-        value={network}
-        onChange={setNetwork}
-        disabled={!!presetNetwork}
+      <AmountInput
+        fiatAmount={fiatAmount}
+        onFiatAmountChange={setFiatAmount}
+        currency={currency}
+        cryptoEstimate={usdcEstimate}
+        cryptoLabel="USDC you'll receive (estimate)"
+        fiatSubLabel={`${currency || userFiat} you'll pay via MoMo`}
+        platformFeeFiat={platformFeeFiat}
+        maxFiat={maxNetFiat}
       />
 
-      <div className="mt-4">
-        <AmountInput
-          label={`Amount to pay (${currency})`}
-          value={fiatAmount}
-          onChange={setFiatAmount}
-          currency={currency}
-        />
-        {minNetFiat != null && maxNetFiat != null && (
-          <p className="text-rowan-muted text-xs mt-2">
-            Trader limits: {minNetFiat.toLocaleString()} – {maxNetFiat.toLocaleString()} {currency}
-          </p>
+      <div className="mt-6">
+        {networkLocked && network ? (
+          <div>
+            <p className="text-rowan-muted text-xs uppercase tracking-wider mb-3">
+              Mobile money network
+            </p>
+            <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 flex items-center justify-between">
+              <PaymentMethodPill network={network} />
+              <span className="text-rowan-muted text-xs">From trader ad</span>
+            </div>
+          </div>
+        ) : (
+          <NetworkSelector selected={network} onSelect={setNetwork} country={country} />
         )}
-        {belowMin && <p className="text-rowan-red text-xs mt-2">Amount below trader minimum</p>}
-        {exceedsMax && <p className="text-rowan-red text-xs mt-2">Amount above trader maximum</p>}
       </div>
+
+      {minNetFiat != null && maxNetFiat != null && (
+        <p className="text-rowan-muted text-xs mt-4 text-center">
+          Trader limits: {minNetFiat.toLocaleString()} – {maxNetFiat.toLocaleString()} {currency}
+        </p>
+      )}
+      {belowMin && <p className="text-rowan-red text-xs mt-2 text-center">Amount below trader minimum</p>}
+      {exceedsMax && <p className="text-rowan-red text-xs mt-2 text-center">Amount above trader maximum</p>}
 
       {error && (
         <p className="text-rowan-red text-sm mt-4">{error}</p>
