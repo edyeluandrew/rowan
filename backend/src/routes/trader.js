@@ -133,21 +133,21 @@ router.get('/requests', authTrader, async (req, res, next) => {
 
     // NEVER pass undefined to SQL — build query conditionally
     let query = `SELECT id, xlm_amount, usdc_amount, fiat_amount, fiat_currency, network,
-                        state, trader_matched_at, created_at, payout_phone
+                        state, trader_matched_at, matched_at, created_at, payout_phone, order_side
                  FROM transactions
                  WHERE trader_id = $1`;
     
     const params = [req.traderId];
 
-    // Only add status filter if status param was provided
+    // pending = assigned but not yet accepted; active = accepted / in progress
     if (status === 'pending') {
-      query += ` AND state = $2`;
-      params.push('TRADER_MATCHED');
+      query += ` AND state = 'TRADER_MATCHED' AND matched_at IS NULL`;
     } else if (status === 'active') {
-      query += ` AND state IN ($2, $3)`;
-      params.push('FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING');
+      query += ` AND (
+        (state = 'TRADER_MATCHED' AND matched_at IS NOT NULL)
+        OR state IN ('ESCROW_LOCKED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING')
+      )`;
     }
-    // If status not provided or unknown value: return ALL trader requests (no additional filter)
 
     query += ` ORDER BY trader_matched_at DESC NULLS LAST`;
 

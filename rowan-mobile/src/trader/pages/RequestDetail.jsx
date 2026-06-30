@@ -206,7 +206,8 @@ export default function RequestDetail() {
 
   const network = NETWORKS[tx.network] || {};
   const step = getStep();
-  const isBuyOrder = (tx.order_side || tx.orderSide) === 'BUY';
+  const isBuyOrder = (tx.order_side || tx.orderSide) === 'BUY'
+    || (Number(tx.usdc_amount) > 0 && Number(tx.xlm_amount) === 0 && !!tx.preferred_payout_setting_id);
   const isPayoutStep = step === 1 && !isBuyOrder;
   const isBuyLockStep = isBuyOrder && tx.state === 'TRADER_MATCHED' && tx.matched_at;
   const isBuyConfirmStep = isBuyOrder && tx.state === 'FIAT_PAYOUT_SUBMITTED';
@@ -287,6 +288,54 @@ export default function RequestDetail() {
         </div>
       )}
 
+      {/* Buy order actions — above chat so trader sees next step immediately */}
+      {isBuyLockStep && (
+        <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 mb-4 space-y-2">
+          <h3 className="text-rowan-yellow text-xs font-semibold uppercase">Step 1: Lock USDC in escrow</h3>
+          <p className="text-rowan-muted text-xs">Send exactly {Number(tx.usdc_amount).toFixed(4)} USDC to:</p>
+          <p className="text-rowan-text text-xs font-mono break-all">{tx.escrow_address || 'Escrow address'}</p>
+          <p className="text-rowan-muted text-xs">Memo: <span className="text-rowan-text font-mono">{tx.escrow_memo}</span></p>
+          <p className="text-rowan-muted text-[11px] pt-1">After this, the customer gets your MoMo details and can tap &quot;I&apos;ve sent payment&quot;.</p>
+        </div>
+      )}
+
+      {isBuyWaitingCustomer && (
+        <div className="bg-rowan-surface rounded-xl p-4 mb-4">
+          <p className="text-rowan-text text-sm font-semibold">Step 2: Waiting for customer payment</p>
+          <p className="text-rowan-muted text-xs mt-2">
+            USDC is locked. Customer will send mobile money to your verified {network.label || tx.network} number, then tap &quot;I&apos;ve sent payment&quot;.
+          </p>
+        </div>
+      )}
+
+      {isBuyConfirmStep && (
+        <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-3 border-2 border-rowan-yellow/50">
+          <p className="text-rowan-text text-sm font-semibold">Step 3: Confirm you received MoMo</p>
+          <p className="text-rowan-muted text-xs">Check your mobile money balance, then tap below to release USDC to the customer.</p>
+          {tx.payout_reference && (
+            <p className="text-rowan-muted text-xs">Reference: <span className="text-rowan-text font-mono">{tx.payout_reference}</span></p>
+          )}
+          <Button
+            loading={confirmingBuy}
+            size="lg"
+            onClick={async () => {
+              setConfirmingBuy(true);
+              try {
+                await confirmFiatReceived(tx.id);
+                await fetchTx();
+                refresh();
+              } catch (err) {
+                alert(err.response?.data?.error || 'Could not confirm');
+              } finally {
+                setConfirmingBuy(false);
+              }
+            }}
+          >
+            I have received payment
+          </Button>
+        </div>
+      )}
+
       {/* Order chat */}
       {(tx.state === 'REFUNDED' || tx.state === 'FAILED') && (
         <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-3 mb-4">
@@ -349,53 +398,7 @@ export default function RequestDetail() {
         )}
       </div>
 
-      {/* Buy: lock USDC in escrow */}
-      {isBuyLockStep && (
-        <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-2">
-          <h3 className="text-rowan-yellow text-xs font-semibold uppercase">Lock USDC in escrow</h3>
-          <p className="text-rowan-muted text-xs">Send exactly {Number(tx.usdc_amount).toFixed(4)} USDC to:</p>
-          <p className="text-rowan-text text-xs font-mono break-all">{tx.escrow_address || 'Escrow address'}</p>
-          <p className="text-rowan-muted text-xs">Memo: <span className="text-rowan-text font-mono">{tx.escrow_memo}</span></p>
-        </div>
-      )}
-
-      {isBuyWaitingCustomer && (
-        <div className="bg-rowan-surface rounded-xl p-4 mb-4">
-          <p className="text-rowan-text text-sm font-medium">Waiting for customer payment</p>
-          <p className="text-rowan-muted text-xs mt-2">
-            USDC is locked in escrow. The customer will send mobile money to your verified {network.label || tx.network} number, then tap &quot;I&apos;ve sent payment&quot;.
-          </p>
-        </div>
-      )}
-
-      {isBuyConfirmStep && (
-        <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-3 border border-rowan-yellow/40">
-          <p className="text-rowan-text text-sm font-semibold">Customer says they paid</p>
-          <p className="text-rowan-muted text-xs">Check your mobile money, then confirm below to release USDC to their wallet.</p>
-          {tx.payout_reference && (
-            <p className="text-rowan-muted text-xs">Reference: <span className="text-rowan-text font-mono">{tx.payout_reference}</span></p>
-          )}
-          <Button
-            loading={confirmingBuy}
-            onClick={async () => {
-              setConfirmingBuy(true);
-              try {
-                await confirmFiatReceived(tx.id);
-                await fetchTx();
-                refresh();
-              } catch (err) {
-                alert(err.response?.data?.error || 'Could not confirm');
-              } finally {
-                setConfirmingBuy(false);
-              }
-            }}
-          >
-            I have received payment
-          </Button>
-        </div>
-      )}
-
-      {/* Payout Instructions */}
+      {/* Payout Instructions — sell / cashout only */}
       {isPayoutStep && (
         <div className="bg-rowan-surface rounded-xl p-4 mb-4">
           <h3 className="text-rowan-yellow text-xs font-semibold mb-3 uppercase tracking-wider">

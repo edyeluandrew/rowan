@@ -517,6 +517,51 @@ export default function TransactionStatus() {
         <PaymentWindowCountdown expiresAt={transaction.paymentExpiresAt} />
       )}
 
+      {isBuy && transaction?.state === 'TRADER_MATCHED' && (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 my-4 text-center">
+          <p className="text-rowan-text text-sm font-semibold">Step 2: Waiting for trader to lock USDC</p>
+          <p className="text-rowan-muted text-xs mt-2">
+            The trader must send USDC to escrow first. After that, you&apos;ll see their mobile money number and the <strong className="text-rowan-text">I&apos;ve sent payment</strong> button.
+          </p>
+        </div>
+      )}
+
+      {isBuy && transaction?.state === 'ESCROW_LOCKED' && (
+        <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 my-4 space-y-4">
+          <p className="text-rowan-text text-sm font-semibold text-center">
+            Step 3: Pay trader via mobile money
+          </p>
+          <p className="text-rowan-text text-xs text-center">
+            Trader locked {Number(transaction.usdcAmount).toFixed(4)} USDC. Send {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} via {getNetworkLabel(transaction.network)}.
+          </p>
+          {buyPaymentDetails?.account_number ? (
+            <PaymentDetailsCard payload={buyPaymentDetails} viewerRole="user" />
+          ) : (
+            <p className="text-rowan-yellow text-xs text-center">
+              Payment details should appear in chat below. Trader must use their verified {getNetworkLabel(transaction.network)} number.
+            </p>
+          )}
+          <input
+            type="text"
+            value={buyPaymentRef}
+            onChange={(e) => setBuyPaymentRef(e.target.value)}
+            placeholder="Mobile money reference (required)"
+            className="w-full bg-rowan-bg border border-rowan-border rounded-xl px-4 py-3 text-rowan-text text-sm min-h-11"
+          />
+          {buyPaymentError && <p className="text-rowan-red text-xs">{buyPaymentError}</p>}
+          <Button loading={submittingBuyPayment} onClick={handleSubmitBuyPayment} size="lg">
+            I&apos;ve sent payment
+          </Button>
+        </div>
+      )}
+
+      {isBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
+        <div className="bg-rowan-surface rounded-xl p-4 my-4 text-center">
+          <p className="text-rowan-text text-sm font-medium">Payment submitted</p>
+          <p className="text-rowan-muted text-xs mt-2">Waiting for the trader to tap <strong className="text-rowan-text">I have received payment</strong>. USDC will then go to your wallet.</p>
+        </div>
+      )}
+
       {transaction && !isTerminal && activeTxId && isManualP2pTransaction(transaction) && (
         <div className="my-4">
           <OrderChat
@@ -554,48 +599,6 @@ export default function TransactionStatus() {
           uploadEvidence={uploadDisputeEvidence}
           listEvidence={listDisputeEvidence}
         />
-      )}
-
-      {isBuy && transaction?.state === 'TRADER_MATCHED' && (
-        <div className="bg-rowan-surface rounded-xl p-4 my-4 text-center">
-          <p className="text-rowan-text text-sm font-medium">Waiting for trader to lock USDC</p>
-          <p className="text-rowan-muted text-xs mt-2">
-            Once the trader sends USDC to escrow, you&apos;ll get their mobile money details and can tap &quot;I&apos;ve sent payment&quot;.
-          </p>
-        </div>
-      )}
-
-      {isBuy && transaction?.state === 'ESCROW_LOCKED' && (
-        <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
-          <p className="text-rowan-text text-sm font-medium text-center">
-            Trader locked {Number(transaction.usdcAmount).toFixed(4)} USDC. Send {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} via {getNetworkLabel(transaction.network)}.
-          </p>
-          {buyPaymentDetails?.account_number ? (
-            <PaymentDetailsCard payload={buyPaymentDetails} viewerRole="user" />
-          ) : (
-            <p className="text-rowan-yellow text-xs text-center">
-              Trader payment details are in the chat below. If missing, ask the trader or support — they must use their verified {getNetworkLabel(transaction.network)} number from onboarding.
-            </p>
-          )}
-          <input
-            type="text"
-            value={buyPaymentRef}
-            onChange={(e) => setBuyPaymentRef(e.target.value)}
-            placeholder="Mobile money reference"
-            className="w-full bg-rowan-bg border border-rowan-border rounded-xl px-4 py-3 text-rowan-text text-sm min-h-11"
-          />
-          {buyPaymentError && <p className="text-rowan-red text-xs">{buyPaymentError}</p>}
-          <Button loading={submittingBuyPayment} onClick={handleSubmitBuyPayment}>
-            I&apos;ve sent payment
-          </Button>
-        </div>
-      )}
-
-      {isBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
-        <div className="bg-rowan-surface rounded-xl p-4 my-6 text-center">
-          <p className="text-rowan-text text-sm font-medium">Payment submitted</p>
-          <p className="text-rowan-muted text-xs mt-2">Waiting for the trader to confirm they received your mobile money. USDC will be released to your wallet automatically.</p>
-        </div>
       )}
 
       {!isBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (

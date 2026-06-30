@@ -49,7 +49,11 @@ export function normalizeWalletTransaction(tx) {
 }
 
 export function isBuyOrder(tx) {
-  return (tx?.orderSide ?? tx?.order_side) === 'BUY'
+  if ((tx?.orderSide ?? tx?.order_side) === 'BUY') return true
+  const usdc = Number(tx?.usdcAmount ?? tx?.usdc_amount ?? 0)
+  const xlm = Number(tx?.xlmAmount ?? tx?.xlm_amount ?? 0)
+  const manual = !!(tx?.preferredPayoutSettingId ?? tx?.preferred_payout_setting_id)
+  return manual && usdc > 0 && xlm === 0
 }
 
 /** Order chat is only for manual P2P (user picked a trader ad), not Express auto-match. */
