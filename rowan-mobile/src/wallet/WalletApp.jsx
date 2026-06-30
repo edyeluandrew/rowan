@@ -67,6 +67,7 @@ export default function WalletApp() {
             <Route path="marketplace" element={<Marketplace />} />
             <Route path="traders/:id" element={<TraderProfile />} />
             <Route path="blocked-traders" element={<BlockedTraders />} />
+            <Route path="cashout" element={<Cashout />} />
             <Route path="cashout/confirm" element={<CashoutConfirm />} />
             <Route path="cashout/send" element={<CashoutSend />} />
             <Route path="transaction/:id" element={<TransactionStatus />} />

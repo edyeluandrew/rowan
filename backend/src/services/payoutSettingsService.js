@@ -6,6 +6,18 @@
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
 
+const MOBILE_NETWORK_ALIASES = {
+  M_PESA_KE: 'MPESA_KE',
+  MPESA_KE: 'MPESA_KE',
+  MPESA: 'MPESA_KE',
+};
+
+function normalizeMobileNetwork(network) {
+  if (!network) return network;
+  const key = String(network).trim().toUpperCase();
+  return MOBILE_NETWORK_ALIASES[key] || key;
+}
+
 class PayoutSettingsService {
   /**
    * Get all payout settings for a trader
@@ -60,7 +72,7 @@ class PayoutSettingsService {
   async createPayoutSetting(traderId, data) {
     const {
       country,
-      network,
+      network: rawNetwork,
       currency,
       min_amount,
       max_amount,
@@ -72,6 +84,7 @@ class PayoutSettingsService {
       fee_percent,
     } = data;
 
+    const network = normalizeMobileNetwork(rawNetwork);
     const isBuyAd = ad_side === 'USER_BUY';
 
     if (!country || !network || !currency || min_amount === undefined || max_amount === undefined) {
@@ -82,6 +95,11 @@ class PayoutSettingsService {
 
     if (isBuyAd && (!available_usdc || available_usdc <= 0)) {
       const err = new Error('available_usdc is required for buy ads');
+      err.status = 400;
+      throw err;
+    }
+    if (isBuyAd && (rate_per_usdc == null || rate_per_usdc === '' || Number(rate_per_usdc) <= 0)) {
+      const err = new Error('rate_per_usdc is required for buy ads');
       err.status = 400;
       throw err;
     }

@@ -231,7 +231,11 @@ export default function Marketplace() {
       {!loading && !error && ads.length === 0 && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-8 text-center">
           <p className="text-rowan-text text-sm font-medium">No traders available right now.</p>
-          <p className="text-rowan-muted text-xs mt-2">Try adjusting your filters.</p>
+          <p className="text-rowan-muted text-xs mt-2">
+            {tab === 'buy'
+              ? 'Traders must publish an active Sell USDC ad with inventory and a USDC price set.'
+              : 'Try adjusting your filters or check back soon.'}
+          </p>
           <Button className="mt-4" variant="ghost" onClick={() => loadAds(true)}>
             <RefreshCw size={16} />
             Refresh
