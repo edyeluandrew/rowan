@@ -42,7 +42,9 @@ export const payoutSettingsAPI = {
    * @param {string} data.currency - Currency code (UGX, KES, TZS)
    * @param {number} data.min_amount - Minimum payout amount
    * @param {number} data.max_amount - Maximum payout amount
-   * @param {number} data.available_float - Available float amount
+   * @param {number} [data.available_float] - Available fiat float (USER_SELL)
+   * @param {number} [data.available_usdc] - Available USDC inventory (USER_BUY)
+   * @param {string} [data.ad_side] - USER_SELL | USER_BUY
    * @param {number} [data.rate_per_usdc] - Optional USDC rate
    * @param {number} [data.spread_percent] - Optional spread percentage (0-100)
    * @param {number} [data.fee_percent] - Optional fee percentage (0-100)

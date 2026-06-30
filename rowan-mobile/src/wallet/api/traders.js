@@ -4,6 +4,10 @@ export function listTraderAds(params = {}) {
   return client.get('/api/v1/traders/ads', { params }).then((res) => res.data)
 }
 
+export function listBuyAds(params = {}) {
+  return client.get('/api/v1/traders/ads', { params: { ...params, side: 'buy' } }).then((res) => res.data)
+}
+
 export function getTraderAd(payoutSettingId) {
   return client.get(`/api/v1/traders/ads/${payoutSettingId}`).then((res) => res.data?.data)
 }

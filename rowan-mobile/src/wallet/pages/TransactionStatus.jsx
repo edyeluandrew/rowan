@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace, Lock } from 'lucide-react'
 import { getTransactionStatus, confirmReceipt, openDispute, cancelOrder } from '../api/cashout'
+import { submitBuyPayment } from '../api/buy'
 import { uploadDisputeEvidence, listDisputeEvidence } from '../api/user'
 import DisputeEvidenceSection from '../components/disputes/DisputeEvidenceSection'
 import useSocketHook from '../hooks/useSocket'
@@ -16,7 +17,7 @@ import Button from '../components/ui/Button'
 import OrderShortId from '../components/ui/OrderShortId'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
-import { normalizeWalletTransaction, getTransactionStatusTimestamps, isManualP2pTransaction } from '../utils/transactions'
+import { normalizeWalletTransaction, getTransactionStatusTimestamps, isManualP2pTransaction, isBuyOrder } from '../utils/transactions'
 import { STATE_SUBTITLES } from '../utils/constants'
 import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine } from '../utils/p2pFormat'
 
@@ -57,6 +58,9 @@ export default function TransactionStatus() {
   const [cancelNotice, setCancelNotice] = useState(null)
   const [appealCountdown, setAppealCountdown] = useState('')
   const [paymentProofReceived, setPaymentProofReceived] = useState(false)
+  const [buyPaymentRef, setBuyPaymentRef] = useState('')
+  const [submittingBuyPayment, setSubmittingBuyPayment] = useState(false)
+  const [buyPaymentError, setBuyPaymentError] = useState(null)
 
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
   const INITIAL_WAIT_MS = 3000 // Escrow + swap can take several seconds on testnet
@@ -181,8 +185,26 @@ export default function TransactionStatus() {
 
   const showDisputeAction = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
     || appealWindowOpen
-  const showConfirmSection = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
+  const isBuy = isBuyOrder(transaction)
+  const showConfirmSection = !isBuy && ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
   const canConfirmPayment = paymentProofReceived && showConfirmSection
+
+  const handleSubmitBuyPayment = async () => {
+    if (!buyPaymentRef.trim()) {
+      setBuyPaymentError('Enter your mobile money reference')
+      return
+    }
+    setSubmittingBuyPayment(true)
+    setBuyPaymentError(null)
+    try {
+      await submitBuyPayment({ transactionId: activeTxId, paymentReference: buyPaymentRef.trim() })
+      setTransaction((prev) => mergeTransaction(prev, { state: 'FIAT_PAYOUT_SUBMITTED', payoutReference: buyPaymentRef.trim() }))
+    } catch (err) {
+      setBuyPaymentError(err.response?.data?.error || 'Could not submit payment')
+    } finally {
+      setSubmittingBuyPayment(false)
+    }
+  }
 
   const handleCancelOrder = async () => {
     setCancelling(true)
@@ -520,7 +542,33 @@ export default function TransactionStatus() {
         />
       )}
 
-      {transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
+      {isBuy && transaction?.state === 'ESCROW_LOCKED' && (
+        <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
+          <p className="text-rowan-text text-sm font-medium text-center">
+            Trader locked {Number(transaction.usdcAmount).toFixed(4)} USDC. Send {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} via {getNetworkLabel(transaction.network)}.
+          </p>
+          <input
+            type="text"
+            value={buyPaymentRef}
+            onChange={(e) => setBuyPaymentRef(e.target.value)}
+            placeholder="Mobile money reference"
+            className="w-full bg-rowan-bg border border-rowan-border rounded-xl px-4 py-3 text-rowan-text text-sm min-h-11"
+          />
+          {buyPaymentError && <p className="text-rowan-red text-xs">{buyPaymentError}</p>}
+          <Button loading={submittingBuyPayment} onClick={handleSubmitBuyPayment}>
+            I&apos;ve sent payment
+          </Button>
+        </div>
+      )}
+
+      {isBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
+        <div className="bg-rowan-surface rounded-xl p-4 my-6 text-center">
+          <p className="text-rowan-text text-sm font-medium">Payment submitted</p>
+          <p className="text-rowan-muted text-xs mt-2">Waiting for the trader to confirm they received your mobile money. USDC will be released to your wallet automatically.</p>
+        </div>
+      )}
+
+      {!isBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
         <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
           <div className="text-center">
             <p className="text-rowan-text text-sm font-medium">
@@ -551,7 +599,7 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {transaction?.state === 'USER_CONFIRMATION_PENDING' && (
+      {!isBuy && transaction?.state === 'USER_CONFIRMATION_PENDING' && (
         <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
           <div className="text-center">
             <p className="text-rowan-text text-sm font-medium">

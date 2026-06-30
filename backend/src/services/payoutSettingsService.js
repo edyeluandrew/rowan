@@ -16,11 +16,12 @@ class PayoutSettingsService {
         `SELECT 
            id, trader_id, country, network, currency,
            min_amount, max_amount, available_float, reserved_float,
+           available_usdc, reserved_usdc, ad_side,
            rate_per_usdc, spread_percent, fee_percent,
            is_active, created_at, updated_at
          FROM trader_payout_settings
          WHERE trader_id = $1
-         ORDER BY created_at DESC`,
+         ORDER BY ad_side, created_at DESC`,
         [traderId]
       );
       return result.rows;
@@ -39,6 +40,7 @@ class PayoutSettingsService {
         `SELECT 
            id, trader_id, country, network, currency,
            min_amount, max_amount, available_float, reserved_float,
+           available_usdc, reserved_usdc, ad_side,
            rate_per_usdc, spread_percent, fee_percent,
            is_active, created_at, updated_at
          FROM trader_payout_settings
@@ -62,15 +64,29 @@ class PayoutSettingsService {
       currency,
       min_amount,
       max_amount,
-      available_float,
+      available_float = 0,
+      available_usdc = 0,
+      ad_side = 'USER_SELL',
       rate_per_usdc,
       spread_percent,
       fee_percent,
     } = data;
 
-    // Validation
-    if (!country || !network || !currency || min_amount === undefined || max_amount === undefined || available_float === undefined) {
-      const err = new Error('Missing required fields: country, network, currency, min_amount, max_amount, available_float');
+    const isBuyAd = ad_side === 'USER_BUY';
+
+    if (!country || !network || !currency || min_amount === undefined || max_amount === undefined) {
+      const err = new Error('Missing required fields: country, network, currency, min_amount, max_amount');
+      err.status = 400;
+      throw err;
+    }
+
+    if (isBuyAd && (!available_usdc || available_usdc <= 0)) {
+      const err = new Error('available_usdc is required for buy ads');
+      err.status = 400;
+      throw err;
+    }
+    if (!isBuyAd && available_float === undefined) {
+      const err = new Error('available_float is required for sell ads');
       err.status = 400;
       throw err;
     }
@@ -81,7 +97,7 @@ class PayoutSettingsService {
       throw err;
     }
 
-    if (min_amount < 0 || max_amount < 0 || available_float < 0) {
+    if (min_amount < 0 || max_amount < 0 || available_float < 0 || available_usdc < 0) {
       const err = new Error('Amounts cannot be negative');
       err.status = 400;
       throw err;
@@ -109,14 +125,18 @@ class PayoutSettingsService {
       const result = await db.query(
         `INSERT INTO trader_payout_settings
          (trader_id, country, network, currency, min_amount, max_amount, available_float,
-          rate_per_usdc, spread_percent, fee_percent, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
+          available_usdc, ad_side, rate_per_usdc, spread_percent, fee_percent, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, TRUE)
          RETURNING id, trader_id, country, network, currency,
                    min_amount, max_amount, available_float, reserved_float,
+                   available_usdc, reserved_usdc, ad_side,
                    rate_per_usdc, spread_percent, fee_percent,
                    is_active, created_at, updated_at`,
         [
-          traderId, country, network, currency, min_amount, max_amount, available_float,
+          traderId, country, network, currency, min_amount, max_amount,
+          isBuyAd ? 0 : available_float,
+          isBuyAd ? available_usdc : 0,
+          ad_side,
           rate_per_usdc || null, spread_percent || null, fee_percent || null,
         ]
       );
@@ -167,6 +187,10 @@ class PayoutSettingsService {
       updates.push(`available_float = $${paramIndex++}::NUMERIC`);
       values.push(data.available_float);
     }
+    if (data.available_usdc !== undefined) {
+      updates.push(`available_usdc = $${paramIndex++}::NUMERIC`);
+      values.push(data.available_usdc);
+    }
     if (data.rate_per_usdc !== undefined) {
       updates.push(`rate_per_usdc = $${paramIndex++}::NUMERIC`);
       values.push(data.rate_per_usdc);
@@ -192,6 +216,7 @@ class PayoutSettingsService {
     const minAmt = data.min_amount !== undefined ? data.min_amount : existing.min_amount;
     const maxAmt = data.max_amount !== undefined ? data.max_amount : existing.max_amount;
     const availFloat = data.available_float !== undefined ? data.available_float : existing.available_float;
+    const availUsdc = data.available_usdc !== undefined ? data.available_usdc : existing.available_usdc;
 
     if (maxAmt <= minAmt) {
       const err = new Error('max_amount must be greater than min_amount');
@@ -199,7 +224,7 @@ class PayoutSettingsService {
       throw err;
     }
 
-    if (minAmt < 0 || maxAmt < 0 || availFloat < 0) {
+    if (minAmt < 0 || maxAmt < 0 || availFloat < 0 || (availUsdc != null && availUsdc < 0)) {
       const err = new Error('Amounts cannot be negative');
       err.status = 400;
       throw err;
@@ -581,6 +606,82 @@ class PayoutSettingsService {
       maxFiat: parseFloat(row.max_fiat),
       activeTraders: row.active_traders,
     }));
+  }
+
+  async reserveUsdcFloat(payoutSettingId, usdcAmount) {
+    if (usdcAmount <= 0) {
+      const err = new Error('USDC amount must be greater than 0');
+      err.status = 400;
+      throw err;
+    }
+    const result = await db.query(
+      `UPDATE trader_payout_settings
+       SET reserved_usdc = reserved_usdc + $1, updated_at = NOW()
+       WHERE id = $2 AND ad_side = 'USER_BUY'
+         AND (available_usdc - reserved_usdc) >= $1
+       RETURNING id, available_usdc, reserved_usdc`,
+      [usdcAmount, payoutSettingId]
+    );
+    if (result.rows.length === 0) {
+      const err = new Error('Insufficient USDC float to reserve');
+      err.status = 409;
+      throw err;
+    }
+    return result.rows[0];
+  }
+
+  async releaseReservedUsdcFloat(payoutSettingId, usdcAmount) {
+    const result = await db.query(
+      `UPDATE trader_payout_settings
+       SET reserved_usdc = GREATEST(0, reserved_usdc - $1), updated_at = NOW()
+       WHERE id = $2 RETURNING *`,
+      [usdcAmount, payoutSettingId]
+    );
+    return result.rows[0] || null;
+  }
+
+  async finalizeUsdc(payoutSettingId, usdcAmount) {
+    const result = await db.query(
+      `UPDATE trader_payout_settings
+       SET available_usdc = GREATEST(0, available_usdc - $1),
+           reserved_usdc = GREATEST(0, reserved_usdc - $1),
+           updated_at = NOW()
+       WHERE id = $2 RETURNING *`,
+      [usdcAmount, payoutSettingId]
+    );
+    return result.rows[0] || null;
+  }
+
+  async finalizeUsdcFloatForTransaction(transactionId, payoutSettingId, usdcAmount) {
+    if (!payoutSettingId) return { skipped: true };
+    const won = await this.claimFloatSettlement(transactionId);
+    if (!won) return { skipped: true, reason: 'already_settled' };
+    try {
+      return { skipped: false, setting: await this.finalizeUsdc(payoutSettingId, parseFloat(usdcAmount)) };
+    } catch (err) {
+      await this.unclaimFloatSettlement(transactionId).catch(() => {});
+      throw err;
+    }
+  }
+
+  async getActiveBuyNetworkLimits(network, currency) {
+    const result = await db.query(
+      `SELECT MIN(min_amount) AS min_fiat, MAX(max_amount) AS max_fiat, COUNT(*)::int AS active_traders
+       FROM trader_payout_settings ps
+       JOIN traders t ON t.id = ps.trader_id
+       WHERE ps.network = $1::mobile_network AND ps.currency = $2
+         AND ps.ad_side = 'USER_BUY' AND ps.is_active = TRUE
+         AND (ps.available_usdc - ps.reserved_usdc) > 0
+         AND t.status = 'ACTIVE' AND t.verification_status = 'VERIFIED'`,
+      [network, currency]
+    );
+    const row = result.rows[0];
+    return {
+      hasTraders: (row?.active_traders || 0) > 0,
+      minFiat: row?.min_fiat != null ? parseFloat(row.min_fiat) : null,
+      maxFiat: row?.max_fiat != null ? parseFloat(row.max_fiat) : null,
+      activeTraders: row?.active_traders || 0,
+    };
   }
 }
 

@@ -43,6 +43,12 @@ export async function submitPayoutSent(id, reference, proofFile = null) {
   return data;
 }
 
+/** POST /api/v1/trader/requests/:id/fiat-received — confirm MoMo on BUY orders */
+export async function confirmFiatReceived(id) {
+  const { data } = await client.post(`/api/v1/trader/requests/${id}/fiat-received`);
+  return data;
+}
+
 /** GET /api/v1/trader/stats */
 export async function getStats() {
   const { data } = await client.get('/api/v1/trader/stats');

@@ -314,7 +314,7 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
               t.completed_at, t.failed_at, t.created_at, t.dispute_id,
               t.stellar_deposit_tx, t.stellar_release_tx, t.payment_expires_at,
               t.appeal_expires_at, t.appeal_archived_at, t.trader_id,
-              t.locked_rate, t.preferred_payout_setting_id,
+              t.locked_rate, t.preferred_payout_setting_id, t.order_side,
               t.payout_reference, t.payout_proof_url,
               tr.name AS trader_name
        FROM transactions t
@@ -331,7 +331,7 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
                 t.completed_at, t.failed_at, t.created_at, t.dispute_id,
                 t.stellar_deposit_tx, t.stellar_release_tx, t.payment_expires_at,
                 t.appeal_expires_at, t.appeal_archived_at, t.trader_id,
-                t.locked_rate, t.preferred_payout_setting_id,
+                t.locked_rate, t.preferred_payout_setting_id, t.order_side,
                 t.payout_reference, t.payout_proof_url,
                 tr.name AS trader_name
          FROM transactions t
@@ -385,6 +385,7 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
       locked_rate: tx.locked_rate != null ? parseFloat(tx.locked_rate) : null,
       preferred_payout_setting_id: tx.preferred_payout_setting_id,
       selection_method: tx.preferred_payout_setting_id ? 'manual' : 'auto',
+      order_side: tx.order_side || 'SELL',
       payout_reference: tx.payout_reference,
       payout_proof_url: payoutProofUrl,
     });

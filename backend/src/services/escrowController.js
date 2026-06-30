@@ -673,6 +673,196 @@ async function releaseToTrader(transactionId) {
 }
 
 /**
+ * Release USDC from escrow to the wallet user (BUY orders).
+ */
+async function releaseToUser(transactionId) {
+  const lockKey = `lock:release-user:${transactionId}`;
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', config.platform.redisLockTtlReleaseSeconds, 'NX');
+  if (!lockAcquired) {
+    logger.warn(`[Escrow] User release lock held for tx ${transactionId}`);
+    return null;
+  }
+
+  try {
+    const txResult = await db.query(
+      `SELECT t.*, u.stellar_address AS user_stellar
+       FROM transactions t
+       JOIN users u ON u.id = t.user_id
+       WHERE t.id = $1 AND t.order_side = 'BUY'
+         AND t.state IN ('USER_CONFIRMATION_PENDING', 'DISPUTE_RELEASE_PENDING', 'RELEASE_BLOCKED')`,
+      [transactionId]
+    );
+    const transaction = txResult.rows[0];
+    if (!transaction) throw new Error('Buy transaction not found or wrong state');
+
+    if (!transaction.user_stellar) {
+      throw new Error(`User ${transaction.user_id} has no stellar address`);
+    }
+
+    if (transaction.stellar_release_tx) {
+      return transaction.stellar_release_tx;
+    }
+
+    const userAccount = await horizon.loadAccount(transaction.user_stellar);
+    const hasTrustline = userAccount.balances.some(
+      (b) => b.asset_code === USDC_ASSET.code && b.asset_issuer === USDC_ASSET.issuer
+    );
+    if (!hasTrustline) {
+      if (transaction.state !== 'RELEASE_BLOCKED') {
+        await stateMachine.transition(transactionId, transaction.state, 'RELEASE_BLOCKED', {
+          failure_reason: 'User missing USDC trustline',
+        });
+      }
+      return null;
+    }
+
+    const usdcDecimal = Number(transaction.usdc_amount);
+    if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+      throw new Error(`Invalid USDC amount: ${transaction.usdc_amount}`);
+    }
+
+    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+    const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: transaction.user_stellar,
+          asset: USDC_ASSET,
+          amount: usdcDecimal.toFixed(7),
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    tx.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(tx);
+
+    const appealExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await stateMachine.transition(transactionId, transaction.state, 'COMPLETE', {
+      stellar_release_tx: result.hash,
+      appeal_expires_at: appealExpiresAt,
+    });
+
+    try {
+      await payoutSettingsService.finalizeUsdcFloatForTransaction(
+        transactionId,
+        transaction.payout_setting_id,
+        usdcDecimal
+      );
+    } catch (finalizeErr) {
+      logger.error(`[Escrow] USDC float finalize failed for buy tx ${transactionId}: ${finalizeErr.message}`);
+    }
+
+    const fiatAmount = parseFloat(transaction.fiat_amount);
+    const fiatCurrency = transaction.fiat_currency || 'UGX';
+    const KES_TO_UGX = config.usdcFiatRates.UGX / config.usdcFiatRates.KES;
+    const TZS_TO_UGX = config.usdcFiatRates.UGX / config.usdcFiatRates.TZS;
+    const ugxEquivalent = fiatCurrency === 'KES' ? Math.floor(fiatAmount * KES_TO_UGX)
+                        : fiatCurrency === 'TZS' ? Math.floor(fiatAmount * TZS_TO_UGX)
+                        : Math.floor(fiatAmount);
+    await db.query(
+      `UPDATE traders SET daily_volume = daily_volume + $1 WHERE id = $2`,
+      [ugxEquivalent, transaction.trader_id]
+    );
+
+    notificationService.notifyUser(transaction.user_id, 'buy_complete', {
+      transactionId,
+      usdcAmount: transaction.usdc_amount,
+      stellarReleaseTx: result.hash,
+    }).catch(() => {});
+
+    logger.info(`[Escrow] Released ${usdcDecimal} USDC to user for buy tx ${transactionId}`);
+    return result.hash;
+  } finally {
+    setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
+  }
+}
+
+/**
+ * Trader locks USDC in escrow for a BUY order (Horizon watcher or manual verify).
+ */
+async function handleTraderUsdcDeposit({ memo, amount, sourceAccount, txHash }) {
+  logger.info(`[Escrow] Trader USDC deposit — memo: ${memo}, amount: ${amount}, from: ${sourceAccount}`);
+
+  const lockKey = `lock:usdc-deposit:${memo}`;
+  const lockAcquired = await redis.set(lockKey, txHash, 'EX', config.platform.redisLockTtlDepositSeconds, 'NX');
+  if (!lockAcquired) return;
+
+  const quoteResult = await db.query(
+    `SELECT q.*, t.id AS tx_id, t.state AS tx_state, t.trader_id, t.usdc_amount, t.matched_at,
+            tr.stellar_address AS trader_stellar
+     FROM quotes q
+     JOIN transactions t ON t.quote_id = q.id
+     JOIN traders tr ON tr.id = t.trader_id
+     WHERE q.memo = $1 AND q.order_side = 'BUY' AND q.is_used = TRUE`,
+    [memo]
+  );
+  const row = quoteResult.rows[0];
+  if (!row) {
+    logger.warn(`[Escrow] No buy order for USDC memo ${memo}`);
+    await redis.del(lockKey);
+    return;
+  }
+
+  if (row.tx_state !== 'TRADER_MATCHED' || !row.matched_at) {
+    logger.warn(`[Escrow] Buy tx ${row.tx_id} not ready for USDC lock (state=${row.tx_state})`);
+    await redis.del(lockKey);
+    return;
+  }
+
+  if (sourceAccount !== row.trader_stellar) {
+    logger.warn(`[Escrow] USDC deposit from wrong account: ${sourceAccount} vs ${row.trader_stellar}`);
+    await redis.del(lockKey);
+    return;
+  }
+
+  const expectedUsdc = Number(row.usdc_amount);
+  const receivedUsdc = Number(amount);
+  const tolerance = 0.0000001;
+  if (Math.abs(receivedUsdc - expectedUsdc) > tolerance) {
+    logger.warn(`[Escrow] USDC amount mismatch: expected ${expectedUsdc}, got ${receivedUsdc}`);
+    await redis.del(lockKey);
+    return;
+  }
+
+  const transitioned = await stateMachine.transition(row.tx_id, 'TRADER_MATCHED', 'ESCROW_LOCKED', {
+    stellar_deposit_tx: txHash,
+    usdc_amount: receivedUsdc,
+  });
+
+  if (!transitioned) {
+    await redis.del(lockKey);
+    return;
+  }
+
+  const paymentExpiresAt = new Date(Date.now() + config.platform.paymentWindowSeconds * 1000);
+  await db.query(
+    `UPDATE transactions SET payment_expires_at = $1 WHERE id = $2`,
+    [paymentExpiresAt, row.tx_id]
+  );
+
+  notificationService.notifyUser(row.user_id, 'usdc_locked', {
+    transactionId: row.tx_id,
+    message: 'Trader locked USDC. Send mobile money now.',
+    paymentExpiresAt: paymentExpiresAt.toISOString(),
+  }).catch(() => {});
+
+  const chatService = (await import('./chatService.js')).default;
+  chatService.sendPaymentDetailsMessage(row.tx_id, {
+    type: 'payment_details',
+    role: 'trader_receive',
+    amount: row.fiat_amount,
+    currency: row.fiat_currency,
+    network: row.network,
+  }).catch(() => {});
+
+  logger.info(`[Escrow] Buy tx ${row.tx_id} USDC locked — user may pay MoMo`);
+  await redis.del(lockKey);
+}
+
+/**
  * Refund native XLM from escrow to the user (pre-swap path only).
  */
 async function refundXlm(userStellarAddress, xlmAmount, reason) {
@@ -1347,8 +1537,10 @@ async function retryReleaseBlocked(transactionId, { adminId } = {}) {
 
 export default {
   handleDeposit,
+  handleTraderUsdcDeposit,
   swapXlmToUsdc,
   releaseToTrader,
+  releaseToUser,
   retryReleaseBlocked,
   refundXlm,
   refundToUser,

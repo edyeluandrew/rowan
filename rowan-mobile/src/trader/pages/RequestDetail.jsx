@@ -1,7 +1,7 @@
 import { LockKeyhole, ChevronLeft, Copy, CopyCheck } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getRequest, confirmRequest } from '../api/trader';
+import { getRequest, confirmRequest, confirmFiatReceived } from '../api/trader';
 import { useSocket } from '../context/SocketContext';
 import { useRequests } from '../hooks/useRequests';
 import { useCountdown } from '../hooks/useCountdown';
@@ -97,6 +97,7 @@ export default function RequestDetail() {
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const [revealTimer, setRevealTimer] = useState(null);
   const [copiedOrderId, setCopiedOrderId] = useState(false);
+  const [confirmingBuy, setConfirmingBuy] = useState(false);
 
   const fetchTx = useCallback(async () => {
     try {
@@ -205,7 +206,10 @@ export default function RequestDetail() {
 
   const network = NETWORKS[tx.network] || {};
   const step = getStep();
-  const isPayoutStep = step === 1;
+  const isBuyOrder = tx.order_side === 'BUY';
+  const isPayoutStep = step === 1 && !isBuyOrder;
+  const isBuyLockStep = isBuyOrder && tx.state === 'TRADER_MATCHED' && tx.matched_at;
+  const isBuyConfirmStep = isBuyOrder && tx.state === 'FIAT_PAYOUT_SUBMITTED';
   const isAwaitingConfirmation = step === 2;
   const isComplete = step >= 3;
 
@@ -331,6 +335,42 @@ export default function RequestDetail() {
         )}
       </div>
 
+      {/* Buy: lock USDC in escrow */}
+      {isBuyLockStep && (
+        <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-2">
+          <h3 className="text-rowan-yellow text-xs font-semibold uppercase">Lock USDC in escrow</h3>
+          <p className="text-rowan-muted text-xs">Send exactly {Number(tx.usdc_amount).toFixed(4)} USDC to:</p>
+          <p className="text-rowan-text text-xs font-mono break-all">{tx.escrow_address || 'Escrow address'}</p>
+          <p className="text-rowan-muted text-xs">Memo: <span className="text-rowan-text font-mono">{tx.escrow_memo}</span></p>
+        </div>
+      )}
+
+      {isBuyConfirmStep && (
+        <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-3">
+          <p className="text-rowan-text text-sm">Customer submitted mobile money payment. Confirm receipt to release USDC.</p>
+          {tx.payout_reference && (
+            <p className="text-rowan-muted text-xs">Reference: {tx.payout_reference}</p>
+          )}
+          <Button
+            loading={confirmingBuy}
+            onClick={async () => {
+              setConfirmingBuy(true);
+              try {
+                await confirmFiatReceived(tx.id);
+                await fetchTx();
+                refresh();
+              } catch (err) {
+                alert(err.response?.data?.error || 'Could not confirm');
+              } finally {
+                setConfirmingBuy(false);
+              }
+            }}
+          >
+            Confirm payment received
+          </Button>
+        </div>
+      )}
+
       {/* Payout Instructions */}
       {isPayoutStep && (
         <div className="bg-rowan-surface rounded-xl p-4 mb-4">
@@ -384,7 +424,7 @@ export default function RequestDetail() {
       )}
 
       {/* Payment submitted — waiting for user */}
-      {isAwaitingConfirmation && (
+      {isAwaitingConfirmation && !isBuyOrder && (
         <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-4 text-center mb-4">
           <p className="text-rowan-green text-sm font-medium">
             Payment proof submitted

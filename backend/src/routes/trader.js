@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authTrader, signToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import matchingEngine from '../services/matchingEngine.js';
+import buyMatchingEngine from '../services/buyMatchingEngine.js';
 import escrowController from '../services/escrowController.js';
 import db from '../db/index.js';
 import bcrypt from 'bcryptjs';
@@ -204,10 +205,12 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
               t.network, t.state, t.trader_matched_at, t.matched_at,
               t.fiat_sent_at, t.created_at, t.completed_at, t.user_id, t.trader_id,
               t.payout_phone, t.payout_name, t.stellar_release_tx, t.payment_expires_at,
-              t.preferred_payout_setting_id,
+              t.preferred_payout_setting_id, t.order_side, t.payout_reference,
+              q.memo AS escrow_memo, q.escrow_address,
               tr.stellar_address
        FROM transactions t
        JOIN traders tr ON tr.id = t.trader_id
+       LEFT JOIN quotes q ON q.id = t.quote_id
        WHERE t.id = $1 AND t.trader_id = $2`,
       [req.params.id, req.traderId]
     );
@@ -245,17 +248,28 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
 router.post('/requests/:id/accept', authTrader, async (req, res, next) => {
   try {
     logger.info(`[Trader] Accepting request ${req.params.id} for trader ${req.traderId}`);
-    
-    // Call accept to mark acceptance
-    await matchingEngine.acceptRequest(req.params.id, req.traderId);
+
+    const sideCheck = await db.query(
+      `SELECT order_side FROM transactions WHERE id = $1 AND trader_id = $2`,
+      [req.params.id, req.traderId]
+    );
+    const orderSide = sideCheck.rows[0]?.order_side || 'SELL';
+
+    if (orderSide === 'BUY') {
+      await buyMatchingEngine.acceptBuyRequest(req.params.id, req.traderId);
+    } else {
+      await matchingEngine.acceptRequest(req.params.id, req.traderId);
+    }
     
     // Fetch full request data to return to frontend
     const result = await db.query(
       `SELECT t.id, t.usdc_amount, t.xlm_amount, t.fiat_amount, t.fiat_currency,
               t.network, t.state, t.trader_matched_at, t.matched_at,
               t.fiat_sent_at, t.created_at, t.user_id, t.trader_id,
-              t.payout_phone, t.payout_name
+              t.payout_phone, t.payout_name, t.order_side,
+              q.memo AS escrow_memo, q.escrow_address
        FROM transactions t
+       LEFT JOIN quotes q ON q.id = t.quote_id
        WHERE t.id = $1 AND t.trader_id = $2`,
       [req.params.id, req.traderId]
     );
@@ -339,6 +353,30 @@ router.post('/requests/:id/payout-sent', authTrader, sensitiveActionLimiter, pay
     if (err.statusCode) {
       return res.status(err.statusCode).json({ error: err.message });
     }
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/trader/requests/:id/fiat-received
+ * Trader confirms MoMo received on a BUY order — releases USDC to user.
+ */
+router.post('/requests/:id/fiat-received', authTrader, sensitiveActionLimiter, async (req, res, next) => {
+  try {
+    const { transaction, releaseHash } = await buyMatchingEngine.confirmFiatReceived(
+      req.params.id,
+      req.traderId
+    );
+    res.json({
+      success: true,
+      status: transaction.state,
+      releaseTxHash: releaseHash,
+      message: releaseHash
+        ? 'Payment confirmed. USDC released to the customer.'
+        : 'Payment confirmed. USDC release pending (check trustline).',
+    });
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
     next(err);
   }
 });

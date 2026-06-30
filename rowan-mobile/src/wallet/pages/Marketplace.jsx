@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, RefreshCw } from 'lucide-react'
-import { listTraderAds } from '../api/traders'
+import { listTraderAds, listBuyAds } from '../api/traders'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import TraderAdCard from '../components/marketplace/TraderAdCard'
 import MarketplaceSkeleton from '../components/marketplace/MarketplaceSkeleton'
@@ -14,6 +14,9 @@ import Button from '../components/ui/Button'
 
 export default function Marketplace() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const initialTab = location.state?.tab === 'buy' ? 'buy' : 'sell'
+  const [tab, setTab] = useState(initialTab)
   const { country, fiatCurrency } = useUserCountry()
   const countryNetworks = useMemo(() => Object.keys(getNetworksForCountry(country)), [country])
   const { activeTransaction, hasActiveOrder } = useActiveTransaction()
@@ -33,11 +36,9 @@ export default function Marketplace() {
     setError(null)
     try {
       const params = { currency: fiatCurrency }
-      if (network) {
-        params.network = network
-      }
+      if (network) params.network = network
       if (minAmount) params.minAmount = parseFloat(minAmount)
-      const res = await listTraderAds(params)
+      const res = tab === 'buy' ? await listBuyAds(params) : await listTraderAds(params)
       setAds(res.ads || [])
     } catch (err) {
       setError(err.response?.data?.error || 'Could not load traders. Please try again.')
@@ -45,7 +46,7 @@ export default function Marketplace() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [network, minAmount, fiatCurrency])
+  }, [network, minAmount, fiatCurrency, tab])
 
   useEffect(() => {
     loadAds()
@@ -73,6 +74,17 @@ export default function Marketplace() {
 
   const handleTrade = (ad) => {
     if (hasActiveOrder) return
+    if (tab === 'buy') {
+      navigate('/wallet/buy', {
+        state: {
+          selectedAd: ad,
+          payoutSettingId: ad.payoutSettingId || ad.id,
+          traderName: ad.traderName,
+          network: ad.network,
+        },
+      })
+      return
+    }
     navigate('/wallet/cashout', {
       state: {
         selectedAd: ad,
@@ -107,8 +119,31 @@ export default function Marketplace() {
       </div>
 
       <p className="text-rowan-muted text-sm text-center mb-5">
-        Pick a verified trader or use auto match from Cash Out.
+        {tab === 'buy'
+          ? 'Buy USDC — pay mobile money, receive USDC in your wallet.'
+          : 'Sell / cash out — pick a trader or use auto match from Cash Out.'}
       </p>
+
+      <div className="flex gap-2 mb-5">
+        <button
+          type="button"
+          onClick={() => setTab('buy')}
+          className={`flex-1 rounded-xl py-3 text-sm font-semibold min-h-11 ${
+            tab === 'buy' ? 'bg-rowan-yellow text-rowan-bg' : 'bg-rowan-surface border border-rowan-border text-rowan-muted'
+          }`}
+        >
+          Buy USDC
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('sell')}
+          className={`flex-1 rounded-xl py-3 text-sm font-semibold min-h-11 ${
+            tab === 'sell' ? 'bg-rowan-yellow text-rowan-bg' : 'bg-rowan-surface border border-rowan-border text-rowan-muted'
+          }`}
+        >
+          Sell
+        </button>
+      </div>
 
       {hasActiveOrder && activeTransaction && (
         <div className="bg-rowan-yellow rounded-xl p-4 mb-4">
@@ -210,6 +245,7 @@ export default function Marketplace() {
             <TraderAdCard
               key={ad.payoutSettingId || ad.id}
               ad={ad}
+              mode={tab}
               xlmRate={lookupNetworkRate(allRates, ad.network)}
               onTrade={handleTrade}
               onViewProfile={handleViewProfile}
@@ -219,11 +255,13 @@ export default function Marketplace() {
         </div>
       )}
 
-      <div className="mt-6">
-        <Button variant="ghost" onClick={() => navigate('/wallet/cashout')} disabled={hasActiveOrder}>
-          Use auto match instead
-        </Button>
-      </div>
+      {tab === 'sell' && (
+        <div className="mt-6">
+          <Button variant="ghost" onClick={() => navigate('/wallet/cashout')} disabled={hasActiveOrder}>
+            Use auto match instead
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

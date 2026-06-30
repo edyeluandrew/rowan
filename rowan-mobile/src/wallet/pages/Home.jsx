@@ -132,7 +132,16 @@ export default function Home() {
         <Button
           variant="ghost"
           className="mt-2"
-          onClick={() => navigate('/wallet/marketplace')}
+          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })}
+          disabled={hasActiveOrder}
+        >
+          <Coins size={18} />
+          Buy USDC
+        </Button>
+        <Button
+          variant="ghost"
+          className="mt-2"
+          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'sell' } })}
           disabled={hasActiveOrder}
         >
           <UserCheck size={18} />

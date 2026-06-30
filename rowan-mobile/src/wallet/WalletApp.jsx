@@ -22,6 +22,8 @@ import TraderProfile from './pages/TraderProfile';
 import BlockedTraders from './pages/BlockedTraders';
 import ReceiveXlm from './pages/ReceiveXlm';
 import AddMoney from './pages/AddMoney';
+import Buy from './pages/Buy'
+import BuyConfirm from './pages/BuyConfirm'
 import Cashout from './pages/Cashout';
 import CashoutConfirm from './pages/CashoutConfirm';
 import CashoutSend from './pages/CashoutSend';
@@ -60,7 +62,8 @@ export default function WalletApp() {
             <Route path="notifications" element={<Notifications />} />
             <Route path="receive" element={<ReceiveXlm />} />
             <Route path="add-money" element={<AddMoney />} />
-            <Route path="cashout" element={<Cashout />} />
+            <Route path="buy" element={<Buy />} />
+            <Route path="buy/confirm" element={<BuyConfirm />} />
             <Route path="marketplace" element={<Marketplace />} />
             <Route path="traders/:id" element={<TraderProfile />} />
             <Route path="blocked-traders" element={<BlockedTraders />} />

@@ -114,38 +114,45 @@ function startHeartbeat() {
  */
 async function handlePayment(payment) {
   try {
-    // Only process incoming payments (not outgoing swaps/releases)
     if (payment.to !== config.stellar.escrowPublicKey) return;
-    if (payment.from === config.stellar.escrowPublicKey) return; // self-swap
+    if (payment.from === config.stellar.escrowPublicKey) return;
 
-    // Only process native XLM payments (not USDC receipts)
-    if (payment.asset_type !== 'native') return;
-
-    logger.info(`[Horizon] ✅ Processing XLM payment: ${payment.from} → ${payment.to} (${payment.amount} XLM)`);
-
-    // Fetch the parent transaction to get the memo
     const tx = await payment.transaction();
     const memo = tx.memo || '';
 
-    logger.info(`[Horizon] 📋 Transaction memo: "${memo}"`);
+    if (payment.asset_type === 'native') {
+      logger.info(`[Horizon] ✅ Processing XLM payment: ${payment.from} → ${payment.to} (${payment.amount} XLM)`);
+      logger.info(`[Horizon] 📋 Transaction memo: "${memo}"`);
 
-    if (!memo.startsWith('ROWAN-qt_')) {
-      logger.warn(`[Horizon] ⚠️  Payment without Rowan memo — ignoring (memo: "${memo}")`);
+      if (!memo.startsWith('ROWAN-qt_')) {
+        logger.warn(`[Horizon] ⚠️  Payment without Rowan sell memo — ignoring`);
+        return;
+      }
+
+      await escrowController.handleDeposit({
+        memo,
+        amount: payment.amount,
+        sourceAccount: payment.from,
+        txHash: tx.hash,
+      });
+    } else if (
+      payment.asset_type === 'credit_alphanum4'
+      && payment.asset_code === 'USDC'
+      && memo.startsWith('ROWAN-buy_')
+    ) {
+      logger.info(`[Horizon] ✅ Processing USDC buy lock: ${payment.amount} from ${payment.from}`);
+      await escrowController.handleTraderUsdcDeposit({
+        memo,
+        amount: payment.amount,
+        sourceAccount: payment.from,
+        txHash: tx.hash,
+      });
+    } else {
       return;
     }
 
-    logger.info(`[Horizon] 🎯 Valid Rowan payment detected! Creating transaction record...`);
+    logger.info(`[Horizon] ✨ Processed payment for memo: ${memo}`);
 
-    await escrowController.handleDeposit({
-      memo,
-      amount: payment.amount,
-      sourceAccount: payment.from,
-      txHash: tx.hash,
-    });
-
-    logger.info(`[Horizon] ✨ Transaction record created successfully for memo: ${memo}`);
-
-    // ── C8 FIX: Persist cursor after successful processing ──
     if (payment.paging_token) {
       await redis.set(CURSOR_KEY, payment.paging_token);
     }

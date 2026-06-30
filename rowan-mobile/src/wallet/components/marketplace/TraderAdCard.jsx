@@ -9,8 +9,11 @@ import {
 import PaymentMethodPill from '../ui/PaymentMethodPill'
 import Button from '../ui/Button'
 
-export default function TraderAdCard({ ad, xlmRate, onTrade, onViewProfile, tradeDisabled = false }) {
-  const rateLine = formatXlmRateLine(ad.currency, xlmRate)
+export default function TraderAdCard({ ad, xlmRate, mode = 'sell', onTrade, onViewProfile, tradeDisabled = false }) {
+  const isBuy = mode === 'buy'
+  const rateLine = isBuy
+    ? (ad.ratePerUsdc ? `1 USDC ≈ ${ad.ratePerUsdc.toLocaleString()} ${ad.currency}` : null)
+    : formatXlmRateLine(ad.currency, xlmRate)
   const completion = formatPercent(ad.completionRate)
   const releaseTime = formatDurationMinutes(ad.avgReleaseMinutes)
   const replyTime = formatDurationMinutes(ad.avgResponseMinutes)
@@ -80,7 +83,7 @@ export default function TraderAdCard({ ad, xlmRate, onTrade, onViewProfile, trad
           View profile
         </Button>
         <Button className="py-3" onClick={() => onTrade?.(ad)} disabled={tradeDisabled}>
-          Trade
+          {isBuy ? 'Buy USDC' : 'Trade'}
         </Button>
       </div>
     </div>

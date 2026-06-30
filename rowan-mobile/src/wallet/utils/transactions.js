@@ -42,7 +42,12 @@ export function normalizeWalletTransaction(tx) {
     wasDisputed: tx.wasDisputed ?? tx.was_disputed ?? !!tx.dispute_id,
     paymentMethod: tx.paymentMethod ?? tx.payment_method ?? tx.network,
     preferredPayoutSettingId: tx.preferredPayoutSettingId ?? tx.preferred_payout_setting_id ?? null,
+    orderSide: tx.orderSide ?? tx.order_side ?? 'SELL',
   }
+}
+
+export function isBuyOrder(tx) {
+  return (tx?.orderSide ?? tx?.order_side) === 'BUY'
 }
 
 /** Order chat is only for manual P2P (user picked a trader ad), not Express auto-match. */

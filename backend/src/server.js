@@ -19,6 +19,7 @@ import { errorHandler } from './middleware/validate.js';
 import wellKnownRoutes from './routes/wellKnown.js';
 import authRoutes from './routes/auth.js';
 import cashoutRoutes from './routes/cashout.js';
+import buyRoutes from './routes/buy.js';
 import traderRoutes from './routes/trader.js';
 import traderOnboardingRoutes from './routes/traderOnboarding.js';
 import adminRoutes from './routes/admin.js';
@@ -215,6 +216,7 @@ app.get('/health', async (req, res) => {
 // /api/v1/trader/onboarding must come before /api/v1/trader to work correctly
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/cashout', cashoutRoutes);
+app.use('/api/v1/buy', buyRoutes);
 app.use('/api/v1/config', configRoutes);
 app.use('/api/v1/disputes', disputesRoutes);
 app.use('/api/v1/trader/onboarding', traderOnboardingRoutes); // ← SPECIFIC path first

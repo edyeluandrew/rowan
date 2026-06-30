@@ -22,11 +22,11 @@ import websocket from './websocket.js';
 const VALID_TRANSITIONS = {
   QUOTE_REQUESTED:  ['QUOTE_CONFIRMED', 'FAILED'],
   QUOTE_CONFIRMED:  ['ESCROW_LOCKED', 'FAILED'],
-  ESCROW_LOCKED:    ['TRADER_MATCHED', 'FAILED', 'REFUNDED'],
+  ESCROW_LOCKED:    ['TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'FAILED', 'REFUNDED'],
   // CRITICAL FIX: Removed backward transition to ESCROW_LOCKED
   // Traders are assigned/reassigned WITHOUT changing state
   // This prevents transaction regression (TRADER_MATCHED → ESCROW_LOCKED → TRADER_MATCHED)
-  TRADER_MATCHED:   ['FIAT_PAYOUT_SUBMITTED', 'FAILED', 'REFUNDED'],
+  TRADER_MATCHED:   ['FIAT_PAYOUT_SUBMITTED', 'ESCROW_LOCKED', 'FAILED', 'REFUNDED'],
   FIAT_PAYOUT_SUBMITTED: ['USER_CONFIRMATION_PENDING', 'DISPUTE_OPENED', 'FAILED', 'REFUNDED'],
   // DISPUTE_OPENED is allowed here too: a user can dispute after entering receipt
   // confirmation but before settlement completes (matches disputeService + routes).

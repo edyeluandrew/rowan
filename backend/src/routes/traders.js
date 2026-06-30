@@ -14,8 +14,9 @@ const router = Router();
  */
 router.get('/ads', authUser, async (req, res, next) => {
   try {
-    const { currency, network, minAmount, maxAmount, paymentMethod, page, limit } = req.query;
-    const result = await traderAdsService.listAds({
+    const { currency, network, minAmount, maxAmount, paymentMethod, page, limit, side } = req.query;
+    const listFn = side === 'buy' ? traderAdsService.listBuyAds : traderAdsService.listAds;
+    const result = await listFn({
       userId: req.userId,
       currency,
       network,

@@ -65,7 +65,7 @@ router.get('/:id', authTrader, async (req, res, next) => {
 router.post(
   '/',
   authTrader,
-  validate(['country', 'network', 'currency', 'min_amount', 'max_amount', 'available_float']),
+  validate(['country', 'network', 'currency', 'min_amount', 'max_amount']),
   async (req, res, next) => {
     try {
       const traderId = req.traderId;
@@ -76,6 +76,8 @@ router.post(
         min_amount,
         max_amount,
         available_float,
+        available_usdc,
+        ad_side,
         rate_per_usdc,
         spread_percent,
         fee_percent,
@@ -87,7 +89,9 @@ router.post(
         currency,
         min_amount: parseFloat(min_amount),
         max_amount: parseFloat(max_amount),
-        available_float: parseFloat(available_float),
+        available_float: available_float != null ? parseFloat(available_float) : 0,
+        available_usdc: available_usdc != null ? parseFloat(available_usdc) : 0,
+        ad_side: ad_side || 'USER_SELL',
         rate_per_usdc: rate_per_usdc ? parseFloat(rate_per_usdc) : null,
         spread_percent: spread_percent ? parseFloat(spread_percent) : null,
         fee_percent: fee_percent ? parseFloat(fee_percent) : null,
@@ -118,6 +122,7 @@ router.put('/:id', authTrader, async (req, res, next) => {
       min_amount,
       max_amount,
       available_float,
+      available_usdc,
       rate_per_usdc,
       spread_percent,
       fee_percent,
@@ -129,6 +134,7 @@ router.put('/:id', authTrader, async (req, res, next) => {
     if (min_amount !== undefined) updateData.min_amount = parseFloat(min_amount);
     if (max_amount !== undefined) updateData.max_amount = parseFloat(max_amount);
     if (available_float !== undefined) updateData.available_float = parseFloat(available_float);
+    if (available_usdc !== undefined) updateData.available_usdc = parseFloat(available_usdc);
     if (rate_per_usdc !== undefined) updateData.rate_per_usdc = rate_per_usdc ? parseFloat(rate_per_usdc) : null;
     if (spread_percent !== undefined) updateData.spread_percent = spread_percent ? parseFloat(spread_percent) : null;
     if (fee_percent !== undefined) updateData.fee_percent = fee_percent ? parseFloat(fee_percent) : null;
