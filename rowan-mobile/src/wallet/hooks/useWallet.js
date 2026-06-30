@@ -8,6 +8,8 @@ import { loadAccountBalances } from '../utils/stellar'
 export default function useWallet() {
   const { keypair } = useAuth()
   const [balance, setBalance] = useState(null)
+  const [usdcBalance, setUsdcBalance] = useState(null)
+  const [hasUsdcTrustline, setHasUsdcTrustline] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -21,6 +23,8 @@ export default function useWallet() {
         import.meta.env.VITE_STELLAR_HORIZON_URL
       )
       setBalance(balances.xlm)
+      setUsdcBalance(balances.usdc)
+      setHasUsdcTrustline(balances.hasUsdcTrustline)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -32,5 +36,13 @@ export default function useWallet() {
     fetchBalance()
   }, [fetchBalance])
 
-  return { balance, loading, error, refresh: fetchBalance, publicKey: keypair?.publicKey }
+  return {
+    balance,
+    usdcBalance,
+    hasUsdcTrustline,
+    loading,
+    error,
+    refresh: fetchBalance,
+    publicKey: keypair?.publicKey,
+  }
 }

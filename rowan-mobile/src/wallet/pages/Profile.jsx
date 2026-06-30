@@ -13,12 +13,13 @@ import { formatAddress, formatXlm } from '../utils/format'
 import { KYC_LEVELS, COPY_FEEDBACK_TIMEOUT_MS, COUNTRY_CODES } from '../utils/constants'
 import { COUNTRY_FIAT } from '../utils/country'
 import CountryPicker from '../components/settings/CountryPicker'
+import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 import Badge from '../components/ui/Badge'
 
 export default function Profile() {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
-  const { balance, publicKey } = useWallet()
+  const { balance, usdcBalance, hasUsdcTrustline, publicKey } = useWallet()
   const { stats } = useTransactions()
   const { country, setCountry } = useUserCountry()
   const [showCountryPicker, setShowCountryPicker] = useState(false)
@@ -105,6 +106,20 @@ export default function Profile() {
             </Badge>
           </div>
         </div>
+      </div>
+
+      {/* USDC wallet */}
+      <div className="bg-rowan-surface rounded-xl p-4 mb-4">
+        <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">USDC balance</p>
+        <p className="text-rowan-yellow text-2xl font-bold tabular-nums">
+          {hasUsdcTrustline ? Number(usdcBalance || 0).toFixed(2) : '—'}
+        </p>
+        <p className="text-rowan-muted text-xs mt-1">
+          {hasUsdcTrustline
+            ? 'Live from Stellar — updates after buy orders complete'
+            : 'Enable USDC below to receive tokens from P2P buy'}
+        </p>
+        {hasUsdcTrustline === false && <UsdcTrustlineSetup compact />}
       </div>
 
       {/* Stats grid */}

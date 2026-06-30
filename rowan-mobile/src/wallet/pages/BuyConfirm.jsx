@@ -5,6 +5,8 @@ import CountdownTimer from '../components/ui/CountdownTimer'
 import Button from '../components/ui/Button'
 import { confirmBuyOrder } from '../api/buy'
 import { formatLockedRateLine, getTraderDisplayName } from '../utils/p2pFormat'
+import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
+import useWallet from '../hooks/useWallet'
 
 export default function BuyConfirm() {
   const navigate = useNavigate()
@@ -13,6 +15,9 @@ export default function BuyConfirm() {
   const [expired, setExpired] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const { hasUsdcTrustline } = useWallet()
+  const trustlineError =
+    error && /trustline|USDC/i.test(error)
 
   if (!quote) {
     navigate('/wallet/buy', { replace: true })
@@ -25,7 +30,7 @@ export default function BuyConfirm() {
     : null
 
   const handleConfirm = async () => {
-    if (expired || loading) return
+    if (expired || loading || hasUsdcTrustline === false) return
     setLoading(true)
     setError(null)
     try {
@@ -94,9 +99,18 @@ export default function BuyConfirm() {
         After you confirm, the trader must lock USDC in escrow. Then you send mobile money and upload proof.
       </p>
 
-      {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
+      {(hasUsdcTrustline === false || trustlineError) && (
+        <UsdcTrustlineSetup compact onEnabled={() => setError(null)} />
+      )}
 
-      <Button className="w-full mt-8" disabled={expired || loading} loading={loading} onClick={handleConfirm}>
+      {error && !trustlineError && <p className="text-rowan-red text-sm mt-4">{error}</p>}
+
+      <Button
+        className="w-full mt-8"
+        disabled={expired || loading || hasUsdcTrustline === false}
+        loading={loading}
+        onClick={handleConfirm}
+      >
         {expired ? 'Quote expired' : 'Confirm & start order'}
       </Button>
     </div>

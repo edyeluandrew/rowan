@@ -7,7 +7,14 @@ import {
   BASE_FEE,
   Horizon,
 } from '@stellar/stellar-sdk'
-import { CURRENT_NETWORK, STELLAR_TX_TIMEOUT_SECONDS } from './constants'
+import { CURRENT_NETWORK, STELLAR_TX_TIMEOUT_SECONDS, USDC_ISSUERS } from './constants'
+
+const networkKey = import.meta.env.VITE_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet'
+
+/** USDC asset for the active Stellar network */
+export function getUsdcAsset() {
+  return new Asset('USDC', USDC_ISSUERS[networkKey])
+}
 
 /**
  * Generate a new random Stellar keypair.
@@ -115,24 +122,61 @@ export async function submitTransaction(signedXdr, horizonUrl) {
   }
 }
 
+function balancesFromAccount(account) {
+  const usdcAsset = getUsdcAsset()
+  const xlmBalance = account.balances.find((b) => b.asset_type === 'native')
+  const usdcLine = account.balances.find(
+    (b) => b.asset_code === usdcAsset.code && b.asset_issuer === usdcAsset.issuer
+  )
+  return {
+    xlm: xlmBalance ? parseFloat(xlmBalance.balance) : 0,
+    usdc: usdcLine ? parseFloat(usdcLine.balance) : 0,
+    hasUsdcTrustline: !!usdcLine,
+  }
+}
+
 /**
  * Load account balances from Horizon.
- * Returns { xlm: 0 } for unfunded accounts (404).
+ * Returns zero balances for unfunded accounts (404).
  */
 export async function loadAccountBalances(publicKey, horizonUrl) {
   const server = new Horizon.Server(horizonUrl)
   try {
     const account = await server.loadAccount(publicKey)
-    const xlmBalance = account.balances.find(
-      (b) => b.asset_type === 'native'
-    )
-    return {
-      xlm: xlmBalance ? parseFloat(xlmBalance.balance) : 0,
-    }
+    return balancesFromAccount(account)
   } catch (err) {
     if (err?.response?.status === 404) {
-      return { xlm: 0 }
+      return { xlm: 0, usdc: 0, hasUsdcTrustline: false }
     }
     throw err
   }
+}
+
+/**
+ * Build and sign a ChangeTrust op so this wallet can receive USDC.
+ */
+export async function buildAndSignUsdcTrustline({ sourceSecretKey, horizonUrl }) {
+  const server = new Horizon.Server(horizonUrl)
+  const keypair = Keypair.fromSecret(sourceSecretKey)
+  const account = await server.loadAccount(keypair.publicKey())
+  const usdcAsset = getUsdcAsset()
+
+  const txBuilder = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: CURRENT_NETWORK.passphrase,
+  })
+    .addOperation(Operation.changeTrust({ asset: usdcAsset }))
+    .setTimeout(STELLAR_TX_TIMEOUT_SECONDS)
+    .build()
+
+  txBuilder.sign(keypair)
+  return txBuilder.toXDR()
+}
+
+/**
+ * Add USDC trustline on-chain and return the Horizon submit result.
+ */
+export async function addUsdcTrustline(sourceSecretKey, horizonUrl) {
+  const signedXdr = await buildAndSignUsdcTrustline({ sourceSecretKey, horizonUrl })
+  return submitTransaction(signedXdr, horizonUrl)
 }

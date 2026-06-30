@@ -144,3 +144,13 @@ export const STELLAR_NETWORKS = {
 export const CURRENT_NETWORK =
   STELLAR_NETWORKS[import.meta.env.VITE_STELLAR_NETWORK] ||
   STELLAR_NETWORKS.testnet
+
+/** Testnet / mainnet USDC issuers — must match backend config */
+export const USDC_ISSUERS = {
+  testnet:
+    import.meta.env.VITE_USDC_ISSUER_TESTNET ||
+    'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+  mainnet:
+    import.meta.env.VITE_USDC_ISSUER_MAINNET ||
+    'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+}

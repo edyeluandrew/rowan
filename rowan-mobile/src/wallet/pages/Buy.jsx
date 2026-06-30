@@ -4,6 +4,7 @@ import { ChevronLeft, Coins, UserCheck } from 'lucide-react'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import useUserCountry from '../hooks/useUserCountry'
 import useRates from '../hooks/useRates'
+import useWallet from '../hooks/useWallet'
 import { getBuyQuote } from '../api/buy'
 import { hashPhoneNumber } from '../utils/crypto'
 import { NETWORKS } from '../utils/constants'
@@ -11,6 +12,7 @@ import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
 import Button from '../components/ui/Button'
 import PaymentMethodPill from '../components/ui/PaymentMethodPill'
+import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 
 /** Match backend buy quote fee/spread for indicative USDC estimate */
 const FEE_FACTOR = 0.99
@@ -35,6 +37,7 @@ export default function Buy() {
 
   const { country, fiatCurrency: userFiat } = useUserCountry()
   const { rates } = useRates(userFiat)
+  const { hasUsdcTrustline } = useWallet()
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
 
   const adNetwork = presetNetwork || selectedAd?.network || null
@@ -88,7 +91,8 @@ export default function Buy() {
     netFiat > 0 &&
     !belowMin &&
     !exceedsMax &&
-    !loading
+    !loading &&
+    hasUsdcTrustline !== false
 
   const handleGetQuote = async () => {
     if (!canProceed) return
@@ -145,6 +149,8 @@ export default function Buy() {
           Pay mobile money, receive USDC in your wallet after the trader confirms payment.
         </p>
       </div>
+
+      <UsdcTrustlineSetup />
 
       <AmountInput
         fiatAmount={fiatAmount}
