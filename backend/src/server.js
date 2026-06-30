@@ -22,6 +22,7 @@ import cashoutRoutes from './routes/cashout.js';
 import buyRoutes from './routes/buy.js';
 import traderRoutes from './routes/trader.js';
 import traderOnboardingRoutes from './routes/traderOnboarding.js';
+import payoutSettingsRoutes from './routes/payoutSettings.js';
 import adminRoutes from './routes/admin.js';
 import userRoutes from './routes/user.js';
 import ratesRoutes from './routes/rates.js';
@@ -220,6 +221,7 @@ app.use('/api/v1/buy', buyRoutes);
 app.use('/api/v1/config', configRoutes);
 app.use('/api/v1/disputes', disputesRoutes);
 app.use('/api/v1/trader/onboarding', traderOnboardingRoutes); // ← SPECIFIC path first
+app.use('/api/v1/trader/payout-settings', payoutSettingsRoutes);
 app.use('/api/v1/trader', traderRoutes);                      // ← GENERAL path second
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/user', userRoutes);
