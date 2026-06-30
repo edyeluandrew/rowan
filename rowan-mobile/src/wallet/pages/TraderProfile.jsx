@@ -9,6 +9,7 @@ import {
   formatPercent,
   formatDurationMinutes,
   formatXlmRateLine,
+  formatUsdcRateLine,
   getTraderDisplayName,
   lookupNetworkRate,
 } from '../utils/p2pFormat'
@@ -21,6 +22,8 @@ export default function TraderProfile() {
   const navigate = useNavigate()
   const location = useLocation()
   const preselectedAd = location.state?.ad
+  const marketplaceMode = location.state?.mode === 'buy' ? 'buy' : 'sell'
+  const isBuyMode = marketplaceMode === 'buy'
   const { allRates } = useRates()
 
   const [profile, setProfile] = useState(null)
@@ -38,8 +41,12 @@ export default function TraderProfile() {
     getTraderProfile(id)
       .then((data) => {
         setProfile(data)
-        if (!preselectedAd && data.ads?.length === 1) {
-          setSelectedAd(data.ads[0])
+        if (!preselectedAd) {
+          const filtered = (data.ads || []).filter((ad) => {
+            const side = ad.adSide || ad.ad_side || 'USER_SELL'
+            return isBuyMode ? side === 'USER_BUY' : side === 'USER_SELL'
+          })
+          if (filtered.length === 1) setSelectedAd(filtered[0])
         }
       })
       .catch((err) => {
@@ -61,6 +68,17 @@ export default function TraderProfile() {
 
   const handleTrade = () => {
     if (!selectedAd) return
+    if (isBuyMode || selectedAd.adSide === 'USER_BUY') {
+      navigate('/wallet/buy', {
+        state: {
+          selectedAd,
+          payoutSettingId: selectedAd.payoutSettingId || selectedAd.id,
+          traderName: profile?.name,
+          network: selectedAd.network,
+        },
+      })
+      return
+    }
     navigate('/wallet/cashout', {
       state: {
         selectedAd,
@@ -120,10 +138,21 @@ export default function TraderProfile() {
 
   const stats = profile.stats || {}
   const reviews = profile.reviews || []
+  const visibleAds = (profile.ads || []).filter((ad) => {
+    const side = ad.adSide || ad.ad_side || 'USER_SELL'
+    return isBuyMode ? side === 'USER_BUY' : side === 'USER_SELL'
+  })
+
   const selectedRate = selectedAd
-    ? lookupNetworkRate(allRates, selectedAd.network)
+    ? (isBuyMode || selectedAd.adSide === 'USER_BUY')
+      ? selectedAd.ratePerUsdc
+      : lookupNetworkRate(allRates, selectedAd.network)
     : null
-  const rateLine = selectedAd ? formatXlmRateLine(selectedAd.currency, selectedRate) : null
+  const rateLine = selectedAd
+    ? (isBuyMode || selectedAd.adSide === 'USER_BUY')
+      ? formatUsdcRateLine(selectedAd.currency, selectedRate)
+      : formatXlmRateLine(selectedAd.currency, selectedRate)
+    : null
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-32 px-4 pt-4">
@@ -186,11 +215,22 @@ export default function TraderProfile() {
       </div>
 
       <div className="mb-6">
-        <h2 className="text-rowan-text text-sm font-semibold mb-3">Available offers</h2>
+        <h2 className="text-rowan-text text-sm font-semibold mb-3">
+          {isBuyMode ? 'USDC offers' : 'Cash-out offers'}
+        </h2>
         <div className="space-y-2">
-          {profile.ads?.map((ad) => {
+          {visibleAds.length === 0 && (
+            <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 text-center">
+              <p className="text-rowan-muted text-sm">No active offers in this category</p>
+            </div>
+          )}
+          {visibleAds.map((ad) => {
             const isSelected = (selectedAd?.payoutSettingId || selectedAd?.id) === ad.payoutSettingId
-            const adRate = formatXlmRateLine(ad.currency, lookupNetworkRate(allRates, ad.network))
+            const isBuyAd = (ad.adSide || ad.ad_side) === 'USER_BUY'
+            const adRate = isBuyAd
+              ? formatUsdcRateLine(ad.currency, ad.ratePerUsdc)
+              : formatXlmRateLine(ad.currency, lookupNetworkRate(allRates, ad.network))
+            const availableUsdc = ad.availableUsdc ?? ad.available_usdc
             return (
               <button
                 key={ad.payoutSettingId}
@@ -202,16 +242,23 @@ export default function TraderProfile() {
               >
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <PaymentMethodPill network={ad.network} />
-                  {adRate && <span className="text-rowan-muted text-xs">{adRate}</span>}
+                  {adRate && <span className="text-rowan-yellow text-xs font-medium">{adRate}</span>}
                 </div>
                 <p className="text-rowan-text text-sm font-medium mt-3">
-                  {formatCurrency(ad.minAmount, ad.currency)}
+                  Limits: {formatCurrency(ad.minAmount, ad.currency)}
                   {' \u2013 '}
                   {formatCurrency(ad.maxAmount, ad.currency)}
                 </p>
-                <p className="text-rowan-muted text-xs mt-1">
-                  Available {formatCurrency(ad.availableFloat, ad.currency)}
-                </p>
+                {isBuyAd && availableUsdc != null && (
+                  <p className="text-rowan-muted text-xs mt-1">
+                    {Number(availableUsdc).toFixed(2)} USDC available
+                  </p>
+                )}
+                {!isBuyAd && ad.availableFloat != null && (
+                  <p className="text-rowan-muted text-xs mt-1">
+                    {formatCurrency(ad.availableFloat, ad.currency)} float available
+                  </p>
+                )}
               </button>
             )
           })}
@@ -227,6 +274,11 @@ export default function TraderProfile() {
             {' \u2013 '}
             {formatCurrency(selectedAd.maxAmount, selectedAd.currency)}
           </p>
+          {(selectedAd.adSide === 'USER_BUY' || isBuyMode) && (selectedAd.availableUsdc ?? selectedAd.available_usdc) != null && (
+            <p className="text-rowan-muted text-xs mt-1">
+              {(selectedAd.availableUsdc ?? selectedAd.available_usdc).toFixed(2)} USDC available
+            </p>
+          )}
         </div>
       )}
 
@@ -256,8 +308,12 @@ export default function TraderProfile() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-rowan-bg border-t border-rowan-border">
-        <Button onClick={handleTrade} disabled={!selectedAd || profile.isBlocked}>
-          {profile.isBlocked ? 'Trader blocked' : 'Trade with this trader'}
+        <Button onClick={handleTrade} disabled={!selectedAd || profile.isBlocked || (isBuyMode && !selectedAd?.ratePerUsdc)}>
+          {profile.isBlocked
+            ? 'Trader blocked'
+            : isBuyMode
+              ? 'Buy USDC with this trader'
+              : 'Trade with this trader'}
         </Button>
       </div>
 

@@ -57,6 +57,13 @@ export function formatXlmRateLine(currency, rate) {
   return `1 XLM = ${currency} ${formatted}`
 }
 
+/** e.g. "1 USDC ≈ UGX 3,728" — trader-set buy price */
+export function formatUsdcRateLine(currency, ratePerUsdc) {
+  if (!currency || ratePerUsdc == null || !Number.isFinite(Number(ratePerUsdc))) return null
+  const formatted = Number(ratePerUsdc).toLocaleString('en-US', { maximumFractionDigits: 2 })
+  return `1 USDC ≈ ${currency} ${formatted}`
+}
+
 /** e.g. "10:34 AM" */
 export function formatMessageTime(isoString) {
   if (!isoString) return ''

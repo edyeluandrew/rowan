@@ -87,11 +87,12 @@ router.get('/:id/profile', authUser, async (req, res, next) => {
     );
 
     const adsResult = await db.query(
-      `SELECT id, network, currency, min_amount, max_amount,
-              (available_float - reserved_float) AS net_float
+      `SELECT id, network, currency, min_amount, max_amount, ad_side, rate_per_usdc,
+              (available_float - reserved_float) AS net_float,
+              (available_usdc - reserved_usdc) AS net_usdc
        FROM trader_payout_settings
        WHERE trader_id = $1 AND is_active = TRUE
-       ORDER BY currency, network`,
+       ORDER BY ad_side, currency, network`,
       [traderId]
     );
 
@@ -113,7 +114,10 @@ router.get('/:id/profile', authUser, async (req, res, next) => {
           currency: a.currency,
           minAmount: parseFloat(a.min_amount),
           maxAmount: parseFloat(a.max_amount),
-          availableFloat: parseFloat(a.net_float),
+          adSide: a.ad_side || 'USER_SELL',
+          ratePerUsdc: a.rate_per_usdc != null ? parseFloat(a.rate_per_usdc) : null,
+          availableFloat: a.ad_side === 'USER_SELL' ? parseFloat(a.net_float) : undefined,
+          availableUsdc: a.ad_side === 'USER_BUY' ? parseFloat(a.net_usdc) : undefined,
         })),
       },
     });

@@ -96,7 +96,7 @@ export default function Marketplace() {
   }
 
   const handleViewProfile = (ad) => {
-    navigate(`/wallet/traders/${ad.traderId}`, { state: { ad } })
+    navigate(`/wallet/traders/${ad.traderId}`, { state: { ad, mode: tab } })
   }
 
   return (

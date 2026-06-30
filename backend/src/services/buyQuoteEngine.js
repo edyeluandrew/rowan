@@ -17,12 +17,34 @@ function normalizeFiatAmount(amount, fiatCurrency) {
 
 /**
  * Compute USDC the user receives when paying a target fiat amount (MoMo).
+ * When ratePerUsdc is set (manual P2P buy ad), uses the trader's price.
  */
-async function computeBuyQuoteFromFiat(fiatAmount, network) {
+async function computeBuyQuoteFromFiat(fiatAmount, network, { ratePerUsdc = null } = {}) {
   const fiatCurrency = quoteEngine.networkToFiat(network);
-  const fiatFx = await fxService.assertFiatFxAvailableForQuote(fiatCurrency);
-  const usdcToFiat = fiatFx.rate;
   const fiatAmountNum = normalizeFiatAmount(fiatAmount, fiatCurrency);
+
+  let usdcToFiat;
+  let fiatFx;
+  let rateSource;
+
+  if (ratePerUsdc != null && Number(ratePerUsdc) > 0) {
+    usdcToFiat = Number(ratePerUsdc);
+    rateSource = 'TRADER_AD';
+    fiatFx = {
+      rate: usdcToFiat,
+      fxSource: 'trader_ad',
+      fxCurrency: fiatCurrency,
+      fxWarning: null,
+      fiatRateSource: 'TRADER_AD',
+      fxProvider: 'trader_ad',
+      fxFetchedAt: new Date().toISOString(),
+      fxAgeSeconds: 0,
+    };
+  } else {
+    fiatFx = await fxService.assertFiatFxAvailableForQuote(fiatCurrency);
+    usdcToFiat = fiatFx.rate;
+    rateSource = 'LIVE';
+  }
 
   const spreadMultiplierUser = 1 - (spreadPercent / 100);
   const feeMultiplier = 1 - (feePercent / 100);
@@ -38,8 +60,8 @@ async function computeBuyQuoteFromFiat(fiatAmount, network) {
     platformFeeNum,
     userRateAfterSpread,
     usdcToFiat,
-    rateSource: 'LIVE',
-    quoteWarning: null,
+    rateSource,
+    quoteWarning: rateSource === 'TRADER_AD' ? null : null,
   };
 }
 
@@ -129,7 +151,22 @@ async function createBuyQuoteFromFiat({
     throw err;
   }
 
-  const computed = await computeBuyQuoteFromFiat(fiatAmount, network);
+  const adRateResult = await db.query(
+    `SELECT rate_per_usdc FROM trader_payout_settings
+     WHERE id = $1 AND is_active = TRUE AND ad_side = 'USER_BUY'`,
+    [payoutSettingId]
+  );
+  const ratePerUsdc = adRateResult.rows[0]?.rate_per_usdc != null
+    ? parseFloat(adRateResult.rows[0].rate_per_usdc)
+    : null;
+  if (!ratePerUsdc || ratePerUsdc <= 0) {
+    const err = new Error('Trader has not set a USDC price for this ad');
+    err.statusCode = 409;
+    err.code = 'TRADER_RATE_REQUIRED';
+    throw err;
+  }
+
+  const computed = await computeBuyQuoteFromFiat(fiatAmount, network, { ratePerUsdc });
   const traderAdsService = (await import('./traderAdsService.js')).default;
   await traderAdsService.validateBuyAdForQuote(payoutSettingId, {
     network,

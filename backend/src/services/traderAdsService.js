@@ -145,6 +145,10 @@ async function getAdById(payoutSettingId) {
   const reviews = await traderStatsService.getRecentReviews(row.trader_id, 10);
   const online = traderStatsService.enrichOnlineStatus(row);
 
+  const isBuyAd = row.ad_side === 'USER_BUY';
+  const netFloat = parseFloat(row.available_float || 0) - parseFloat(row.reserved_float || 0);
+  const netUsdc = parseFloat(row.available_usdc || 0) - parseFloat(row.reserved_usdc || 0);
+
   return {
     id: row.id,
     payoutSettingId: row.id,
@@ -156,7 +160,9 @@ async function getAdById(payoutSettingId) {
     country: row.country,
     minAmount: parseFloat(row.min_amount),
     maxAmount: parseFloat(row.max_amount),
-    availableFloat: parseFloat(row.available_float) - parseFloat(row.reserved_float || 0),
+    adSide: row.ad_side || 'USER_SELL',
+    availableFloat: isBuyAd ? undefined : netFloat,
+    availableUsdc: isBuyAd ? netUsdc : undefined,
     ratePerUsdc: row.rate_per_usdc != null ? parseFloat(row.rate_per_usdc) : null,
     stats,
     reviews,
@@ -246,6 +252,8 @@ async function listBuyAds({
     `t.verification_status = 'VERIFIED'`,
     `t.stellar_address IS NOT NULL`,
     `(ps.available_usdc - ps.reserved_usdc) > 0`,
+    `ps.rate_per_usdc IS NOT NULL`,
+    `ps.rate_per_usdc > 0`,
     `(SELECT COUNT(*) FROM transactions tx
         WHERE tx.trader_id = t.id
           AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[]))
@@ -309,6 +317,7 @@ async function listBuyAds({
       const trustStatus = await getTraderUsdcTrustlineStatus(row.stellar_address);
       if (!trustStatus.hasTrustline) return null;
       const stats = await traderStatsService.getTraderStats(row.trader_id);
+      const online = traderStatsService.enrichOnlineStatus(row);
       return {
         id: row.payout_setting_id,
         payoutSettingId: row.payout_setting_id,
@@ -327,6 +336,7 @@ async function listBuyAds({
         reviewCount: stats.reviewCount,
         positivePercent: stats.positivePercent,
         activeOrders: row.active_orders,
+        ...online,
       };
     })
   )).filter(Boolean);
@@ -370,6 +380,12 @@ async function validateBuyAdForQuote(payoutSettingId, { network, currency, fiatA
   if (row.network !== network || row.currency !== currency) {
     const err = new Error('Ad does not support this network or currency');
     err.statusCode = 400;
+    throw err;
+  }
+  if (!row.rate_per_usdc || parseFloat(row.rate_per_usdc) <= 0) {
+    const err = new Error('Trader has not set a USDC price for this ad');
+    err.statusCode = 409;
+    err.code = 'TRADER_RATE_REQUIRED';
     throw err;
   }
   const fiat = parseFloat(fiatAmount);

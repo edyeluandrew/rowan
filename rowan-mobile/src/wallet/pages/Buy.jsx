@@ -1,13 +1,13 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, Coins, UserCheck } from 'lucide-react'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import useUserCountry from '../hooks/useUserCountry'
-import useRates from '../hooks/useRates'
 import useWallet from '../hooks/useWallet'
 import { getBuyQuote } from '../api/buy'
 import { hashPhoneNumber } from '../utils/crypto'
 import { NETWORKS } from '../utils/constants'
+import { formatUsdcRateLine } from '../utils/p2pFormat'
 import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
 import Button from '../components/ui/Button'
@@ -36,7 +36,6 @@ export default function Buy() {
   } = location.state || {}
 
   const { country, fiatCurrency: userFiat } = useUserCountry()
-  const { rates } = useRates(userFiat)
   const { hasUsdcTrustline } = useWallet()
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
 
@@ -69,26 +68,30 @@ export default function Buy() {
   const currency = network ? NETWORKS[network]?.currency : userFiat
   const minNetFiat = selectedAd?.minAmount ?? null
   const maxNetFiat = selectedAd?.maxAmount ?? null
+  const traderRate = selectedAd?.ratePerUsdc != null ? Number(selectedAd.ratePerUsdc) : null
+  const availableUsdc = selectedAd?.availableUsdc ?? selectedAd?.available_usdc
+  const maxFiatFromUsdc =
+    traderRate && availableUsdc
+      ? Math.floor(Number(availableUsdc) * traderRate * FEE_FACTOR * SPREAD_FACTOR)
+      : null
+  const effectiveMaxFiat =
+    maxNetFiat != null && maxFiatFromUsdc != null
+      ? Math.min(maxNetFiat, maxFiatFromUsdc)
+      : maxNetFiat ?? maxFiatFromUsdc
   const belowMin = minNetFiat != null && netFiat > 0 && netFiat < minNetFiat
-  const exceedsMax = maxNetFiat != null && netFiat > maxNetFiat
+  const exceedsMax = effectiveMaxFiat != null && netFiat > effectiveMaxFiat
 
-  const usdcToFiat = useMemo(() => {
-    if (selectedAd?.ratePerUsdc && Number(selectedAd.ratePerUsdc) > 0) {
-      return Number(selectedAd.ratePerUsdc)
-    }
-    if (rates?.usdcToFiat && Number(rates.usdcToFiat) > 0) {
-      return Number(rates.usdcToFiat)
-    }
-    return null
-  }, [selectedAd?.ratePerUsdc, rates?.usdcToFiat])
+  const usdcToFiat = traderRate && traderRate > 0 ? traderRate : null
 
   const usdcEstimate = estimateUsdcFromFiat(netFiat, usdcToFiat)
   const platformFeeFiat = netFiat > 0 ? netFiat * 0.01 : 0
+  const traderRateLine = formatUsdcRateLine(currency, traderRate)
 
   const canProceed =
     payoutSettingId &&
     network &&
     netFiat > 0 &&
+    traderRate &&
     !belowMin &&
     !exceedsMax &&
     !loading &&
@@ -139,6 +142,14 @@ export default function Buy() {
           <div>
             <p className="text-rowan-text text-sm font-semibold">Trader</p>
             <p className="text-rowan-muted text-sm">{presetTraderName || selectedAd?.traderName}</p>
+            {traderRateLine && (
+              <p className="text-rowan-yellow text-xs font-medium mt-1">{traderRateLine}</p>
+            )}
+            {availableUsdc != null && (
+              <p className="text-rowan-muted text-xs mt-1">
+                {Number(availableUsdc).toFixed(2)} USDC available
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -157,11 +168,17 @@ export default function Buy() {
         onFiatAmountChange={setFiatAmount}
         currency={currency}
         cryptoEstimate={usdcEstimate}
-        cryptoLabel="USDC you'll receive (estimate)"
+        cryptoLabel="USDC you'll receive (estimate at trader price)"
         fiatSubLabel={`${currency || userFiat} you'll pay via MoMo`}
         platformFeeFiat={platformFeeFiat}
-        maxFiat={maxNetFiat}
+        maxFiat={effectiveMaxFiat}
       />
+
+      {!traderRate && (
+        <p className="text-rowan-red text-xs mt-2 text-center">
+          This trader has not set a USDC price. Choose another ad in the marketplace.
+        </p>
+      )}
 
       <div className="mt-6">
         {networkLocked && network ? (
@@ -179,13 +196,19 @@ export default function Buy() {
         )}
       </div>
 
-      {minNetFiat != null && maxNetFiat != null && (
+      {minNetFiat != null && effectiveMaxFiat != null && (
         <p className="text-rowan-muted text-xs mt-4 text-center">
-          Trader limits: {minNetFiat.toLocaleString()} – {maxNetFiat.toLocaleString()} {currency}
+          Order limits: {minNetFiat.toLocaleString()} – {effectiveMaxFiat.toLocaleString()} {currency}
         </p>
       )}
       {belowMin && <p className="text-rowan-red text-xs mt-2 text-center">Amount below trader minimum</p>}
-      {exceedsMax && <p className="text-rowan-red text-xs mt-2 text-center">Amount above trader maximum</p>}
+      {exceedsMax && (
+        <p className="text-rowan-red text-xs mt-2 text-center">
+          Amount above trader limit{maxFiatFromUsdc != null && maxFiatFromUsdc < (maxNetFiat ?? Infinity)
+            ? ' or available USDC'
+            : ''}
+        </p>
+      )}
 
       {error && (
         <p className="text-rowan-red text-sm mt-4">{error}</p>
