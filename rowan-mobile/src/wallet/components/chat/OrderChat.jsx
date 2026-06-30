@@ -1,22 +1,39 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Send, Paperclip, X } from 'lucide-react'
-import { getChatMessages, sendChatMessage, sendChatImage } from '../../api/chat'
-import useSocketHook from '../../hooks/useSocket'
-import useJoinOrder from '../../hooks/useJoinOrder'
-import { formatMessageTime } from '../../utils/p2pFormat'
+import {
+  getChatMessages as walletGetChatMessages,
+  sendChatMessage as walletSendChatMessage,
+  sendChatImage as walletSendChatImage,
+} from '../../api/chat'
+import { useSocketContext } from '../../context/SocketContext'
+import { formatMessageTime, formatShortId } from '../../utils/p2pFormat'
 import TransactionStatusBadge from '../transactions/TransactionStatusBadge'
 import PaymentDetailsCard from './PaymentDetailsCard'
 import PaymentProofCard from './PaymentProofCard'
-import { formatShortId } from '../../utils/p2pFormat'
 
 const CHAT_LOCKED_STATES = ['DISPUTE_OPENED', 'DISPUTE_REFUND_PENDING', 'DISPUTE_RELEASE_PENDING']
 const MAX_COMMENT = 500
 
-export default function OrderChat({
+const DEFAULT_CHAT_API = {
+  getChatMessages: walletGetChatMessages,
+  sendChatMessage: walletSendChatMessage,
+  sendChatImage: walletSendChatImage,
+}
+
+/**
+ * Socket-aware order chat UI. Pass `on`/`off`/`joinOrder` from the active app
+ * (wallet or trader) — do not rely on wallet SocketContext when rendered in trader.
+ */
+export function OrderChatCore({
   transactionId,
   txState,
   counterpartyName = 'Trader',
   viewerRole = 'user',
+  on,
+  off,
+  joinOrder,
+  chatApi = DEFAULT_CHAT_API,
+  emptyPlaceholder = 'Say hello to your trader to get started',
 }) {
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
@@ -29,19 +46,21 @@ export default function OrderChat({
   const locked = CHAT_LOCKED_STATES.includes(txState)
   const shortId = transactionId ? formatShortId(transactionId) : ''
 
-  useJoinOrder(transactionId)
+  useEffect(() => {
+    if (transactionId && joinOrder) joinOrder(transactionId)
+  }, [transactionId, joinOrder])
 
   useEffect(() => {
     if (!transactionId) return
     let cancelled = false
-    getChatMessages(transactionId)
+    chatApi.getChatMessages(transactionId)
       .then((data) => { if (!cancelled) setMessages(data) })
       .catch(() => { if (!cancelled) setError('Could not load messages. Pull to refresh by leaving and returning.') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [transactionId])
+  }, [transactionId, chatApi])
 
-  useSocketHook('chat_message', (msg) => {
+  const handleChatMessage = useCallback((msg) => {
     if (msg.transactionId === transactionId) {
       setMessages((prev) => {
         if (prev.some((m) => m.id === msg.id)) return prev
@@ -56,7 +75,13 @@ export default function OrderChat({
         }]
       })
     }
-  })
+  }, [transactionId])
+
+  useEffect(() => {
+    if (!on || !off) return undefined
+    on('chat_message', handleChatMessage)
+    return () => off('chat_message', handleChatMessage)
+  }, [on, off, handleChatMessage])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -67,7 +92,7 @@ export default function OrderChat({
     setSending(true)
     setError(null)
     try {
-      const row = await sendChatMessage(transactionId, text.trim())
+      const row = await chatApi.sendChatMessage(transactionId, text.trim())
       setMessages((prev) => [...prev, row])
       setText('')
     } catch (err) {
@@ -83,7 +108,7 @@ export default function OrderChat({
     setSending(true)
     setError(null)
     try {
-      const row = await sendChatImage(transactionId, file)
+      const row = await chatApi.sendChatImage(transactionId, file)
       setMessages((prev) => [...prev, row])
     } catch (err) {
       setError(err.response?.data?.error || 'Image could not be uploaded. Please try again.')
@@ -97,7 +122,7 @@ export default function OrderChat({
 
   return (
     <>
-      <div className="bg-rowan-surface border border-rowan-border rounded-xl overflow-hidden">
+      <div className="bg-rowan-surface border border-rowan-border rounded-xl overflow-hidden mb-4">
         <div className="px-4 py-3 border-b border-rowan-border">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
@@ -121,7 +146,7 @@ export default function OrderChat({
           )}
           {!loading && messages.length === 0 && (
             <p className="text-rowan-muted text-xs text-center py-6 italic">
-              Say hello to your trader to get started
+              {emptyPlaceholder}
             </p>
           )}
           {messages.map((msg) => {
@@ -236,4 +261,10 @@ export default function OrderChat({
       )}
     </>
   )
+}
+
+/** Wallet app default — uses wallet SocketContext */
+export default function OrderChat(props) {
+  const { on, off, joinOrder } = useSocketContext()
+  return <OrderChatCore {...props} on={on} off={off} joinOrder={joinOrder} />
 }

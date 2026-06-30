@@ -47,7 +47,7 @@ export default function TraderApp() {
           </Route>
 
           {/* Full-screen routes */}
-          <Route path="requests/:id" element={<RequestDetail />} />
+          <Route path="requests/:id" element={<ErrorBoundary title="Request unavailable"><RequestDetail /></ErrorBoundary>} />
           <Route path="earnings" element={<Earnings />} />
           <Route path="disputes/:id" element={<DisputeDetail />} />
           <Route path="wallet" element={<StellarWallet />} />

@@ -1,12 +1,18 @@
-import OrderChat from '../../../wallet/components/chat/OrderChat';
+import { useSocket } from '../../context/SocketContext';
+import * as chatApi from '../../api/chat';
+import { OrderChatCore } from '../../../wallet/components/chat/OrderChat';
 
-export default function TraderOrderChat({ transactionId, txState }) {
+/** Trader app order chat — uses trader SocketContext (not wallet). */
+export default function TraderOrderChat(props) {
+  const { on, off, joinOrder } = useSocket();
   return (
-    <OrderChat
-      transactionId={transactionId}
-      txState={txState}
-      counterpartyName="Customer"
-      viewerRole="trader"
+    <OrderChatCore
+      {...props}
+      on={on}
+      off={off}
+      joinOrder={joinOrder}
+      chatApi={chatApi}
+      emptyPlaceholder="Say hello to your customer to get started"
     />
   );
 }

@@ -212,6 +212,7 @@ export default function RequestDetail() {
   const isBuyConfirmStep = isBuyOrder && tx.state === 'FIAT_PAYOUT_SUBMITTED';
   const isAwaitingConfirmation = step === 2;
   const isComplete = step >= 3;
+  const buyEscrowLocked = isBuyOrder && ['ESCROW_LOCKED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'COMPLETE'].includes(tx.state);
 
   const orderShortId = tx?.id
     ? `ROW-${tx.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`
@@ -250,18 +251,30 @@ export default function RequestDetail() {
         </button>
       )}
 
-      {/* USDC Escrow Banner */}
-      <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-3 mb-4 flex items-center gap-2">
-        <LockKeyhole size={20} className="text-rowan-green" />
-        <div>
-          <span className="text-rowan-green text-xs font-medium">USDC Escrowed on Stellar</span>
-          {tx.escrow_address && (
-            <p className="text-rowan-muted text-[10px] mt-0.5 font-mono">
-              {formatAddress(tx.escrow_address)}
+      {/* USDC escrow / lock banner */}
+      {isBuyLockStep ? (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-3 mb-4 flex items-center gap-2">
+          <LockKeyhole size={20} className="text-rowan-yellow" />
+          <div>
+            <span className="text-rowan-yellow text-xs font-medium">Lock USDC in escrow</span>
+            <p className="text-rowan-muted text-[10px] mt-0.5">
+              Send USDC to escrow with the memo below to continue.
             </p>
-          )}
+          </div>
         </div>
-      </div>
+      ) : (buyEscrowLocked || !isBuyOrder) ? (
+        <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-3 mb-4 flex items-center gap-2">
+          <LockKeyhole size={20} className="text-rowan-green" />
+          <div>
+            <span className="text-rowan-green text-xs font-medium">USDC Escrowed on Stellar</span>
+            {tx.escrow_address && (
+              <p className="text-rowan-muted text-[10px] mt-0.5 font-mono">
+                {formatAddress(tx.escrow_address)}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* Step indicator */}
       <StepIndicator currentStep={step} />
