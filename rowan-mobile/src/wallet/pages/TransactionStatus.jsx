@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace, Lock } from 'lucide-react'
 import { getTransactionStatus, confirmReceipt, openDispute, cancelOrder } from '../api/cashout'
 import { submitBuyPayment } from '../api/buy'
+import PaymentDetailsCard from '../components/chat/PaymentDetailsCard'
 import { uploadDisputeEvidence, listDisputeEvidence } from '../api/user'
 import DisputeEvidenceSection from '../components/disputes/DisputeEvidenceSection'
 import useSocketHook from '../hooks/useSocket'
@@ -28,7 +29,7 @@ export default function TransactionStatus() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const { stellarTxHash, transactionId: passedTransactionId } = location.state || {}
+  const { stellarTxHash, transactionId: passedTransactionId, orderSide: navOrderSide } = location.state || {}
 
   const [transaction, setTransaction] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -90,7 +91,10 @@ export default function TransactionStatus() {
 
     const fetchStatus = async () => {
       try {
-        const tx = normalizeWalletTransaction(await getTransactionStatus(statusId))
+        const data = await getTransactionStatus(statusId)
+        const tx = normalizeWalletTransaction(
+          navOrderSide && !data.order_side ? { ...data, order_side: navOrderSide } : data
+        )
         if (!cancelled) {
           console.log(`[TransactionStatus] ✅ Transaction found (attempt ${retryCountRef.current + 1})`)
           setTransaction(tx)
@@ -139,7 +143,7 @@ export default function TransactionStatus() {
       if (pollTimer) clearTimeout(pollTimer)
       if (initialWaitTimer) clearTimeout(initialWaitTimer)
     }
-  }, [statusId])
+  }, [statusId, navOrderSide])
 
   useEffect(() => {
     if (!activeTxId || transaction?.state !== 'COMPLETE' || reviewSubmitted) return
@@ -185,7 +189,17 @@ export default function TransactionStatus() {
 
   const showDisputeAction = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
     || appealWindowOpen
-  const isBuy = isBuyOrder(transaction)
+  const isBuy = isBuyOrder(transaction) || navOrderSide === 'BUY'
+  const buyPaymentDetails = isBuy && transaction?.state === 'ESCROW_LOCKED' && transaction?.traderReceivePhone
+    ? {
+        role: 'trader_receive',
+        network: transaction.network,
+        account_number: transaction.traderReceivePhone,
+        account_name: transaction.traderReceiveName || transaction.traderName || 'Trader',
+        amount: formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency),
+        reference: activeTxId ? `ROW-${activeTxId.replace(/-/g, '').slice(0, 8).toUpperCase()}` : 'ROW',
+      }
+    : null
   const showConfirmSection = !isBuy && ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
   const canConfirmPayment = paymentProofReceived && showConfirmSection
 
@@ -542,11 +556,27 @@ export default function TransactionStatus() {
         />
       )}
 
+      {isBuy && transaction?.state === 'TRADER_MATCHED' && (
+        <div className="bg-rowan-surface rounded-xl p-4 my-4 text-center">
+          <p className="text-rowan-text text-sm font-medium">Waiting for trader to lock USDC</p>
+          <p className="text-rowan-muted text-xs mt-2">
+            Once the trader sends USDC to escrow, you&apos;ll get their mobile money details and can tap &quot;I&apos;ve sent payment&quot;.
+          </p>
+        </div>
+      )}
+
       {isBuy && transaction?.state === 'ESCROW_LOCKED' && (
         <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
           <p className="text-rowan-text text-sm font-medium text-center">
             Trader locked {Number(transaction.usdcAmount).toFixed(4)} USDC. Send {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} via {getNetworkLabel(transaction.network)}.
           </p>
+          {buyPaymentDetails?.account_number ? (
+            <PaymentDetailsCard payload={buyPaymentDetails} viewerRole="user" />
+          ) : (
+            <p className="text-rowan-yellow text-xs text-center">
+              Trader payment details are in the chat below. If missing, ask the trader or support — they must use their verified {getNetworkLabel(transaction.network)} number from onboarding.
+            </p>
+          )}
           <input
             type="text"
             value={buyPaymentRef}

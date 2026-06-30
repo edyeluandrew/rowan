@@ -13,9 +13,17 @@ export default function PaymentDetailsCard({ payload, viewerRole = 'user' }) {
   const [copied, setCopied] = useState(false)
   if (!payload) return null
 
-  const label = viewerRole === 'trader'
-    ? 'Send payment using these details:'
-    : 'Your trader will send payment to your mobile money. Details below:'
+  const label = payload.role === 'trader_receive' || payload.payment_role === 'trader_receive'
+    ? (viewerRole === 'user'
+      ? 'Send mobile money to your trader using these details:'
+      : 'Customer should pay you at these details:')
+    : viewerRole === 'trader'
+      ? 'Send payment using these details:'
+      : 'Your trader will send payment to your mobile money. Details below:'
+
+  const title = payload.role === 'trader_receive' || payload.payment_role === 'trader_receive'
+    ? '💳 Pay trader via mobile money'
+    : '💳 Trader Payment Details'
 
   const handleCopy = async () => {
     try {
@@ -31,7 +39,7 @@ export default function PaymentDetailsCard({ payload, viewerRole = 'user' }) {
     <div className="my-2">
       <p className="text-rowan-muted text-[11px] mb-2 text-center">{label}</p>
       <div className="border border-rowan-yellow/30 bg-rowan-yellow/10 rounded-xl p-4 text-sm">
-        <p className="text-rowan-text font-semibold mb-3">💳 Trader Payment Details</p>
+        <p className="text-rowan-text font-semibold mb-3">{title}</p>
         <div className="border-t border-rowan-border/50 pt-3 space-y-2 text-rowan-text">
           <Row label="Network" value={getNetworkLabel(payload.network) || payload.network} />
           <Row label="Name" value={payload.account_name} />

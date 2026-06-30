@@ -155,6 +155,9 @@ export function OrderChatCore({
               if (typeof payload === 'string') {
                 try { payload = JSON.parse(payload) } catch { payload = null }
               }
+              if (payload?.payload && typeof payload.payload === 'object') {
+                payload = payload.payload
+              }
               if (!payload) return null
               return (
                 <div key={msg.id}>

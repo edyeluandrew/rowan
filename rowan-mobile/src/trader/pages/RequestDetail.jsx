@@ -206,10 +206,11 @@ export default function RequestDetail() {
 
   const network = NETWORKS[tx.network] || {};
   const step = getStep();
-  const isBuyOrder = tx.order_side === 'BUY';
+  const isBuyOrder = (tx.order_side || tx.orderSide) === 'BUY';
   const isPayoutStep = step === 1 && !isBuyOrder;
   const isBuyLockStep = isBuyOrder && tx.state === 'TRADER_MATCHED' && tx.matched_at;
   const isBuyConfirmStep = isBuyOrder && tx.state === 'FIAT_PAYOUT_SUBMITTED';
+  const isBuyWaitingCustomer = isBuyOrder && tx.state === 'ESCROW_LOCKED';
   const isAwaitingConfirmation = step === 2;
   const isComplete = step >= 3;
   const buyEscrowLocked = isBuyOrder && ['ESCROW_LOCKED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'COMPLETE'].includes(tx.state);
@@ -358,11 +359,21 @@ export default function RequestDetail() {
         </div>
       )}
 
+      {isBuyWaitingCustomer && (
+        <div className="bg-rowan-surface rounded-xl p-4 mb-4">
+          <p className="text-rowan-text text-sm font-medium">Waiting for customer payment</p>
+          <p className="text-rowan-muted text-xs mt-2">
+            USDC is locked in escrow. The customer will send mobile money to your verified {network.label || tx.network} number, then tap &quot;I&apos;ve sent payment&quot;.
+          </p>
+        </div>
+      )}
+
       {isBuyConfirmStep && (
-        <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-3">
-          <p className="text-rowan-text text-sm">Customer submitted mobile money payment. Confirm receipt to release USDC.</p>
+        <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-3 border border-rowan-yellow/40">
+          <p className="text-rowan-text text-sm font-semibold">Customer says they paid</p>
+          <p className="text-rowan-muted text-xs">Check your mobile money, then confirm below to release USDC to their wallet.</p>
           {tx.payout_reference && (
-            <p className="text-rowan-muted text-xs">Reference: {tx.payout_reference}</p>
+            <p className="text-rowan-muted text-xs">Reference: <span className="text-rowan-text font-mono">{tx.payout_reference}</span></p>
           )}
           <Button
             loading={confirmingBuy}
@@ -379,7 +390,7 @@ export default function RequestDetail() {
               }
             }}
           >
-            Confirm payment received
+            I have received payment
           </Button>
         </div>
       )}

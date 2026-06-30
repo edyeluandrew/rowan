@@ -11,6 +11,7 @@ import payoutSettingsService from '../services/payoutSettingsService.js';
 import quoteEngine from '../services/quoteEngine.js';
 import config from '../config/index.js';
 import db from '../db/index.js';
+import { getVerifiedTraderMomo } from '../services/traderMomoService.js';
 import logger from '../utils/logger.js';
 import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 import storageService from '../services/storageService.js';
@@ -181,6 +182,10 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
     const tx = result.rows[0];
     if (!tx) return res.status(404).json({ error: 'Transaction not found' });
 
+    const traderMomo = tx.trader_id
+      ? await getVerifiedTraderMomo(tx.trader_id, tx.network)
+      : null;
+
     res.json({
       id: tx.id,
       state: tx.state,
@@ -192,6 +197,8 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
       network: tx.network,
       trader_id: tx.trader_id,
       trader_name: tx.trader_name,
+      trader_receive_phone: traderMomo?.phone_number || null,
+      trader_receive_name: traderMomo?.account_name || null,
       payment_expires_at: tx.payment_expires_at,
       stellar_deposit_tx: tx.stellar_deposit_tx,
       stellar_release_tx: tx.stellar_release_tx,

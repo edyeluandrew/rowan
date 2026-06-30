@@ -129,14 +129,15 @@ async function confirmAgreement(traderId, agreementVersion) {
  * Mark MoMo account as verified after OTP confirmation.
  * Called from the OTP verify endpoint.
  */
-async function markMomoVerified(traderId, network, phoneHash) {
+async function markMomoVerified(traderId, network, phoneHash, phoneNumber = null) {
   await db.query(
     `UPDATE trader_momo_accounts SET
        verification_status = 'PASSED',
-       verified_at = NOW()
+       verified_at = NOW(),
+       phone_number = COALESCE($4, phone_number)
      WHERE trader_id = $1 AND network = $2 AND phone_number_hash = $3
      RETURNING *`,
-    [traderId, network, phoneHash]
+    [traderId, network, phoneHash, phoneNumber]
   );
 
   // Check if at least one MoMo account is verified → update verification record
@@ -157,15 +158,16 @@ async function markMomoVerified(traderId, network, phoneHash) {
 /**
  * Add a MoMo account for a trader (during onboarding document submission).
  */
-async function addMomoAccount(traderId, { network, phoneHash, accountName, method = 'OTP' }) {
+async function addMomoAccount(traderId, { network, phoneHash, phoneNumber = null, accountName, method = 'OTP' }) {
   const result = await db.query(
-    `INSERT INTO trader_momo_accounts (trader_id, network, phone_number_hash, account_name, verification_method)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO trader_momo_accounts (trader_id, network, phone_number_hash, phone_number, account_name, verification_method)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (trader_id, network, phone_number_hash) DO UPDATE SET
        account_name = EXCLUDED.account_name,
+       phone_number = COALESCE(EXCLUDED.phone_number, trader_momo_accounts.phone_number),
        verification_method = EXCLUDED.verification_method
      RETURNING *`,
-    [traderId, network, phoneHash, accountName, method]
+    [traderId, network, phoneHash, phoneNumber, accountName, method]
   );
   return result.rows[0];
 }

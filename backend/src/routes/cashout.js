@@ -8,6 +8,7 @@ import notificationService from '../services/notificationService.js';
 import payoutSettingsService from '../services/payoutSettingsService.js';
 import config from '../config/index.js';
 import db from '../db/index.js';
+import { getVerifiedTraderMomo } from '../services/traderMomoService.js';
 import redis from '../db/redis.js';
 import logger from '../utils/logger.js';
 import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
@@ -356,6 +357,14 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
       }
     }
 
+    let traderReceivePhone = null;
+    let traderReceiveName = null;
+    if (tx.order_side === 'BUY' && tx.trader_id) {
+      const traderMomo = await getVerifiedTraderMomo(tx.trader_id, tx.network);
+      traderReceivePhone = traderMomo?.phone_number || null;
+      traderReceiveName = traderMomo?.account_name || null;
+    }
+
     res.json({
       id: tx.id,
       state: tx.state,
@@ -386,6 +395,8 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
       preferred_payout_setting_id: tx.preferred_payout_setting_id,
       selection_method: tx.preferred_payout_setting_id ? 'manual' : 'auto',
       order_side: tx.order_side || 'SELL',
+      trader_receive_phone: traderReceivePhone,
+      trader_receive_name: traderReceiveName,
       payout_reference: tx.payout_reference,
       payout_proof_url: payoutProofUrl,
     });

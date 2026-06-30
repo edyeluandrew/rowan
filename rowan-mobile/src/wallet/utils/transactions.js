@@ -43,6 +43,8 @@ export function normalizeWalletTransaction(tx) {
     paymentMethod: tx.paymentMethod ?? tx.payment_method ?? tx.network,
     preferredPayoutSettingId: tx.preferredPayoutSettingId ?? tx.preferred_payout_setting_id ?? null,
     orderSide: tx.orderSide ?? tx.order_side ?? 'SELL',
+    traderReceivePhone: tx.traderReceivePhone ?? tx.trader_receive_phone ?? null,
+    traderReceiveName: tx.traderReceiveName ?? tx.trader_receive_name ?? null,
   }
 }
 

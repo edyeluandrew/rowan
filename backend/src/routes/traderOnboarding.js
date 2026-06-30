@@ -101,6 +101,7 @@ router.post(
             const saved = await verificationService.addMomoAccount(traderId, {
               network: acct.network,
               phoneHash,
+              phoneNumber: acct.phoneNumber,
               accountName: acct.accountName || null,
               method: 'OTP',
             });
@@ -206,7 +207,7 @@ router.post(
       }
 
       // Mark MoMo account as verified in the DB
-      await verificationService.markMomoVerified(req.traderId, network, phoneHash);
+      await verificationService.markMomoVerified(req.traderId, network, phoneHash, phoneNumber);
 
       res.json({
         verified: true,

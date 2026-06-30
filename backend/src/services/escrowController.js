@@ -791,7 +791,8 @@ async function handleTraderUsdcDeposit({ memo, amount, sourceAccount, txHash }) 
   if (!lockAcquired) return;
 
   const quoteResult = await db.query(
-    `SELECT q.*, t.id AS tx_id, t.state AS tx_state, t.trader_id, t.usdc_amount, t.matched_at,
+    `SELECT q.*, t.id AS tx_id, t.state AS tx_state, t.trader_id, t.user_id, t.usdc_amount,
+            t.fiat_amount, t.fiat_currency, t.network AS tx_network, t.matched_at,
             tr.stellar_address AS trader_stellar
      FROM quotes q
      JOIN transactions t ON t.quote_id = q.id
@@ -849,14 +850,21 @@ async function handleTraderUsdcDeposit({ memo, amount, sourceAccount, txHash }) 
     paymentExpiresAt: paymentExpiresAt.toISOString(),
   }).catch(() => {});
 
+  const { getVerifiedTraderMomo, buildBuyPaymentDetailsPayload } = await import('./traderMomoService.js');
+  const traderMomo = await getVerifiedTraderMomo(row.trader_id, row.tx_network || row.network);
   const chatService = (await import('./chatService.js')).default;
-  chatService.sendPaymentDetailsMessage(row.tx_id, {
-    type: 'payment_details',
-    role: 'trader_receive',
-    amount: row.fiat_amount,
-    currency: row.fiat_currency,
-    network: row.network,
-  }).catch(() => {});
+  chatService.sendPaymentDetailsMessage(
+    row.tx_id,
+    buildBuyPaymentDetailsPayload(
+      {
+        id: row.tx_id,
+        network: row.tx_network || row.network,
+        fiat_amount: row.fiat_amount,
+        fiat_currency: row.fiat_currency,
+      },
+      traderMomo
+    )
+  ).catch(() => {});
 
   logger.info(`[Escrow] Buy tx ${row.tx_id} USDC locked — user may pay MoMo`);
   await redis.del(lockKey);
