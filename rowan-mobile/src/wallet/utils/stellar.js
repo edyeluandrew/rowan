@@ -245,22 +245,23 @@ export async function findReceiveUsdcPath({ horizonUrl, usdcAmount }) {
   const amount = Number(usdcAmount)
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error('Invalid USDC amount')
- 0.0000000',
-    '  const result = await server',
-    '    .strictReceivePaths([Asset.native()], usdcAsset, amount.toFixed(7))',
-    '    .call()',
-    '',
-    '  const nativeRecords = horizonPathRecords(result).filter(',
-    "    (r) => r.source_asset_type === 'native'",
-    '  )',
-    '',
-    '  if (!nativeRecords.length) {',
-    "    throw new Error('No XLM→USDC swap path found on the DEX. Fund with test XLM and try again.')",
-    '  }',
-    '',
-    '  const best = nativeRecords.reduce((a, b) =>',
-    '    parseFloat(a.source_amount) < parseFloat(b.source_amount) ? a : b',
-    '  )',
+  }
+
+  const result = await server
+    .strictReceivePaths([Asset.native()], usdcAsset, amount.toFixed(7))
+    .call()
+
+  const nativeRecords = horizonPathRecords(result).filter(
+    (r) => r.source_asset_type === 'native'
+  )
+
+  if (!nativeRecords.length) {
+    throw new Error('No XLM→USDC swap path found on the DEX. Fund with test XLM and try again.')
+  }
+
+  const best = nativeRecords.reduce((a, b) =>
+    parseFloat(a.source_amount) < parseFloat(b.source_amount) ? a : b
+  )
 
   return {
     sourceAmount: parseFloat(best.source_amount),
