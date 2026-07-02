@@ -343,6 +343,7 @@ export default function TransactionStatus() {
   useSocketHook('transaction_update', (data) => applySocketUpdate(data))
   useSocketHook('tx_update', (data) => applySocketUpdate(data))
   useSocketHook('trader_matched', (data) => applySocketUpdate(data, 'TRADER_MATCHED'))
+  useSocketHook('usdc_locked', (data) => applySocketUpdate(data, 'ESCROW_LOCKED'))
   useSocketHook('transaction_complete', (data) => applySocketUpdate(data, 'COMPLETE'))
   useSocketHook('transaction_refunded', (data) => applySocketUpdate(data, 'REFUNDED'))
   useSocketHook('transaction_failed', (data) => applySocketUpdate(data, 'FAILED'))
@@ -514,7 +515,10 @@ export default function TransactionStatus() {
       )}
 
       {transaction?.state === 'TRADER_MATCHED' && transaction.paymentExpiresAt && (
-        <PaymentWindowCountdown expiresAt={transaction.paymentExpiresAt} />
+        <PaymentWindowCountdown
+          expiresAt={transaction.paymentExpiresAt}
+          orderSide={isBuy ? 'BUY' : 'SELL'}
+        />
       )}
 
       {isBuy && transaction?.state === 'TRADER_MATCHED' && (

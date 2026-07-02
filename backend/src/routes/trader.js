@@ -358,6 +358,20 @@ router.post('/requests/:id/payout-sent', authTrader, sensitiveActionLimiter, pay
 });
 
 /**
+ * POST /api/v1/trader/requests/:id/verify-usdc-lock
+ * Trader confirms they sent USDC — polls Horizon and advances to ESCROW_LOCKED.
+ */
+router.post('/requests/:id/verify-usdc-lock', authTrader, async (req, res, next) => {
+  try {
+    const result = await escrowController.syncBuyUsdcLock(req.params.id, req.traderId);
+    res.json(result);
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    next(err);
+  }
+});
+
+/**
  * POST /api/v1/trader/requests/:id/fiat-received
  * Trader confirms MoMo received on a BUY order — releases USDC to user.
  */
@@ -547,21 +561,29 @@ router.post('/requests/:id/decline', authTrader, async (req, res, next) => {
     await escrowController.releaseMatchFloatForTransaction(tx);
 
     await db.query(
-      `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL
-       WHERE id = $1`,
-      [req.params.id]
-    );
-
-    // Slight trust score decay for declining
-    await db.query(
       `UPDATE traders SET trust_score = GREATEST(0, trust_score - 1) WHERE id = $1`,
       [req.traderId]
     );
 
-    // Re-run matching algorithm
-    matchingEngine.matchTrader(tx.id).catch((err) => {
-      logger.error(`[Trader] Re-match after decline failed:`, err.message);
-    });
+    if (tx.order_side === 'BUY') {
+      await db.query(
+        `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, trader_matched_at = NULL, payment_expires_at = NULL
+         WHERE id = $1 AND state = 'TRADER_MATCHED' AND order_side = 'BUY'`,
+        [req.params.id]
+      );
+      buyMatchingEngine.matchBuyTrader(tx.id).catch((err) => {
+        logger.error(`[Trader] Buy re-match after decline failed:`, err.message);
+      });
+    } else {
+      await db.query(
+        `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL
+         WHERE id = $1`,
+        [req.params.id]
+      );
+      matchingEngine.matchTrader(tx.id).catch((err) => {
+        logger.error(`[Trader] Re-match after decline failed:`, err.message);
+      });
+    }
 
     res.json({ success: true, message: 'Request declined. It will be routed to another trader.' });
   } catch (err) {

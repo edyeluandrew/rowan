@@ -846,6 +846,7 @@ async function handleTraderUsdcDeposit({ memo, amount, sourceAccount, txHash }) 
 
   notificationService.notifyUser(row.user_id, 'usdc_locked', {
     transactionId: row.tx_id,
+    state: 'ESCROW_LOCKED',
     message: 'Trader locked USDC. Send mobile money now.',
     paymentExpiresAt: paymentExpiresAt.toISOString(),
   }).catch(() => {});
@@ -868,6 +869,72 @@ async function handleTraderUsdcDeposit({ memo, amount, sourceAccount, txHash }) 
 
   logger.info(`[Escrow] Buy tx ${row.tx_id} USDC locked — user may pay MoMo`);
   await redis.del(lockKey);
+}
+
+/**
+ * Poll Horizon for trader USDC payment to escrow (buy lock) when watcher missed it.
+ */
+async function syncBuyUsdcLock(transactionId, traderId) {
+  const result = await db.query(
+    `SELECT t.id, t.state, t.usdc_amount, t.matched_at, t.trader_id,
+            q.memo, tr.stellar_address AS trader_stellar
+     FROM transactions t
+     JOIN quotes q ON q.id = t.quote_id
+     JOIN traders tr ON tr.id = t.trader_id
+     WHERE t.id = $1 AND t.trader_id = $2 AND t.order_side = 'BUY'`,
+    [transactionId, traderId]
+  );
+  const row = result.rows[0];
+  if (!row) {
+    const err = new Error('Buy request not found');
+    err.statusCode = 404;
+    throw err;
+  }
+  if (row.state === 'ESCROW_LOCKED') {
+    return { status: 'already_locked', state: row.state };
+  }
+  if (row.state !== 'TRADER_MATCHED' || !row.matched_at) {
+    const err = new Error(`Cannot verify USDC lock while order is ${row.state}`);
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const escrowAddress = config.stellar.escrowPublicKey;
+  const payments = await horizon
+    .payments()
+    .forAccount(escrowAddress)
+    .order('desc')
+    .limit(100)
+    .call();
+
+  for (const payment of payments.records) {
+    if (payment.from !== row.trader_stellar) continue;
+    const isUsdc = (payment.asset_type === 'credit_alphanum4' || payment.asset_type === 'credit_alphanum12')
+      && payment.asset_code === 'USDC';
+    if (!isUsdc) continue;
+
+    const paymentTx = await horizon.transactions().transaction(payment.transaction_hash).call();
+    const memo = paymentTx.memo || '';
+    if (memo !== row.memo) continue;
+
+    await handleTraderUsdcDeposit({
+      memo,
+      amount: payment.amount,
+      sourceAccount: payment.from,
+      txHash: payment.transaction_hash,
+    });
+
+    const updated = await db.query(`SELECT state FROM transactions WHERE id = $1`, [transactionId]);
+    const newState = updated.rows[0]?.state;
+    if (newState === 'ESCROW_LOCKED') {
+      return { status: 'locked', state: newState };
+    }
+  }
+
+  return {
+    status: 'not_found',
+    message: 'No USDC payment found on escrow yet. Send the exact amount with the memo shown, wait ~30 seconds, then tap again.',
+  };
 }
 
 /**
@@ -1546,6 +1613,7 @@ async function retryReleaseBlocked(transactionId, { adminId } = {}) {
 export default {
   handleDeposit,
   handleTraderUsdcDeposit,
+  syncBuyUsdcLock,
   swapXlmToUsdc,
   releaseToTrader,
   releaseToUser,

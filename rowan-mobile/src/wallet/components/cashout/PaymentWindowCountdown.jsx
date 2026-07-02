@@ -6,24 +6,31 @@ const WARNING_THRESHOLD_SECONDS = 120
 /**
  * Large centered payment window countdown after trader match.
  */
-export default function PaymentWindowCountdown({ expiresAt }) {
+export default function PaymentWindowCountdown({ expiresAt, orderSide = 'SELL' }) {
   const { formatted, isExpired, remaining } = useCountdown(expiresAt)
   const showWarning = remaining > 0 && remaining <= WARNING_THRESHOLD_SECONDS
+  const isBuy = orderSide === 'BUY'
 
   if (!expiresAt) return null
 
   if (isExpired) {
     return (
       <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-6 mb-4 text-center">
-        <p className="text-rowan-red text-sm font-semibold">Payment window expired</p>
+        <p className="text-rowan-red text-sm font-semibold">Time window expired</p>
         <p className="text-rowan-muted text-xs mt-2">
-          Your XLM will be refunded if the trader did not send mobile money in time.
+          {isBuy
+            ? 'This order may be cancelled if the trader did not lock USDC in time.'
+            : 'Your XLM will be refunded if the trader did not send mobile money in time.'}
         </p>
       </div>
     )
   }
 
-  const label = showWarning ? 'Payment window closing soon' : 'Awaiting payment from trader'
+  const label = showWarning
+    ? 'Time window closing soon'
+    : isBuy
+      ? 'Waiting for trader to lock USDC'
+      : 'Awaiting payment from trader'
 
   return (
     <div
@@ -47,7 +54,9 @@ export default function PaymentWindowCountdown({ expiresAt }) {
         <div className="flex items-start justify-center gap-2 mt-4">
           <AlertTriangle size={14} className="text-rowan-red shrink-0 mt-0.5" />
           <p className="text-rowan-red text-xs max-w-xs">
-            If mobile money does not arrive soon, your order may be refunded automatically.
+            {isBuy
+              ? 'If USDC is not locked soon, this order may be reassigned or cancelled.'
+              : 'If mobile money does not arrive soon, your order may be refunded automatically.'}
           </p>
         </div>
       )}

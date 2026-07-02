@@ -71,6 +71,11 @@ async function matchTrader(transactionId) {
     const transaction = txResult.rows[0];
     if (!transaction) throw new Error(`Transaction ${transactionId} not found`);
 
+    if (transaction.order_side === 'BUY') {
+      const { default: buyMatchingEngine } = await import('./buyMatchingEngine.js');
+      return buyMatchingEngine.matchBuyTrader(transactionId);
+    }
+
     // Guard: accept both ESCROW_LOCKED (old flow) and TRADER_MATCHED (new flow with early state transition)
     if (!['ESCROW_LOCKED', 'TRADER_MATCHED'].includes(transaction.state)) {
       logger.warn(`[Matching] Tx ${transactionId} in state ${transaction.state}, expected ESCROW_LOCKED or TRADER_MATCHED — skipping`);

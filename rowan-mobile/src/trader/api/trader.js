@@ -49,6 +49,12 @@ export async function confirmFiatReceived(id) {
   return data;
 }
 
+/** POST /api/v1/trader/requests/:id/verify-usdc-lock — poll Horizon after sending USDC */
+export async function verifyUsdcLock(id) {
+  const { data } = await client.post(`/api/v1/trader/requests/${id}/verify-usdc-lock`);
+  return data;
+}
+
 /** GET /api/v1/trader/stats */
 export async function getStats() {
   const { data } = await client.get('/api/v1/trader/stats');

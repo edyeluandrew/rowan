@@ -1,7 +1,7 @@
 import { LockKeyhole, ChevronLeft, Copy, CopyCheck } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getRequest, confirmRequest, confirmFiatReceived } from '../api/trader';
+import { getRequest, confirmRequest, confirmFiatReceived, verifyUsdcLock } from '../api/trader';
 import { useSocket } from '../context/SocketContext';
 import { useRequests } from '../hooks/useRequests';
 import { useCountdown } from '../hooks/useCountdown';
@@ -98,6 +98,8 @@ export default function RequestDetail() {
   const [revealTimer, setRevealTimer] = useState(null);
   const [copiedOrderId, setCopiedOrderId] = useState(false);
   const [confirmingBuy, setConfirmingBuy] = useState(false);
+  const [verifyingUsdc, setVerifyingUsdc] = useState(false);
+  const [usdcVerifyMsg, setUsdcVerifyMsg] = useState(null);
 
   const fetchTx = useCallback(async () => {
     try {
@@ -290,12 +292,67 @@ export default function RequestDetail() {
 
       {/* Buy order actions — above chat so trader sees next step immediately */}
       {isBuyLockStep && (
-        <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 mb-4 space-y-2">
+        <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 mb-4 space-y-3">
           <h3 className="text-rowan-yellow text-xs font-semibold uppercase">Step 1: Lock USDC in escrow</h3>
-          <p className="text-rowan-muted text-xs">Send exactly {Number(tx.usdc_amount).toFixed(4)} USDC to:</p>
-          <p className="text-rowan-text text-xs font-mono break-all">{tx.escrow_address || 'Escrow address'}</p>
-          <p className="text-rowan-muted text-xs">Memo: <span className="text-rowan-text font-mono">{tx.escrow_memo}</span></p>
-          <p className="text-rowan-muted text-[11px] pt-1">After this, the customer gets your MoMo details and can tap &quot;I&apos;ve sent payment&quot;.</p>
+          <p className="text-rowan-muted text-xs">In your Stellar wallet, send exactly {Number(tx.usdc_amount).toFixed(4)} USDC to:</p>
+          <p className="text-rowan-text text-xs font-mono break-all bg-rowan-bg rounded-lg p-2">{tx.escrow_address || 'Escrow address'}</p>
+          <p className="text-rowan-muted text-xs">Memo (required): <span className="text-rowan-text font-mono">{tx.escrow_memo}</span></p>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 border border-rowan-border"
+              onClick={() => {
+                navigator.clipboard.writeText(tx.escrow_address || '');
+                alert('Escrow address copied');
+              }}
+            >
+              Copy address
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 border border-rowan-border"
+              onClick={() => {
+                navigator.clipboard.writeText(tx.escrow_memo || '');
+                alert('Memo copied');
+              }}
+            >
+              Copy memo
+            </Button>
+          </div>
+          {usdcVerifyMsg && (
+            <p className={`text-xs ${usdcVerifyMsg.type === 'error' ? 'text-rowan-red' : 'text-rowan-green'}`}>
+              {usdcVerifyMsg.text}
+            </p>
+          )}
+          <Button
+            loading={verifyingUsdc}
+            size="lg"
+            onClick={async () => {
+              setVerifyingUsdc(true);
+              setUsdcVerifyMsg(null);
+              try {
+                const result = await verifyUsdcLock(tx.id);
+                if (result.status === 'locked' || result.status === 'already_locked') {
+                  setUsdcVerifyMsg({ type: 'ok', text: 'USDC locked! Customer can now pay you.' });
+                  await fetchTx();
+                  refresh();
+                } else {
+                  setUsdcVerifyMsg({ type: 'error', text: result.message || 'Payment not found yet — wait 30s and try again.' });
+                }
+              } catch (err) {
+                setUsdcVerifyMsg({ type: 'error', text: err.response?.data?.error || 'Could not verify USDC' });
+              } finally {
+                setVerifyingUsdc(false);
+              }
+            }}
+          >
+            I&apos;ve sent USDC — check now
+          </Button>
+          <p className="text-rowan-muted text-[11px] text-center">
+            After this, the customer sees your MoMo number and the &quot;I&apos;ve sent payment&quot; button.
+          </p>
         </div>
       )}
 

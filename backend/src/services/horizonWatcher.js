@@ -136,7 +136,7 @@ async function handlePayment(payment) {
         txHash: tx.hash,
       });
     } else if (
-      payment.asset_type === 'credit_alphanum4'
+      (payment.asset_type === 'credit_alphanum4' || payment.asset_type === 'credit_alphanum12')
       && payment.asset_code === 'USDC'
       && memo.startsWith('ROWAN-buy_')
     ) {

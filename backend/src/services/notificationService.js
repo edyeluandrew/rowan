@@ -249,6 +249,9 @@ async function notifyUser(userId, event, data) {
   if (event === 'trader_matched') {
     websocket.emitToUser(userId, 'trader_matched', payload);
   }
+  if (event === 'usdc_locked') {
+    websocket.emitToUser(userId, 'usdc_locked', payload);
+  }
 
   logger.info(`[Notify] User ${userId} — ${event}: ${data.message || data.state}`);
 
@@ -590,10 +593,15 @@ async function notifyAdmins(event, data) {
  * Notify a specific trader with an event
  */
 async function notifyTrader(traderId, event, data) {
-  websocket.emitToTrader(traderId, event, {
+  const payload = {
     ...data,
     timestamp: new Date().toISOString(),
-  });
+  };
+  websocket.emitToTrader(traderId, event, payload);
+  if (['user_sent_payment', 'usdc_locked'].includes(event)) {
+    websocket.emitToTrader(traderId, 'transaction_update', payload);
+    websocket.emitToTrader(traderId, 'tx_update', payload);
+  }
   logger.info(`[Notify] Trader ${traderId} — event: ${event}`);
 }
 

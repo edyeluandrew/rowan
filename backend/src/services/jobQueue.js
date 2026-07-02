@@ -265,14 +265,42 @@ reMatchQueue.process(async (job) => {
   if (mode === 'retry_match') {
     if (tx && !tx.trader_id && ['ESCROW_LOCKED', 'TRADER_MATCHED'].includes(tx.state)) {
       logger.info(`[Job:rematch] Retrying match for tx ${transactionId} (no trader assigned yet)`);
-      const { default: matchingEngine } = await import('./matchingEngine.js');
-      await matchingEngine.matchTrader(transactionId);
+      if (tx.order_side === 'BUY') {
+        const { default: buyMatchingEngine } = await import('./buyMatchingEngine.js');
+        await buyMatchingEngine.matchBuyTrader(transactionId);
+      } else {
+        const { default: matchingEngine } = await import('./matchingEngine.js');
+        await matchingEngine.matchTrader(transactionId);
+      }
     }
+    return;
+  }
+
+  // Buy orders: re-match without regressing to ESCROW_LOCKED (no user XLM deposit)
+  if (tx?.order_side === 'BUY' && currentTraderId && tx.state === 'TRADER_MATCHED' && tx.trader_id === currentTraderId && !tx.matched_at) {
+    logger.info(`[Job:rematch] Buy trader ${currentTraderId} timed out on tx ${transactionId} — re-matching`);
+    const escrowController = await getEscrowController();
+    await escrowController.releaseMatchFloatForTransaction(tx);
+    await db.query(
+      `UPDATE traders SET trust_score = GREATEST(0, trust_score - 2) WHERE id = $1`,
+      [currentTraderId]
+    );
+    await db.query(
+      `UPDATE transactions
+         SET trader_id = NULL, payout_setting_id = NULL, trader_matched_at = NULL, payment_expires_at = NULL, updated_at = NOW()
+       WHERE id = $1 AND state = 'TRADER_MATCHED' AND order_side = 'BUY'`,
+      [transactionId]
+    );
+    const { default: buyMatchingEngine } = await import('./buyMatchingEngine.js');
+    await buyMatchingEngine.matchBuyTrader(transactionId);
     return;
   }
 
   // Only re-match if still in TRADER_MATCHED, same trader, and NOT accepted
   // [B1] matched_at is set when trader accepts — if set, don't re-match
+  // Only re-match sell/cashout if still in TRADER_MATCHED, same trader, and NOT accepted
+  if (tx?.order_side === 'BUY') return;
+
   if (tx && currentTraderId && tx.state === 'TRADER_MATCHED' && tx.trader_id === currentTraderId && !tx.matched_at) {
     logger.info(`[Job:rematch] Trader ${currentTraderId} timed out on tx ${transactionId} — re-matching`);
 

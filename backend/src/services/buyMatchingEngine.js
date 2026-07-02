@@ -271,6 +271,7 @@ async function submitUserPaymentSent(transactionId, userId, paymentReference, { 
 
   notificationService.notifyTrader(transaction.trader_id, 'user_sent_payment', {
     transactionId,
+    state: 'FIAT_PAYOUT_SUBMITTED',
     reference: paymentReference,
     fiat_amount: transaction.fiat_amount,
     fiat_currency: transaction.fiat_currency,
