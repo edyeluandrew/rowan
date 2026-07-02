@@ -140,12 +140,27 @@ export default function RequestDetail() {
     on('transaction_update', handleUpdate);
     on('tx_update', handleUpdate);
     on('tx_complete', handleUpdate);
+    on('user_sent_payment', handleUpdate);
     return () => {
       off('transaction_update', handleUpdate);
       off('tx_update', handleUpdate);
       off('tx_complete', handleUpdate);
+      off('user_sent_payment', handleUpdate);
     };
   }, [id, on, off, fetchTx]);
+
+  const txState = (tx?.state || tx?.status || '').toUpperCase();
+  const isBuyOrderEarly = tx && (
+    (tx.order_side || tx.orderSide) === 'BUY'
+    || (Number(tx.usdc_amount) > 0 && Number(tx.xlm_amount) === 0 && !!tx.preferred_payout_setting_id)
+  );
+
+  useEffect(() => {
+    if (!tx || !isBuyOrderEarly) return undefined;
+    if (!['ESCROW_LOCKED', 'FIAT_PAYOUT_SUBMITTED'].includes(txState)) return undefined;
+    const timer = setInterval(() => { fetchTx(); }, 4000);
+    return () => clearInterval(timer);
+  }, [tx, txState, isBuyOrderEarly, fetchTx]);
 
   // Reveal phone auto-hide after 30s
   const handleReveal = () => {
@@ -208,15 +223,27 @@ export default function RequestDetail() {
 
   const network = NETWORKS[tx.network] || {};
   const step = getStep();
-  const isBuyOrder = (tx.order_side || tx.orderSide) === 'BUY'
-    || (Number(tx.usdc_amount) > 0 && Number(tx.xlm_amount) === 0 && !!tx.preferred_payout_setting_id);
+  const isBuyOrder = isBuyOrderEarly;
   const isPayoutStep = step === 1 && !isBuyOrder;
-  const isBuyLockStep = isBuyOrder && tx.state === 'TRADER_MATCHED' && tx.matched_at;
-  const isBuyConfirmStep = isBuyOrder && tx.state === 'FIAT_PAYOUT_SUBMITTED';
-  const isBuyWaitingCustomer = isBuyOrder && tx.state === 'ESCROW_LOCKED';
+  const isBuyLockStep = isBuyOrder && txState === 'TRADER_MATCHED' && tx.matched_at;
+  const isBuyConfirmStep = isBuyOrder && txState === 'FIAT_PAYOUT_SUBMITTED';
+  const isBuyWaitingCustomer = isBuyOrder && txState === 'ESCROW_LOCKED';
   const isAwaitingConfirmation = step === 2;
   const isComplete = step >= 3;
-  const buyEscrowLocked = isBuyOrder && ['ESCROW_LOCKED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'COMPLETE'].includes(tx.state);
+  const buyEscrowLocked = isBuyOrder && ['ESCROW_LOCKED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'COMPLETE'].includes(txState);
+
+  const handleConfirmBuyReceived = async () => {
+    setConfirmingBuy(true);
+    try {
+      await confirmFiatReceived(tx.id);
+      await fetchTx();
+      refresh();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Could not confirm');
+    } finally {
+      setConfirmingBuy(false);
+    }
+  };
 
   const orderShortId = tx?.id
     ? `ROW-${tx.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`
@@ -240,7 +267,7 @@ export default function RequestDetail() {
           <ChevronLeft size={22} />
         </button>
         <h1 className="text-rowan-text font-semibold text-lg flex-1">Request Detail</h1>
-        <Badge type="status" value={tx.state || tx.status} />
+        <Badge type="status" value={txState || tx.state || tx.status} />
       </div>
 
       {orderShortId && (
@@ -357,10 +384,13 @@ export default function RequestDetail() {
       )}
 
       {isBuyWaitingCustomer && (
-        <div className="bg-rowan-surface rounded-xl p-4 mb-4">
+        <div className="bg-rowan-surface rounded-xl p-4 mb-4 border border-rowan-border">
           <p className="text-rowan-text text-sm font-semibold">Step 2: Waiting for customer payment</p>
           <p className="text-rowan-muted text-xs mt-2">
-            USDC is locked. Customer will send mobile money to your verified {network.label || tx.network} number, then tap &quot;I&apos;ve sent payment&quot;.
+            USDC is locked. The customer must pay your MoMo and tap <strong className="text-rowan-text">&quot;I&apos;ve sent payment&quot;</strong> on their wallet app.
+          </p>
+          <p className="text-rowan-yellow text-xs mt-2">
+            The <strong>I have received payment</strong> button appears here only after they do that.
           </p>
         </div>
       )}
@@ -372,22 +402,7 @@ export default function RequestDetail() {
           {tx.payout_reference && (
             <p className="text-rowan-muted text-xs">Reference: <span className="text-rowan-text font-mono">{tx.payout_reference}</span></p>
           )}
-          <Button
-            loading={confirmingBuy}
-            size="lg"
-            onClick={async () => {
-              setConfirmingBuy(true);
-              try {
-                await confirmFiatReceived(tx.id);
-                await fetchTx();
-                refresh();
-              } catch (err) {
-                alert(err.response?.data?.error || 'Could not confirm');
-              } finally {
-                setConfirmingBuy(false);
-              }
-            }}
-          >
+          <Button loading={confirmingBuy} size="lg" onClick={handleConfirmBuyReceived}>
             I have received payment
           </Button>
         </div>
@@ -412,10 +427,11 @@ export default function RequestDetail() {
         />
       )}
 
-      {/* Dispute/Status Cards */}
-      {['FIAT_PAYOUT_SUBMITTED', 'DISPUTE_OPENED', 'DISPUTE_RELEASE_PENDING', 'DISPUTE_REFUND_PENDING', 'REFUNDED'].includes(tx.state) && (
+      {/* Dispute/Status Cards — sell flow only at FIAT_PAYOUT_SUBMITTED (buy uses Step 3 card above) */}
+      {['FIAT_PAYOUT_SUBMITTED', 'DISPUTE_OPENED', 'DISPUTE_RELEASE_PENDING', 'DISPUTE_REFUND_PENDING', 'REFUNDED'].includes(txState)
+        && !(isBuyOrder && txState === 'FIAT_PAYOUT_SUBMITTED') && (
         <div className="mb-4">
-          <TraderDisputeStatusCard state={tx.state} data={tx} />
+          <TraderDisputeStatusCard state={txState} data={tx} />
         </div>
       )}
 
@@ -540,6 +556,14 @@ export default function RequestDetail() {
           transactionId={tx.id}
           onClose={() => setShowReviewModal(false)}
         />
+      )}
+
+      {isBuyConfirmStep && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-rowan-bg/95 border-t border-rowan-yellow/30 backdrop-blur-sm">
+          <Button loading={confirmingBuy} size="lg" className="w-full" onClick={handleConfirmBuyReceived}>
+            I have received payment
+          </Button>
+        </div>
       )}
     </div>
   );
