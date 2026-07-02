@@ -428,15 +428,12 @@ export default function RequestDetail() {
       )}
 
       {isBuyConfirmStep && (
-        <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-3 border-2 border-rowan-yellow/50">
+        <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-2 border-2 border-rowan-yellow/50">
           <p className="text-rowan-text text-sm font-semibold">Step 3: Confirm you received MoMo</p>
-          <p className="text-rowan-muted text-xs">Check your mobile money balance, then tap below to release USDC to the customer.</p>
+          <p className="text-rowan-muted text-xs">Check your mobile money balance, then tap the button below to release USDC to the customer.</p>
           {tx.payout_reference && (
             <p className="text-rowan-muted text-xs">Reference: <span className="text-rowan-text font-mono">{tx.payout_reference}</span></p>
           )}
-          <Button loading={confirmingBuy} size="lg" onClick={handleConfirmBuyReceived}>
-            I have received payment
-          </Button>
         </div>
       )}
 
