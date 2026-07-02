@@ -322,7 +322,7 @@ export default function RequestDetail() {
         <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 mb-4 space-y-3">
           <h3 className="text-rowan-yellow text-xs font-semibold uppercase">Step 1: Lock USDC in escrow</h3>
           <p className="text-rowan-muted text-xs">
-            Send exactly <strong className="text-rowan-text">{Number(tx.usdc_amount).toFixed(4)} USDC</strong> from your <strong className="text-rowan-text">Rowan linked address</strong> (not a different Freighter wallet unless you verified that address in Profile).
+            Send exactly <strong className="text-rowan-text">{Number(tx.usdc_amount).toFixed(4)} USDC</strong> from your <strong className="text-rowan-text">Rowan wallet</strong> below — no Freighter or external app needed.
           </p>
           <LockUsdcButton
             tx={tx}

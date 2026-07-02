@@ -1,92 +1,92 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, Globe, Fingerprint, Copy, CopyCheck,
-  KeyRound, AlertTriangle, Wallet, TrendingUp,
+  ChevronLeft, Globe, Copy, CopyCheck, Wallet, TrendingUp,
+  RefreshCw, Coins, ArrowRightLeft, Plus, KeyRound,
 } from 'lucide-react';
-import { getWallet, verifyWalletAddress } from '../api/wallet';
+import { getWallet } from '../api/wallet';
 import WalletTransactionRow from '../components/wallet/WalletTransactionRow';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
 import { COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants';
 import { useSocket } from '../context/SocketContext';
+import useTraderWallet from '../hooks/useTraderWallet';
+import { CURRENT_NETWORK } from '../../wallet/utils/constants';
+import { isValidSecretKey } from '../../wallet/utils/stellar';
 
 export default function StellarWallet() {
   const navigate = useNavigate();
   const { on, off } = useSocket();
-  const [wallet, setWallet] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    keypair, publicKey: walletPublicKey, xlmBalance, usdcBalance: walletUsdc,
+    hasUsdcTrustline, loading: walletLoading, busy, error: walletError,
+    refresh, createWallet, importWallet, fundTestnet, enableUsdc, swapToUsdc,
+    setLinkedAddress, linkedAddress,
+  } = useTraderWallet();
+  const [serverWallet, setServerWallet] = useState(null);
+  const [loadingServer, setLoadingServer] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [showVerify, setShowVerify] = useState(false);
-  const [newAddress, setNewAddress] = useState('');
-  const [verifying, setVerifying] = useState(false);
-  const [verifyErr, setVerifyErr] = useState(null);
-  const [error, setError] = useState(null);
+  const [importSecret, setImportSecret] = useState('');
+  const [showImport, setShowImport] = useState(false);
+  const [swapAmount, setSwapAmount] = useState('10');
+  const [actionMsg, setActionMsg] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadWallet = async () => {
+    const loadServerWallet = async () => {
       try {
         const data = await getWallet();
-        if (!cancelled) setWallet(data);
+        if (!cancelled) {
+          setServerWallet(data);
+          setLinkedAddress(data.stellar_address || data.stellarAddress || null);
+        }
       } catch {
-        if (!cancelled) setError('Failed to load wallet');
+        /* optional server metadata */
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoadingServer(false);
       }
     };
 
-    loadWallet();
+    loadServerWallet();
 
-    const refreshOnComplete = () => {
-      loadWallet();
+    const refreshAll = () => {
+      loadServerWallet();
+      refresh();
     };
-    on('tx_complete', refreshOnComplete);
-    on('tx_update', refreshOnComplete);
+    on('tx_complete', refreshAll);
+    on('tx_update', refreshAll);
 
     return () => {
       cancelled = true;
-      off('tx_complete', refreshOnComplete);
-      off('tx_update', refreshOnComplete);
+      off('tx_complete', refreshAll);
+      off('tx_update', refreshAll);
     };
-  }, [on, off]);
+  }, [on, off, refresh, setLinkedAddress]);
+
+  const publicKey = walletPublicKey || serverWallet?.stellar_address || '';
+  const usdcBalance = walletUsdc ?? serverWallet?.usdc_balance ?? 0;
+  const txs = serverWallet?.recent_transactions || serverWallet?.recentTransactions || [];
 
   const copyAddress = () => {
-    const addr = wallet?.stellarAddress || wallet?.stellar_address || '';
-    if (!addr) return;
-    navigator.clipboard.writeText(addr).then(() => {
+    if (!publicKey) return;
+    navigator.clipboard.writeText(publicKey).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), COPY_FEEDBACK_TIMEOUT_MS);
     });
   };
 
-  const handleVerify = async () => {
-    setVerifyErr(null);
-    if (!newAddress.trim()) { setVerifyErr('Enter a Stellar address'); return; }
-    setVerifying(true);
+  const runAction = async (label, fn) => {
+    setActionMsg(null);
     try {
-      await verifyWalletAddress(newAddress.trim());
-      setWallet((prev) => ({
-        ...prev,
-        stellarAddress: newAddress.trim(),
-        stellar_address: newAddress.trim(),
-      }));
-      setShowVerify(false);
-      setNewAddress('');
+      await fn();
+      setActionMsg({ type: 'ok', text: `${label} — done` });
     } catch (err) {
-      setVerifyErr(err.response?.data?.error || 'Verification failed');
-    } finally {
-      setVerifying(false);
+      setActionMsg({ type: 'error', text: err.message });
     }
   };
 
-  const address = wallet?.stellarAddress || wallet?.stellar_address || '';
-  const balance = wallet?.usdcBalance ?? wallet?.usdc_balance ?? 0;
-  const hasTrustline = wallet?.usdc_trustline ?? wallet?.usdcTrustline;
-  const txs = wallet?.recentTransactions || wallet?.recent_transactions || [];
-
-  if (loading) {
+  if (walletLoading || loadingServer) {
     return (
       <div className="bg-rowan-bg min-h-screen flex items-center justify-center">
         <LoadingSpinner size={28} className="text-rowan-yellow" />
@@ -96,127 +96,181 @@ export default function StellarWallet() {
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24">
-      {/* Top bar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-rowan-border">
-        <button onClick={() => navigate(-1)} className="text-rowan-text">
+        <button type="button" onClick={() => navigate(-1)} className="text-rowan-text">
           <ChevronLeft size={22} />
         </button>
         <Globe size={20} className="text-rowan-yellow" />
-        <h1 className="text-rowan-text font-semibold text-lg">Stellar Wallet</h1>
+        <h1 className="text-rowan-text font-semibold text-lg">Rowan Wallet</h1>
       </div>
 
-      {error && (
-        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mx-4 mt-4 text-rowan-red text-sm">{error}</div>
-      )}
-
-      <div className="px-4">
-        {/* Address card */}
-        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mt-4">
-          <div className="flex items-center gap-2">
-            <Fingerprint size={16} className="text-rowan-muted" />
-            <span className="text-rowan-muted text-xs uppercase tracking-wider">USDC Receiving Address</span>
-          </div>
-          <p className="text-rowan-text font-mono text-sm mt-2 break-all">{address}</p>
-
-          <div className="flex gap-3 mt-3">
-            <button
-              onClick={copyAddress}
-              className="flex-1 flex items-center justify-center gap-1.5 border border-rowan-border text-rowan-muted py-2.5 rounded-lg text-sm active:bg-rowan-border/50 transition-colors"
-            >
-              {copied ? (
-                <><CopyCheck size={15} className="text-rowan-green" /><span className="text-rowan-green">Copied!</span></>
-              ) : (
-                <><Copy size={15} />Copy Address</>
-              )}
-            </button>
-            <button
-              onClick={() => setShowVerify(true)}
-              className="flex-1 flex items-center justify-center gap-1.5 border border-rowan-yellow text-rowan-yellow py-2.5 rounded-lg text-sm active:bg-rowan-yellow/10 transition-colors"
-            >
-              <KeyRound size={15} />
-              Verify Address
-            </button>
-          </div>
-        </div>
-
-        {/* Balance card */}
-        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mt-3">
-          <div className="flex items-center gap-2">
-            <Wallet size={16} className="text-rowan-muted" />
-            <span className="text-rowan-muted text-xs">Current USDC Balance</span>
-          </div>
-          <p className="text-rowan-yellow text-3xl font-bold tabular-nums mt-1">
-            {Number(balance).toFixed(2)}
-          </p>
-          {hasTrustline === false && address && (
-            <p className="text-rowan-red text-xs mt-2">
-              No USDC trustline on this address — add one in your Stellar wallet before accepting trades.
+      <div className="px-4 mt-4 space-y-3">
+        {!keypair ? (
+          <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 space-y-3">
+            <h2 className="text-rowan-yellow text-sm font-semibold">Set up your trader wallet</h2>
+            <p className="text-rowan-muted text-xs">
+              Everything happens here — fund with test XLM, swap to USDC, and lock escrow. No Freighter needed.
             </p>
-          )}
-          <p className="text-rowan-muted text-xs mt-2">
-            Balance fetched live from the Stellar network. May take a few seconds after a new payment.
-          </p>
-        </div>
-
-        {/* Recent receipts */}
-        <div className="mt-4">
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp size={16} className="text-rowan-yellow" />
-            <h3 className="text-rowan-text font-bold text-sm">Recent Receipts</h3>
+            <Button loading={busy} size="lg" onClick={() => runAction('Wallet created', createWallet)}>
+              <Plus size={16} className="inline mr-1" />
+              Create Rowan wallet
+            </Button>
+            {!showImport ? (
+              <button
+                type="button"
+                onClick={() => setShowImport(true)}
+                className="text-rowan-yellow text-xs underline w-full text-center"
+              >
+                Import existing secret key
+              </button>
+            ) : (
+              <div className="space-y-2 pt-2 border-t border-rowan-border">
+                <input
+                  type="password"
+                  value={importSecret}
+                  onChange={(e) => setImportSecret(e.target.value)}
+                  placeholder="S… secret key"
+                  className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text text-xs font-mono"
+                />
+                <Button
+                  loading={busy}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full border border-rowan-border"
+                  disabled={!isValidSecretKey(importSecret.trim())}
+                  onClick={() => runAction('Wallet imported', () => importWallet(importSecret))}
+                >
+                  Import & link
+                </Button>
+              </div>
+            )}
           </div>
-          {txs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Globe size={48} className="text-rowan-muted mb-4" />
-              <p className="text-rowan-muted text-sm">No USDC receipts yet</p>
+        ) : (
+          <>
+            <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
+              <div className="flex items-center gap-2">
+                <KeyRound size={16} className="text-rowan-muted" />
+                <span className="text-rowan-muted text-xs uppercase tracking-wider">Your Rowan address</span>
+              </div>
+              <p className="text-rowan-text font-mono text-sm mt-2 break-all">{publicKey}</p>
+              <button
+                type="button"
+                onClick={copyAddress}
+                className="mt-3 w-full flex items-center justify-center gap-1.5 border border-rowan-border text-rowan-muted py-2.5 rounded-lg text-sm"
+              >
+                {copied ? <><CopyCheck size={15} className="text-rowan-green" /><span className="text-rowan-green">Copied</span></> : <><Copy size={15} />Copy address</>}
+              </button>
+              {linkedAddress && linkedAddress !== publicKey && (
+                <p className="text-rowan-red text-xs mt-2">
+                  Profile linked to a different address — recreate wallet or re-import the matching key.
+                </p>
+              )}
             </div>
-          ) : (
-            txs.map((tx, i) => (
-              <WalletTransactionRow key={tx.id || i} transaction={tx} />
-            ))
-          )}
-        </div>
-      </div>
 
-      {/* Verify bottom sheet */}
-      {showVerify && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={() => setShowVerify(false)}>
-          <div
-            className="bg-rowan-surface w-full max-w-md rounded-t-2xl p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-10 h-1 bg-rowan-border rounded-full mx-auto mb-4" />
-            <h3 className="text-rowan-text font-semibold text-base mb-3">Verify Stellar Address</h3>
-
-            <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-lg p-3 mb-4">
-              <div className="flex items-start gap-2">
-                <AlertTriangle size={16} className="text-rowan-red flex-shrink-0 mt-0.5" />
-                <p className="text-rowan-red text-xs">
-                  Changing your receiving address will affect future USDC payments. Make sure you own this wallet.
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
+                <p className="text-rowan-muted text-xs">XLM balance</p>
+                <p className="text-rowan-text text-2xl font-bold tabular-nums mt-1">
+                  {xlmBalance != null ? Number(xlmBalance).toFixed(2) : '—'}
+                </p>
+              </div>
+              <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
+                <div className="flex items-center gap-1">
+                  <Wallet size={14} className="text-rowan-muted" />
+                  <p className="text-rowan-muted text-xs">USDC balance</p>
+                </div>
+                <p className="text-rowan-yellow text-2xl font-bold tabular-nums mt-1">
+                  {Number(usdcBalance).toFixed(2)}
                 </p>
               </div>
             </div>
 
-            <input
-              value={newAddress}
-              onChange={(e) => setNewAddress(e.target.value)}
-              placeholder="G..."
-              className="bg-rowan-bg border border-rowan-border text-rowan-text rounded-lg px-4 py-3 w-full text-sm font-mono focus:outline-none focus:border-rowan-yellow placeholder-rowan-muted mb-3"
-            />
+            {CURRENT_NETWORK.isTest && (
+              <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 space-y-2">
+                <p className="text-rowan-text text-sm font-medium">Testnet setup</p>
+                <Button
+                  loading={busy}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full border border-rowan-border"
+                  onClick={() => runAction('Funded with test XLM', fundTestnet)}
+                >
+                  Get testnet XLM
+                </Button>
+                {hasUsdcTrustline === false && (
+                  <Button
+                    loading={busy}
+                    size="sm"
+                    className="w-full"
+                    onClick={() => runAction('USDC enabled', enableUsdc)}
+                  >
+                    <Coins size={14} className="inline mr-1" />
+                    Enable USDC
+                  </Button>
+                )}
+                {hasUsdcTrustline && (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-rowan-muted text-xs flex items-center gap-1">
+                      <ArrowRightLeft size={12} />
+                      Swap test XLM → USDC on the DEX
+                    </p>
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={swapAmount}
+                      onChange={(e) => setSwapAmount(e.target.value)}
+                      className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text text-sm"
+                    />
+                    <Button
+                      loading={busy}
+                      variant="ghost"
+                      size="sm"
+                      className="w-full border border-rowan-border"
+                      onClick={() => runAction('Swap complete', () => swapToUsdc(Number(swapAmount)))}
+                    >
+                      Swap for {swapAmount} USDC
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
 
-            {verifyErr && <p className="text-rowan-red text-sm mb-3">{verifyErr}</p>}
+            {!CURRENT_NETWORK.isTest && hasUsdcTrustline === false && (
+              <Button loading={busy} size="sm" className="w-full" onClick={() => runAction('USDC enabled', enableUsdc)}>
+                Enable USDC trustline
+              </Button>
+            )}
 
-            <Button variant="primary" size="lg" onClick={handleVerify} loading={verifying}>
-              Confirm
-            </Button>
             <button
-              onClick={() => setShowVerify(false)}
-              className="w-full py-3 mt-2 text-rowan-muted text-sm text-center"
+              type="button"
+              onClick={() => refresh()}
+              className="w-full flex items-center justify-center gap-2 text-rowan-muted text-xs py-2"
             >
-              Cancel
+              <RefreshCw size={14} />
+              Refresh balances
             </button>
+          </>
+        )}
+
+        {(actionMsg || walletError) && (
+          <p className={`text-xs ${(actionMsg?.type === 'error' || walletError) ? 'text-rowan-red' : 'text-rowan-green'}`}>
+            {actionMsg?.text || walletError}
+          </p>
+        )}
+
+        <div className="pt-2">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp size={16} className="text-rowan-yellow" />
+            <h3 className="text-rowan-text font-bold text-sm">Recent receipts</h3>
           </div>
+          {txs.length === 0 ? (
+            <p className="text-rowan-muted text-sm text-center py-8">No USDC receipts yet</p>
+          ) : (
+            txs.map((tx, i) => <WalletTransactionRow key={tx.id || i} transaction={tx} />)
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

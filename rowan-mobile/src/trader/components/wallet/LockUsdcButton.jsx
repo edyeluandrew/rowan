@@ -1,153 +1,115 @@
-import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Button from '../ui/Button';
-import { getSecure, setSecure } from '../../../shared/utils/storage';
-import { buildAndSignUsdcPayment, submitTransaction, isValidSecretKey, keypairFromSecret } from '../../../wallet/utils/stellar';
-import { verifyWalletAddress } from '../../api/wallet';
-
-const TRADER_KEY_STORAGE = 'rowan_trader_stellar_keypair';
+import useTraderWallet from '../../hooks/useTraderWallet';
+import { buildAndSignUsdcPayment, submitTransaction } from '../../../wallet/utils/stellar';
+import { verifyUsdcLock } from '../../api/trader';
 
 /**
- * One-tap send USDC from trader's imported Rowan wallet key to escrow.
+ * Send USDC to escrow from the trader's Rowan wallet (no external wallet).
  */
 export default function LockUsdcButton({ tx, onLocked, onError }) {
-  const [sending, setSending] = useState(false);
-  const [importSecret, setImportSecret] = useState('');
-  const [importing, setImporting] = useState(false);
-  const [localPublicKey, setLocalPublicKey] = useState(null);
-  const [showImport, setShowImport] = useState(false);
-
-  const linkedAddress = tx?.trader_stellar_address || tx?.stellar_address || '';
+  const navigate = useNavigate();
+  const { keypair, publicKey, usdcBalance, isReady, busy, refresh } = useTraderWallet();
   const escrowAddress = tx?.escrow_address || '';
   const memo = tx?.escrow_memo || '';
   const usdcAmount = Number(tx?.usdc_amount || 0);
+  const linkedAddress = tx?.trader_stellar_address || tx?.stellar_address || publicKey || '';
   const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL;
 
-  useEffect(() => {
-    (async () => {
-      const stored = await getSecure(TRADER_KEY_STORAGE);
-      if (stored) {
-        try {
-          const kp = JSON.parse(stored);
-          setLocalPublicKey(kp.publicKey || null);
-        } catch {
-          setLocalPublicKey(null);
-        }
-      }
-    })();
-  }, []);
-
-  const handleImport = async () => {
-    const secret = importSecret.trim();
-    if (!isValidSecretKey(secret)) {
-      onError?.('Enter a valid Stellar secret key (starts with S)');
+  const handleSend = async () => {
+    if (!keypair?.secretKey) {
+      onError?.('Set up your Rowan wallet first — Profile → Stellar Wallet');
+      navigate('/trader/wallet');
       return;
     }
-    setImporting(true);
-    try {
-      const kp = keypairFromSecret(secret);
-      const publicKey = kp.publicKey();
-      await setSecure(TRADER_KEY_STORAGE, JSON.stringify({ publicKey, secretKey: secret }));
-      await verifyWalletAddress(publicKey);
-      setLocalPublicKey(publicKey);
-      setShowImport(false);
-      setImportSecret('');
-    } catch (err) {
-      onError?.(err.response?.data?.error || err.message || 'Could not save wallet key');
-    } finally {
-      setImporting(false);
+    if (!isReady) {
+      onError?.('Enable USDC in your Rowan wallet first');
+      navigate('/trader/wallet');
+      return;
     }
-  };
-
-  const handleSend = async () => {
+    if (linkedAddress && keypair.publicKey !== linkedAddress) {
+      onError?.('Your Rowan wallet address does not match your profile. Open Stellar Wallet to fix.');
+      navigate('/trader/wallet');
+      return;
+    }
     if (!escrowAddress || !memo || !usdcAmount) {
       onError?.('Missing escrow details for this order');
       return;
     }
-    const stored = await getSecure(TRADER_KEY_STORAGE);
-    if (!stored) {
-      setShowImport(true);
-      onError?.('Import your Stellar secret key first (same wallet you use for USDC)');
-      return;
-    }
-    let kp;
-    try {
-      kp = JSON.parse(stored);
-    } catch {
-      onError?.('Wallet key data corrupted — re-import your secret key');
-      return;
-    }
-    if (!kp.secretKey) {
-      setShowImport(true);
-      onError?.('Import your Stellar secret key to send USDC from Rowan');
-      return;
-    }
-    if (linkedAddress && kp.publicKey !== linkedAddress) {
-      onError?.(`Your imported wallet (${kp.publicKey.slice(0, 8)}…) does not match your Rowan linked address (${linkedAddress.slice(0, 8)}…). Re-import or update Profile → Stellar Wallet.`);
+    if (Number(usdcBalance || 0) < usdcAmount) {
+      onError?.(`Need ${usdcAmount.toFixed(4)} USDC in your Rowan wallet (you have ${Number(usdcBalance || 0).toFixed(4)}). Swap XLM → USDC in Stellar Wallet.`);
+      navigate('/trader/wallet');
       return;
     }
 
-    setSending(true);
     try {
       const signed = await buildAndSignUsdcPayment({
-        sourceSecretKey: kp.secretKey,
+        sourceSecretKey: keypair.secretKey,
         destinationAddress: escrowAddress,
         usdcAmount,
         memo,
         horizonUrl,
       });
       await submitTransaction(signed, horizonUrl);
-      await onLocked?.();
+      await refresh();
+
+      try {
+        const result = await verifyUsdcLock(tx.id);
+        if (result.status === 'locked' || result.status === 'already_locked') {
+          await onLocked?.(result);
+        } else if (result.status === 'wrong_sender') {
+          onError?.(result.message);
+        } else {
+          await onLocked?.({ pending: true, ...result });
+        }
+      } catch (err) {
+        await onLocked?.({ pending: true, error: err.response?.data?.error });
+      }
     } catch (err) {
       onError?.(err.message || 'Could not send USDC');
-    } finally {
-      setSending(false);
     }
   };
 
-  return (
-    <div className="space-y-3 border-t border-rowan-border/50 pt-3">
-      {linkedAddress && (
-        <div className="bg-rowan-bg rounded-lg p-2">
-          <p className="text-rowan-muted text-[10px] uppercase">Your Rowan linked address (must send from this)</p>
-          <p className="text-rowan-text text-xs font-mono break-all mt-1">{linkedAddress}</p>
-        </div>
-      )}
-
-      {localPublicKey && localPublicKey !== linkedAddress && (
-        <p className="text-rowan-red text-xs">
-          Imported key address does not match your Rowan profile. Tap Verify Address in Stellar Wallet or re-import.
+  if (!keypair) {
+    return (
+      <div className="space-y-2">
+        <p className="text-rowan-muted text-xs text-center">
+          Create a Rowan wallet once — then fund, swap, and lock USDC here.
         </p>
+        <Button size="lg" onClick={() => navigate('/trader/wallet')}>
+          Set up Rowan wallet
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="bg-rowan-bg rounded-lg p-2">
+        <p className="text-rowan-muted text-[10px] uppercase">Rowan wallet</p>
+        <p className="text-rowan-text text-xs font-mono break-all mt-1">{publicKey}</p>
+        <p className="text-rowan-muted text-[10px] mt-1">
+          USDC: {Number(usdcBalance || 0).toFixed(4)} · need {usdcAmount.toFixed(4)}
+        </p>
+      </div>
+
+      {!isReady && (
+        <Button variant="ghost" size="sm" className="w-full border border-rowan-border" onClick={() => navigate('/trader/wallet')}>
+          Enable USDC in Rowan wallet
+        </Button>
       )}
 
-      <Button loading={sending} size="lg" onClick={handleSend}>
+      <Button loading={busy} size="lg" onClick={handleSend} disabled={!isReady}>
         Send USDC to escrow from Rowan
       </Button>
 
-      {!showImport ? (
-        <button
-          type="button"
-          onClick={() => setShowImport(true)}
-          className="text-rowan-yellow text-xs underline w-full text-center"
-        >
-          Import Stellar secret key (one-time)
-        </button>
-      ) : (
-        <div className="space-y-2">
-          <p className="text-rowan-muted text-xs">
-            Paste the secret key (S…) for the wallet that holds your USDC. Stored securely on this device only.
-          </p>
-          <input
-            type="password"
-            value={importSecret}
-            onChange={(e) => setImportSecret(e.target.value)}
-            placeholder="S… secret key"
-            className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text text-xs font-mono"
-          />
-          <Button loading={importing} variant="ghost" size="sm" className="w-full border border-rowan-border" onClick={handleImport}>
-            Save key & link address
-          </Button>
-        </div>
-      )}
+      <button
+        type="button"
+        onClick={() => navigate('/trader/wallet')}
+        className="text-rowan-yellow text-xs underline w-full text-center"
+      >
+        Manage wallet (fund / swap USDC)
+      </button>
     </div>
   );
 }

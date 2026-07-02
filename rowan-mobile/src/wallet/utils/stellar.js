@@ -218,3 +218,94 @@ export async function addUsdcTrustline(sourceSecretKey, horizonUrl) {
   const signedXdr = await buildAndSignUsdcTrustline({ sourceSecretKey, horizonUrl })
   return submitTransaction(signedXdr, horizonUrl)
 }
+
+function pathRecordToAssets(pathRecords) {
+  if (!pathRecords?.length) return []
+  return pathRecords.map((p) => {
+    if (p.asset_type === 'native') return Asset.native()
+    return new Asset(p.asset_code, p.asset_issuer)
+  })
+}
+
+/**
+ * Find the best XLM→USDC path on the Stellar DEX for receiving a USDC amount.
+ */
+export async function findReceiveUsdcPath({ horizonUrl, usdcAmount }) {
+  const server = new Horizon.Server(horizonUrl)
+  const usdcAsset = getUsdcAsset()
+  const amount = Number(usdcAmount)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Invalid USDC amount')
+  }
+
+  const result = await server
+    .strictReceivePaths(['native'], usdcAsset, amount.toFixed(7))
+    .call()
+
+  if (!result.records?.length) {
+    throw new Error('No XLM→USDC swap path found on the DEX. Fund with test XLM and try again.')
+  }
+
+  const best = result.records.reduce((a, b) =>
+    parseFloat(a.source_amount) < parseFloat(b.source_amount) ? a : b
+  )
+
+  return {
+    sourceAmount: parseFloat(best.source_amount),
+    destAmount: parseFloat(best.destination_amount),
+    path: pathRecordToAssets(best.path),
+  }
+}
+
+/**
+ * Swap XLM → USDC into the source wallet via path payment (testnet DEX).
+ */
+export async function buildAndSignXlmToUsdcSwap({
+  sourceSecretKey,
+  usdcAmount,
+  slippagePercent = 5,
+  horizonUrl,
+}) {
+  const pathInfo = await findReceiveUsdcPath({ horizonUrl, usdcAmount })
+  const sendMax = (pathInfo.sourceAmount * (1 + slippagePercent / 100)).toFixed(7)
+  const destAmount = pathInfo.destAmount.toFixed(7)
+
+  const server = new Horizon.Server(horizonUrl)
+  const keypair = Keypair.fromSecret(sourceSecretKey)
+  const account = await server.loadAccount(keypair.publicKey())
+  const usdcAsset = getUsdcAsset()
+
+  const txBuilder = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: CURRENT_NETWORK.passphrase,
+  })
+    .addOperation(
+      Operation.pathPaymentStrictReceive({
+        sendAsset: Asset.native(),
+        sendMax,
+        destination: keypair.publicKey(),
+        destAsset: usdcAsset,
+        destAmount,
+        path: pathInfo.path,
+      })
+    )
+    .setTimeout(STELLAR_TX_TIMEOUT_SECONDS)
+    .build()
+
+  txBuilder.sign(keypair)
+  return { xdr: txBuilder.toXDR(), estimatedXlm: pathInfo.sourceAmount, usdcAmount: pathInfo.destAmount }
+}
+
+/**
+ * Swap XLM to USDC and submit to Horizon.
+ */
+export async function swapXlmToUsdc({ sourceSecretKey, usdcAmount, horizonUrl, slippagePercent = 5 }) {
+  const { xdr, estimatedXlm, usdcAmount: received } = await buildAndSignXlmToUsdcSwap({
+    sourceSecretKey,
+    usdcAmount,
+    slippagePercent,
+    horizonUrl,
+  })
+  const result = await submitTransaction(xdr, horizonUrl)
+  return { ...result, estimatedXlm, usdcAmount: received }
+}

@@ -159,7 +159,7 @@ export default function Profile() {
       {/* Navigation Links */}
       <div className="bg-rowan-surface rounded-xl mb-4 divide-y divide-rowan-border">
         {[
-          { to: '/trader/wallet', icon: Globe, label: 'Stellar Wallet', sub: 'Balance & receipts' },
+          { to: '/trader/wallet', icon: Globe, label: 'Rowan Wallet', sub: 'Fund, swap & send USDC' },
           { to: '/trader/sla', icon: Timer, label: 'SLA Performance', sub: 'Payout targets' },
           { to: '/trader/performance/networks', icon: BarChart3, label: 'Network Performance', sub: 'Stats by network' },
           { to: '/trader/earnings', icon: TrendingUp, label: 'Earnings', sub: 'Breakdown & history' },
