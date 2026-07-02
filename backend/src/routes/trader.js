@@ -207,6 +207,7 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
               t.payout_phone, t.payout_name, t.stellar_release_tx, t.payment_expires_at,
               t.preferred_payout_setting_id, t.order_side, t.payout_reference,
               q.memo AS escrow_memo, q.escrow_address,
+              tr.stellar_address AS trader_stellar_address,
               tr.stellar_address
        FROM transactions t
        JOIN traders tr ON tr.id = t.trader_id

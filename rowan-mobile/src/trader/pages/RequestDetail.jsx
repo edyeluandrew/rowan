@@ -19,7 +19,7 @@ import { uploadTraderDisputeEvidence, listTraderDisputeEvidence } from '../api/d
 import TraderReviewModal from '../components/reviews/TraderReviewModal';
 import { getTraderReviewStatus } from '../api/reviews';
 import useJoinOrder from '../hooks/useJoinOrder';
-import { isManualP2pTransaction } from '../../wallet/utils/transactions';
+import LockUsdcButton from '../components/wallet/LockUsdcButton';
 
 const STEPS = ['Escrow Funded', 'Payout Sent', 'Complete'];
 
@@ -321,9 +321,29 @@ export default function RequestDetail() {
       {isBuyLockStep && (
         <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 mb-4 space-y-3">
           <h3 className="text-rowan-yellow text-xs font-semibold uppercase">Step 1: Lock USDC in escrow</h3>
-          <p className="text-rowan-muted text-xs">In your Stellar wallet, send exactly {Number(tx.usdc_amount).toFixed(4)} USDC to:</p>
+          <p className="text-rowan-muted text-xs">
+            Send exactly <strong className="text-rowan-text">{Number(tx.usdc_amount).toFixed(4)} USDC</strong> from your <strong className="text-rowan-text">Rowan linked address</strong> (not a different Freighter wallet unless you verified that address in Profile).
+          </p>
+          <LockUsdcButton
+            tx={tx}
+            onLocked={async () => {
+              setUsdcVerifyMsg(null);
+              try {
+                const result = await verifyUsdcLock(tx.id);
+                if (result.status === 'locked' || result.status === 'already_locked') {
+                  setUsdcVerifyMsg({ type: 'ok', text: 'USDC locked! Customer can now pay you.' });
+                  await fetchTx();
+                  refresh();
+                }
+              } catch (err) {
+                setUsdcVerifyMsg({ type: 'error', text: err.response?.data?.error || 'Sent — tap check now below' });
+              }
+            }}
+            onError={(msg) => setUsdcVerifyMsg({ type: 'error', text: msg })}
+          />
+          <p className="text-rowan-muted text-[10px] text-center">— or send manually —</p>
           <p className="text-rowan-text text-xs font-mono break-all bg-rowan-bg rounded-lg p-2">{tx.escrow_address || 'Escrow address'}</p>
-          <p className="text-rowan-muted text-xs">Memo (required): <span className="text-rowan-text font-mono">{tx.escrow_memo}</span></p>
+          <p className="text-rowan-muted text-xs">Memo: <span className="text-rowan-text font-mono">{tx.escrow_memo}</span></p>
           <div className="flex gap-2">
             <Button
               variant="ghost"
@@ -355,7 +375,9 @@ export default function RequestDetail() {
           )}
           <Button
             loading={verifyingUsdc}
+            variant="ghost"
             size="lg"
+            className="border border-rowan-border"
             onClick={async () => {
               setVerifyingUsdc(true);
               setUsdcVerifyMsg(null);
@@ -366,7 +388,10 @@ export default function RequestDetail() {
                   await fetchTx();
                   refresh();
                 } else {
-                  setUsdcVerifyMsg({ type: 'error', text: result.message || 'Payment not found yet — wait 30s and try again.' });
+                  setUsdcVerifyMsg({
+                    type: 'error',
+                    text: result.message || 'Payment not found yet — wait 30s and try again.',
+                  });
                 }
               } catch (err) {
                 setUsdcVerifyMsg({ type: 'error', text: err.response?.data?.error || 'Could not verify USDC' });
@@ -377,9 +402,6 @@ export default function RequestDetail() {
           >
             I&apos;ve sent USDC — check now
           </Button>
-          <p className="text-rowan-muted text-[11px] text-center">
-            After this, the customer sees your MoMo number and the &quot;I&apos;ve sent payment&quot; button.
-          </p>
         </div>
       )}
 

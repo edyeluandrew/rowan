@@ -907,8 +907,10 @@ async function syncBuyUsdcLock(transactionId, traderId) {
     .limit(100)
     .call();
 
+  let wrongSender = null;
+  const expectedUsdc = Number(row.usdc_amount);
+
   for (const payment of payments.records) {
-    if (payment.from !== row.trader_stellar) continue;
     const isUsdc = (payment.asset_type === 'credit_alphanum4' || payment.asset_type === 'credit_alphanum12')
       && payment.asset_code === 'USDC';
     if (!isUsdc) continue;
@@ -916,6 +918,11 @@ async function syncBuyUsdcLock(transactionId, traderId) {
     const paymentTx = await horizon.transactions().transaction(payment.transaction_hash).call();
     const memo = paymentTx.memo || '';
     if (memo !== row.memo) continue;
+
+    if (payment.from !== row.trader_stellar) {
+      wrongSender = payment.from;
+      continue;
+    }
 
     await handleTraderUsdcDeposit({
       memo,
@@ -931,9 +938,21 @@ async function syncBuyUsdcLock(transactionId, traderId) {
     }
   }
 
+  if (wrongSender) {
+    return {
+      status: 'wrong_sender',
+      expectedFrom: row.trader_stellar,
+      actualFrom: wrongSender,
+      message: `USDC arrived with the correct memo but from ${wrongSender.slice(0, 8)}… — Rowan expects your linked address ${row.trader_stellar.slice(0, 8)}…. Update it under Profile → Stellar Wallet → Verify Address, or send from the linked address.`,
+    };
+  }
+
   return {
     status: 'not_found',
-    message: 'No USDC payment found on escrow yet. Send the exact amount with the memo shown, wait ~30 seconds, then tap again.',
+    expectedFrom: row.trader_stellar,
+    expectedAmount: expectedUsdc,
+    expectedMemo: row.memo,
+    message: `No matching USDC payment found. Send exactly ${expectedUsdc} USDC from ${row.trader_stellar} with memo "${row.memo}", wait ~30 seconds, then try again.`,
   };
 }
 

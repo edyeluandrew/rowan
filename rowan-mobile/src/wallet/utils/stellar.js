@@ -99,6 +99,44 @@ export async function buildAndSignPayment({
 }
 
 /**
+ * Build and sign a USDC payment to escrow (buy order lock).
+ */
+export async function buildAndSignUsdcPayment({
+  sourceSecretKey,
+  destinationAddress,
+  usdcAmount,
+  memo,
+  horizonUrl,
+}) {
+  const server = new Horizon.Server(horizonUrl)
+  const keypair = Keypair.fromSecret(sourceSecretKey)
+  const sourceAccount = await server.loadAccount(keypair.publicKey())
+  const usdcAsset = getUsdcAsset()
+  const amount = Number(usdcAmount)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Invalid USDC amount')
+  }
+
+  const txBuilder = new TransactionBuilder(sourceAccount, {
+    fee: BASE_FEE,
+    networkPassphrase: CURRENT_NETWORK.passphrase,
+  })
+    .addOperation(
+      Operation.payment({
+        destination: destinationAddress,
+        asset: usdcAsset,
+        amount: amount.toFixed(7),
+      })
+    )
+    .addMemo(Memo.text(String(memo || '').slice(0, 28)))
+    .setTimeout(STELLAR_TX_TIMEOUT_SECONDS)
+    .build()
+
+  txBuilder.sign(keypair)
+  return txBuilder.toXDR()
+}
+
+/**
  * Submit a signed transaction XDR to Horizon.
  */
 export async function submitTransaction(signedXdr, horizonUrl) {
