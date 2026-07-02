@@ -20,13 +20,15 @@ import TraderReviewModal from '../components/reviews/TraderReviewModal';
 import { getTraderReviewStatus } from '../api/reviews';
 import useJoinOrder from '../hooks/useJoinOrder';
 import LockUsdcButton from '../components/wallet/LockUsdcButton';
+import { isManualP2pTransaction } from '../../wallet/utils/transactions';
 
-const STEPS = ['Escrow Funded', 'Payout Sent', 'Complete'];
+const SELL_STEPS = ['Escrow Funded', 'Payout Sent', 'Complete'];
+const BUY_STEPS = ['Lock USDC', 'Customer Pays', 'Confirm MoMo', 'Complete'];
 
-function StepIndicator({ currentStep }) {
+function StepIndicator({ currentStep, steps = SELL_STEPS }) {
   return (
     <div className="flex items-center justify-between mb-6">
-      {STEPS.map((label, i) => {
+      {steps.map((label, i) => {
         const done = i < currentStep;
         const active = i === currentStep;
         return (
@@ -48,7 +50,7 @@ function StepIndicator({ currentStep }) {
               >
                 {done ? '✓' : i + 1}
               </div>
-              {i < STEPS.length - 1 && (
+              {i < steps.length - 1 && (
                 <div
                   className={`h-0.5 flex-1 ${done ? 'bg-rowan-green' : 'bg-rowan-border'}`}
                 />
@@ -183,22 +185,23 @@ export default function RequestDetail() {
   }, [revealTimer]);
 
   // Determine step from state
-  const getStep = () => {
+  const getStep = (forBuy = false) => {
     if (!tx) return 0;
     const state = (tx.state || tx.status || '').toUpperCase();
-    // Dispute states don't progress in the normal step flow
     if (['DISPUTE_OPENED', 'DISPUTE_RELEASE_PENDING', 'DISPUTE_REFUND_PENDING'].includes(state)) {
-      return state === 'DISPUTE_RELEASE_PENDING' ? 3 : 2; // Show dispute but don't allow payout
+      return state === 'DISPUTE_RELEASE_PENDING' ? 3 : 2;
     }
-    // Map database states to UI steps:
-    // Step 3: Transaction complete
-    if (state === 'COMPLETE') return 3;
-    // Step 2: Payment submitted, waiting for customer confirmation (FIAT_PAYOUT_SUBMITTED, USER_CONFIRMATION_PENDING)
+    if (state === 'COMPLETE') return forBuy ? 4 : 3;
+
+    if (forBuy) {
+      if (state === 'FIAT_PAYOUT_SUBMITTED' || state === 'USER_CONFIRMATION_PENDING') return 2;
+      if (state === 'ESCROW_LOCKED') return 1;
+      if (state === 'TRADER_MATCHED') return 0;
+      return 0;
+    }
+
     if (state === 'FIAT_PAYOUT_SUBMITTED' || state === 'USER_CONFIRMATION_PENDING') return 2;
-    // Step 1: Payout ready - trader matched and should send fiat
-    // (includes TRADER_MATCHED state where trader is assigned)
     if (state === 'TRADER_MATCHED') return 1;
-    // Step 0: Earlier states (QUOTE_CONFIRMED, ESCROW_LOCKED)
     return 0;
   };
 
@@ -222,14 +225,14 @@ export default function RequestDetail() {
   }
 
   const network = NETWORKS[tx.network] || {};
-  const step = getStep();
+  const step = getStep(isBuyOrderEarly);
   const isBuyOrder = isBuyOrderEarly;
   const isPayoutStep = step === 1 && !isBuyOrder;
   const isBuyLockStep = isBuyOrder && txState === 'TRADER_MATCHED' && tx.matched_at;
   const isBuyConfirmStep = isBuyOrder && txState === 'FIAT_PAYOUT_SUBMITTED';
   const isBuyWaitingCustomer = isBuyOrder && txState === 'ESCROW_LOCKED';
   const isAwaitingConfirmation = step === 2;
-  const isComplete = step >= 3;
+  const isComplete = isBuyOrder ? step >= 4 : step >= 3;
   const buyEscrowLocked = isBuyOrder && ['ESCROW_LOCKED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'COMPLETE'].includes(txState);
 
   const handleConfirmBuyReceived = async () => {
@@ -308,7 +311,7 @@ export default function RequestDetail() {
       ) : null}
 
       {/* Step indicator */}
-      <StepIndicator currentStep={step} />
+      <StepIndicator currentStep={step} steps={isBuyOrder ? BUY_STEPS : SELL_STEPS} />
 
       {/* Payment window countdown */}
       {(tx.payment_expires_at || tx.sla_expires_at) && !isComplete && step <= 1 && (
@@ -477,9 +480,11 @@ export default function RequestDetail() {
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-rowan-muted text-xs">XLM Amount</span>
+          <span className="text-rowan-muted text-xs">{isBuyOrder ? 'USDC Amount' : 'XLM Amount'}</span>
           <span className="text-rowan-text text-sm font-mono">
-            {parseFloat(tx.xlm_amount || 0).toFixed(2)} XLM
+            {isBuyOrder
+              ? `${parseFloat(tx.usdc_amount || 0).toFixed(4)} USDC`
+              : `${parseFloat(tx.xlm_amount || 0).toFixed(2)} XLM`}
           </span>
         </div>
         {tx.rate && (
