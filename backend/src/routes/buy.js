@@ -134,8 +134,8 @@ router.post(
 router.post(
   '/payment-sent',
   authUser,
-  validate(['transactionId', 'paymentReference']),
   paymentProofUpload.single('proof'),
+  validate(['transactionId', 'paymentReference']),
   async (req, res, next) => {
     try {
       const { transactionId, paymentReference } = req.body;

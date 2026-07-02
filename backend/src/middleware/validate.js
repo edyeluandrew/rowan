@@ -12,8 +12,9 @@ const MOBILE_NETWORKS = ['MPESA_KE', 'MTN_UG', 'AIRTEL_UG', 'MTN_TZ', 'AIRTEL_TZ
  */
 export function validate(requiredFields) {
   return (req, res, next) => {
+    const body = req.body || {};
     const missing = requiredFields.filter((f) => {
-      const val = req.body[f];
+      const val = body[f];
       return val === undefined || val === null || val === '';
     });
 
@@ -33,9 +34,10 @@ export function validate(requiredFields) {
 export function validateTypes(schema) {
   return (req, res, next) => {
     const errors = [];
+    const body = req.body || {};
 
     for (const [field, rule] of Object.entries(schema)) {
-      const val = req.body[field];
+      const val = body[field];
       if (val === undefined || val === null) continue; // use validate() for required checks
 
       switch (rule) {

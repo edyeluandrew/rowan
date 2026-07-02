@@ -18,9 +18,7 @@ export function submitBuyPayment({ transactionId, paymentReference, proofFile })
   form.append('transactionId', transactionId)
   form.append('paymentReference', paymentReference)
   if (proofFile) form.append('proof', proofFile)
-  return client.post('/api/v1/buy/payment-sent', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }).then((res) => res.data)
+  return client.post('/api/v1/buy/payment-sent', form).then((res) => res.data)
 }
 
 export function getBuyTransactionStatus(transactionId) {
