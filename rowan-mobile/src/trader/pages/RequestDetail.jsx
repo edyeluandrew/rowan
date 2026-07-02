@@ -444,8 +444,13 @@ export default function RequestDetail() {
         </div>
       )}
 
-      {!isComplete && tx.state !== 'REFUNDED' && tx.state !== 'FAILED' && isManualP2pTransaction(tx) && (
-        <OrderChat transactionId={tx.id} txState={tx.state || tx.status} />
+      {!isComplete && tx.state !== 'REFUNDED' && tx.state !== 'FAILED' && (isManualP2pTransaction(tx) || isBuyOrder) && (
+        <OrderChat
+          transactionId={tx.id}
+          txState={tx.state || tx.status}
+          counterpartyName="Customer"
+          viewerRole="trader"
+        />
       )}
 
       {tx.state === 'DISPUTE_OPENED' && tx.dispute_id && (

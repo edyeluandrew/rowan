@@ -14,6 +14,19 @@ import PaymentProofCard from './PaymentProofCard'
 const CHAT_LOCKED_STATES = ['DISPUTE_OPENED', 'DISPUTE_REFUND_PENDING', 'DISPUTE_RELEASE_PENDING']
 const MAX_COMMENT = 500
 
+function normalizeChatMessage(msg) {
+  if (!msg) return null
+  return {
+    id: msg.id,
+    sender_role: msg.sender_role ?? msg.senderRole,
+    message: msg.message,
+    type: msg.type,
+    image_url: msg.image_url ?? msg.imageUrl,
+    payload: msg.payload,
+    created_at: msg.created_at ?? msg.createdAt,
+  }
+}
+
 const DEFAULT_CHAT_API = {
   getChatMessages: walletGetChatMessages,
   sendChatMessage: walletSendChatMessage,
@@ -47,34 +60,39 @@ export function OrderChatCore({
   const shortId = transactionId ? formatShortId(transactionId) : ''
 
   useEffect(() => {
-    if (transactionId && joinOrder) joinOrder(transactionId)
-  }, [transactionId, joinOrder])
+    if (!transactionId || !joinOrder) return undefined
+    const rejoin = () => joinOrder(transactionId)
+    rejoin()
+    if (on) on('connect', rejoin)
+    return () => { if (off) off('connect', rejoin) }
+  }, [transactionId, joinOrder, on, off])
 
   useEffect(() => {
     if (!transactionId) return
     let cancelled = false
+    setLoading(true)
     chatApi.getChatMessages(transactionId)
-      .then((data) => { if (!cancelled) setMessages(data) })
+      .then((data) => {
+        if (!cancelled) {
+          setMessages((Array.isArray(data) ? data : []).map(normalizeChatMessage).filter(Boolean))
+        }
+      })
       .catch(() => { if (!cancelled) setError('Could not load messages. Pull to refresh by leaving and returning.') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [transactionId, chatApi])
+  }, [transactionId, txState, chatApi])
 
   const handleChatMessage = useCallback((msg) => {
-    if (msg.transactionId === transactionId) {
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) return prev
-        return [...prev, {
-          id: msg.id,
-          sender_role: msg.senderRole,
-          message: msg.message,
-          type: msg.type,
-          image_url: msg.imageUrl,
-          payload: msg.payload,
-          created_at: msg.createdAt,
-        }]
-      })
-    }
+    if (msg.transactionId !== transactionId && msg.transaction_id !== transactionId) return
+    const row = normalizeChatMessage({
+      ...msg,
+      transaction_id: msg.transactionId ?? msg.transaction_id,
+    })
+    if (!row) return
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === row.id)) return prev
+      return [...prev, row]
+    })
   }, [transactionId])
 
   useEffect(() => {
@@ -93,7 +111,7 @@ export function OrderChatCore({
     setError(null)
     try {
       const row = await chatApi.sendChatMessage(transactionId, text.trim())
-      setMessages((prev) => [...prev, row])
+      setMessages((prev) => [...prev, normalizeChatMessage(row)])
       setText('')
     } catch (err) {
       setError(err.response?.data?.error || 'Message could not be sent. Please try again.')
@@ -109,7 +127,7 @@ export function OrderChatCore({
     setError(null)
     try {
       const row = await chatApi.sendChatImage(transactionId, file)
-      setMessages((prev) => [...prev, row])
+      setMessages((prev) => [...prev, normalizeChatMessage(row)])
     } catch (err) {
       setError(err.response?.data?.error || 'Image could not be uploaded. Please try again.')
     } finally {
