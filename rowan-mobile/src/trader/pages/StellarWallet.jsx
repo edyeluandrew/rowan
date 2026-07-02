@@ -218,10 +218,12 @@ export default function StellarWallet() {
                       type="number"
                       min="0.1"
                       step="0.1"
+                      max="1000"
                       value={swapAmount}
                       onChange={(e) => setSwapAmount(e.target.value)}
                       className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text text-sm"
                     />
+                    <p className="text-rowan-muted text-[10px]">Start small (e.g. 10–50 USDC). Large swaps need more XLM.</p>
                     <Button
                       loading={busy}
                       variant="ghost"

@@ -222,9 +222,18 @@ export async function addUsdcTrustline(sourceSecretKey, horizonUrl) {
 function pathRecordToAssets(pathRecords) {
   if (!pathRecords?.length) return []
   return pathRecords.map((p) => {
+    if (typeof p === 'string') {
+      if (p === 'native') return Asset.native()
+      const [code, issuer] = p.split(':')
+      return new Asset(code, issuer)
+    }
     if (p.asset_type === 'native') return Asset.native()
     return new Asset(p.asset_code, p.asset_issuer)
   })
+}
+
+function horizonPathRecords(result) {
+  return result?.records || result?._embedded?.records || []
 }
 
 /**
@@ -236,19 +245,22 @@ export async function findReceiveUsdcPath({ horizonUrl, usdcAmount }) {
   const amount = Number(usdcAmount)
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error('Invalid USDC amount')
-  }
-
-  const result = await server
-    .strictReceivePaths(['native'], usdcAsset, amount.toFixed(7))
-    .call()
-
-  if (!result.records?.length) {
-    throw new Error('No XLM→USDC swap path found on the DEX. Fund with test XLM and try again.')
-  }
-
-  const best = result.records.reduce((a, b) =>
-    parseFloat(a.source_amount) < parseFloat(b.source_amount) ? a : b
-  )
+ 0.0000000',
+    '  const result = await server',
+    '    .strictReceivePaths([Asset.native()], usdcAsset, amount.toFixed(7))',
+    '    .call()',
+    '',
+    '  const nativeRecords = horizonPathRecords(result).filter(',
+    "    (r) => r.source_asset_type === 'native'",
+    '  )',
+    '',
+    '  if (!nativeRecords.length) {',
+    "    throw new Error('No XLM→USDC swap path found on the DEX. Fund with test XLM and try again.')",
+    '  }',
+    '',
+    '  const best = nativeRecords.reduce((a, b) =>',
+    '    parseFloat(a.source_amount) < parseFloat(b.source_amount) ? a : b',
+    '  )',
 
   return {
     sourceAmount: parseFloat(best.source_amount),
