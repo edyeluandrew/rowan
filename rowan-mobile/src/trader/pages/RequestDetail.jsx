@@ -334,6 +334,13 @@ export default function RequestDetail() {
                   setUsdcVerifyMsg({ type: 'ok', text: 'USDC locked! Customer can now pay you.' });
                   await fetchTx();
                   refresh();
+                } else if (result.status === 'wrong_sender') {
+                  setUsdcVerifyMsg({ type: 'error', text: result.message });
+                } else {
+                  setUsdcVerifyMsg({
+                    type: 'ok',
+                    text: 'USDC sent! Wait ~30 seconds, then tap "I\'ve sent USDC — check now" if it does not update automatically.',
+                  });
                 }
               } catch (err) {
                 setUsdcVerifyMsg({ type: 'error', text: err.response?.data?.error || 'Sent — tap check now below' });
