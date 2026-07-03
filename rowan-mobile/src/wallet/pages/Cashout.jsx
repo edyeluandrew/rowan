@@ -183,9 +183,18 @@ export default function Cashout() {
               Trading with {presetTraderName || selectedAd?.traderName || 'selected trader'}
             </p>
             <p className="text-rowan-muted text-xs mt-1">
-              Your order will be matched to this trader when possible.
+              Only this trader will handle your order — we will not switch you to another trader.
             </p>
           </div>
+        </div>
+      )}
+
+      {!selectedAd && !presetTraderName && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
+          <p className="text-rowan-text text-sm font-medium">Express Cash Out</p>
+          <p className="text-rowan-muted text-xs mt-1">
+            We will auto-match the best available trader for your amount and network.
+          </p>
         </div>
       )}
 

@@ -358,7 +358,9 @@ async function handlePayoutTimeout(transactionId, traderId) {
   const escrowController = await getEscrowController();
 
   if (attemptCount >= maxAttempts) {
-    const reason = 'Auto-refund: trader payout timeout (max re-match attempts reached)';
+    const reason = tx.preferred_payout_setting_id
+      ? 'Auto-refund: your chosen trader did not send mobile money in time'
+      : 'Auto-refund: trader payout timeout (max re-match attempts reached)';
     logger.warn(`[Job:rematch] Payout timeout max attempts (${maxAttempts}) for tx ${transactionId} — refunding`);
 
     await db.query(
@@ -395,13 +397,19 @@ async function handlePayoutTimeout(transactionId, traderId) {
 
   await redis.incr(countKey);
   await redis.expire(countKey, 86400);
-  await redis.sadd(EXCLUDED_TRADERS_KEY(transactionId), traderId);
-  await redis.expire(EXCLUDED_TRADERS_KEY(transactionId), 86400);
+
+  const isManualSelection = Boolean(tx.preferred_payout_setting_id);
+  if (!isManualSelection) {
+    await redis.sadd(EXCLUDED_TRADERS_KEY(transactionId), traderId);
+    await redis.expire(EXCLUDED_TRADERS_KEY(transactionId), 86400);
+  }
 
   await notificationService.notifyTraderUpdate(traderId, 'request_reassigned', {
     transactionId,
     state: 'ESCROW_LOCKED',
-    message: 'Payout window expired — this job was returned to the queue',
+    message: isManualSelection
+      ? 'Payout window expired — waiting for you to retry on this manual order'
+      : 'Payout window expired — this job was returned to the queue',
   });
 
   const { default: matchingEngine } = await import('./matchingEngine.js');
@@ -410,7 +418,9 @@ async function handlePayoutTimeout(transactionId, traderId) {
   await notificationService.notifyUser(tx.user_id, 'trader_rematch', {
     transactionId,
     state: 'ESCROW_LOCKED',
-    message: 'Your trader did not send mobile money in time. Finding another trader…',
+    message: isManualSelection
+      ? 'Your chosen trader did not send mobile money in time. Waiting for them to retry…'
+      : 'Your trader did not send mobile money in time. Finding another trader…',
   });
 }
 

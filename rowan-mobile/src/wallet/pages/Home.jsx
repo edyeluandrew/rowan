@@ -127,8 +127,11 @@ export default function Home() {
       <div className="mt-3">
         <Button onClick={() => navigate('/wallet/cashout')}>
           <ArrowDownToLine size={18} />
-          Cash Out
+          Express Cash Out
         </Button>
+        <p className="text-rowan-muted text-xs text-center mt-1.5 px-2">
+          Auto-match the fastest available trader — no need to pick from the marketplace.
+        </p>
         <Button
           variant="ghost"
           className="mt-2"
@@ -145,7 +148,7 @@ export default function Home() {
           disabled={hasActiveOrder}
         >
           <UserCheck size={18} />
-          Choose a trader
+          Sell with a trader
         </Button>
       </div>
 

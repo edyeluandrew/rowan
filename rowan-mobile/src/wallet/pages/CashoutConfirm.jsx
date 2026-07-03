@@ -84,7 +84,7 @@ export default function CashoutConfirm() {
                 </p>
               )}
               <p className="text-rowan-muted text-xs mt-2">
-                If this trader is unavailable, we will find you the next best match automatically.
+                Only this trader will handle your order. If they are unavailable, we will wait and retry — we will not auto-match someone else.
               </p>
             </div>
           </div>

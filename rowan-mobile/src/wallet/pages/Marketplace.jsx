@@ -121,7 +121,7 @@ export default function Marketplace() {
       <p className="text-rowan-muted text-sm text-center mb-5">
         {tab === 'buy'
           ? 'Buy USDC — pay mobile money, receive USDC in your wallet.'
-          : 'Sell / cash out — pick a trader or use auto match from Cash Out.'}
+          : 'Sell to a trader you choose. For fastest matching without picking, use Express Cash Out on Home.'}
       </p>
 
       <div className="flex gap-2 mb-5">
@@ -262,7 +262,7 @@ export default function Marketplace() {
       {tab === 'sell' && (
         <div className="mt-6">
           <Button variant="ghost" onClick={() => navigate('/wallet/cashout')} disabled={hasActiveOrder}>
-            Use auto match instead
+            Express Cash Out instead
           </Button>
         </div>
       )}

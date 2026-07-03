@@ -106,11 +106,12 @@ async function matchTrader(transactionId) {
       excludedTraderIds = await redis.smembers(`excluded-traders:${transactionId}`);
     } catch (_) { /* best-effort */ }
     const triedTraderIds = [...excludedTraderIds];
-    let skipPreferred = false;
     const preferredSettingId = transaction.preferred_payout_setting_id;
+    const isManualSelection = Boolean(preferredSettingId);
     const orderUserId = transaction.user_id;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const usePreferred = !skipPreferred && preferredSettingId && attempt === 0;
+    const maxMatchAttempts = isManualSelection ? 1 : 6;
+    for (let attempt = 0; attempt < maxMatchAttempts; attempt++) {
+      const usePreferred = isManualSelection;
 
       const candidateParams = [
         transaction.network,
@@ -155,12 +156,13 @@ async function matchTrader(transactionId) {
       );
 
       const candidate = candidateResult.rows[0];
-      if (!candidate && usePreferred) {
+      if (!candidate && isManualSelection) {
         logger.warn(
-          `[Matching] Preferred payout setting ${preferredSettingId} unavailable for tx ${transactionId} — falling back to auto-match`
+          `[Matching] Preferred payout setting ${preferredSettingId} unavailable for tx ${transactionId} — retrying (manual selection, no auto-match fallback)`
         );
-        skipPreferred = true;
-        continue;
+        const jobQueue = await getJobQueue();
+        await jobQueue.enqueueReMatch(transactionId, null, config.platform.traderRetryDelaySeconds || 30);
+        return null;
       }
       if (!candidate) {
         // Permanent failure: amount outside any trader's min/max — refund instead of retry loop
@@ -205,6 +207,11 @@ async function matchTrader(transactionId) {
           `[Matching] Skipping trader ${candidate.trader_id} (${candidate.trader_name}) — ` +
           `no USDC trustline (${trustStatus.reason || 'unknown'})`
         );
+        if (isManualSelection) {
+          const jobQueue = await getJobQueue();
+          await jobQueue.enqueueReMatch(transactionId, null, config.platform.traderRetryDelaySeconds || 30);
+          return null;
+        }
         triedTraderIds.push(candidate.trader_id);
         continue;
       }
@@ -247,14 +254,18 @@ async function matchTrader(transactionId) {
         const reserved = await payoutSettingsService.reserveFloat(candidate.payout_setting_id, fiatNeeded);
         logger.info(`[Matching] Matched tx ${transactionId} → trader ${candidate.trader_id} (${candidate.trader_name}); reserved ${fiatNeeded} ${fiatCurrency} on setting ${candidate.payout_setting_id} (reserved_float now ${reserved.reserved_float})`);
       } catch (reserveErr) {
-        // Lost the float race (another tx reserved first). Unassign (keep TRADER_MATCHED,
-        // clear trader_id + payout_setting_id) and try the next eligible trader.
-        logger.warn(`[Matching] Reservation failed for trader ${candidate.trader_id} on tx ${transactionId}: ${reserveErr.message} — trying next`);
+        logger.warn(`[Matching] Reservation failed for trader ${candidate.trader_id} on tx ${transactionId}: ${reserveErr.message}`);
         await db.query(
           `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL
            WHERE id = $1 AND trader_id = $2`,
           [transactionId, candidate.trader_id]
         );
+        if (isManualSelection) {
+          const jobQueue = await getJobQueue();
+          await jobQueue.enqueueReMatch(transactionId, null, config.platform.traderRetryDelaySeconds || 30);
+          return null;
+        }
+        // Lost the float race — try the next eligible trader (Express auto-match only).
         triedTraderIds.push(candidate.trader_id);
         continue;
       }
