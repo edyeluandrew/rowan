@@ -64,6 +64,41 @@ export function formatUsdcRateLine(currency, ratePerUsdc) {
   return `1 USDC ≈ ${currency} ${formatted}`
 }
 
+/** e.g. "Joined Jun 2024" */
+export function formatMemberSince(isoString) {
+  if (!isoString) return null
+  const d = new Date(isoString)
+  if (!Number.isFinite(d.getTime())) return null
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `Joined ${months[d.getMonth()]} ${d.getFullYear()}`
+}
+
+/** e.g. "42 trades" */
+export function formatTradeCount(count) {
+  const n = Number(count)
+  if (!Number.isFinite(n) || n < 0) return null
+  if (n === 0) return 'No trades yet'
+  return n === 1 ? '1 trade' : `${n.toLocaleString()} trades`
+}
+
+/** Rough USDC per XLM from fiat rates */
+export function estimateUsdcPerXlm(xlmRate, usdcToFiat) {
+  const xlm = Number(xlmRate)
+  const usdc = Number(usdcToFiat)
+  if (!Number.isFinite(xlm) || !Number.isFinite(usdc) || usdc <= 0) return null
+  return xlm / usdc
+}
+
+/** e.g. "With 10 XLM → ~UGX 36,400" */
+export function formatSellEstimateLine(xlmAmount, fiatAmount, currency) {
+  const xlm = Number(xlmAmount)
+  const fiat = Number(fiatAmount)
+  if (!Number.isFinite(xlm) || !Number.isFinite(fiat) || !currency) return null
+  const fiatFmt = Math.round(fiat).toLocaleString('en-US')
+  const xlmFmt = Number.isInteger(xlm) ? String(xlm) : xlm.toFixed(1)
+  return `With ${xlmFmt} XLM → ~${currency} ${fiatFmt}`
+}
+
 /** e.g. "10:34 AM" */
 export function formatMessageTime(isoString) {
   if (!isoString) return ''

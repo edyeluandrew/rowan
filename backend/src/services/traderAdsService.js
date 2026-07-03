@@ -67,6 +67,7 @@ async function listAds({
       t.name AS trader_name,
       t.stellar_address,
       t.trust_score,
+      t.created_at AS member_since,
       t.last_seen_at,
       t.max_concurrent_orders,
       ps.network,
@@ -111,6 +112,8 @@ async function listAds({
         availableFloat: parseFloat(row.net_float),
         ratePerUsdc: row.rate_per_usdc != null ? parseFloat(row.rate_per_usdc) : null,
         completionRate: stats.completionRate,
+        completedOrders: stats.completedOrders,
+        memberSince: row.member_since,
         avgReleaseMinutes: stats.avgReleaseMinutes,
         avgResponseMinutes: stats.avgResponseMinutes,
         reviewCount: stats.reviewCount,
@@ -123,6 +126,71 @@ async function listAds({
   )).filter(Boolean);
 
   return { ads, page: Math.max(1, page), limit: Math.min(limit, 50) };
+}
+
+/**
+ * Collapse flat marketplace ads into one row per trader with nested payment offers.
+ */
+function groupAdsByTrader(ads, { isBuy = false } = {}) {
+  const byTrader = new Map();
+
+  for (const ad of ads) {
+    const traderId = ad.traderId;
+    if (!traderId) continue;
+
+    if (!byTrader.has(traderId)) {
+      byTrader.set(traderId, {
+        traderId,
+        traderName: ad.traderName,
+        trustScore: ad.trustScore,
+        memberSince: ad.memberSince,
+        completedOrders: ad.completedOrders ?? 0,
+        completionRate: ad.completionRate,
+        avgReleaseMinutes: ad.avgReleaseMinutes,
+        avgResponseMinutes: ad.avgResponseMinutes,
+        reviewCount: ad.reviewCount,
+        positivePercent: ad.positivePercent,
+        isOnline: ad.isOnline,
+        lastSeenLabel: ad.lastSeenLabel,
+        currency: ad.currency,
+        offers: [],
+      });
+    }
+
+    const group = byTrader.get(traderId);
+    group.offers.push({
+      payoutSettingId: ad.payoutSettingId || ad.id,
+      network: ad.network,
+      currency: ad.currency,
+      minAmount: ad.minAmount,
+      maxAmount: ad.maxAmount,
+      availableFloat: ad.availableFloat,
+      availableUsdc: ad.availableUsdc,
+      ratePerUsdc: ad.ratePerUsdc,
+      adSide: ad.adSide || (isBuy ? 'USER_BUY' : 'USER_SELL'),
+    });
+  }
+
+  const traders = Array.from(byTrader.values()).map((group) => {
+    const mins = group.offers.map((o) => o.minAmount).filter((v) => Number.isFinite(v));
+    const maxs = group.offers.map((o) => o.maxAmount).filter((v) => Number.isFinite(v));
+    const floats = group.offers.map((o) => o.availableFloat).filter((v) => Number.isFinite(v) && v > 0);
+    const usdcs = group.offers.map((o) => o.availableUsdc).filter((v) => Number.isFinite(v) && v > 0);
+    const rates = group.offers.map((o) => o.ratePerUsdc).filter((v) => Number.isFinite(v) && v > 0);
+
+    return {
+      ...group,
+      minAmount: mins.length ? Math.min(...mins) : null,
+      maxAmount: maxs.length ? Math.max(...maxs) : null,
+      totalAvailableFloat: floats.length ? floats.reduce((a, b) => a + b, 0) : null,
+      totalAvailableUsdc: usdcs.length ? usdcs.reduce((a, b) => a + b, 0) : null,
+      bestRatePerUsdc: rates.length ? Math.max(...rates) : null,
+      offers: group.offers.sort((a, b) => (a.network || '').localeCompare(b.network || '')),
+    };
+  });
+
+  traders.sort((a, b) => (b.trustScore || 0) - (a.trustScore || 0));
+  return traders;
 }
 
 async function getAdById(payoutSettingId) {
@@ -291,6 +359,8 @@ async function listBuyAds({
       ps.trader_id,
       t.name AS trader_name,
       t.trust_score,
+      t.created_at AS member_since,
+      t.last_seen_at,
       ps.network,
       ps.currency,
       ps.country,
@@ -333,6 +403,10 @@ async function listBuyAds({
         ratePerUsdc: row.rate_per_usdc != null ? parseFloat(row.rate_per_usdc) : null,
         adSide: 'USER_BUY',
         completionRate: stats.completionRate,
+        completedOrders: stats.completedOrders,
+        memberSince: row.member_since,
+        avgReleaseMinutes: stats.avgReleaseMinutes,
+        avgResponseMinutes: stats.avgResponseMinutes,
         reviewCount: stats.reviewCount,
         positivePercent: stats.positivePercent,
         activeOrders: row.active_orders,
@@ -407,6 +481,7 @@ async function validateBuyAdForQuote(payoutSettingId, { network, currency, fiatA
 export default {
   listAds,
   listBuyAds,
+  groupAdsByTrader,
   getAdById,
   validateAdForQuote,
   validateBuyAdForQuote,

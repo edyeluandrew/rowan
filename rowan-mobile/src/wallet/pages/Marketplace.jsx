@@ -3,13 +3,14 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, RefreshCw } from 'lucide-react'
 import { listTraderAds, listBuyAds } from '../api/traders'
 import useActiveTransaction from '../hooks/useActiveTransaction'
-import TraderAdCard from '../components/marketplace/TraderAdCard'
+import TraderGroupCard from '../components/marketplace/TraderGroupCard'
+import NetworkPickSheet from '../components/marketplace/NetworkPickSheet'
 import MarketplaceSkeleton from '../components/marketplace/MarketplaceSkeleton'
 import useRates from '../hooks/useRates'
+import useWallet from '../hooks/useWallet'
 import useUserCountry from '../hooks/useUserCountry'
 import { getNetworksForCountry } from '../utils/country'
 import { NETWORKS } from '../utils/constants'
-import { lookupNetworkRate } from '../utils/p2pFormat'
 import Button from '../components/ui/Button'
 
 export default function Marketplace() {
@@ -20,8 +21,10 @@ export default function Marketplace() {
   const { country, fiatCurrency } = useUserCountry()
   const countryNetworks = useMemo(() => Object.keys(getNetworksForCountry(country)), [country])
   const { activeTransaction, hasActiveOrder } = useActiveTransaction()
-  const { allRates } = useRates(fiatCurrency)
-  const [ads, setAds] = useState([])
+  const { rates, allRates } = useRates(fiatCurrency)
+  const { balance } = useWallet()
+  const [traders, setTraders] = useState([])
+  const [pickTrader, setPickTrader] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
@@ -39,7 +42,7 @@ export default function Marketplace() {
       if (network) params.network = network
       if (minAmount) params.minAmount = parseFloat(minAmount)
       const res = tab === 'buy' ? await listBuyAds(params) : await listTraderAds(params)
-      setAds(res.ads || [])
+      setTraders(res.traders || [])
     } catch (err) {
       setError(err.response?.data?.error || 'Could not load traders. Please try again.')
     } finally {
@@ -72,14 +75,29 @@ export default function Marketplace() {
     pulling.current = false
   }
 
-  const handleTrade = (ad) => {
-    if (hasActiveOrder) return
+  const buildAdFromOffer = (offer, trader) => ({
+    ...offer,
+    id: offer.payoutSettingId,
+    traderId: trader.traderId,
+    traderName: trader.traderName,
+    trustScore: trader.trustScore,
+    minAmount: offer.minAmount ?? trader.minAmount,
+    maxAmount: offer.maxAmount ?? trader.maxAmount,
+    availableFloat: offer.availableFloat,
+    availableUsdc: offer.availableUsdc,
+    ratePerUsdc: offer.ratePerUsdc ?? trader.bestRatePerUsdc,
+  })
+
+  const handleTrade = (offer, trader) => {
+    if (hasActiveOrder || !offer) return
+    const ad = buildAdFromOffer(offer, trader)
+    setPickTrader(null)
     if (tab === 'buy') {
       navigate('/wallet/buy', {
         state: {
           selectedAd: ad,
-          payoutSettingId: ad.payoutSettingId || ad.id,
-          traderName: ad.traderName,
+          payoutSettingId: ad.payoutSettingId,
+          traderName: trader.traderName,
           network: ad.network,
         },
       })
@@ -88,15 +106,18 @@ export default function Marketplace() {
     navigate('/wallet/cashout', {
       state: {
         selectedAd: ad,
-        payoutSettingId: ad.payoutSettingId || ad.id,
-        traderName: ad.traderName,
+        payoutSettingId: ad.payoutSettingId,
+        traderName: trader.traderName,
         network: ad.network,
       },
     })
   }
 
-  const handleViewProfile = (ad) => {
-    navigate(`/wallet/traders/${ad.traderId}`, { state: { ad, mode: tab } })
+  const handleViewProfile = (trader) => {
+    const firstOffer = trader.offers?.[0]
+    navigate(`/wallet/traders/${trader.traderId}`, {
+      state: { ad: firstOffer ? buildAdFromOffer(firstOffer, trader) : null, mode: tab },
+    })
   }
 
   return (
@@ -228,7 +249,7 @@ export default function Marketplace() {
         </div>
       )}
 
-      {!loading && !error && ads.length === 0 && (
+      {!loading && !error && traders.length === 0 && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-8 text-center">
           <p className="text-rowan-text text-sm font-medium">No traders available right now.</p>
           <p className="text-rowan-muted text-xs mt-2">
@@ -243,21 +264,33 @@ export default function Marketplace() {
         </div>
       )}
 
-      {!loading && !error && ads.length > 0 && (
+      {!loading && !error && traders.length > 0 && (
         <div className="space-y-3">
-          {ads.map((ad) => (
-            <TraderAdCard
-              key={ad.payoutSettingId || ad.id}
-              ad={ad}
+          {traders.map((trader) => (
+            <TraderGroupCard
+              key={trader.traderId}
+              trader={trader}
               mode={tab}
-              xlmRate={lookupNetworkRate(allRates, ad.network)}
+              allRates={allRates}
+              usdcToFiat={rates?.usdcToFiat}
+              walletBalance={balance}
               onTrade={handleTrade}
               onViewProfile={handleViewProfile}
+              onPickNetwork={setPickTrader}
               tradeDisabled={hasActiveOrder}
             />
           ))}
         </div>
       )}
+
+      <NetworkPickSheet
+        open={!!pickTrader}
+        traderName={pickTrader?.traderName}
+        offers={pickTrader?.offers || []}
+        mode={tab}
+        onSelect={(offer) => handleTrade(offer, pickTrader)}
+        onClose={() => setPickTrader(null)}
+      />
 
       {tab === 'sell' && (
         <div className="mt-6">

@@ -26,6 +26,16 @@ router.get('/ads', authUser, async (req, res, next) => {
       page: parseInt(page, 10) || 1,
       limit: parseInt(limit, 10) || 20,
     });
+    const grouped = req.query.grouped === '1' || req.query.grouped === 'true';
+    if (grouped) {
+      const traders = traderAdsService.groupAdsByTrader(result.ads, { isBuy: side === 'buy' });
+      return res.json({
+        success: true,
+        traders,
+        page: result.page,
+        limit: result.limit,
+      });
+    }
     res.json({ success: true, ...result });
   } catch (err) {
     next(err);
