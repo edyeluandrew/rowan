@@ -183,8 +183,14 @@ router.post(
             error: 'Liquidity unavailable right now. Please try again later.' 
           });
         }
+        if (quoteErr.statusCode && quoteErr.statusCode < 500) {
+          return res.status(quoteErr.statusCode).json({
+            error: quoteErr.message,
+            code: quoteErr.code || undefined,
+          });
+        }
         return res.status(503).json({ 
-          error: 'Unable to generate quote. Please try again.' 
+          error: quoteErr.message || 'Unable to generate quote. Please try again.',
         });
       }
 

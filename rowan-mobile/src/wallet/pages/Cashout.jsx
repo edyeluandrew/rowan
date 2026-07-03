@@ -16,6 +16,7 @@ import useUserCountry from '../hooks/useUserCountry'
 import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
+import PaymentMethodPill from '../components/ui/PaymentMethodPill'
 import Button from '../components/ui/Button'
 
 export default function Cashout() {
@@ -32,8 +33,11 @@ export default function Cashout() {
   const { allRates } = useRates(userFiat)
   const { balance } = useWallet()
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
+  const adNetwork = presetNetwork || selectedAd?.network || null
+  const payoutSettingId = presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
+  const networkLocked = !!(payoutSettingId && adNetwork)
   const [fiatAmount, setFiatAmount] = useState('')
-  const [network, setNetwork] = useState(presetNetwork || null)
+  const [network, setNetwork] = useState(adNetwork)
   const [phone, setPhone] = useState('')
   const [recipientName, setRecipientName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -52,6 +56,10 @@ export default function Cashout() {
   )
 
   const netFiat = parseFloat(fiatAmount) || 0
+
+  useEffect(() => {
+    if (adNetwork) setNetwork(adNetwork)
+  }, [adNetwork])
 
   useEffect(() => {
     if (!activeLoading && activeTransaction?.id) {
@@ -79,15 +87,22 @@ export default function Cashout() {
     [networkLimits, network]
   )
 
+  const traderMinFiat = selectedAd?.minAmount ?? null
+  const traderMaxFiat = selectedAd?.maxAmount ?? null
+  const traderFloatFiat = selectedAd?.availableFloat ?? selectedAd?.available_float ?? null
+
   const maxNetFiat = useMemo(() => {
-    const caps = [walletMaxNetFiat, selectedNetworkLimits?.maxFiat].filter(
-      (v) => v != null && Number.isFinite(v) && v > 0
-    )
+    const caps = [
+      walletMaxNetFiat,
+      selectedNetworkLimits?.maxFiat,
+      traderMaxFiat,
+      traderFloatFiat,
+    ].filter((v) => v != null && Number.isFinite(v) && v > 0)
     if (caps.length === 0) return null
     return Math.min(...caps)
-  }, [walletMaxNetFiat, selectedNetworkLimits])
+  }, [walletMaxNetFiat, selectedNetworkLimits, traderMaxFiat, traderFloatFiat])
 
-  const minNetFiat = selectedNetworkLimits?.minFiat ?? null
+  const minNetFiat = traderMinFiat ?? selectedNetworkLimits?.minFiat ?? null
 
   const xlmEstimate = rateValue > 0 && netFiat > 0
     ? (netFiat / rateValue) * 1.03
@@ -96,11 +111,14 @@ export default function Cashout() {
 
   const exceedsWallet = maxNetFiat != null && netFiat > maxNetFiat
   const belowMin = minNetFiat != null && netFiat > 0 && netFiat < minNetFiat
+  const exceedsTraderFloat =
+    traderFloatFiat != null && netFiat > 0 && netFiat > traderFloatFiat
 
   const canProceed =
     netFiat > 0 &&
     !exceedsWallet &&
     !belowMin &&
+    !exceedsTraderFloat &&
     network &&
     phone.length >= 7 &&
     recipientName.trim().length >= 2
@@ -132,9 +150,7 @@ export default function Cashout() {
         phoneHash,
         payoutPhone: fullPhone,
         payoutName: recipientName.trim(),
-        ...(presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
-          ? { payoutSettingId: presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id }
-          : {}),
+        ...(payoutSettingId ? { payoutSettingId } : {}),
       })
       navigate('/wallet/cashout/confirm', {
         state: {
@@ -145,7 +161,7 @@ export default function Cashout() {
           requestedFiat: Math.round(netFiat),
           selectedAd,
           traderName: presetTraderName || selectedAd?.traderName,
-          payoutSettingId: presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id,
+          payoutSettingId,
         },
       })
     } catch (err) {
@@ -234,8 +250,26 @@ export default function Cashout() {
       />
 
       <div className="mt-6">
-        <NetworkSelector selected={network} onSelect={setNetwork} country={country} />
+        {networkLocked && network ? (
+          <div>
+            <p className="text-rowan-muted text-xs uppercase tracking-wider mb-3">
+              Mobile money network
+            </p>
+            <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 flex items-center justify-between">
+              <PaymentMethodPill network={network} />
+              <span className="text-rowan-muted text-xs">From trader ad</span>
+            </div>
+          </div>
+        ) : (
+          <NetworkSelector selected={network} onSelect={setNetwork} country={country} />
+        )}
       </div>
+
+      {networkLocked && minNetFiat != null && maxNetFiat != null && (
+        <p className="text-rowan-muted text-xs mt-4 text-center">
+          Order limits: {Math.ceil(minNetFiat).toLocaleString()} – {Math.floor(maxNetFiat).toLocaleString()} {currency}
+        </p>
+      )}
 
       <div className="mt-6">
         <PhoneInput
@@ -261,7 +295,7 @@ export default function Cashout() {
 
       {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
 
-      {(exceedsWallet || belowMin) && (
+      {(exceedsWallet || belowMin || exceedsTraderFloat) && (
         <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 flex items-start gap-3">
           <AlertTriangle size={18} className="text-rowan-yellow shrink-0 mt-0.5" />
           <div>
@@ -273,11 +307,19 @@ export default function Cashout() {
                 </p>
               </>
             )}
-            {belowMin && selectedNetworkLimits && (
+            {belowMin && (
               <>
                 <p className="text-rowan-yellow text-sm font-medium">Amount too small</p>
                 <p className="text-rowan-muted text-xs mt-1">
-                  Minimum payout is {Math.ceil(selectedNetworkLimits.minFiat).toLocaleString()} {selectedNetworkLimits.currency}.
+                  Minimum payout is {Math.ceil(minNetFiat).toLocaleString()} {currency}.
+                </p>
+              </>
+            )}
+            {exceedsTraderFloat && traderFloatFiat != null && (
+              <>
+                <p className="text-rowan-yellow text-sm font-medium">Amount exceeds trader float</p>
+                <p className="text-rowan-muted text-xs mt-1">
+                  This trader only has about {Math.floor(traderFloatFiat).toLocaleString()} {currency} available right now.
                 </p>
               </>
             )}
