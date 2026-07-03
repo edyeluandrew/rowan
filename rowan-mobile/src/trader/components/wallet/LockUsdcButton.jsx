@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../ui/Button';
 import useTraderWallet from '../../hooks/useTraderWallet';
@@ -9,7 +10,8 @@ import { verifyUsdcLock } from '../../api/trader';
  */
 export default function LockUsdcButton({ tx, onLocked, onError }) {
   const navigate = useNavigate();
-  const { keypair, publicKey, usdcBalance, isReady, busy, refresh } = useTraderWallet();
+  const { keypair, publicKey, usdcBalance, isReady, refresh } = useTraderWallet();
+  const [sending, setSending] = useState(false);
   const escrowAddress = tx?.escrow_address || '';
   const memo = tx?.escrow_memo || '';
   const usdcAmount = Number(tx?.usdc_amount || 0);
@@ -43,6 +45,7 @@ export default function LockUsdcButton({ tx, onLocked, onError }) {
     }
 
     try {
+      setSending(true);
       const signed = await buildAndSignUsdcPayment({
         sourceSecretKey: keypair.secretKey,
         destinationAddress: escrowAddress,
@@ -67,6 +70,8 @@ export default function LockUsdcButton({ tx, onLocked, onError }) {
       }
     } catch (err) {
       onError?.(err.message || 'Could not send USDC');
+    } finally {
+      setSending(false);
     }
   };
 
@@ -99,7 +104,7 @@ export default function LockUsdcButton({ tx, onLocked, onError }) {
         </Button>
       )}
 
-      <Button loading={busy} size="lg" onClick={handleSend} disabled={!isReady}>
+      <Button loading={sending} size="lg" onClick={handleSend} disabled={!isReady || sending}>
         Send USDC to escrow from Rowan
       </Button>
 

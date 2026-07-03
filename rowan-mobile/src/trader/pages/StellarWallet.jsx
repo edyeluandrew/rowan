@@ -10,7 +10,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
 import { COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants';
 import { useSocket } from '../context/SocketContext';
-import useTraderWallet from '../hooks/useTraderWallet';
+import useTraderWallet, { WALLET_ACTIONS } from '../hooks/useTraderWallet';
 import { CURRENT_NETWORK } from '../../wallet/utils/constants';
 import { isValidSecretKey } from '../../wallet/utils/stellar';
 
@@ -19,7 +19,7 @@ export default function StellarWallet() {
   const { on, off } = useSocket();
   const {
     keypair, publicKey: walletPublicKey, xlmBalance, usdcBalance: walletUsdc,
-    hasUsdcTrustline, loading: walletLoading, busy, error: walletError,
+    hasUsdcTrustline, loading: walletLoading, activeAction, isActionBusy, error: walletError,
     refresh, createWallet, importWallet, fundTestnet, enableUsdc, swapToUsdc,
     setLinkedAddress, linkedAddress,
   } = useTraderWallet();
@@ -76,6 +76,8 @@ export default function StellarWallet() {
     });
   };
 
+  const anyActionRunning = !!activeAction;
+
   const runAction = async (label, fn) => {
     setActionMsg(null);
     try {
@@ -111,7 +113,12 @@ export default function StellarWallet() {
             <p className="text-rowan-muted text-xs">
               Everything happens here — fund with test XLM, swap to USDC, and lock escrow. No Freighter needed.
             </p>
-            <Button loading={busy} size="lg" onClick={() => runAction('Wallet created', createWallet)}>
+            <Button
+              loading={isActionBusy(WALLET_ACTIONS.CREATE)}
+              disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.CREATE)}
+              size="lg"
+              onClick={() => runAction('Wallet created', createWallet)}
+            >
               <Plus size={16} className="inline mr-1" />
               Create Rowan wallet
             </Button>
@@ -133,11 +140,11 @@ export default function StellarWallet() {
                   className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text text-xs font-mono"
                 />
                 <Button
-                  loading={busy}
+                  loading={isActionBusy(WALLET_ACTIONS.IMPORT)}
+                  disabled={(anyActionRunning && !isActionBusy(WALLET_ACTIONS.IMPORT)) || !isValidSecretKey(importSecret.trim())}
                   variant="ghost"
                   size="sm"
                   className="w-full border border-rowan-border"
-                  disabled={!isValidSecretKey(importSecret.trim())}
                   onClick={() => runAction('Wallet imported', () => importWallet(importSecret))}
                 >
                   Import & link
@@ -186,33 +193,45 @@ export default function StellarWallet() {
             </div>
 
             {CURRENT_NETWORK.isTest && (
-              <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 space-y-2">
-                <p className="text-rowan-text text-sm font-medium">Testnet setup</p>
-                <Button
-                  loading={busy}
-                  variant="ghost"
-                  size="sm"
-                  className="w-full border border-rowan-border"
-                  onClick={() => runAction('Funded with test XLM', fundTestnet)}
-                >
-                  Get testnet XLM
-                </Button>
-                {hasUsdcTrustline === false && (
+              <div className="space-y-3">
+                <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
+                  <p className="text-rowan-text text-sm font-medium">Step 1 — Fund with test XLM</p>
+                  <p className="text-rowan-muted text-xs mt-1">Free testnet XLM from Friendbot. Do this first.</p>
                   <Button
-                    loading={busy}
+                    loading={isActionBusy(WALLET_ACTIONS.FUND)}
+                    disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.FUND)}
+                    variant="ghost"
                     size="sm"
-                    className="w-full"
-                    onClick={() => runAction('USDC enabled', enableUsdc)}
+                    className="w-full border border-rowan-border mt-3"
+                    onClick={() => runAction('Funded with test XLM', fundTestnet)}
                   >
-                    <Coins size={14} className="inline mr-1" />
-                    Enable USDC
+                    Get testnet XLM
                   </Button>
+                </div>
+
+                {hasUsdcTrustline === false && (
+                  <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
+                    <p className="text-rowan-text text-sm font-medium">Step 2 — Enable USDC</p>
+                    <p className="text-rowan-muted text-xs mt-1">One-time trustline so you can hold and send USDC.</p>
+                    <Button
+                      loading={isActionBusy(WALLET_ACTIONS.ENABLE_USDC)}
+                      disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.ENABLE_USDC)}
+                      size="sm"
+                      className="w-full mt-3"
+                      onClick={() => runAction('USDC enabled', enableUsdc)}
+                    >
+                      <Coins size={14} className="inline mr-1" />
+                      Enable USDC
+                    </Button>
+                  </div>
                 )}
+
                 {hasUsdcTrustline && (
-                  <div className="space-y-2 pt-1">
+                  <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 space-y-2">
+                    <p className="text-rowan-text text-sm font-medium">Step 3 — Swap XLM to USDC</p>
                     <p className="text-rowan-muted text-xs flex items-center gap-1">
                       <ArrowRightLeft size={12} />
-                      Swap test XLM → USDC on the DEX
+                      Buy USDC on the testnet DEX using your XLM
                     </p>
                     <input
                       type="number"
@@ -221,11 +240,13 @@ export default function StellarWallet() {
                       max="1000"
                       value={swapAmount}
                       onChange={(e) => setSwapAmount(e.target.value)}
-                      className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text text-sm"
+                      disabled={anyActionRunning}
+                      className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text text-sm disabled:opacity-50"
                     />
                     <p className="text-rowan-muted text-[10px]">Start small (e.g. 10–50 USDC). Large swaps need more XLM.</p>
                     <Button
-                      loading={busy}
+                      loading={isActionBusy(WALLET_ACTIONS.SWAP)}
+                      disabled={(anyActionRunning && !isActionBusy(WALLET_ACTIONS.SWAP)) || !swapAmount || Number(swapAmount) <= 0}
                       variant="ghost"
                       size="sm"
                       className="w-full border border-rowan-border"
@@ -239,7 +260,13 @@ export default function StellarWallet() {
             )}
 
             {!CURRENT_NETWORK.isTest && hasUsdcTrustline === false && (
-              <Button loading={busy} size="sm" className="w-full" onClick={() => runAction('USDC enabled', enableUsdc)}>
+              <Button
+                loading={isActionBusy(WALLET_ACTIONS.ENABLE_USDC)}
+                disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.ENABLE_USDC)}
+                size="sm"
+                className="w-full"
+                onClick={() => runAction('USDC enabled', enableUsdc)}
+              >
                 Enable USDC trustline
               </Button>
             )}

@@ -14,6 +14,14 @@ import { verifyWalletAddress } from '../api/wallet'
 
 export const TRADER_KEY_STORAGE = 'rowan_trader_stellar_keypair'
 
+export const WALLET_ACTIONS = {
+  CREATE: 'create',
+  IMPORT: 'import',
+  FUND: 'fund',
+  ENABLE_USDC: 'enableUsdc',
+  SWAP: 'swap',
+}
+
 /**
  * Trader's in-app Stellar wallet — create, fund, trustline, swap, send.
  * Keys stay on-device; public address is synced to the trader profile.
@@ -26,7 +34,7 @@ export default function useTraderWallet() {
   const [usdcBalance, setUsdcBalance] = useState(null)
   const [hasUsdcTrustline, setHasUsdcTrustline] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(false)
+  const [activeAction, setActiveAction] = useState(null)
   const [error, setError] = useState(null)
 
   const loadStoredKeypair = useCallback(async () => {
@@ -73,37 +81,42 @@ export default function useTraderWallet() {
     setLinkedAddress(publicKey)
   }, [])
 
-  const createWallet = useCallback(async () => {
-    setBusy(true)
+  const runWalletAction = useCallback(async (action, fn) => {
+    if (activeAction) {
+      throw new Error('Please wait for the current action to finish')
+    }
+    setActiveAction(action)
     setError(null)
     try {
-      const kp = generateKeypair()
-      await setSecure(TRADER_KEY_STORAGE, JSON.stringify(kp))
-      await syncLinkedAddress(kp.publicKey)
-      if (CURRENT_NETWORK.friendbotUrl) {
-        await fundWithFriendbot(kp.publicKey)
-        await new Promise((r) => setTimeout(r, 2000))
-      }
-      setKeypair(kp)
-      await refresh()
-      return kp
+      return await fn()
     } catch (err) {
-      const msg = err.response?.data?.error || err.message || 'Could not create wallet'
+      const msg = err.response?.data?.error || err.message || 'Action failed'
       setError(msg)
       throw new Error(msg)
     } finally {
-      setBusy(false)
+      setActiveAction(null)
     }
-  }, [refresh, syncLinkedAddress])
+  }, [activeAction])
+
+  const createWallet = useCallback(async () => runWalletAction(WALLET_ACTIONS.CREATE, async () => {
+    const kp = generateKeypair()
+    await setSecure(TRADER_KEY_STORAGE, JSON.stringify(kp))
+    await syncLinkedAddress(kp.publicKey)
+    if (CURRENT_NETWORK.friendbotUrl) {
+      await fundWithFriendbot(kp.publicKey)
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+    setKeypair(kp)
+    await refresh()
+    return kp
+  }), [refresh, runWalletAction, syncLinkedAddress])
 
   const importWallet = useCallback(async (secretKey) => {
     const secret = secretKey.trim()
     if (!isValidSecretKey(secret)) {
       throw new Error('Enter a valid Stellar secret key (starts with S)')
     }
-    setBusy(true)
-    setError(null)
-    try {
+    return runWalletAction(WALLET_ACTIONS.IMPORT, async () => {
       const kpObj = keypairFromSecret(secret)
       const kp = { publicKey: kpObj.publicKey(), secretKey: secret }
       await setSecure(TRADER_KEY_STORAGE, JSON.stringify(kp))
@@ -111,59 +124,35 @@ export default function useTraderWallet() {
       setKeypair(kp)
       await refresh()
       return kp
-    } catch (err) {
-      const msg = err.response?.data?.error || err.message || 'Could not import wallet'
-      setError(msg)
-      throw new Error(msg)
-    } finally {
-      setBusy(false)
-    }
-  }, [refresh, syncLinkedAddress])
+    })
+  }, [refresh, runWalletAction, syncLinkedAddress])
 
   const fundTestnet = useCallback(async () => {
     if (!keypair?.publicKey) throw new Error('Create a Rowan wallet first')
     if (!CURRENT_NETWORK.friendbotUrl) throw new Error('Testnet funding is not available on mainnet')
-    setBusy(true)
-    setError(null)
-    try {
+    return runWalletAction(WALLET_ACTIONS.FUND, async () => {
       await fundWithFriendbot(keypair.publicKey)
       await new Promise((r) => setTimeout(r, 2000))
       await refresh()
-    } catch (err) {
-      const msg = err.message || 'Friendbot funding failed'
-      setError(msg)
-      throw new Error(msg)
-    } finally {
-      setBusy(false)
-    }
-  }, [keypair?.publicKey, refresh])
+    })
+  }, [keypair?.publicKey, refresh, runWalletAction])
 
   const enableUsdc = useCallback(async () => {
     if (!keypair?.secretKey) throw new Error('Create a Rowan wallet first')
-    setBusy(true)
-    setError(null)
-    try {
+    return runWalletAction(WALLET_ACTIONS.ENABLE_USDC, async () => {
       if (CURRENT_NETWORK.isTest && (xlmBalance == null || xlmBalance < 1)) {
         await fundWithFriendbot(keypair.publicKey)
         await new Promise((r) => setTimeout(r, 2000))
       }
       await addUsdcTrustline(keypair.secretKey, horizonUrl)
       await refresh()
-    } catch (err) {
-      const msg = err.message || 'Could not enable USDC'
-      setError(msg)
-      throw new Error(msg)
-    } finally {
-      setBusy(false)
-    }
-  }, [horizonUrl, keypair, refresh, xlmBalance])
+    })
+  }, [horizonUrl, keypair, refresh, runWalletAction, xlmBalance])
 
   const swapToUsdc = useCallback(async (usdcAmount) => {
     if (!keypair?.secretKey) throw new Error('Create a Rowan wallet first')
     if (!hasUsdcTrustline) throw new Error('Enable USDC in your Rowan wallet first')
-    setBusy(true)
-    setError(null)
-    try {
+    return runWalletAction(WALLET_ACTIONS.SWAP, async () => {
       const result = await swapXlmToUsdc({
         sourceSecretKey: keypair.secretKey,
         usdcAmount,
@@ -171,14 +160,10 @@ export default function useTraderWallet() {
       })
       await refresh()
       return result
-    } catch (err) {
-      const msg = err.message || 'Swap failed'
-      setError(msg)
-      throw new Error(msg)
-    } finally {
-      setBusy(false)
-    }
-  }, [hasUsdcTrustline, horizonUrl, keypair?.secretKey, refresh])
+    })
+  }, [hasUsdcTrustline, horizonUrl, keypair?.secretKey, refresh, runWalletAction])
+
+  const isActionBusy = useCallback((action) => activeAction === action, [activeAction])
 
   const isLinked = !!keypair?.publicKey && (
     !linkedAddress || linkedAddress === keypair.publicKey
@@ -192,7 +177,9 @@ export default function useTraderWallet() {
     usdcBalance,
     hasUsdcTrustline,
     loading,
-    busy,
+    activeAction,
+    isActionBusy,
+    busy: !!activeAction,
     error,
     isReady: !!keypair?.secretKey && hasUsdcTrustline === true,
     isLinked,
