@@ -86,6 +86,9 @@ export function formatAvgReleaseTime(minutes) {
   if (!formatted) return null
   return `Avg. payout: ${formatted}`
 }
+
+/** e.g. "42 trades" */
+export function formatTradeCount(count) {
   const n = Number(count)
   if (!Number.isFinite(n) || n < 0) return null
   if (n === 0) return 'No trades yet'
