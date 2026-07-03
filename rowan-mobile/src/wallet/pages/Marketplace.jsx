@@ -12,6 +12,7 @@ import useUserCountry from '../hooks/useUserCountry'
 import { getNetworksForCountry } from '../utils/country'
 import { NETWORKS } from '../utils/constants'
 import Button from '../components/ui/Button'
+import client from '../api/client'
 
 export default function Marketplace() {
   const navigate = useNavigate()
@@ -25,6 +26,7 @@ export default function Marketplace() {
   const { balance } = useWallet()
   const [traders, setTraders] = useState([])
   const [pickTrader, setPickTrader] = useState(null)
+  const [typicalTradeMinutes, setTypicalTradeMinutes] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
@@ -50,6 +52,15 @@ export default function Marketplace() {
       setRefreshing(false)
     }
   }, [network, minAmount, fiatCurrency, tab])
+
+  useEffect(() => {
+    client.get('/api/v1/config/cashout-limits')
+      .then((res) => {
+        const mins = res.data?.data?.tradeTiming?.typicalCompleteMinutes
+        if (mins != null) setTypicalTradeMinutes(mins)
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     loadAds()
@@ -274,6 +285,7 @@ export default function Marketplace() {
               allRates={allRates}
               usdcToFiat={rates?.usdcToFiat}
               walletBalance={balance}
+              typicalTradeMinutes={typicalTradeMinutes}
               onTrade={handleTrade}
               onViewProfile={handleViewProfile}
               onPickNetwork={setPickTrader}

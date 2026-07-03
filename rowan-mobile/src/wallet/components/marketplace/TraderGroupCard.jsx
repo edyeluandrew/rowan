@@ -2,13 +2,14 @@ import { ShieldCheck, Clock, Calendar } from 'lucide-react'
 import {
   formatCurrency,
   formatPercent,
-  formatDurationMinutes,
   formatXlmRateLine,
   formatUsdcRateLine,
   formatMemberSince,
   formatTradeCount,
   estimateUsdcPerXlm,
   formatSellEstimateLine,
+  formatTypicalTradeTime,
+  formatAvgReleaseTime,
   getTraderDisplayName,
   lookupNetworkRate,
 } from '../../utils/p2pFormat'
@@ -24,6 +25,7 @@ export default function TraderGroupCard({
   allRates,
   usdcToFiat,
   walletBalance,
+  typicalTradeMinutes,
   onTrade,
   onViewProfile,
   onPickNetwork,
@@ -49,7 +51,8 @@ export default function TraderGroupCard({
   const estimateLine = formatSellEstimateLine(estimateXlm, estimateFiat, currency)
 
   const completion = formatPercent(trader.completionRate)
-  const releaseTime = formatDurationMinutes(trader.avgReleaseMinutes)
+  const avgReleaseLine = formatAvgReleaseTime(trader.avgReleaseMinutes)
+  const typicalTradeLine = formatTypicalTradeTime(typicalTradeMinutes)
   const memberSince = formatMemberSince(trader.memberSince)
   const tradeCount = formatTradeCount(trader.completedOrders)
   const isVerified = trader.trustScore >= 80
@@ -140,10 +143,16 @@ export default function TraderGroupCard({
             {completion} completion
           </span>
         )}
-        {releaseTime && (
+        {avgReleaseLine && (
           <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-rowan-surface border border-rowan-border text-rowan-muted">
             <Clock size={12} className="shrink-0" />
-            Avg. {releaseTime}
+            {avgReleaseLine}
+          </span>
+        )}
+        {typicalTradeLine && (
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-rowan-yellow/10 border border-rowan-yellow/30 text-rowan-yellow">
+            <Clock size={12} className="shrink-0" />
+            {typicalTradeLine}
           </span>
         )}
       </div>
@@ -154,16 +163,6 @@ export default function TraderGroupCard({
             Limits: {formatCurrency(trader.minAmount, currency)}
             {' \u2013 '}
             {formatCurrency(trader.maxAmount, currency)}
-          </p>
-        )}
-        {isBuy && trader.totalAvailableUsdc != null && (
-          <p className="text-rowan-muted text-xs">
-            {Number(trader.totalAvailableUsdc).toFixed(2)} USDC available
-          </p>
-        )}
-        {!isBuy && trader.totalAvailableFloat != null && (
-          <p className="text-rowan-muted text-xs">
-            {formatCurrency(trader.totalAvailableFloat, currency)} float total
           </p>
         )}
       </div>

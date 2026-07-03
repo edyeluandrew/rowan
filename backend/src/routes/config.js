@@ -77,6 +77,20 @@ router.get('/cashout-limits', async (req, res, next) => {
       },
       // Slippage protection
       slippagePercent: config.platform.quoteSlippagePercent,
+      // Marketplace: typical end-to-end trade duration (system estimate)
+      tradeTiming: (() => {
+        const acceptSec = config.platform.traderAcceptTimeoutSeconds;
+        const paySec = config.platform.paymentWindowSeconds;
+        const typicalCompleteMinutes = parseInt(process.env.TYPICAL_TRADE_MINUTES, 10)
+          || Math.max(5, Math.ceil((acceptSec + paySec * 0.5) / 60));
+        const maxCompleteMinutes = Math.ceil((acceptSec + paySec + 120) / 60);
+        return {
+          typicalCompleteMinutes,
+          maxCompleteMinutes,
+          traderAcceptMinutes: Math.ceil(acceptSec / 60),
+          paymentWindowMinutes: Math.ceil(paySec / 60),
+        };
+      })(),
       // [PHASE 4] KYC-tiered limits (for transparency and admin display)
       kycLimits: config.kycLimits,
       // [PHASE 4] Amount mismatch tolerance for deposit verification

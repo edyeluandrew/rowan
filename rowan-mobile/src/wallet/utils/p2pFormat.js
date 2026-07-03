@@ -73,8 +73,19 @@ export function formatMemberSince(isoString) {
   return `Joined ${months[d.getMonth()]} ${d.getFullYear()}`
 }
 
-/** e.g. "42 trades" */
-export function formatTradeCount(count) {
+/** e.g. "Usually under 10 min" — platform typical trade duration */
+export function formatTypicalTradeTime(minutes) {
+  const m = Number(minutes)
+  if (!Number.isFinite(m) || m <= 0) return null
+  return m === 1 ? 'Usually under 1 min' : `Usually under ${m} min`
+}
+
+/** e.g. "Avg. payout: 4 min" */
+export function formatAvgReleaseTime(minutes) {
+  const formatted = formatDurationMinutes(minutes)
+  if (!formatted) return null
+  return `Avg. payout: ${formatted}`
+}
   const n = Number(count)
   if (!Number.isFinite(n) || n < 0) return null
   if (n === 0) return 'No trades yet'
