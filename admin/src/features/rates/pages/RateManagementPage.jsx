@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import TopBar from '../../../shared/components/layout/TopBar'
 import ConfirmDialog from '../../../shared/components/ui/ConfirmDialog'
 import Button from '../../../shared/components/ui/Button'
@@ -30,6 +30,10 @@ export default function RateManagementPage() {
       setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    fetchRates()
+  }, [fetchRates])
 
   const handleOpenConfirm = () => {
     const num = Number(newRate)

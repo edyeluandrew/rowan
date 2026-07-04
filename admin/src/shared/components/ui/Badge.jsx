@@ -6,12 +6,20 @@ export default function Badge({ variant = 'info', color, bg, children }) {
     error: 'bg-rowan-red/10 text-rowan-red',
     success: 'bg-rowan-green/10 text-rowan-green',
     info: 'bg-rowan-blue/10 text-rowan-blue',
-    warning: 'bg-rowan-orange/10 text-rowan-orange'
+    warning: 'bg-rowan-orange/10 text-rowan-orange',
+    red: 'bg-rowan-red/10 text-rowan-red',
+    green: 'bg-rowan-green/10 text-rowan-green',
+    blue: 'bg-rowan-blue/10 text-rowan-blue',
+    orange: 'bg-rowan-orange/10 text-rowan-orange',
+    yellow: 'bg-rowan-yellow/10 text-rowan-yellow',
+    gray: 'bg-rowan-muted/15 text-rowan-muted',
   }
 
   // Support custom color/bg props or variant
-  const badgeColor = color || colors[variant].split(' ')[1]
-  const badgeBg = bg || colors[variant].split(' ')[0]
+  const variantClasses = colors[variant] || colors.info
+  const classParts = variantClasses.split(' ')
+  const badgeColor = color || classParts[1]
+  const badgeBg = bg || classParts[0]
 
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeBg} ${badgeColor}`}>
