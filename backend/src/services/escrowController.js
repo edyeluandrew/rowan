@@ -851,6 +851,15 @@ async function handleTraderUsdcDeposit({ memo, amount, sourceAccount, txHash }) 
     paymentExpiresAt: paymentExpiresAt.toISOString(),
   }).catch(() => {});
 
+  notificationService.createNotification(
+    row.user_id,
+    'user',
+    'transaction_update',
+    'USDC locked in escrow',
+    'Your trader locked USDC in escrow. Send your mobile money payment now.',
+    row.tx_id
+  ).catch(() => {});
+
   const { getVerifiedTraderMomo, buildBuyPaymentDetailsPayload } = await import('./traderMomoService.js');
   const traderMomo = await getVerifiedTraderMomo(row.trader_id, row.tx_network || row.network);
   const chatService = (await import('./chatService.js')).default;
@@ -1172,6 +1181,14 @@ async function refundToUser(transactionId, { adminId = null, retry = false } = {
           status: 'refund_waiting_trustline',
           message: 'Your dispute was resolved in your favour, but your wallet must add a USDC trustline before the refund can complete.',
         });
+        await notificationService.createNotification(
+          tx.user_id,
+          'user',
+          'dispute_update',
+          'Refund waiting on your wallet',
+          'Add a USDC trustline in your wallet so we can complete your dispute refund.',
+          transactionId
+        );
       } catch (_) { /* notification best-effort */ }
       logger.warn(`[Refund] Tx ${transactionId} blocked: user ${tx.user_stellar} has no USDC trustline`);
       return { status: 'blocked', code, message: 'User wallet has no USDC trustline. Refund will complete after the user adds one and an admin retries.' };
@@ -1248,11 +1265,27 @@ async function refundToUser(transactionId, { adminId = null, retry = false } = {
         stellarRefundTx: result.hash,
         message: 'Your dispute was resolved in your favour. The escrowed USDC has been returned to your wallet.',
       });
+      await notificationService.createNotification(
+        tx.user_id,
+        'user',
+        'transaction_refunded',
+        'Refund completed',
+        'Your dispute was resolved in your favour and the escrowed USDC has been returned to your wallet.',
+        transactionId
+      );
       if (tx.trader_id) {
         await notificationService.notifyTrader(tx.trader_id, 'dispute_refund_complete', {
           transactionId,
           message: 'This dispute was resolved for the customer. The escrowed USDC was returned to the customer.',
         });
+        await notificationService.createNotification(
+          tx.trader_id,
+          'trader',
+          'dispute',
+          'Dispute resolved for customer',
+          'The dispute was resolved for the customer and the escrowed USDC was returned to them.',
+          transactionId
+        );
       }
     } catch (_) { /* notification best-effort */ }
 

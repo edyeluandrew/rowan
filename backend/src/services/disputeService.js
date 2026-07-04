@@ -259,6 +259,14 @@ async function traderRespond(disputeId, traderId, responseText, proofFile) {
       trader_response: responseText,
       has_proof: !!proofKey,
     });
+    await notificationService.createNotification(
+      dispute.user_id,
+      'user',
+      'dispute_update',
+      'Trader responded to your dispute',
+      'The trader added a response to your dispute. Our team is reviewing the case.',
+      dispute.transaction_id
+    ).catch(() => {});
 
     await notificationService.notifyAdmins('dispute_trader_responded', {
       dispute_id: disputeId,
@@ -520,6 +528,14 @@ async function adminAction(disputeId, adminId, action, actionData = {}) {
       dispute_id: disputeId,
       request: actionData.reason,
     });
+    await notificationService.createNotification(
+      dispute.trader_id,
+      'trader',
+      'dispute',
+      'More evidence requested',
+      actionData.reason || 'Support requested more evidence on this dispute.',
+      dispute.transaction_id
+    ).catch(() => {});
   }
 
   logger.info(`[Dispute] Admin ${adminId} took action ${action} on dispute ${disputeId}`);

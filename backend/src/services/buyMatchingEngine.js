@@ -120,6 +120,15 @@ async function matchBuyTrader(transactionId) {
       message: 'Trader matched. Waiting for them to accept and lock USDC.',
     }).catch(() => {});
 
+    notificationService.createNotification(
+      transaction.user_id,
+      'user',
+      'TRADER_MATCHED',
+      'Trader found!',
+      'A trader has been matched to your order. We are waiting for them to lock USDC in escrow.',
+      transactionId
+    ).catch(() => {});
+
     const acceptTimeoutMs = (config.platform.traderAcceptTimeoutSeconds || 180) * 1000;
     await notificationService.notifyTraderNewRequest(candidate.trader_id, {
       id: transactionId,
@@ -208,6 +217,15 @@ async function acceptBuyRequest(transactionId, traderId) {
       memo: quote?.memo,
       lockExpiresAt: lockExpiresAt.toISOString(),
     }).catch(() => {});
+
+    notificationService.createNotification(
+      transaction.user_id,
+      'user',
+      'transaction_update',
+      'Trader accepted your order',
+      'Your trader accepted the order and is now locking USDC in escrow.',
+      transactionId
+    ).catch(() => {});
   }
 
   const quoteRow = await db.query(`SELECT memo, escrow_address FROM quotes WHERE id = $1`, [transaction.quote_id]);
@@ -276,6 +294,15 @@ async function submitUserPaymentSent(transactionId, userId, paymentReference, { 
     fiat_amount: transaction.fiat_amount,
     fiat_currency: transaction.fiat_currency,
   }).catch(() => {});
+
+  notificationService.createNotification(
+    transaction.trader_id,
+    'trader',
+    'payout',
+    'Buyer marked payment sent',
+    `The buyer says they sent ${formatFiatDisplay(transaction.fiat_amount, transaction.fiat_currency)}. Review the proof and confirm when received.`,
+    transactionId
+  ).catch(() => {});
 
   return transaction;
 }

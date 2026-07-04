@@ -11,12 +11,21 @@ import { formatTimeAgo } from '../../utils/format';
 
 const iconMap = {
   payout: { Icon: Coins, color: 'text-rowan-yellow' },
+  COMPLETE: { Icon: ShieldCheck, color: 'text-rowan-green' },
   new_request: { Icon: Inbox, color: 'text-rowan-yellow' },
   request: { Icon: Inbox, color: 'text-rowan-yellow' },
+  request_reassigned: { Icon: Clock, color: 'text-rowan-yellow' },
   dispute: { Icon: ShieldAlert, color: 'text-rowan-red' },
+  DISPUTE_OPENED: { Icon: ShieldAlert, color: 'text-rowan-red' },
+  DISPUTE_RESOLVED: { Icon: ShieldCheck, color: 'text-rowan-green' },
+  dispute_evidence_requested: { Icon: ShieldAlert, color: 'text-rowan-yellow' },
+  dispute_refund_complete: { Icon: ShieldAlert, color: 'text-rowan-red' },
+  dispute_resolved_release: { Icon: ShieldCheck, color: 'text-rowan-green' },
   escrow: { Icon: Key, color: 'text-rowan-yellow' },
+  user_sent_payment: { Icon: Coins, color: 'text-rowan-green' },
   system: { Icon: Bell, color: 'text-rowan-muted' },
   verification: { Icon: ShieldCheck, color: 'text-rowan-green' },
+  verification_update: { Icon: ShieldCheck, color: 'text-rowan-green' },
 };
 
 /**
@@ -25,7 +34,7 @@ const iconMap = {
  */
 export default function NotificationItem({ notification, onTap }) {
   const n = notification;
-  const isUnread = !n.read && !n.read_at;
+  const isUnread = !n.read && !n.readAt && !n.read_at;
   const { Icon, color } = iconMap[n.type] || iconMap.system;
 
   return (

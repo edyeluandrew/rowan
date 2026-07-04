@@ -422,6 +422,16 @@ async function handlePayoutTimeout(transactionId, traderId) {
       ? 'Your chosen trader did not send mobile money in time. Waiting for them to retry…'
       : 'Your trader did not send mobile money in time. Finding another trader…',
   });
+  await notificationService.createNotification(
+    tx.user_id,
+    'user',
+    'transaction_update',
+    isManualSelection ? 'Trader retry in progress' : 'Finding another trader',
+    isManualSelection
+      ? 'Your chosen trader did not send mobile money in time. We are waiting for them to retry.'
+      : 'Your trader did not send mobile money in time. Rowan is finding another trader for you.',
+    transactionId
+  ).catch(() => {});
 }
 
 /**
@@ -502,6 +512,14 @@ orphanRecoveryQueue.process(async () => {
        AND t.fiat_payout_submitted_at < NOW() - INTERVAL '1 minute' * $1`,
     [fiatSentMinutes]
   );
+  if (stuckFiatSent.rows.length > 0) {
+    await notificationService.notifyAdmins('system_alert', {
+      type: 'stuck_payouts',
+      severity: 'warning',
+      count: stuckFiatSent.rows.length,
+      message: `${stuckFiatSent.rows.length} payout${stuckFiatSent.rows.length === 1 ? '' : 's'} need admin review`,
+    });
+  }
   for (const tx of stuckFiatSent.rows) {
     logger.warn(`[Job:orphan-recovery] FIAT_PAYOUT_SUBMITTED stuck for tx ${tx.id} — flagging for admin review`);
   }
