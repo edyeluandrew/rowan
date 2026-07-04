@@ -298,20 +298,19 @@ router.post(
       );
       const has2fa = twoFaResult.rows[0]?.is_enabled === true;
 
+      // Temporary admin-login policy: bypass 2FA until the admin frontend has
+      // a complete verification step. This preserves access without requiring
+      // operators to disable their stored 2FA settings manually in the DB.
       if (has2fa) {
         await auditLogService.log({
           admin_id: admin.id,
           actor_role: 'admin',
-          action: 'admin_2fa_required',
+          action: 'admin_2fa_bypassed',
           resource_type: 'admin',
           resource_id: admin.id,
           metadata: { email: admin.email },
           ip_address: req.ip,
           user_agent: req.get('user-agent'),
-        });
-        return res.json({
-          requiresTwoFactorVerification: true,
-          adminId: admin.id,
         });
       }
 
@@ -323,7 +322,7 @@ router.post(
         action: 'admin_login',
         resource_type: 'admin',
         resource_id: admin.id,
-        metadata: { email: admin.email, twoFactorUsed: false },
+        metadata: { email: admin.email, twoFactorUsed: false, twoFactorBypassed: has2fa },
         ip_address: req.ip,
         user_agent: req.get('user-agent'),
       });
