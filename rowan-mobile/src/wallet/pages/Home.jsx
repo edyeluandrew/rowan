@@ -13,6 +13,7 @@ import BiometricLock from '../../shared/components/BiometricLock'
 import BalanceCard from '../components/wallet/BalanceCard'
 import RateDisplay from '../components/wallet/RateDisplay'
 import CashoutInProgressBanner from '../components/cashout/CashoutInProgressBanner'
+import MvpPilotBanner from '../components/ui/MvpPilotBanner'
 import ConnectionDot from '../components/ui/ConnectionDot'
 import NotificationBadge from '../components/ui/NotificationBadge'
 import TransactionCard from '../components/transactions/TransactionCard'
@@ -90,6 +91,8 @@ export default function Home() {
           retryRates()
         }}
       />
+
+      <MvpPilotBanner className="mt-4" />
 
       {activeCashout && <CashoutInProgressBanner transaction={activeCashout} />}
 

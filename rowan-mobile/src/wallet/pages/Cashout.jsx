@@ -18,6 +18,7 @@ import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
 import PaymentMethodPill from '../components/ui/PaymentMethodPill'
 import Button from '../components/ui/Button'
+import MvpPilotBanner from '../components/ui/MvpPilotBanner'
 
 export default function Cashout() {
   const navigate = useNavigate()
@@ -190,6 +191,8 @@ export default function Cashout() {
         </button>
         <h1 className="text-rowan-text text-lg font-bold">Cash Out</h1>
       </div>
+
+      <MvpPilotBanner className="mb-4" />
 
       {(selectedAd || presetTraderName) && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4 flex items-start gap-3">

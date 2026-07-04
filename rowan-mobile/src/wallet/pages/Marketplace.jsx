@@ -12,6 +12,7 @@ import useUserCountry from '../hooks/useUserCountry'
 import { getNetworksForCountry } from '../utils/country'
 import { NETWORKS } from '../utils/constants'
 import Button from '../components/ui/Button'
+import MvpPilotBanner from '../components/ui/MvpPilotBanner'
 import client from '../api/client'
 
 export default function Marketplace() {
@@ -155,6 +156,8 @@ export default function Marketplace() {
           ? 'Buy USDC — pay mobile money, receive USDC in your wallet.'
           : 'Sell to a trader you choose. For fastest matching without picking, use Express Cash Out on Home.'}
       </p>
+
+      <MvpPilotBanner className="mb-4" />
 
       <div className="flex gap-2 mb-5">
         <button
