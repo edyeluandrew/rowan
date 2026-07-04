@@ -1,4 +1,5 @@
 import { AlertTriangle, Info, XCircle } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 const ICONS = {
   warning: AlertTriangle,
@@ -22,11 +23,16 @@ export default function AlertBanner({ alerts = [] }) {
         const Icon = ICONS[severity] || ICONS.info
         return (
           <div
-            key={alert.id}
+            key={alert.id || `${alert.message}-${alert.timestamp}`}
             className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm ${COLORS[severity] || COLORS.info}`}
           >
             <Icon size={16} className="shrink-0" />
             <span className="flex-1">{alert.message}</span>
+            {alert.actionUrl && (
+              <Link to={alert.actionUrl} className="text-xs font-medium underline underline-offset-2">
+                {alert.actionLabel || 'Review'}
+              </Link>
+            )}
             <span className="text-xs opacity-70">{alert.timestamp}</span>
           </div>
         )

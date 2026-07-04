@@ -77,7 +77,7 @@ export default function DisputeDetail() {
 
       await respondToDispute(id, responseText.trim(), file);
       setSuccess(true);
-      setDispute((prev) => ({ ...prev, status: 'UNDER_REVIEW', traderResponse: responseText.trim(), respondedAt: new Date().toISOString() }));
+      setDispute((prev) => ({ ...prev, status: 'TRADER_RESPONDED', traderResponse: responseText.trim(), respondedAt: new Date().toISOString() }));
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to submit response');
     } finally {
@@ -87,7 +87,9 @@ export default function DisputeDetail() {
 
   const d = dispute || {};
   const hasResponded = d.traderResponse || d.trader_response || d.respondedAt || d.responded_at;
-  const isResolved = d.status === 'RESOLVED_TRADER_WIN' || d.status === 'RESOLVED_USER_WIN';
+  const isTraderWin = d.status === 'RESOLVED_FOR_TRADER';
+  const isDismissed = d.status === 'DISMISSED' || d.status === 'CLOSED';
+  const isResolved = isTraderWin || d.status === 'RESOLVED_FOR_USER' || isDismissed;
 
   if (loading) {
     return (
@@ -235,11 +237,11 @@ export default function DisputeDetail() {
         {isResolved && (
           <div
             className={`bg-rowan-surface border rounded-xl p-4 mt-4 ${
-              d.status === 'RESOLVED_TRADER_WIN' ? 'border-rowan-green/30' : 'border-rowan-red/30'
+              isTraderWin ? 'border-rowan-green/30' : isDismissed ? 'border-rowan-border' : 'border-rowan-red/30'
             }`}
           >
             <p className={`font-bold text-sm mb-2 ${
-              d.status === 'RESOLVED_TRADER_WIN' ? 'text-rowan-green' : 'text-rowan-red'
+              isTraderWin ? 'text-rowan-green' : isDismissed ? 'text-rowan-muted' : 'text-rowan-red'
             }`}>
               Dispute Resolved
             </p>

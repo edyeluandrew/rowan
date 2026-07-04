@@ -12,6 +12,7 @@ import bcrypt from 'bcryptjs';
 import logger from '../utils/logger.js';
 import auditLogService from '../services/auditLogService.js';
 import { sensitiveActionLimiter } from '../middleware/rateLimits.js';
+import config from '../config/index.js';
 
 const router = Router();
 
@@ -22,24 +23,89 @@ const router = Router();
  */
 router.get('/transactions', authAdmin, async (req, res, next) => {
   try {
-    const { state, limit = 50, offset = 0 } = req.query;
-    let query = `
-      SELECT t.*, tr.name as trader_name
+    const {
+      state,
+      network,
+      search,
+      from,
+      to,
+      stuckPayoutOnly,
+      staleMinutes,
+      limit = 50,
+      offset,
+      page = 1,
+    } = req.query;
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const requestedPage = Math.max(parseInt(page, 10) || 1, 1);
+    const offsetNum = offset != null
+      ? Math.max(parseInt(offset, 10) || 0, 0)
+      : (requestedPage - 1) * limitNum;
+    const currentPage = offset != null ? Math.floor(offsetNum / limitNum) + 1 : requestedPage;
+    const staleMinutesNum = Math.max(
+      parseInt(staleMinutes, 10) || config.platform.orphanFiatSentMinutes,
+      1
+    );
+    const stuckOnly = String(stuckPayoutOnly) === 'true';
+    const params = [];
+    const where = [];
+
+    if (state) {
+      params.push(state);
+      where.push(`t.state = $${params.length}`);
+    }
+    if (network) {
+      params.push(network);
+      where.push(`t.network = $${params.length}`);
+    }
+    if (search?.trim()) {
+      params.push(`%${search.trim()}%`);
+      where.push(`(
+        t.id::text ILIKE $${params.length}
+        OR COALESCE(t.payout_phone, '') ILIKE $${params.length}
+        OR COALESCE(t.payout_name, '') ILIKE $${params.length}
+        OR COALESCE(tr.name, '') ILIKE $${params.length}
+      )`);
+    }
+    if (from) {
+      params.push(from);
+      where.push(`t.created_at >= $${params.length}::date`);
+    }
+    if (to) {
+      params.push(to);
+      where.push(`t.created_at < ($${params.length}::date + INTERVAL '1 day')`);
+    }
+    if (stuckOnly) {
+      where.push(`t.state = 'FIAT_PAYOUT_SUBMITTED'`);
+      params.push(staleMinutesNum);
+      where.push(`COALESCE(t.fiat_sent_at, t.updated_at, t.created_at) <= NOW() - ($${params.length} * INTERVAL '1 minute')`);
+    }
+
+    const whereClause = where.length ? ` WHERE ${where.join(' AND ')}` : '';
+    const baseQuery = `
       FROM transactions t
       LEFT JOIN traders tr ON tr.id = t.trader_id
     `;
-    const params = [];
-    if (state) {
-      params.push(state);
-      query += ` WHERE t.state = $${params.length}`;
-    }
-    params.push(parseInt(limit));
-    query += ` ORDER BY t.created_at DESC LIMIT $${params.length}`;
-    params.push(parseInt(offset));
-    query += ` OFFSET $${params.length}`;
+    const countResult = await db.query(
+      `SELECT COUNT(*) as total ${baseQuery}${whereClause}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0]?.total || 0, 10);
 
-    const result = await db.query(query, params);
-    res.json({ transactions: result.rows });
+    const query = `
+      SELECT t.*, tr.name as trader_name
+      ${baseQuery}
+      ${whereClause}
+      ORDER BY t.created_at DESC
+      LIMIT $${params.length + 1}
+      OFFSET $${params.length + 2}
+    `;
+    const result = await db.query(query, [...params, limitNum, offsetNum]);
+    res.json({
+      transactions: result.rows,
+      total,
+      page: currentPage,
+      pages: Math.max(1, Math.ceil(total / limitNum)),
+    });
   } catch (err) {
     next(err);
   }
@@ -141,6 +207,15 @@ router.get('/overview', authAdmin, async (req, res, next) => {
       WHERE state IN ('ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING')
     `);
 
+    // Stuck fiat payouts that need manual review
+    const stuckPayoutResult = await db.query(
+      `SELECT COUNT(*)::int AS count
+       FROM transactions
+       WHERE state = 'FIAT_PAYOUT_SUBMITTED'
+         AND fiat_payout_submitted_at < NOW() - INTERVAL '1 minute' * $1`,
+      [config.platform.orphanFiatSentMinutes]
+    );
+
     // Success rate
     const txRow = txToday.rows[0];
     const total = parseInt(txRow.transactions_today) || 0;
@@ -160,10 +235,27 @@ router.get('/overview', authAdmin, async (req, res, next) => {
     // Alerts
     const alerts = [];
     if (parseInt(disputesResult.rows[0].open_disputes) > 0) {
-      alerts.push({ type: 'warning', message: `${disputesResult.rows[0].open_disputes} open dispute(s) need attention` });
+      alerts.push({
+        severity: 'warning',
+        message: `${disputesResult.rows[0].open_disputes} open dispute(s) need attention`,
+        timestamp: 'now',
+      });
     }
     if (parseInt(pendingResult.rows[0].pending_approvals) > 0) {
-      alerts.push({ type: 'info', message: `${pendingResult.rows[0].pending_approvals} trader(s) awaiting approval` });
+      alerts.push({
+        severity: 'info',
+        message: `${pendingResult.rows[0].pending_approvals} trader(s) awaiting approval`,
+        timestamp: 'now',
+      });
+    }
+    if ((stuckPayoutResult.rows[0]?.count || 0) > 0) {
+      alerts.push({
+        severity: 'warning',
+        message: `${stuckPayoutResult.rows[0].count} payout(s) have been awaiting user confirmation too long and need admin review`,
+        timestamp: 'now',
+        actionLabel: 'Review payouts',
+        actionUrl: '/transactions?state=FIAT_PAYOUT_SUBMITTED&stuckPayoutOnly=true',
+      });
     }
 
     res.json({
@@ -176,6 +268,7 @@ router.get('/overview', authAdmin, async (req, res, next) => {
         avg_settlement_time: avgResult.rows[0].avg_settlement_time ? parseInt(avgResult.rows[0].avg_settlement_time) : null,
         pending_approvals: parseInt(pendingResult.rows[0].pending_approvals),
         escrow_locked: parseFloat(escrowResult.rows[0].escrow_locked),
+        stuck_payouts: parseInt(stuckPayoutResult.rows[0]?.count || 0),
         failed_today: parseInt(txRow.failed_today),
         success_rate: successRate,
       },
@@ -258,22 +351,74 @@ router.get('/metrics', authAdmin, async (req, res, next) => {
  */
 router.get('/disputes', authAdmin, async (req, res, next) => {
   try {
-    const { status, limit = 50 } = req.query;
-    let query = `
-      SELECT d.*, tr.name as trader_name
+    const { status, priority, search, limit = 50, offset, page = 1 } = req.query;
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const requestedPage = Math.max(parseInt(page, 10) || 1, 1);
+    const offsetNum = offset != null
+      ? Math.max(parseInt(offset, 10) || 0, 0)
+      : (requestedPage - 1) * limitNum;
+    const currentPage = offset != null ? Math.floor(offsetNum / limitNum) + 1 : requestedPage;
+    const priorityExpr = `
+      CASE
+        WHEN d.status IN ('RESOLVED_FOR_USER', 'RESOLVED_FOR_TRADER', 'DISMISSED', 'CLOSED') THEN 'resolved'
+        WHEN d.status = 'ESCALATED' THEN 'high'
+        WHEN d.sla_deadline IS NOT NULL AND d.sla_deadline <= NOW() + INTERVAL '12 hours' THEN 'high'
+        WHEN d.sla_deadline IS NOT NULL AND d.sla_deadline <= NOW() + INTERVAL '24 hours' THEN 'medium'
+        WHEN d.status = 'OPEN' THEN 'medium'
+        ELSE 'low'
+      END
+    `;
+    const baseQuery = `
       FROM disputes d
       LEFT JOIN traders tr ON tr.id = d.trader_id
+      LEFT JOIN transactions t ON t.id = d.transaction_id
     `;
     const params = [];
+    const where = [];
+
     if (status) {
       params.push(status);
-      query += ` WHERE d.status = $${params.length}`;
+      where.push(`d.status = $${params.length}`);
     }
-    params.push(parseInt(limit));
-    query += ` ORDER BY d.created_at DESC LIMIT $${params.length}`;
+    if (priority) {
+      params.push(priority);
+      where.push(`(${priorityExpr}) = $${params.length}`);
+    }
+    if (search?.trim()) {
+      params.push(`%${search.trim()}%`);
+      where.push(`(
+        d.id::text ILIKE $${params.length}
+        OR d.transaction_id::text ILIKE $${params.length}
+        OR COALESCE(d.reason, '') ILIKE $${params.length}
+        OR COALESCE(tr.name, '') ILIKE $${params.length}
+      )`);
+    }
 
-    const result = await db.query(query, params);
-    res.json({ disputes: result.rows });
+    const whereClause = where.length ? ` WHERE ${where.join(' AND ')}` : '';
+    const countResult = await db.query(
+      `SELECT COUNT(*) as total ${baseQuery}${whereClause}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0]?.total || 0, 10);
+
+    const query = `
+      SELECT d.*, tr.name as trader_name,
+             t.state as transaction_state, t.usdc_amount, t.fiat_amount, t.fiat_currency, t.network,
+             ${priorityExpr} as priority
+      ${baseQuery}
+      ${whereClause}
+      ORDER BY d.created_at DESC
+      LIMIT $${params.length + 1}
+      OFFSET $${params.length + 2}
+    `;
+
+    const result = await db.query(query, [...params, limitNum, offsetNum]);
+    res.json({
+      disputes: result.rows,
+      total,
+      page: currentPage,
+      pages: Math.max(1, Math.ceil(total / limitNum)),
+    });
   } catch (err) {
     next(err);
   }
@@ -1254,16 +1399,9 @@ router.post('/transactions/:id/reassign', authAdmin, async (req, res, next) => {
  */
 router.get('/disputes/:id', authAdmin, async (req, res, next) => {
   try {
-    const result = await db.query(`
-      SELECT d.*, tr.name as trader_name,
-             t.state as transaction_state, t.usdc_amount, t.fiat_amount, t.fiat_currency
-      FROM disputes d
-      LEFT JOIN traders tr ON tr.id = d.trader_id
-      LEFT JOIN transactions t ON t.id = d.transaction_id
-      WHERE d.id = $1
-    `, [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Dispute not found' });
-    res.json({ dispute: result.rows[0] });
+    const dispute = await disputeService.getDisputeById(req.params.id);
+    if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
+    res.json({ dispute });
   } catch (err) { next(err); }
 });
 

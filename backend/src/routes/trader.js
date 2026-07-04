@@ -13,6 +13,7 @@ import { maskPhoneNumber } from '../utils/phoneMasking.js';
 import { traderLoginLimiter, sensitiveActionLimiter } from '../middleware/rateLimits.js';
 import multer from 'multer';
 import disputeEvidenceService from '../services/disputeEvidenceService.js';
+import disputeService from '../services/disputeService.js';
 import storageService from '../services/storageService.js';
 import notificationService from '../services/notificationService.js';
 import { formatShortId } from '../utils/shortId.js';
@@ -1025,12 +1026,63 @@ router.get('/float/health', authTrader, async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/trader/disputes/:id
+ * Trader dispute detail.
+ */
+router.get('/disputes/:id', authTrader, async (req, res, next) => {
+  try {
+    const dispute = await disputeService.getDisputeById(req.params.id);
+    if (!dispute) {
+      return res.status(404).json({ error: 'Dispute not found' });
+    }
+    if (dispute.trader_id !== req.traderId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    res.json({ dispute });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/trader/disputes/:id/respond
+ * Trader responds to an open dispute with text and optional proof.
+ */
+router.post(
+  '/disputes/:id/respond',
+  authTrader,
+  payoutProofUpload.single('paymentProof'),
+  async (req, res, next) => {
+    try {
+      const { responseText } = req.body;
+      if (!responseText || !responseText.trim()) {
+        return res.status(400).json({ error: 'Response text is required' });
+      }
+
+      const dispute = await disputeService.traderRespond(
+        req.params.id,
+        req.traderId,
+        responseText.trim(),
+        req.file || null
+      );
+
+      res.json({ dispute });
+    } catch (err) {
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
+      next(err);
+    }
+  }
+);
+
+/**
  * GET /api/v1/trader/disputes/:disputeId/evidence
  */
 router.get('/disputes/:disputeId/evidence', authTrader, async (req, res, next) => {
   try {
     const evidence = await disputeEvidenceService.listEvidence(req.params.disputeId, {
-      traderId: req.userId,
+      traderId: req.traderId,
     });
     res.json({ evidence });
   } catch (err) {
@@ -1055,7 +1107,7 @@ router.post(
       }
       const evidence = await disputeEvidenceService.uploadEvidence(
         req.params.disputeId,
-        { traderId: req.userId },
+        { traderId: req.traderId },
         req.file
       );
       res.status(201).json({ success: true, evidence });

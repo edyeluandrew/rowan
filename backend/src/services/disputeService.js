@@ -526,19 +526,162 @@ async function adminAction(disputeId, adminId, action, actionData = {}) {
   return updatedDispute;
 }
 
+function computeDisputePriority(dispute) {
+  if (!dispute) return 'medium';
+
+  if (['RESOLVED_FOR_USER', 'RESOLVED_FOR_TRADER', 'DISMISSED', 'CLOSED'].includes(dispute.status)) {
+    return 'resolved';
+  }
+
+  if (dispute.status === 'ESCALATED') {
+    return 'high';
+  }
+
+  const deadline = dispute.sla_deadline ? new Date(dispute.sla_deadline) : null;
+  if (deadline && !Number.isNaN(deadline.getTime())) {
+    const hoursRemaining = (deadline.getTime() - Date.now()) / (1000 * 60 * 60);
+    if (hoursRemaining <= 12) return 'high';
+    if (hoursRemaining <= 24) return 'medium';
+  }
+
+  if (dispute.status === 'OPEN') return 'medium';
+  if (dispute.status === 'TRADER_RESPONDED' || dispute.status === 'UNDER_REVIEW') return 'low';
+  return 'medium';
+}
+
+function buildDisputeOutcome(dispute) {
+  switch (dispute?.status) {
+    case 'RESOLVED_FOR_USER':
+      return 'Refund user';
+    case 'RESOLVED_FOR_TRADER':
+      return 'Release to trader';
+    case 'DISMISSED':
+      return 'Dismissed';
+    case 'CLOSED':
+      return dispute?.closure_reason || 'Closed';
+    default:
+      return null;
+  }
+}
+
+function parseAdminNotes(adminNotes, dispute) {
+  if (!adminNotes || !adminNotes.trim()) return [];
+
+  return adminNotes
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^\[(.+?)\]\s*(.*)$/);
+      const tag = match?.[1] || 'NOTE';
+      const text = match?.[2] || line;
+      const author = tag === 'ESCALATED' ? 'Admin escalation' : 'Admin';
+      return {
+        type: tag.toLowerCase(),
+        text,
+        author,
+        created_at: dispute.updated_at || dispute.created_at,
+      };
+    });
+}
+
+function buildDisputeTimeline(dispute) {
+  if (!dispute) return [];
+
+  const events = [];
+
+  if (dispute.created_at) {
+    events.push({
+      timestamp: dispute.created_at,
+      message: 'Dispute opened by user',
+    });
+  }
+
+  if (dispute.trader_response_at) {
+    events.push({
+      timestamp: dispute.trader_response_at,
+      message: 'Trader submitted a response and payment proof',
+    });
+  }
+
+  if (dispute.escalated_at) {
+    events.push({
+      timestamp: dispute.escalated_at,
+      message: dispute.escalation_reason
+        ? `Admin escalated dispute: ${dispute.escalation_reason}`
+        : 'Admin escalated dispute for review',
+    });
+  }
+
+  if (dispute.resolved_at) {
+    events.push({
+      timestamp: dispute.resolved_at,
+      message: dispute.resolution_reason
+        ? `Dispute resolved: ${dispute.resolution_reason}`
+        : `Dispute resolved as ${dispute.status}`,
+    });
+  }
+
+  if (dispute.status === 'DISMISSED' && dispute.updated_at) {
+    events.push({
+      timestamp: dispute.updated_at,
+      message: dispute.closure_reason
+        ? `Dispute dismissed: ${dispute.closure_reason}`
+        : 'Dispute dismissed by admin',
+    });
+  }
+
+  if (dispute.status === 'CLOSED' && dispute.updated_at) {
+    events.push({
+      timestamp: dispute.updated_at,
+      message: dispute.closure_reason
+        ? `Dispute closed: ${dispute.closure_reason}`
+        : 'Dispute closed',
+    });
+  }
+
+  return events
+    .filter((event) => event.timestamp)
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+}
+
+function withDisputePresentationFields(dispute) {
+  if (!dispute) return dispute;
+
+  const notes = parseAdminNotes(dispute.admin_notes, dispute);
+  return {
+    ...dispute,
+    traderName: dispute.trader_name,
+    userPhone: dispute.user_phone,
+    transactionState: dispute.transaction_state,
+    fiatAmount: dispute.fiat_amount,
+    fiatCurrency: dispute.fiat_currency,
+    usdcAmount: dispute.usdc_amount,
+    traderResponse: dispute.trader_response,
+    respondedAt: dispute.trader_response_at,
+    resolutionNote: dispute.resolution_reason || dispute.closure_reason,
+    priority: computeDisputePriority(dispute),
+    outcome: buildDisputeOutcome(dispute),
+    notes,
+    timeline: buildDisputeTimeline(dispute),
+  };
+}
+
 /**
  * Get dispute by ID
  */
 async function getDisputeById(disputeId) {
   const result = await db.query(
-    `SELECT d.*, t.name as trader_name, u.phone_hash as user_phone
+    `SELECT d.*, t.name as trader_name, u.phone_hash as user_phone,
+            tx.state as transaction_state, tx.usdc_amount, tx.fiat_amount, tx.fiat_currency, tx.network
      FROM disputes d
      LEFT JOIN traders t ON t.id = d.trader_id
      LEFT JOIN users u ON u.id = d.user_id
+     LEFT JOIN transactions tx ON tx.id = d.transaction_id
      WHERE d.id = $1`,
     [disputeId]
   );
-  return result.rows[0];
+  return withDisputePresentationFields(result.rows[0]);
 }
 
 /**
@@ -548,7 +691,8 @@ async function listDisputes(filters = {}) {
   const { status, traderId, userId, limit = 50, offset = 0 } = filters;
 
   let query = `
-    SELECT d.*, t.name as trader_name, tr.fiat_amount, tr.fiat_currency
+    SELECT d.*, t.name as trader_name, tr.fiat_amount, tr.fiat_currency,
+           tr.state as transaction_state, tr.usdc_amount, tr.network
     FROM disputes d
     LEFT JOIN traders t ON t.id = d.trader_id
     LEFT JOIN transactions tr ON tr.id = d.transaction_id
@@ -574,7 +718,7 @@ async function listDisputes(filters = {}) {
   params.push(limit, offset);
 
   const result = await db.query(query, params);
-  return result.rows;
+  return result.rows.map(withDisputePresentationFields);
 }
 
 export default {

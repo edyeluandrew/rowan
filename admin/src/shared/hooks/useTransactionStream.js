@@ -14,8 +14,8 @@ import { useSocket } from '../context/SocketContext'
 export const useTransactionStream = () => {
   const { on, off, isConnected } = useSocket()
   const [transactions, setTransactions] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [loading] = useState(true)
+  const [error] = useState(null)
   const transactionsRef = useRef(new Map())
 
   // Listen for transaction state changes via WebSocket

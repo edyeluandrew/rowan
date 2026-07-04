@@ -96,22 +96,20 @@ router.get(
  */
 router.get(
   '/:id',
+  authUser,
   async (req, res, next) => {
     try {
       const { id } = req.params;
-      const userId = req.userId || req.traderId; // User or Trader
-      const role = req.userId ? 'user' : 'trader';
+      const userId = req.userId;
 
       const dispute = await disputeService.getDisputeById(id);
       if (!dispute) {
         return res.status(404).json({ error: 'Dispute not found' });
       }
 
-      // Verify access
-      if (role === 'user' && dispute.user_id !== userId) {
-        return res.status(403).json({ error: 'Not authorized to view this dispute' });
-      }
-      if (role === 'trader' && dispute.trader_id !== userId) {
+      // This generic route is a user-facing alias only. Trader access goes through
+      // /api/v1/trader/disputes/:id, which enforces trader ownership explicitly.
+      if (dispute.user_id !== userId) {
         return res.status(403).json({ error: 'Not authorized to view this dispute' });
       }
 

@@ -18,10 +18,13 @@ export const TRANSACTION_STATES = {
   REFUNDED:        { label: 'Refunded', color: 'text-rowan-yellow', bg: 'bg-rowan-yellow/20' },
   FAILED:          { label: 'Failed', color: 'text-rowan-red', bg: 'bg-rowan-red/20' },
   OPEN:            { label: 'Open', color: 'text-rowan-orange', bg: 'bg-rowan-orange/20' },
+  TRADER_RESPONDED:{ label: 'Trader Responded', color: 'text-rowan-blue', bg: 'bg-rowan-blue/20' },
   UNDER_REVIEW:    { label: 'Under Review', color: 'text-rowan-yellow', bg: 'bg-rowan-yellow/20' },
+  ESCALATED:       { label: 'Escalated', color: 'text-rowan-orange', bg: 'bg-rowan-orange/20' },
   RESOLVED_FOR_USER:   { label: 'Resolved (User)', color: 'text-rowan-green', bg: 'bg-rowan-green/20' },
   RESOLVED_FOR_TRADER: { label: 'Resolved (Trader)', color: 'text-rowan-green', bg: 'bg-rowan-green/20' },
   DISMISSED:       { label: 'Dismissed', color: 'text-rowan-muted', bg: 'bg-rowan-muted/20' },
+  CLOSED:          { label: 'Closed', color: 'text-rowan-muted', bg: 'bg-rowan-muted/20' },
 }
 
 export const NETWORKS = {

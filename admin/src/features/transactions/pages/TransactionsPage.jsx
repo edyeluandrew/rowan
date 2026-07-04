@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import TopBar from '../../../shared/components/layout/TopBar'
 import TransactionFilters from '../components/TransactionFilters'
 import TransactionRow from '../components/TransactionRow'
@@ -9,9 +10,27 @@ import { ArrowLeftRight, Wifi } from 'lucide-react'
 import useTransactions from '../hooks/useTransactions'
 
 export default function TransactionsPage() {
-  const [filters, setFilters] = useState({})
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [filters, setFilters] = useState(() => ({
+    state: searchParams.get('state') || undefined,
+    network: searchParams.get('network') || undefined,
+    search: searchParams.get('search') || undefined,
+    from: searchParams.get('from') || undefined,
+    to: searchParams.get('to') || undefined,
+    stuckPayoutOnly: searchParams.get('stuckPayoutOnly') === 'true' ? true : undefined,
+  }))
   const { data, loading, error, pages, page, setPage, refresh, isRealTime } = useTransactions(filters)
   const [refreshing, setRefreshing] = useState(false)
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams()
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '' && value !== false) {
+        nextParams.set(key, String(value))
+      }
+    })
+    setSearchParams(nextParams, { replace: true })
+  }, [filters, setSearchParams])
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)

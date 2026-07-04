@@ -9,10 +9,13 @@ export default function useTransactions(filters = {}) {
   const [error, setError] = useState(null)
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 })
   const { transactions: streamData, isConnected } = useTransactionStream()
+  const hasAdvancedFilters = Boolean(
+    filters.network || filters.search || filters.from || filters.to || filters.stuckPayoutOnly
+  )
 
   // Use real-time stream if connected, otherwise use HTTP polling
   const data = useMemo(() => {
-    if (isConnected && streamData.length > 0) {
+    if (!hasAdvancedFilters && isConnected && streamData.length > 0) {
       // Filter real-time stream data based on filters
       return streamData.filter((tx) => {
         if (filters.state && tx.state !== filters.state) return false
@@ -21,7 +24,7 @@ export default function useTransactions(filters = {}) {
       })
     }
     return httpData
-  }, [streamData, httpData, filters, isConnected])
+  }, [streamData, httpData, filters, hasAdvancedFilters, isConnected])
 
   const refresh = useCallback(async (pageNum = pagination.page) => {
     try {

@@ -21,5 +21,5 @@ export function addDisputeNote(id, note) {
 }
 
 export function getDisputeEvidence(disputeId) {
-  return client.get(`/api/v1/admin/disputes/${disputeId}/evidence`).then((res) => res.data?.evidence || [])
+  return client.get(`/api/v1/admin/disputes/${disputeId}/evidence`).then((res) => res.evidence || [])
 }

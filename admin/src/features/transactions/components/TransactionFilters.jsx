@@ -50,6 +50,16 @@ export default function TransactionFilters({ filters, onChange }) {
           className="bg-rowan-surface border border-rowan-border text-rowan-text rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-rowan-yellow w-48"
         />
       </div>
+
+      <label className="inline-flex items-center gap-2 text-sm text-rowan-text">
+        <input
+          type="checkbox"
+          checked={Boolean(filters.stuckPayoutOnly)}
+          onChange={(e) => update('stuckPayoutOnly', e.target.checked || undefined)}
+          className="rounded border-rowan-border bg-rowan-surface text-rowan-yellow focus:ring-rowan-yellow"
+        />
+        <span>Stuck payouts only</span>
+      </label>
     </div>
   )
 }

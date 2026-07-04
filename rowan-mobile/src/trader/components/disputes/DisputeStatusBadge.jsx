@@ -6,16 +6,24 @@ import { ShieldX, ShieldAlert, ShieldCheck, ShieldOff } from 'lucide-react';
  */
 const BADGE_MAP = {
   OPEN:                 { cls: 'bg-rowan-red/15 text-rowan-red border border-rowan-red/30', Icon: ShieldX },
+  TRADER_RESPONDED:     { cls: 'bg-rowan-blue/15 text-rowan-blue border border-rowan-blue/30', Icon: ShieldCheck },
   UNDER_REVIEW:         { cls: 'bg-rowan-yellow/15 text-rowan-yellow border border-rowan-yellow/30', Icon: ShieldAlert },
-  RESOLVED_TRADER_WIN:  { cls: 'bg-rowan-green/15 text-rowan-green', Icon: ShieldCheck },
-  RESOLVED_USER_WIN:    { cls: 'bg-rowan-red/15 text-rowan-red', Icon: ShieldOff },
+  ESCALATED:            { cls: 'bg-rowan-orange/15 text-rowan-orange border border-rowan-orange/30', Icon: ShieldAlert },
+  RESOLVED_FOR_TRADER:  { cls: 'bg-rowan-green/15 text-rowan-green', Icon: ShieldCheck },
+  RESOLVED_FOR_USER:    { cls: 'bg-rowan-red/15 text-rowan-red', Icon: ShieldOff },
+  DISMISSED:            { cls: 'bg-rowan-muted/20 text-rowan-muted border border-rowan-border', Icon: ShieldOff },
+  CLOSED:               { cls: 'bg-rowan-muted/20 text-rowan-muted border border-rowan-border', Icon: ShieldCheck },
 };
 
 const LABEL_MAP = {
   OPEN:                'Open',
+  TRADER_RESPONDED:    'Response Submitted',
   UNDER_REVIEW:        'Under Review',
-  RESOLVED_TRADER_WIN: 'Resolved — You Won',
-  RESOLVED_USER_WIN:   'Resolved — User Won',
+  ESCALATED:           'Escalated',
+  RESOLVED_FOR_TRADER: 'Resolved — You Won',
+  RESOLVED_FOR_USER:   'Resolved — User Won',
+  DISMISSED:           'Dismissed',
+  CLOSED:              'Closed',
 };
 
 export default function DisputeStatusBadge({ status }) {
