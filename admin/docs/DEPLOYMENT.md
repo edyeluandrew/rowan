@@ -68,12 +68,25 @@ vercel
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "routes": [
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/.*",
+      "dest": "/index.html"
+    }
+  ],
   "env": {
     "VITE_API_URL": "@vite_api_url",
     "VITE_SOCKET_URL": "@vite_socket_url"
   }
 }
 ```
+
+The `routes` fallback is required because the admin app uses `BrowserRouter`. Without it,
+direct visits or refreshes on routes like `/login`, `/transactions/123`, or `/disputes/abc`
+will 404 on Vercel even though the app works from `/`.
 
 ### Netlify
 
