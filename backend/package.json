@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "script:smoke-mvp1": "node test-cashout-flow.mjs",
     "script:bootstrap": "node scripts/bootstrapEscrow.js",
     "script:genkey": "node scripts/genKey.mjs",
     "script:seed-admin": "node scripts/seedAdmin.js",
