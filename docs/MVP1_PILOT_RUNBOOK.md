@@ -5,6 +5,7 @@ Plain-English guide for running the first live pilot. Use this when something go
 **Admin app:** https://rowan-dbb4.vercel.app/login
 
 **Detailed technical runbooks** (deeper steps):
+- [Testnet USDC treasury & Circle top-up](./ops/TESTNET_TREASURY_RUNBOOK.md)
 - [Dispute resolution](./ops/DISPUTE_RESOLUTION_RUNBOOK.md)
 - [Release blocked (trustline)](./ops/RELEASE_BLOCKED_RUNBOOK.md)
 - [Refund retry](./ops/REFUND_RETRY_RUNBOOK.md)
