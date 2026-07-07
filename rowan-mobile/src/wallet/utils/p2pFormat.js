@@ -5,7 +5,7 @@ import { NETWORKS } from './constants'
 export const USER_STATUS_LABELS = {
   QUOTE_REQUESTED: 'Getting your rate...',
   QUOTE_CONFIRMED: 'Rate confirmed',
-  ESCROW_LOCKED: 'XLM secured',
+  ESCROW_LOCKED: 'Funds secured',
   TRADER_MATCHED: 'Trader found',
   FIAT_PAYOUT_SUBMITTED: 'Payment sent to you',
   USER_CONFIRMATION_PENDING: 'Confirm your payment',
@@ -101,6 +101,16 @@ export function estimateUsdcPerXlm(xlmRate, usdcToFiat) {
   const usdc = Number(usdcToFiat)
   if (!Number.isFinite(xlm) || !Number.isFinite(usdc) || usdc <= 0) return null
   return xlm / usdc
+}
+
+/** e.g. "With 10 USDC → ~UGX 36,400" */
+export function formatUsdcSellEstimateLine(usdcAmount, fiatAmount, currency) {
+  const usdc = Number(usdcAmount)
+  const fiat = Number(fiatAmount)
+  if (!Number.isFinite(usdc) || !Number.isFinite(fiat) || !currency) return null
+  const fiatFmt = Math.round(fiat).toLocaleString('en-US')
+  const usdcFmt = usdc < 10 ? usdc.toFixed(2) : String(Math.round(usdc))
+  return `With ${usdcFmt} USDC → ~${currency} ${fiatFmt}`
 }
 
 /** e.g. "With 10 XLM → ~UGX 36,400" */

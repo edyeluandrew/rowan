@@ -7,7 +7,9 @@ import {
   BASE_FEE,
   Horizon,
 } from '@stellar/stellar-sdk'
-import { CURRENT_NETWORK, STELLAR_TX_TIMEOUT_SECONDS, USDC_ISSUERS } from './constants'
+import { CURRENT_NETWORK, STELLAR_TX_TIMEOUT_SECONDS, USDC_ISSUERS, TESTNET_AUTO_USDC_AMOUNT, TESTNET_MIN_USDC_FOR_SKIP } from './constants'
+import { fundWithFriendbot } from './friendbot'
+import { requestBackendTestnetUsdc } from '../api/testnet'
 
 const networkKey = import.meta.env.VITE_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet'
 
@@ -217,6 +219,98 @@ export async function buildAndSignUsdcTrustline({ sourceSecretKey, horizonUrl })
 export async function addUsdcTrustline(sourceSecretKey, horizonUrl) {
   const signedXdr = await buildAndSignUsdcTrustline({ sourceSecretKey, horizonUrl })
   return submitTransaction(signedXdr, horizonUrl)
+}
+
+const FRIENDBOT_SETTLE_MS = 2000
+const MIN_XLM_FOR_TRUSTLINE = 1
+
+/**
+ * Fund testnet XLM (if needed) and add the USDC trustline automatically.
+ * Idempotent — safe on create, import, and app start for legacy wallets.
+ */
+export async function provisionUsdcWallet({ secretKey, publicKey, horizonUrl }) {
+  if (!secretKey || !publicKey) {
+    throw new Error('Wallet keypair required')
+  }
+
+  let balances = await loadAccountBalances(publicKey, horizonUrl)
+  let funded = balances.xlm >= MIN_XLM_FOR_TRUSTLINE
+
+  if (CURRENT_NETWORK.friendbotUrl && balances.xlm < MIN_XLM_FOR_TRUSTLINE) {
+    await fundWithFriendbot(publicKey)
+    await new Promise((r) => setTimeout(r, FRIENDBOT_SETTLE_MS))
+    balances = await loadAccountBalances(publicKey, horizonUrl)
+    funded = balances.xlm >= MIN_XLM_FOR_TRUSTLINE
+  }
+
+  if (balances.hasUsdcTrustline) {
+    return { funded, trustlineCreated: false }
+  }
+
+  if (balances.xlm < MIN_XLM_FOR_TRUSTLINE) {
+    return { funded: false, trustlineCreated: false, skipped: 'account_not_funded' }
+  }
+
+  await addUsdcTrustline(secretKey, horizonUrl)
+  return { funded, trustlineCreated: true }
+}
+
+/**
+ * Testnet only: trustline + starter USDC via backend faucet (real Circle testnet USDC payment).
+ * No simulated balances and no DEX swap — USDC must come from the on-chain treasury wallet.
+ */
+export async function fundTestUsdcWallet({
+  secretKey,
+  publicKey,
+  horizonUrl,
+}) {
+  if (!CURRENT_NETWORK.isTest) {
+    return { skipped: 'not_testnet' }
+  }
+  if (!secretKey || !publicKey) {
+    throw new Error('Wallet keypair required')
+  }
+
+  const provision = await provisionUsdcWallet({ secretKey, publicKey, horizonUrl })
+  const balances = await loadAccountBalances(publicKey, horizonUrl)
+
+  if (balances.usdc >= TESTNET_MIN_USDC_FOR_SKIP) {
+    return {
+      ...provision,
+      usdcFunded: false,
+      skipped: 'already_has_usdc',
+      usdcBalance: balances.usdc,
+    }
+  }
+
+  const backend = await requestBackendTestnetUsdc(publicKey)
+  if (!backend) {
+    throw new Error(
+      'Test USDC faucet is not available. Ask your Rowan admin to fund the testnet treasury from Circle.'
+    )
+  }
+
+  if (backend.skipped) {
+    const refreshed = await loadAccountBalances(publicKey, horizonUrl)
+    return {
+      ...provision,
+      usdcFunded: false,
+      skipped: 'already_has_usdc',
+      usdcBalance: refreshed.usdc,
+      txHash: backend.txHash,
+    }
+  }
+
+  const refreshed = await loadAccountBalances(publicKey, horizonUrl)
+  return {
+    ...provision,
+    usdcFunded: true,
+    usdcAmount: backend.usdcAmount,
+    usdcBalance: refreshed.usdc,
+    txHash: backend.txHash,
+    source: 'circle_testnet_usdc',
+    issuer: USDC_ISSUERS.testnet,
+  }
 }
 
 function pathRecordToAssets(pathRecords) {

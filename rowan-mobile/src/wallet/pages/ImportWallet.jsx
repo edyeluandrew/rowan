@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, Eye, EyeOff, TriangleAlert } from 'lucide-react'
-import { isValidSecretKey, keypairFromSecret } from '../utils/stellar'
+import { isValidSecretKey, keypairFromSecret, fundTestUsdcWallet } from '../utils/stellar'
+import { CURRENT_NETWORK } from '../utils/constants'
 import { setSecure } from '../utils/storage'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -29,6 +30,17 @@ export default function ImportWallet() {
       }
       await setSecure('rowan_stellar_keypair', JSON.stringify(keypairData))
       await setSecure('rowan_wallet_created_at', new Date().toISOString())
+      if (CURRENT_NETWORK.isTest) {
+        try {
+          await fundTestUsdcWallet({
+            secretKey: keypairData.secretKey,
+            publicKey: keypairData.publicKey,
+            horizonUrl: import.meta.env.VITE_STELLAR_HORIZON_URL,
+          })
+        } catch {
+          /* can retry from Home */
+        }
+      }
       navigate('/register')
     } catch {
       /* import failed — invalid key */

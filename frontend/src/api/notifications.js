@@ -8,7 +8,6 @@ export async function getNotifications(page = 1, limit = 50, unreadOnly = false)
   return data;
 }
 
-/** POST /api/v1/trader/notifications/mark-read */
 export async function markNotificationsRead(notificationIds) {
   const { data } = await client.post('/api/v1/trader/notifications/mark-read', {
     notificationIds,

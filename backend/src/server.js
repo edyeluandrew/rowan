@@ -31,6 +31,7 @@ import configRoutes from './routes/config.js';
 import chatRoutes from './routes/chat.js';
 import tradersRoutes from './routes/traders.js';
 import reviewsRoutes from './routes/reviews.js';
+import testnetRoutes from './routes/testnet.js';
 
 // Services
 import websocket from './services/websocket.js';
@@ -229,6 +230,7 @@ app.use('/api/v1/rates', ratesRoutes);
 app.use('/api/v1/chat', chatRoutes);
 app.use('/api/v1/traders', tradersRoutes);
 app.use('/api/v1/reviews', reviewsRoutes);
+app.use('/api/v1/testnet', testnetRoutes);
 
 // ─── 404 handler ────────────────────────────────────────────
 app.use((req, res) => {

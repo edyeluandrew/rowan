@@ -1,14 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getSecure, setSecure } from '../../shared/utils/storage'
 import {
   generateKeypair,
   loadAccountBalances,
-  addUsdcTrustline,
+  provisionUsdcWallet,
+  fundTestUsdcWallet,
   swapXlmToUsdc,
   isValidSecretKey,
   keypairFromSecret,
 } from '../../wallet/utils/stellar'
-import { fundWithFriendbot } from '../../wallet/utils/friendbot'
 import { CURRENT_NETWORK } from '../../wallet/utils/constants'
 import { verifyWalletAddress } from '../api/wallet'
 
@@ -36,6 +36,7 @@ export default function useTraderWallet() {
   const [loading, setLoading] = useState(true)
   const [activeAction, setActiveAction] = useState(null)
   const [error, setError] = useState(null)
+  const provisionAttempted = useRef(null)
 
   const loadStoredKeypair = useCallback(async () => {
     const stored = await getSecure(TRADER_KEY_STORAGE)
@@ -76,6 +77,30 @@ export default function useTraderWallet() {
     return () => { cancelled = true }
   }, [refresh])
 
+  useEffect(() => {
+    if (!keypair?.publicKey || loading || hasUsdcTrustline !== false) return
+    if (provisionAttempted.current === keypair.publicKey) return
+
+    let cancelled = false
+    provisionAttempted.current = keypair.publicKey
+
+    ;(async () => {
+      try {
+        if (!keypair.secretKey) return
+        await provisionUsdcWallet({
+          secretKey: keypair.secretKey,
+          publicKey: keypair.publicKey,
+          horizonUrl,
+        })
+        if (!cancelled) await refresh()
+      } catch {
+        provisionAttempted.current = null
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [hasUsdcTrustline, horizonUrl, keypair, loading, refresh])
+
   const syncLinkedAddress = useCallback(async (publicKey) => {
     await verifyWalletAddress(publicKey)
     setLinkedAddress(publicKey)
@@ -102,14 +127,23 @@ export default function useTraderWallet() {
     const kp = generateKeypair()
     await setSecure(TRADER_KEY_STORAGE, JSON.stringify(kp))
     await syncLinkedAddress(kp.publicKey)
-    if (CURRENT_NETWORK.friendbotUrl) {
-      await fundWithFriendbot(kp.publicKey)
-      await new Promise((r) => setTimeout(r, 2000))
+    if (CURRENT_NETWORK.isTest) {
+      await fundTestUsdcWallet({
+        secretKey: kp.secretKey,
+        publicKey: kp.publicKey,
+        horizonUrl,
+      })
+    } else {
+      await provisionUsdcWallet({
+        secretKey: kp.secretKey,
+        publicKey: kp.publicKey,
+        horizonUrl,
+      })
     }
     setKeypair(kp)
     await refresh()
     return kp
-  }), [refresh, runWalletAction, syncLinkedAddress])
+  }), [horizonUrl, refresh, runWalletAction, syncLinkedAddress])
 
   const importWallet = useCallback(async (secretKey) => {
     const secret = secretKey.trim()
@@ -121,33 +155,65 @@ export default function useTraderWallet() {
       const kp = { publicKey: kpObj.publicKey(), secretKey: secret }
       await setSecure(TRADER_KEY_STORAGE, JSON.stringify(kp))
       await syncLinkedAddress(kp.publicKey)
+      if (CURRENT_NETWORK.isTest) {
+        await fundTestUsdcWallet({
+          secretKey: kp.secretKey,
+          publicKey: kp.publicKey,
+          horizonUrl,
+        })
+      } else {
+        await provisionUsdcWallet({
+          secretKey: kp.secretKey,
+          publicKey: kp.publicKey,
+          horizonUrl,
+        })
+      }
       setKeypair(kp)
       await refresh()
       return kp
     })
-  }, [refresh, runWalletAction, syncLinkedAddress])
+  }, [horizonUrl, refresh, runWalletAction, syncLinkedAddress])
 
   const fundTestnet = useCallback(async () => {
     if (!keypair?.publicKey) throw new Error('Create a Rowan wallet first')
     if (!CURRENT_NETWORK.friendbotUrl) throw new Error('Testnet funding is not available on mainnet')
     return runWalletAction(WALLET_ACTIONS.FUND, async () => {
-      await fundWithFriendbot(keypair.publicKey)
-      await new Promise((r) => setTimeout(r, 2000))
+      if (CURRENT_NETWORK.isTest) {
+        await fundTestUsdcWallet({
+          secretKey: keypair.secretKey,
+          publicKey: keypair.publicKey,
+          horizonUrl,
+        })
+      } else {
+        await provisionUsdcWallet({
+          secretKey: keypair.secretKey,
+          publicKey: keypair.publicKey,
+          horizonUrl,
+        })
+      }
       await refresh()
     })
-  }, [keypair?.publicKey, refresh, runWalletAction])
+  }, [horizonUrl, keypair, refresh, runWalletAction])
 
   const enableUsdc = useCallback(async () => {
     if (!keypair?.secretKey) throw new Error('Create a Rowan wallet first')
     return runWalletAction(WALLET_ACTIONS.ENABLE_USDC, async () => {
-      if (CURRENT_NETWORK.isTest && (xlmBalance == null || xlmBalance < 1)) {
-        await fundWithFriendbot(keypair.publicKey)
-        await new Promise((r) => setTimeout(r, 2000))
+      if (CURRENT_NETWORK.isTest) {
+        await fundTestUsdcWallet({
+          secretKey: keypair.secretKey,
+          publicKey: keypair.publicKey,
+          horizonUrl,
+        })
+      } else {
+        await provisionUsdcWallet({
+          secretKey: keypair.secretKey,
+          publicKey: keypair.publicKey,
+          horizonUrl,
+        })
       }
-      await addUsdcTrustline(keypair.secretKey, horizonUrl)
       await refresh()
     })
-  }, [horizonUrl, keypair, refresh, runWalletAction, xlmBalance])
+  }, [horizonUrl, keypair, refresh, runWalletAction])
 
   const swapToUsdc = useCallback(async (usdcAmount) => {
     if (!keypair?.secretKey) throw new Error('Create a Rowan wallet first')

@@ -2,27 +2,23 @@ import { ShieldCheck, Clock, Calendar } from 'lucide-react'
 import {
   formatCurrency,
   formatPercent,
-  formatXlmRateLine,
   formatUsdcRateLine,
   formatMemberSince,
   formatTradeCount,
-  estimateUsdcPerXlm,
-  formatSellEstimateLine,
+  formatUsdcSellEstimateLine,
   formatTypicalTradeTime,
   formatAvgReleaseTime,
   getTraderDisplayName,
-  lookupNetworkRate,
 } from '../../utils/p2pFormat'
-import { estimateMaxNetFiat } from '../../utils/fiat'
+import { estimateMaxNetFiatFromUsdc } from '../../utils/fiat'
 import PaymentMethodPill from '../ui/PaymentMethodPill'
 import Button from '../ui/Button'
 
-const ESTIMATE_XLM = 10
+const ESTIMATE_USDC = 10
 
 export default function TraderGroupCard({
   trader,
   mode = 'sell',
-  allRates,
   usdcToFiat,
   walletBalance,
   typicalTradeMinutes,
@@ -36,19 +32,17 @@ export default function TraderGroupCard({
   const primaryNetwork = offers[0]?.network
   const currency = trader.currency || offers[0]?.currency
 
-  const xlmRate = !isBuy ? lookupNetworkRate(allRates, primaryNetwork) : null
-  const usdcPerXlm = !isBuy ? estimateUsdcPerXlm(xlmRate, usdcToFiat) : null
   const rateLine = isBuy
     ? formatUsdcRateLine(currency, trader.bestRatePerUsdc)
-    : formatXlmRateLine(currency, xlmRate)
+    : formatUsdcRateLine(currency, usdcToFiat)
 
-  const estimateXlm = walletBalance != null && Number(walletBalance) > 0
-    ? Math.min(Number(walletBalance), ESTIMATE_XLM)
-    : ESTIMATE_XLM
-  const estimateFiat = !isBuy && xlmRate
-    ? estimateMaxNetFiat(estimateXlm, xlmRate)
+  const estimateUsdc = walletBalance != null && Number(walletBalance) > 0
+    ? Math.min(Number(walletBalance), ESTIMATE_USDC)
+    : ESTIMATE_USDC
+  const estimateFiat = !isBuy && usdcToFiat
+    ? estimateMaxNetFiatFromUsdc(estimateUsdc, usdcToFiat)
     : null
-  const estimateLine = formatSellEstimateLine(estimateXlm, estimateFiat, currency)
+  const estimateLine = formatUsdcSellEstimateLine(estimateUsdc, estimateFiat, currency)
 
   const completion = formatPercent(trader.completionRate)
   const avgReleaseLine = formatAvgReleaseTime(trader.avgReleaseMinutes)
@@ -98,11 +92,6 @@ export default function TraderGroupCard({
 
           {rateLine && (
             <p className="text-rowan-yellow text-sm font-medium mt-1">{rateLine}</p>
-          )}
-          {!isBuy && usdcPerXlm != null && (
-            <p className="text-rowan-muted text-xs mt-0.5">
-              ~{usdcPerXlm.toFixed(2)} USDC per XLM
-            </p>
           )}
           {!isBuy && estimateLine && (
             <p className="text-rowan-text text-xs mt-1">{estimateLine} <span className="text-rowan-muted">(estimate)</span></p>

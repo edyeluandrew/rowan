@@ -9,7 +9,7 @@ export default function AmountInput({
   currency,
   xlmEstimate,
   cryptoEstimate,
-  cryptoLabel = 'USDC you receive (estimate)',
+  cryptoLabel = 'USDC to send (estimate)',
   fiatSubLabel,
   platformFeeFiat,
   maxFiat,
@@ -24,7 +24,7 @@ export default function AmountInput({
   const netFiat = parseFloat(fiatAmount) || 0
   const estimate = cryptoEstimate ?? xlmEstimate
   const estimateDecimals = cryptoEstimate != null ? 4 : 4
-  const estimateCaption = cryptoEstimate != null ? cryptoLabel : 'XLM to send (estimate)'
+  const estimateCaption = cryptoEstimate != null ? cryptoLabel : 'USDC to send (estimate)'
   const fiatCaption = fiatSubLabel ?? `${currency || 'UGX'} you receive`
 
   return (

@@ -194,44 +194,48 @@ export default function StellarWallet() {
 
             {CURRENT_NETWORK.isTest && (
               <div className="space-y-3">
-                <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
-                  <p className="text-rowan-text text-sm font-medium">Step 1 — Fund with test XLM</p>
-                  <p className="text-rowan-muted text-xs mt-1">Free testnet XLM from Friendbot. Do this first.</p>
-                  <Button
-                    loading={isActionBusy(WALLET_ACTIONS.FUND)}
-                    disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.FUND)}
-                    variant="ghost"
-                    size="sm"
-                    className="w-full border border-rowan-border mt-3"
-                    onClick={() => runAction('Funded with test XLM', fundTestnet)}
-                  >
-                    Get testnet XLM
-                  </Button>
-                </div>
+                {(xlmBalance == null || xlmBalance < 1) && (
+                  <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
+                    <p className="text-rowan-text text-sm font-medium">Top up network fees</p>
+                    <p className="text-rowan-muted text-xs mt-1">
+                      USDC is enabled automatically. Retry if testnet XLM is still missing.
+                    </p>
+                    <Button
+                      loading={isActionBusy(WALLET_ACTIONS.FUND)}
+                      disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.FUND)}
+                      variant="ghost"
+                      size="sm"
+                      className="w-full border border-rowan-border mt-3"
+                      onClick={() => runAction('Network fees ready', fundTestnet)}
+                    >
+                      Retry network setup
+                    </Button>
+                  </div>
+                )}
 
                 {hasUsdcTrustline === false && (
                   <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
-                    <p className="text-rowan-text text-sm font-medium">Step 2 — Enable USDC</p>
-                    <p className="text-rowan-muted text-xs mt-1">One-time trustline so you can hold and send USDC.</p>
+                    <p className="text-rowan-text text-sm font-medium">Finishing USDC setup</p>
+                    <p className="text-rowan-muted text-xs mt-1">Trustline setup runs automatically when you create a wallet.</p>
                     <Button
                       loading={isActionBusy(WALLET_ACTIONS.ENABLE_USDC)}
                       disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.ENABLE_USDC)}
                       size="sm"
                       className="w-full mt-3"
-                      onClick={() => runAction('USDC enabled', enableUsdc)}
+                      onClick={() => runAction('USDC ready', enableUsdc)}
                     >
                       <Coins size={14} className="inline mr-1" />
-                      Enable USDC
+                      Retry USDC setup
                     </Button>
                   </div>
                 )}
 
                 {hasUsdcTrustline && (
                   <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 space-y-2">
-                    <p className="text-rowan-text text-sm font-medium">Step 3 — Swap XLM to USDC</p>
+                    <p className="text-rowan-text text-sm font-medium">Get test USDC</p>
                     <p className="text-rowan-muted text-xs flex items-center gap-1">
                       <ArrowRightLeft size={12} />
-                      Buy USDC on the testnet DEX using your XLM
+                      Swap testnet XLM to USDC on the DEX
                     </p>
                     <input
                       type="number"
@@ -265,9 +269,9 @@ export default function StellarWallet() {
                 disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.ENABLE_USDC)}
                 size="sm"
                 className="w-full"
-                onClick={() => runAction('USDC enabled', enableUsdc)}
+                onClick={() => runAction('USDC ready', enableUsdc)}
               >
-                Enable USDC trustline
+                Retry USDC setup
               </Button>
             )}
 

@@ -10,7 +10,7 @@ import { getQuote } from '../api/cashout'
 import client from '../api/client'
 import { hashPhoneNumber } from '../utils/crypto'
 import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
-import { estimateMaxNetFiat } from '../utils/fiat'
+import { estimateMaxNetFiatFromUsdc } from '../utils/fiat'
 import { getNetworksForCountry } from '../utils/country'
 import useUserCountry from '../hooks/useUserCountry'
 import AmountInput from '../components/cashout/AmountInput'
@@ -19,6 +19,7 @@ import PhoneInput from '../components/cashout/PhoneInput'
 import PaymentMethodPill from '../components/ui/PaymentMethodPill'
 import Button from '../components/ui/Button'
 import MvpPilotBanner from '../components/ui/MvpPilotBanner'
+import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 
 export default function Cashout() {
   const navigate = useNavigate()
@@ -31,8 +32,8 @@ export default function Cashout() {
   } = location.state || {}
   const { isLocked } = useBiometricProtection()
   const { country, fiatCurrency: userFiat } = useUserCountry()
-  const { allRates } = useRates(userFiat)
-  const { balance } = useWallet()
+  const { allRates, rates } = useRates(userFiat)
+  const { usdcBalance, hasUsdcTrustline } = useWallet()
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
   const adNetwork = presetNetwork || selectedAd?.network || null
   const payoutSettingId = presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
@@ -78,10 +79,12 @@ export default function Cashout() {
   const rateValue = selectedRate?.rate || 0
   const currency = network ? NETWORKS[network]?.currency : userFiat
 
+  const usdcToFiatRate = rates?.usdcToFiat || 0
+
   const walletMaxNetFiat = useMemo(() => {
-    if (!rateValue || balance == null) return null
-    return estimateMaxNetFiat(balance, rateValue)
-  }, [balance, rateValue])
+    if (!usdcToFiatRate || usdcBalance == null) return null
+    return estimateMaxNetFiatFromUsdc(usdcBalance, usdcToFiatRate)
+  }, [usdcBalance, usdcToFiatRate])
 
   const selectedNetworkLimits = useMemo(
     () => networkLimits.find((l) => l.network === network),
@@ -105,8 +108,8 @@ export default function Cashout() {
 
   const minNetFiat = traderMinFiat ?? selectedNetworkLimits?.minFiat ?? null
 
-  const xlmEstimate = rateValue > 0 && netFiat > 0
-    ? (netFiat / rateValue) * 1.03
+  const usdcEstimate = usdcToFiatRate > 0 && netFiat > 0
+    ? (netFiat / usdcToFiatRate) * 1.03
     : 0
   const platformFeeFiat = netFiat > 0 ? netFiat * 0.01 : 0
 
@@ -117,6 +120,7 @@ export default function Cashout() {
 
   const canProceed =
     netFiat > 0 &&
+    hasUsdcTrustline !== false &&
     !exceedsWallet &&
     !belowMin &&
     !exceedsTraderFloat &&
@@ -194,6 +198,8 @@ export default function Cashout() {
 
       <MvpPilotBanner className="mb-4" />
 
+      <UsdcTrustlineSetup compact />
+
       {(selectedAd || presetTraderName) && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4 flex items-start gap-3">
           <UserCheck size={18} className="text-rowan-yellow shrink-0 mt-0.5" />
@@ -239,7 +245,7 @@ export default function Cashout() {
           )}
         </div>
         <p className="text-rowan-muted text-xs mt-1">
-          {balance != null ? `${Number(balance).toFixed(2)} XLM in wallet` : ''}
+          {usdcBalance != null ? `${Number(usdcBalance).toFixed(2)} USDC in wallet` : ''}
         </p>
       </div>
 
@@ -247,7 +253,8 @@ export default function Cashout() {
         fiatAmount={fiatAmount}
         onFiatAmountChange={setFiatAmount}
         currency={currency}
-        xlmEstimate={xlmEstimate}
+        cryptoEstimate={usdcEstimate}
+        cryptoLabel="USDC to send (estimate)"
         platformFeeFiat={platformFeeFiat}
         maxFiat={maxNetFiat}
       />
@@ -306,7 +313,7 @@ export default function Cashout() {
               <>
                 <p className="text-rowan-yellow text-sm font-medium">Amount exceeds your balance</p>
                 <p className="text-rowan-muted text-xs mt-1">
-                  Maximum is about {Math.floor(maxNetFiat).toLocaleString()} {currency} with your current XLM.
+                  Maximum is about {Math.floor(maxNetFiat).toLocaleString()} {currency} with your current USDC.
                 </p>
               </>
             )}

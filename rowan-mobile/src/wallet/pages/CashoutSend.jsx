@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { AlertTriangle, ChevronLeft, Clock, ShieldCheck } from 'lucide-react'
-import { buildAndSignPayment, submitTransaction } from '../utils/stellar'
+import { buildAndSignUsdcPayment, submitTransaction } from '../utils/stellar'
 import { confirmQuote } from '../api/cashout'
 import { getSecure } from '../utils/storage'
 import useActiveTransaction from '../hooks/useActiveTransaction'
@@ -51,10 +51,11 @@ export default function CashoutSend() {
       const kp = JSON.parse(stored)
       if (!kp.secretKey) throw new Error('Wallet key data is corrupted. Please re-import your wallet.')
 
-      const signedXdr = await buildAndSignPayment({
+      const sendUsdc = quote.usdcAmount ?? quote.usdc_amount
+      const signedXdr = await buildAndSignUsdcPayment({
         sourceSecretKey: kp.secretKey,
         destinationAddress: quote.escrowAddress,
-        xlmAmount: quote.xlmAmount,
+        usdcAmount: sendUsdc,
         memo: quote.memo,
         horizonUrl,
       })
@@ -103,13 +104,13 @@ export default function CashoutSend() {
         >
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">Send XLM</h1>
+        <h1 className="text-rowan-text text-lg font-bold">Send USDC</h1>
       </div>
 
       <div className="flex items-center justify-between mb-1 bg-rowan-surface rounded-lg p-3 border border-rowan-border">
         <div className="flex items-center gap-2">
           <Clock size={16} className="text-rowan-yellow" />
-          <span className="text-rowan-muted text-xs">Time to send XLM</span>
+          <span className="text-rowan-muted text-xs">Time to send USDC</span>
         </div>
         <CountdownTimer
           expiresAt={quote.expiresAt}
@@ -117,7 +118,7 @@ export default function CashoutSend() {
         />
       </div>
       <p className="text-rowan-muted text-xs mb-4 px-1">
-        Send before this timer ends. Mobile money timing starts after your XLM is received.
+        Send before this timer ends. Mobile money timing starts after your USDC is received.
       </p>
 
       <QuoteSummary quote={quote} phone={phone} />
@@ -125,8 +126,8 @@ export default function CashoutSend() {
       <div className="bg-rowan-surface rounded-xl p-4 mt-4 flex items-start gap-3">
         <ShieldCheck size={20} className="text-rowan-green shrink-0 mt-0.5" />
         <p className="text-rowan-muted text-xs">
-          Your XLM is sent to escrow and held until mobile money arrives on your phone.
-          If payment is not completed in time, your XLM is refunded automatically.
+          Your USDC is sent to escrow and held until mobile money arrives on your phone.
+          If payment is not completed in time, your USDC is refunded automatically.
         </p>
       </div>
 
@@ -151,7 +152,7 @@ export default function CashoutSend() {
       {!quoteExpired && (
         <div className="mt-8">
           <Button onClick={handleSendNow} loading={loading}>
-            Send XLM
+            Send USDC
           </Button>
         </div>
       )}

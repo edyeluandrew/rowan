@@ -49,8 +49,10 @@ const config = {
       || parseInt(process.env.TRADER_CONFIRM_TIMEOUT_SECONDS, 10) || 300,
     rateCacheTtlSeconds: parseInt(process.env.RATE_CACHE_TTL_SECONDS, 10) || 30,
     minXlmAmount: parseFloat(process.env.MIN_XLM_AMOUNT) || 1,
+    minUsdcAmount: parseFloat(process.env.MIN_USDC_AMOUNT) || 0.5,
     // [PHASE 4] Amount mismatch tolerance (in XLM) for deposit verification
     xlmAmountMismatchTolerance: parseFloat(process.env.XLM_AMOUNT_MISMATCH_TOLERANCE) || 0.01,
+    usdcAmountMismatchTolerance: parseFloat(process.env.USDC_AMOUNT_MISMATCH_TOLERANCE) || 0.0000001,
     // [PHASE 1] Unified slippage tolerance (quote + execution use same value)
     quoteSlippagePercent: parseFloat(process.env.QUOTE_SLIPPAGE_PERCENT) || 0.3,
     // [PHASE 4] Redis lock TTLs for distributed lock protection
@@ -78,6 +80,14 @@ const config = {
     fiatFxStaleSeconds: parseInt(process.env.FIAT_FX_STALE_SECONDS, 10) || 3600,
     // [PHASE 2G] Testnet orphan USDC sweep destination (public key only — required for recovery script)
     testnetRecoveryWalletPublicKey: process.env.TESTNET_RECOVERY_WALLET_PUBLIC_KEY,
+  },
+
+  // Testnet pilot: auto-fund new wallets with starter USDC (direct payment from faucet wallet)
+  testnetFaucet: {
+    secretKey: process.env.TESTNET_FAUCET_SECRET_KEY || null,
+    amount: parseFloat(process.env.TESTNET_FAUCET_USDC_AMOUNT) || 20,
+    minBalanceToSkip: parseFloat(process.env.TESTNET_FAUCET_MIN_BALANCE) || 1,
+    cooldownSeconds: parseInt(process.env.TESTNET_FAUCET_COOLDOWN_SECONDS, 10) || 7200,
   },
 
   // USDC issuers (Stellar)

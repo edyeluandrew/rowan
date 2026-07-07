@@ -24,7 +24,7 @@ export default function Marketplace() {
   const countryNetworks = useMemo(() => Object.keys(getNetworksForCountry(country)), [country])
   const { activeTransaction, hasActiveOrder } = useActiveTransaction()
   const { rates, allRates } = useRates(fiatCurrency)
-  const { balance } = useWallet()
+  const { usdcBalance } = useWallet()
   const [traders, setTraders] = useState([])
   const [pickTrader, setPickTrader] = useState(null)
   const [typicalTradeMinutes, setTypicalTradeMinutes] = useState(null)
@@ -285,9 +285,8 @@ export default function Marketplace() {
               key={trader.traderId}
               trader={trader}
               mode={tab}
-              allRates={allRates}
               usdcToFiat={rates?.usdcToFiat}
-              walletBalance={balance}
+              walletBalance={usdcBalance}
               typicalTradeMinutes={typicalTradeMinutes}
               onTrade={handleTrade}
               onViewProfile={handleViewProfile}

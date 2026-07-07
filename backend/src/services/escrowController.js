@@ -310,6 +310,144 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
 }
 
 /**
+ * Verify an incoming USDC deposit against a locked cash-out quote.
+ * User sends USDC directly — no XLM swap step.
+ */
+async function handleUsdcCashoutDeposit({ memo, amount, sourceAccount, txHash }) {
+  logger.info(`[Escrow] USDC cash-out deposit — memo: ${memo}, amount: ${amount}, tx: ${txHash}`);
+
+  const lockKey = `lock:deposit:${memo}`;
+  const lockAcquired = await redis.set(lockKey, txHash, 'EX', config.platform.redisLockTtlDepositSeconds, 'NX');
+  if (!lockAcquired) {
+    logger.warn(`[Escrow] Duplicate USDC deposit for memo ${memo} — skipping`);
+    return;
+  }
+
+  const quote = await quoteEngine.getQuoteByMemo(memo);
+  if (!quote) {
+    logger.warn(`[Escrow] No valid quote for USDC memo ${memo} — will refund`);
+    await refundUsdc(sourceAccount, amount, `No valid quote for memo ${memo}`);
+    await redis.del(lockKey);
+    return;
+  }
+
+  const userResult = await db.query(
+    `SELECT stellar_address FROM users WHERE id = $1`,
+    [quote.user_id]
+  );
+  const userStellarAddress = userResult.rows[0]?.stellar_address || sourceAccount;
+
+  const expectedUsdc = parseFloat(quote.usdc_deposit_amount ?? quote.path_usdc_received);
+  const receivedUsdc = parseFloat(amount);
+  const tolerance = config.platform.usdcAmountMismatchTolerance;
+  if (!Number.isFinite(expectedUsdc) || Math.abs(receivedUsdc - expectedUsdc) > tolerance) {
+    logger.warn(`[Escrow] USDC amount mismatch: expected ${expectedUsdc}, got ${receivedUsdc}`);
+    await db.query(`UPDATE quotes SET status = 'INVALID' WHERE id = $1`, [quote.id]);
+    await refundUsdc(userStellarAddress, amount, 'Amount mismatch');
+    await redis.del(lockKey);
+    return;
+  }
+
+  if (new Date(quote.expires_at) < new Date()) {
+    logger.warn(`[Escrow] Quote ${quote.id} expired`);
+    await db.query(`UPDATE quotes SET status = 'EXPIRED' WHERE id = $1`, [quote.id]);
+    await refundUsdc(userStellarAddress, amount, 'Quote expired');
+    await redis.del(lockKey);
+    return;
+  }
+
+  const traderUsdc = parseFloat(quote.path_usdc_received ?? receivedUsdc);
+
+  const client = await db.getClient();
+  let transaction;
+  try {
+    await client.query('BEGIN');
+
+    const markResult = await client.query(
+      `UPDATE quotes SET is_used = TRUE, status = 'CONFIRMED' WHERE id = $1 AND is_used = FALSE RETURNING id`,
+      [quote.id]
+    );
+    if (markResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      const existingTx = await db.query(
+        `SELECT id, state FROM transactions WHERE quote_id = $1`,
+        [quote.id]
+      );
+      if (existingTx.rows.length > 0) {
+        logger.info(`[Escrow] ✅ IDEMPOTENT: Transaction already exists for quote ${quote.id}`);
+        await redis.del(lockKey);
+        return;
+      }
+      await redis.del(lockKey);
+      return;
+    }
+
+    const txResult = await client.query(
+      `INSERT INTO transactions
+         (quote_id, user_id, xlm_amount, usdc_amount, fiat_amount, fiat_currency,
+          network, phone_hash, state, stellar_deposit_tx, locked_rate, escrow_locked_at,
+          payout_phone, payout_name, preferred_payout_setting_id)
+       VALUES ($1,$2,0,$3,$4,$5,$6,$7,'ESCROW_LOCKED',$8,$9,NOW(),$10,$11,$12)
+       RETURNING *`,
+      [
+        quote.id,
+        quote.user_id,
+        traderUsdc,
+        parseFloat(quote.fiat_amount),
+        quote.fiat_currency,
+        quote.network,
+        quote.phone_hash,
+        txHash,
+        parseFloat(quote.user_rate),
+        quote.payout_phone,
+        quote.payout_name,
+        quote.preferred_payout_setting_id || null,
+      ]
+    );
+    transaction = txResult.rows[0];
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err.code === '23505' && err.constraint?.includes('quote_id')) {
+      const existingTx = await db.query(
+        `SELECT id FROM transactions WHERE quote_id = $1`,
+        [quote.id]
+      );
+      if (existingTx.rows.length > 0) {
+        await redis.del(lockKey);
+        return;
+      }
+    }
+    await redis.del(lockKey);
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  await redis.set(`quote:${quote.id}:tx`, transaction.id, 'EX', config.platform.redisQuoteTxMapTtlSeconds);
+  logger.info(`[Escrow] USDC cash-out tx ${transaction.id} created — ${traderUsdc} USDC locked`);
+
+  try {
+    await matchingEngine.matchTrader(transaction.id);
+    logger.info(`[Escrow] matchTrader finished for USDC tx ${transaction.id}`);
+  } catch (matchingErr) {
+    logger.error(`[Escrow] matchTrader error for USDC tx ${transaction.id}: ${matchingErr?.message}`);
+    try {
+      const refundHash = await refundUsdc(userStellarAddress, amount, 'Matching failed');
+      await stateMachine.transition(transaction.id, 'ESCROW_LOCKED', 'REFUNDED', {
+        failure_reason: 'Trader matching failed: ' + (matchingErr?.message || 'Unknown error'),
+        stellar_refund_tx: refundHash,
+      });
+    } catch (refundErr) {
+      logger.error(`[Escrow] USDC refund after match failure failed:`, refundErr.message);
+      await stateMachine.transition(transaction.id, 'ESCROW_LOCKED', 'FAILED', {
+        failure_reason: 'Matching failed + refund failed: ' + (matchingErr?.message || 'Unknown error'),
+      });
+    }
+  }
+}
+
+/**
  * [REMOVED] tryMarketMakerFill used manageBuyOffer signed by the escrow account,
  * which risked partial fills + leaving a resting offer on the escrow's books.
  * The escrow now buys USDC exclusively via pathPaymentStrictReceive (atomic),
@@ -963,6 +1101,34 @@ async function syncBuyUsdcLock(transactionId, traderId) {
     expectedMemo: row.memo,
     message: `No matching USDC payment found. Send exactly ${expectedUsdc} USDC from ${row.trader_stellar} with memo "${row.memo}", wait ~30 seconds, then try again.`,
   };
+}
+
+async function refundUsdc(userStellarAddress, usdcAmount, reason) {
+  try {
+    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+
+    const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: userStellarAddress,
+          asset: USDC_ASSET,
+          amount: parseFloat(usdcAmount).toFixed(7),
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    tx.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(tx);
+    logger.info(`[Escrow] Refunded ${usdcAmount} USDC to ${userStellarAddress} — reason: ${reason}, tx: ${result.hash}`);
+    return result.hash;
+  } catch (err) {
+    logger.error(`[Escrow] USDC REFUND FAILED for ${userStellarAddress}:`, err.message);
+    throw err;
+  }
 }
 
 /**
@@ -1664,6 +1830,7 @@ async function retryReleaseBlocked(transactionId, { adminId } = {}) {
 
 export default {
   handleDeposit,
+  handleUsdcCashoutDeposit,
   handleTraderUsdcDeposit,
   syncBuyUsdcLock,
   swapXlmToUsdc,
@@ -1671,6 +1838,7 @@ export default {
   releaseToUser,
   retryReleaseBlocked,
   refundXlm,
+  refundUsdc,
   refundToUser,
   refundOrphanTransaction,
   releaseMatchFloatForTransaction,

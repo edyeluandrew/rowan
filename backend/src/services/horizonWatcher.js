@@ -138,15 +138,26 @@ async function handlePayment(payment) {
     } else if (
       (payment.asset_type === 'credit_alphanum4' || payment.asset_type === 'credit_alphanum12')
       && payment.asset_code === 'USDC'
-      && memo.startsWith('ROWAN-buy_')
     ) {
-      logger.info(`[Horizon] ✅ Processing USDC buy lock: ${payment.amount} from ${payment.from}`);
-      await escrowController.handleTraderUsdcDeposit({
-        memo,
-        amount: payment.amount,
-        sourceAccount: payment.from,
-        txHash: tx.hash,
-      });
+      if (memo.startsWith('ROWAN-qt_')) {
+        logger.info(`[Horizon] ✅ Processing USDC cash-out: ${payment.amount} from ${payment.from}`);
+        await escrowController.handleUsdcCashoutDeposit({
+          memo,
+          amount: payment.amount,
+          sourceAccount: payment.from,
+          txHash: tx.hash,
+        });
+      } else if (memo.startsWith('ROWAN-buy_')) {
+        logger.info(`[Horizon] ✅ Processing USDC buy lock: ${payment.amount} from ${payment.from}`);
+        await escrowController.handleTraderUsdcDeposit({
+          memo,
+          amount: payment.amount,
+          sourceAccount: payment.from,
+          txHash: tx.hash,
+        });
+      } else {
+        return;
+      }
     } else {
       return;
     }

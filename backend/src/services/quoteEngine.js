@@ -418,6 +418,8 @@ async function computeQuoteFromXlm(xlmAmount, network) {
 async function persistQuote({
   userId,
   xlmAmount,
+  usdcDepositAmount = null,
+  depositAsset = 'USDC',
   network,
   phoneHash,
   payoutPhone,
@@ -451,24 +453,25 @@ async function persistQuote({
         rate_ugx, fee_ugx, status, path_xlm_needed, path_usdc_received, quote_source,
         payout_phone, payout_name, rate_source, quote_warning,
         fx_source, fx_rate, fx_currency, fx_warning, fiat_rate_source,
-        fx_provider, fx_fetched_at, fx_age_seconds, preferred_payout_setting_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
+        fx_provider, fx_fetched_at, fx_age_seconds, preferred_payout_setting_id,
+        deposit_asset, usdc_deposit_amount)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING',$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)
      RETURNING *`,
     [
-      userId, xlmAmount, fiatCurrency, 
-      xlmRate,              // market_rate = XLM/USDC from path
-      userRateAfterSpread,  // user_rate = fiat rate after spread
+      userId, xlmAmount, fiatCurrency,
+      xlmRate,
+      userRateAfterSpread,
       fiatAmountNum, platformFeeNum,
       network, phoneHash, memo,
       config.stellar.escrowPublicKey, expiresAt,
       rateUgx, feeUgx,
-      pathData.xlmNeeded,        // path_xlm_needed (for execution)
-      pathData.usdcReceived,     // path_usdc_received (for execution)
-      quoteSource,                // 'horizon-path' (executable) | 'legacy-fallback' (non-executable)
-      payoutPhone,               // payout_phone (full phone for trader)
-      payoutName,                // payout_name (recipient name)
-      rateSource,                 // [PHASE 2C] LIVE | FALLBACK
-      quoteWarning,               // [PHASE 2C] indicative-rate warning (or null)
+      pathData.xlmNeeded,
+      pathData.usdcReceived,
+      quoteSource,
+      payoutPhone,
+      payoutName,
+      rateSource,
+      quoteWarning,
       fiatFx.fxSource,
       fiatFx.rate,
       fiatFx.fxCurrency,
@@ -478,6 +481,8 @@ async function persistQuote({
       fiatFx.fxFetchedAt ? new Date(fiatFx.fxFetchedAt) : null,
       fiatFx.fxAgeSeconds,
       preferredPayoutSettingId,
+      depositAsset,
+      usdcDepositAmount,
     ]
   );
 
@@ -582,9 +587,64 @@ async function discoverPathForUsdcTarget(usdcTargetForPath, fiatCurrency, capRef
 }
 
 /**
+ * Fiat-anchored USDC quote: user specifies net MoMo payout; they send USDC to escrow.
+ * No XLM path discovery — stablecoin in, mobile money out.
+ */
+async function computeQuoteFromTargetFiatUsdc(targetNetFiat, network) {
+  const fiatCurrency = networkToFiat(network);
+  const fiatFx = await fxService.assertFiatFxAvailableForQuote(fiatCurrency);
+  const usdcToFiat = fiatFx.rate;
+  const fiatAmountNum = normalizeLockedFiatAmount(targetNetFiat, fiatCurrency);
+
+  const spreadMultiplierUser = 1 - (spreadPercent / 100);
+  const feeMultiplier = 1 - (feePercent / 100);
+  const grossFiatBeforeSpread = fiatAmountNum / (feeMultiplier * spreadMultiplierUser);
+  const usdcForTrader = grossFiatBeforeSpread / usdcToFiat;
+
+  const slippageMultiplier = 1 + (config.platform.quoteSlippagePercent / 100);
+  const usdcDepositAmount = usdcForTrader * slippageMultiplier;
+
+  const userRateAfterSpread = usdcToFiat * spreadMultiplierUser;
+  const grossFiatActual = usdcForTrader * usdcToFiat * spreadMultiplierUser;
+  const platformFeeNum = parseFloat(Math.max(0, grossFiatActual - fiatAmountNum).toFixed(2));
+
+  const rateUgx = Math.round(usdcToFiat);
+  const feeUgx = Math.round(fiatToUgxRate(platformFeeNum, fiatCurrency));
+
+  logger.info(
+    `[QuoteEngine] USDC-anchored quote: netFiat=${fiatAmountNum} ${fiatCurrency}, ` +
+    `send ${usdcDepositAmount} USDC → trader ${usdcForTrader} USDC`
+  );
+
+  return {
+    fiatCurrency,
+    fiatFx,
+    xlmRate: usdcToFiat,
+    pathData: {
+      xlmNeeded: 0,
+      usdcReceived: usdcForTrader,
+      path: [],
+      source: 'usdc-direct',
+    },
+    rateSource: 'LIVE',
+    quoteWarning: null,
+    userRateAfterSpread,
+    fiatAmountNum,
+    platformFeeNum,
+    rateUgx,
+    feeUgx,
+    quoteSource: 'usdc-direct',
+    xlmWithSlippage: 0,
+    grossFiatActual,
+    usdcDepositAmount,
+  };
+}
+
+/**
  * Fiat-anchored quote: user specifies exact MoMo payout; solve XLM send + USDC for trader.
  * fiat_amount on the quote = exactly what the user entered (net UGX/KES/TZS).
  * path_usdc_received = USDC escrow swaps to and releases to the trader.
+ * @deprecated Legacy XLM deposit path — retained for reference; cash-out uses USDC direct.
  */
 async function computeQuoteFromTargetFiat(targetNetFiat, network) {
   const fiatCurrency = networkToFiat(network);
@@ -655,12 +715,11 @@ async function createQuoteFromFiat({
   payoutName,
   payoutSettingId = null,
 }) {
-  const computed = await computeQuoteFromTargetFiat(targetNetFiat, network);
-  const xlmAmount = Math.ceil(computed.xlmWithSlippage * 1e7) / 1e7;
+  const computed = await computeQuoteFromTargetFiatUsdc(targetNetFiat, network);
+  const usdcDeposit = Math.ceil(computed.usdcDepositAmount * 1e7) / 1e7;
 
-  if (xlmAmount < config.platform.minXlmAmount) {
-    const fiatCurrency = networkToFiat(network);
-    const err = new Error(`Amount too small. Minimum cash-out is ${config.platform.minXlmAmount} XLM equivalent.`);
+  if (usdcDeposit < config.platform.minUsdcAmount) {
+    const err = new Error(`Amount too small. Minimum cash-out is ${config.platform.minUsdcAmount} USDC equivalent.`);
     err.statusCode = 400;
     err.code = 'AMOUNT_BELOW_MIN';
     throw err;
@@ -680,7 +739,9 @@ async function createQuoteFromFiat({
 
   return persistQuote({
     userId,
-    xlmAmount,
+    xlmAmount: 0,
+    usdcDepositAmount: usdcDeposit,
+    depositAsset: 'USDC',
     network,
     phoneHash,
     payoutPhone,
@@ -710,6 +771,7 @@ async function getQuoteByMemo(memo) {
     if (quote.fee_ugx) quote.fee_ugx = Number(quote.fee_ugx);
     if (quote.path_xlm_needed) quote.path_xlm_needed = Number(quote.path_xlm_needed);
     if (quote.path_usdc_received) quote.path_usdc_received = Number(quote.path_usdc_received);
+    if (quote.usdc_deposit_amount) quote.usdc_deposit_amount = Number(quote.usdc_deposit_amount);
     return quote;
   }
 
@@ -733,7 +795,8 @@ async function getQuoteByMemo(memo) {
   if (quote.fee_ugx) quote.fee_ugx = Number(quote.fee_ugx);
   if (quote.path_xlm_needed) quote.path_xlm_needed = Number(quote.path_xlm_needed);
   if (quote.path_usdc_received) quote.path_usdc_received = Number(quote.path_usdc_received);
-  
+  if (quote.usdc_deposit_amount) quote.usdc_deposit_amount = Number(quote.usdc_deposit_amount);
+
   logger.info(`[QuoteEngine] Retrieved quote from DB: ${quote.id} (source: ${quote.quote_source})`);
   return quote;
 }

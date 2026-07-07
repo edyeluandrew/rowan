@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { RefreshCw, TriangleAlert } from 'lucide-react'
-import { generateKeypair } from '../utils/stellar'
+import { generateKeypair, fundTestUsdcWallet, loadAccountBalances } from '../utils/stellar'
 import { setSecure } from '../utils/storage'
-import { WALLET_GEN_DELAY_MS } from '../utils/constants'
+import { WALLET_GEN_DELAY_MS, TESTNET_AUTO_USDC_AMOUNT, CURRENT_NETWORK } from '../utils/constants'
 import AddressDisplay from '../components/wallet/AddressDisplay'
 import Button from '../components/ui/Button'
 
@@ -11,6 +11,8 @@ export default function CreateWallet() {
   const navigate = useNavigate()
   const [keypair, setKeypair] = useState(null)
   const [generating, setGenerating] = useState(true)
+  const [statusMessage, setStatusMessage] = useState('Generating your wallet...')
+  const [testUsdcReady, setTestUsdcReady] = useState(null)
   const [showSkipWarning, setShowSkipWarning] = useState(false)
 
   useEffect(() => {
@@ -19,8 +21,33 @@ export default function CreateWallet() {
       const kp = generateKeypair()
       await setSecure('rowan_stellar_keypair', JSON.stringify(kp))
       await setSecure('rowan_wallet_created_at', new Date().toISOString())
+      if (cancelled) return
+
+      setStatusMessage('Preparing your wallet...')
+      let funded = false
+      try {
+        const result = await fundTestUsdcWallet({
+          secretKey: kp.secretKey,
+          publicKey: kp.publicKey,
+          horizonUrl: import.meta.env.VITE_STELLAR_HORIZON_URL,
+        })
+        funded = result.usdcFunded !== false && result.skipped !== 'already_has_usdc'
+          ? !!result.usdcFunded
+          : (result.usdcBalance ?? 0) >= 1
+        if (!funded && CURRENT_NETWORK.isTest) {
+          const balances = await loadAccountBalances(
+            kp.publicKey,
+            import.meta.env.VITE_STELLAR_HORIZON_URL
+          )
+          funded = balances.usdc >= 1
+        }
+      } catch {
+        funded = false
+      }
+
       if (!cancelled) {
         setKeypair(kp)
+        setTestUsdcReady(CURRENT_NETWORK.isTest ? funded : null)
         setGenerating(false)
       }
     }, WALLET_GEN_DELAY_MS)
@@ -31,7 +58,7 @@ export default function CreateWallet() {
     return (
       <div className="bg-rowan-bg min-h-screen flex flex-col items-center justify-center">
         <RefreshCw size={48} className="text-rowan-yellow animate-spin-slow" />
-        <p className="text-rowan-muted text-sm mt-4">Generating your wallet...</p>
+        <p className="text-rowan-muted text-sm mt-4">{statusMessage}</p>
       </div>
     )
   }
@@ -44,6 +71,22 @@ export default function CreateWallet() {
       <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 flex justify-center mb-6">
         <AddressDisplay address={keypair?.publicKey} />
       </div>
+
+      {CURRENT_NETWORK.isTest && testUsdcReady === true && (
+        <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-4 mb-4">
+          <p className="text-rowan-text text-sm font-medium">
+            {TESTNET_AUTO_USDC_AMOUNT} test USDC added — ready to try cash out and buy flows.
+          </p>
+        </div>
+      )}
+
+      {CURRENT_NETWORK.isTest && testUsdcReady === false && (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4">
+          <p className="text-rowan-text text-sm">
+            Wallet is set up. Tap &quot;Get free test USDC&quot; on Home if your balance is still empty.
+          </p>
+        </div>
+      )}
 
       <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-6">
         <div className="flex items-start gap-2">

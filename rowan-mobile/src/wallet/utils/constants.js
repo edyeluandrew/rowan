@@ -43,7 +43,7 @@ export const NETWORKS = {
 export const TX_STATES = {
   QUOTE_REQUESTED:  { label: 'Getting your rate...',  icon: 'CircleDashed'   },
   QUOTE_CONFIRMED:  { label: 'Rate confirmed',  icon: 'CircleDot'      },
-  ESCROW_LOCKED:    { label: 'XLM secured',     icon: 'Lock'           },
+  ESCROW_LOCKED:    { label: 'Funds secured',   icon: 'Lock'           },
   TRADER_MATCHED:   { label: 'Trader found',  icon: 'UserCheck'      },
   FIAT_PAYOUT_SUBMITTED: { label: 'Payment sent to you', icon: 'Banknote' },
   USER_CONFIRMATION_PENDING: { label: 'Confirm your payment', icon: 'ShieldCheck' },
@@ -100,7 +100,7 @@ export const STATE_ORDER = [
 ]
 
 export const STATE_SUBTITLES = {
-  QUOTE_CONFIRMED: 'Waiting for your XLM payment',
+  QUOTE_CONFIRMED: 'Waiting for your USDC payment',
   ESCROW_LOCKED:   'Finding a trader for your cash out',
   TRADER_MATCHED:  'Mobile money payout pending',
   FIAT_PAYOUT_SUBMITTED: 'Check your phone — confirm when MoMo arrives',
@@ -144,6 +144,11 @@ export const STELLAR_NETWORKS = {
 export const CURRENT_NETWORK =
   STELLAR_NETWORKS[import.meta.env.VITE_STELLAR_NETWORK] ||
   STELLAR_NETWORKS.testnet
+
+/** Testnet pilot: auto-grant this much USDC after wallet setup (via XLM→USDC swap). */
+export const TESTNET_AUTO_USDC_AMOUNT = 20
+/** Skip auto-fund when wallet already holds at least this much USDC. */
+export const TESTNET_MIN_USDC_FOR_SKIP = 1
 
 /** Testnet / mainnet USDC issuers — must match backend config */
 export const USDC_ISSUERS = {

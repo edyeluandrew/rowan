@@ -14,9 +14,23 @@ export function xlmToFiat(xlmBalance, xlmRate) {
   return xlm * rate
 }
 
+export function usdcToFiat(usdcBalance, usdcToFiatRate) {
+  const usdc = parseFloat(usdcBalance)
+  const rate = parseFloat(usdcToFiatRate)
+  if (!Number.isFinite(usdc) || !Number.isFinite(rate) || rate <= 0) return null
+  return usdc * rate
+}
+
 /** Conservative max net fiat cash-out from XLM balance (spread + fee buffer). */
 export function estimateMaxNetFiat(xlmBalance, xlmRate, feePercent = 1, spreadPercent = 1.25) {
   const gross = xlmToFiat(xlmBalance, xlmRate)
+  if (gross == null) return null
+  return gross * (1 - spreadPercent / 100) * (1 - feePercent / 100)
+}
+
+/** Conservative max net fiat cash-out from USDC balance. */
+export function estimateMaxNetFiatFromUsdc(usdcBalance, usdcToFiatRate, feePercent = 1, spreadPercent = 1.25) {
+  const gross = usdcToFiat(usdcBalance, usdcToFiatRate)
   if (gross == null) return null
   return gross * (1 - spreadPercent / 100) * (1 - feePercent / 100)
 }

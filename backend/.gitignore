@@ -70,3 +70,7 @@ ehthumbs.db
 **/tmp/
 **/temp/
 **/*.orig
+
+# Treasury top-up helper keys (local only — contains S... secrets)
+backend/scripts/.treasury-helpers.json
+scripts/.treasury-helpers.json

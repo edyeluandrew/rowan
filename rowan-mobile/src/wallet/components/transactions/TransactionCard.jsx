@@ -13,6 +13,13 @@ export default function TransactionCard({ transaction }) {
   const network = NETWORKS[transaction.network] || {}
   const inProgress = isTransactionInProgress(transaction)
   const subtitle = STATE_SUBTITLES[transaction.state]
+  const cryptoAmount = Number(transaction.usdcAmount ?? transaction.usdc_amount ?? 0)
+  const xlmAmount = Number(transaction.xlmAmount ?? transaction.xlm_amount ?? 0)
+  const cryptoLabel = cryptoAmount > 0
+    ? `${cryptoAmount.toFixed(2)} USDC`
+    : xlmAmount > 0
+      ? `${xlmAmount.toFixed(2)} XLM`
+      : null
 
   return (
     <button
@@ -32,9 +39,9 @@ export default function TransactionCard({ transaction }) {
           )}
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="text-rowan-muted text-sm tabular-nums">
-            {Number(transaction.xlmAmount || 0).toFixed(2)} XLM
-          </p>
+          {cryptoLabel && (
+            <p className="text-rowan-muted text-sm tabular-nums">{cryptoLabel}</p>
+          )}
           <p className="text-rowan-text font-bold tabular-nums">
             {transaction.currency || transaction.fiatCurrency}{' '}
             {Number(transaction.fiatAmount || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}

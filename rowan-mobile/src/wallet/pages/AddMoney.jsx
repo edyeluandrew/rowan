@@ -22,21 +22,25 @@ export default function AddMoney() {
         <div className="w-14 h-14 rounded-full bg-rowan-yellow/10 flex items-center justify-center mx-auto mb-4">
           <Smartphone size={28} className="text-rowan-yellow" />
         </div>
-        <p className="text-rowan-text text-base font-semibold mb-2">Coming soon</p>
+        <p className="text-rowan-text text-base font-semibold mb-2">Buy USDC with mobile money</p>
         <p className="text-rowan-muted text-sm">
-          Pay with MTN or Airtel and receive XLM directly in your Rowan wallet.
+          Pay with MTN or Airtel through a verified trader and receive USDC in your wallet.
         </p>
       </div>
+
+      <Button onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })} className="mb-3">
+        Buy USDC
+      </Button>
 
       <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-6 flex gap-3">
         <Clock size={18} className="text-rowan-muted shrink-0 mt-0.5" />
         <p className="text-rowan-muted text-xs">
-          For now, receive XLM from another wallet or exchange, then cash out to mobile money when you need UGX.
+          You can also receive USDC from another Stellar wallet, then cash out to mobile money when you need local currency.
         </p>
       </div>
 
       <Button onClick={() => navigate('/wallet/receive')} variant="ghost" className="mb-3">
-        Receive XLM instead
+        Receive USDC
       </Button>
       <Button onClick={() => navigate('/wallet/home')}>
         Back to Home

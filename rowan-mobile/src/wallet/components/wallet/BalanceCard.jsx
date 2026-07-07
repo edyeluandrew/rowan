@@ -3,12 +3,12 @@ import LoadingSpinner from '../ui/LoadingSpinner'
 import { FIAT_OPTIONS } from '../../utils/fiat'
 
 /**
- * Fiat-first balance card with optional currency picker and XLM subline.
+ * Fiat-first balance card with USDC primary balance.
  */
 export default function BalanceCard({
   fiatAmount,
   fiatCurrency,
-  xlmBalance,
+  usdcBalance,
   loading,
   refreshing,
   onRefresh,
@@ -34,7 +34,7 @@ export default function BalanceCard({
         </button>
       </div>
 
-      {loading && fiatAmount == null && xlmBalance == null ? (
+      {loading && fiatAmount == null && usdcBalance == null ? (
         <div className="flex justify-center py-6">
           <LoadingSpinner size={24} />
         </div>
@@ -79,9 +79,9 @@ export default function BalanceCard({
             </div>
           </div>
 
-          {xlmBalance != null && (
+          {usdcBalance != null && (
             <p className="text-rowan-muted text-sm tabular-nums mt-3 pt-3 border-t border-rowan-border">
-              {Number(xlmBalance).toFixed(2)} XLM in wallet
+              {Number(usdcBalance).toFixed(2)} USDC in wallet
             </p>
           )}
         </>

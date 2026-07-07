@@ -18,18 +18,18 @@ import ConnectionDot from '../components/ui/ConnectionDot'
 import NotificationBadge from '../components/ui/NotificationBadge'
 import TransactionCard from '../components/transactions/TransactionCard'
 import Button from '../components/ui/Button'
-import { CURRENT_NETWORK } from '../utils/constants'
-import { fundWithFriendbot } from '../utils/friendbot'
-import { xlmToFiat } from '../utils/fiat'
+import { CURRENT_NETWORK, TESTNET_AUTO_USDC_AMOUNT } from '../utils/constants'
+import { usdcToFiat } from '../utils/fiat'
+import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 import { getInProgressTransactions } from '../utils/transactions'
 
 export default function Home() {
   const navigate = useNavigate()
   const { isLocked } = useBiometricProtection()
-  const { balance, loading: balanceLoading, refresh: refreshBalance, publicKey } = useWallet()
+  const { usdcBalance, hasUsdcTrustline, loading: balanceLoading, refresh: refreshBalance, fundTestUsdc } = useWallet()
   const { country, fiatCurrency, ready: countryReady } = useUserCountry()
   const { hasActiveOrder } = useActiveTransaction()
-  const [friendbotState, setFriendbotState] = useState('idle')
+  const [testUsdcState, setTestUsdcState] = useState('idle')
   const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates(fiatCurrency)
   const { transactions, loading: txLoading } = useTransactions()
   const { unreadCount } = useNotificationsContext()
@@ -39,25 +39,23 @@ export default function Home() {
   const activeCashout = inProgress[0] || null
   const recent = transactions.filter((tx) => tx.id !== activeCashout?.id).slice(0, 3)
 
-  const xlmRate = rates?.xlmRate
-  const fiatEquivalent = balance != null && xlmRate
-    ? xlmToFiat(balance, xlmRate)
+  const usdcToFiatRate = rates?.usdcToFiat
+  const fiatEquivalent = usdcBalance != null && usdcToFiatRate
+    ? usdcToFiat(usdcBalance, usdcToFiatRate)
     : null
 
-  const needsTestFunds = CURRENT_NETWORK.isTest
-    && !balanceLoading
-    && (balance == null || parseFloat(balance) < 1)
+  const needsUsdc = !balanceLoading
+    && hasUsdcTrustline !== false
+    && (usdcBalance == null || parseFloat(usdcBalance) < 0.01)
     && !activeCashout
 
-  const handleFriendbot = async () => {
-    if (!publicKey) return
-    setFriendbotState('loading')
+  const handleGetTestUsdc = async () => {
+    setTestUsdcState('loading')
     try {
-      await fundWithFriendbot(publicKey)
-      setFriendbotState('success')
-      refreshBalance()
+      await fundTestUsdc()
+      setTestUsdcState('success')
     } catch {
-      setFriendbotState('error')
+      setTestUsdcState('error')
     }
   }
 
@@ -83,7 +81,7 @@ export default function Home() {
       <BalanceCard
         fiatAmount={countryReady ? fiatEquivalent : null}
         fiatCurrency={fiatCurrency}
-        xlmBalance={balance}
+        usdcBalance={usdcBalance}
         loading={balanceLoading || ratesLoading || !countryReady}
         refreshing={balanceLoading}
         onRefresh={() => {
@@ -92,34 +90,70 @@ export default function Home() {
         }}
       />
 
+      <UsdcTrustlineSetup compact onEnabled={refreshBalance} />
+
       <MvpPilotBanner className="mt-4" />
 
       {activeCashout && <CashoutInProgressBanner transaction={activeCashout} />}
 
-      {needsTestFunds && (
+      {needsUsdc && (
         <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4">
-          <p className="text-rowan-text text-sm font-medium">Fund your test wallet</p>
+          <p className="text-rowan-text text-sm font-medium">Add USDC to get started</p>
           <p className="text-rowan-muted text-xs mt-1">
-            Your balance is empty. Get free test XLM from Stellar Friendbot to try cash out and transfers.
+            {CURRENT_NETWORK.isTest
+              ? 'On testnet, Rowan can add free test USDC to your wallet automatically.'
+              : 'Buy USDC with mobile money, or receive USDC from another Stellar wallet.'}
           </p>
-          <button
-            onClick={handleFriendbot}
-            disabled={friendbotState === 'loading' || friendbotState === 'success'}
-            className="mt-3 w-full flex items-center justify-center gap-2 bg-rowan-yellow text-rowan-bg font-medium rounded-xl px-4 py-3 min-h-11 disabled:opacity-50"
-          >
-            <Coins size={16} />
-            {friendbotState === 'loading' && 'Funding...'}
-            {friendbotState === 'success' && 'Funded — balance updating'}
-            {friendbotState === 'error' && 'Failed — tap to retry'}
-            {friendbotState === 'idle' && 'Get testnet XLM'}
-          </button>
+          {CURRENT_NETWORK.isTest ? (
+            <button
+              onClick={handleGetTestUsdc}
+              disabled={testUsdcState === 'loading'}
+              className="mt-3 w-full flex items-center justify-center gap-2 bg-rowan-yellow text-rowan-bg font-medium rounded-xl px-3 py-3 min-h-11 text-sm disabled:opacity-50"
+            >
+              <Coins size={16} />
+              {testUsdcState === 'loading' && 'Adding test USDC...'}
+              {testUsdcState === 'success' && 'Test USDC added — refresh if needed'}
+              {testUsdcState === 'error' && 'Could not add test USDC — tap to retry'}
+              {testUsdcState === 'idle' && `Get ${TESTNET_AUTO_USDC_AMOUNT} free test USDC`}
+            </button>
+          ) : (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })}
+                className="flex items-center justify-center gap-2 bg-rowan-yellow text-rowan-bg font-medium rounded-xl px-3 py-3 min-h-11 text-sm"
+              >
+                <Plus size={16} />
+                Buy USDC
+              </button>
+              <button
+                onClick={() => navigate('/wallet/receive')}
+                className="flex items-center justify-center gap-2 bg-rowan-surface border border-rowan-border text-rowan-text font-medium rounded-xl px-3 py-3 min-h-11 text-sm"
+              >
+                <ArrowDownLeft size={16} />
+                Receive
+              </button>
+            </div>
+          )}
         </div>
+      )}
+
+      {!needsUsdc && CURRENT_NETWORK.isTest && !balanceLoading && (usdcBalance == null || parseFloat(usdcBalance) < 0.01) && (
+        <button
+          onClick={handleGetTestUsdc}
+          disabled={testUsdcState === 'loading'}
+          className="mt-4 w-full flex items-center justify-center gap-2 bg-rowan-surface border border-rowan-border rounded-xl px-4 py-2 min-h-9 disabled:opacity-50 text-rowan-muted text-xs"
+        >
+          {testUsdcState === 'idle' && `Get ${TESTNET_AUTO_USDC_AMOUNT} free test USDC`}
+          {testUsdcState === 'loading' && 'Adding test USDC...'}
+          {testUsdcState === 'success' && 'Test USDC added'}
+          {testUsdcState === 'error' && 'Retry test USDC'}
+        </button>
       )}
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <Button variant="ghost" onClick={() => navigate('/wallet/receive')}>
           <ArrowDownLeft size={18} />
-          Receive XLM
+          Receive USDC
         </Button>
         <Button variant="ghost" onClick={() => navigate('/wallet/add-money')}>
           <Plus size={18} />
@@ -226,7 +260,7 @@ export default function Home() {
             <Star size={32} className="text-rowan-muted mx-auto mb-3" />
             <p className="text-rowan-muted text-sm">No transactions yet</p>
             <p className="text-rowan-muted text-xs mt-1">
-              Receive XLM or cash out to get started
+              Receive USDC or cash out to get started
             </p>
           </div>
         ) : (

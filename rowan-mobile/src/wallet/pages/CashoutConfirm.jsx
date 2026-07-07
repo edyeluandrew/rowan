@@ -92,14 +92,14 @@ export default function CashoutConfirm() {
       )}
 
       <div className="flex items-center justify-between mb-1">
-        <span className="text-rowan-muted text-sm">Time to send XLM</span>
+        <span className="text-rowan-muted text-sm">Time to send USDC</span>
         <CountdownTimer
           expiresAt={quote.expiresAt}
           onExpire={() => setExpired(true)}
         />
       </div>
       <p className="text-rowan-muted text-xs mb-4">
-        This timer is only for sending XLM from your wallet. After that, we match a trader and send mobile money separately.
+        This timer is only for sending USDC from your wallet. After that, we match a trader and send mobile money separately.
       </p>
 
       <QuoteSummary quote={quote} phone={phone} requestedFiat={requestedFiat} />
@@ -107,8 +107,8 @@ export default function CashoutConfirm() {
       <div className="bg-rowan-surface rounded-xl p-4 mt-4 flex items-start gap-3">
         <ShieldCheck size={20} className="text-rowan-green shrink-0 mt-0.5" />
         <p className="text-rowan-muted text-xs">
-          After you send XLM, funds are held safely until mobile money arrives on your phone.
-          If payment is not completed in time, your XLM will be returned to your wallet.
+          After you send USDC, funds are held safely until mobile money arrives on your phone.
+          If payment is not completed in time, your USDC will be returned to your wallet.
         </p>
       </div>
 
