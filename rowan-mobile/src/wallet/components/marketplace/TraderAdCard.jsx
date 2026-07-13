@@ -3,23 +3,40 @@ import {
   formatCurrency,
   formatPercent,
   formatDurationMinutes,
-  formatXlmRateLine,
   formatUsdcRateLine,
   getTraderDisplayName,
 } from '../../utils/p2pFormat'
 import PaymentMethodPill from '../ui/PaymentMethodPill'
 import Button from '../ui/Button'
 
-export default function TraderAdCard({ ad, xlmRate, mode = 'sell', onTrade, onViewProfile, tradeDisabled = false }) {
+function resolveUsdcAvailable(ad, isBuy, usdcToFiat) {
+  const listed = ad.availableUsdc ?? ad.available_usdc
+  if (listed != null && Number(listed) > 0) return Number(listed)
+  if (isBuy) return listed != null ? Number(listed) : null
+  const floatFiat = ad.availableFloat ?? ad.available_float
+  const rate = Number(ad.ratePerUsdc || ad.rate_per_usdc || usdcToFiat || 0)
+  if (floatFiat != null && rate > 0) return Number(floatFiat) / rate
+  return null
+}
+
+export default function TraderAdCard({
+  ad,
+  usdcToFiat,
+  mode = 'sell',
+  onTrade,
+  onViewProfile,
+  tradeDisabled = false,
+}) {
   const isBuy = mode === 'buy'
-  const rateLine = isBuy
-    ? formatUsdcRateLine(ad.currency, ad.ratePerUsdc)
-    : formatXlmRateLine(ad.currency, xlmRate)
+  const rateLine = formatUsdcRateLine(
+    ad.currency,
+    isBuy ? ad.ratePerUsdc : (ad.ratePerUsdc || usdcToFiat)
+  )
   const completion = formatPercent(ad.completionRate)
   const releaseTime = formatDurationMinutes(ad.avgReleaseMinutes)
   const replyTime = formatDurationMinutes(ad.avgResponseMinutes)
   const isVerified = ad.trustScore >= 80
-  const availableUsdc = ad.availableUsdc ?? ad.available_usdc
+  const usdcAvailable = resolveUsdcAvailable(ad, isBuy, usdcToFiat)
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
@@ -45,7 +62,7 @@ export default function TraderAdCard({ ad, xlmRate, mode = 'sell', onTrade, onVi
             )}
           </div>
           {rateLine && (
-            <p className="text-rowan-yellow text-sm font-medium mt-1">{rateLine}</p>
+            <p className="text-rowan-green text-sm font-medium mt-1">{rateLine}</p>
           )}
           {!isBuy && !rateLine && (
             <p className="text-rowan-muted text-sm mt-1">Live market rate at quote</p>
@@ -86,14 +103,9 @@ export default function TraderAdCard({ ad, xlmRate, mode = 'sell', onTrade, onVi
           {' \u2013 '}
           {formatCurrency(ad.maxAmount, ad.currency)}
         </p>
-        {isBuy && availableUsdc != null && (
-          <p className="text-rowan-muted text-xs">
-            {Number(availableUsdc).toFixed(2)} USDC available
-          </p>
-        )}
-        {!isBuy && ad.availableFloat != null && (
-          <p className="text-rowan-muted text-xs">
-            {formatCurrency(ad.availableFloat, ad.currency)} float available
+        {usdcAvailable != null && Number.isFinite(usdcAvailable) && usdcAvailable > 0 && (
+          <p className="text-rowan-green text-xs font-medium">
+            {usdcAvailable.toFixed(2)} USDC available
           </p>
         )}
       </div>
@@ -103,7 +115,7 @@ export default function TraderAdCard({ ad, xlmRate, mode = 'sell', onTrade, onVi
           View profile
         </Button>
         <Button className="py-3" onClick={() => onTrade?.(ad)} disabled={tradeDisabled || (isBuy && !ad.ratePerUsdc)}>
-          {isBuy ? 'Buy USDC' : 'Trade'}
+          {isBuy ? 'Buy' : 'Sell'}
         </Button>
       </div>
     </div>

@@ -8,7 +8,6 @@ import {
   formatCurrency,
   formatPercent,
   formatDurationMinutes,
-  formatXlmRateLine,
   formatUsdcRateLine,
   getTraderDisplayName,
   lookupNetworkRate,
@@ -24,7 +23,8 @@ export default function TraderProfile() {
   const preselectedAd = location.state?.ad
   const marketplaceMode = location.state?.mode === 'buy' ? 'buy' : 'sell'
   const isBuyMode = marketplaceMode === 'buy'
-  const { allRates } = useRates()
+  const { allRates, rates } = useRates()
+  const usdcToFiat = rates?.usdcToFiat
 
   const [profile, setProfile] = useState(null)
   const [selectedAd, setSelectedAd] = useState(preselectedAd || null)
@@ -144,15 +144,20 @@ export default function TraderProfile() {
   })
 
   const selectedRate = selectedAd
-    ? (isBuyMode || selectedAd.adSide === 'USER_BUY')
-      ? selectedAd.ratePerUsdc
-      : lookupNetworkRate(allRates, selectedAd.network)
+    ? (selectedAd.ratePerUsdc || selectedAd.rate_per_usdc || usdcToFiat || lookupNetworkRate(allRates, selectedAd.network))
     : null
   const rateLine = selectedAd
-    ? (isBuyMode || selectedAd.adSide === 'USER_BUY')
-      ? formatUsdcRateLine(selectedAd.currency, selectedRate)
-      : formatXlmRateLine(selectedAd.currency, selectedRate)
+    ? formatUsdcRateLine(selectedAd.currency, selectedRate)
     : null
+
+  const usdcForAd = (ad) => {
+    const listed = ad.availableUsdc ?? ad.available_usdc
+    if (listed != null && Number(listed) > 0) return Number(listed)
+    const floatFiat = ad.availableFloat ?? ad.available_float
+    const rate = Number(ad.ratePerUsdc || ad.rate_per_usdc || usdcToFiat || 0)
+    if (floatFiat != null && rate > 0) return Number(floatFiat) / rate
+    return null
+  }
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-32 px-4 pt-4">
@@ -226,37 +231,32 @@ export default function TraderProfile() {
           )}
           {visibleAds.map((ad) => {
             const isSelected = (selectedAd?.payoutSettingId || selectedAd?.id) === ad.payoutSettingId
-            const isBuyAd = (ad.adSide || ad.ad_side) === 'USER_BUY'
-            const adRate = isBuyAd
-              ? formatUsdcRateLine(ad.currency, ad.ratePerUsdc)
-              : formatXlmRateLine(ad.currency, lookupNetworkRate(allRates, ad.network))
-            const availableUsdc = ad.availableUsdc ?? ad.available_usdc
+            const adRate = formatUsdcRateLine(
+              ad.currency,
+              ad.ratePerUsdc || ad.rate_per_usdc || usdcToFiat
+            )
+            const availableUsdc = usdcForAd(ad)
             return (
               <button
                 key={ad.payoutSettingId}
                 type="button"
                 onClick={() => setSelectedAd(ad)}
                 className={`w-full text-left rounded-xl p-4 border ${
-                  isSelected ? 'border-rowan-yellow bg-rowan-yellow/5' : 'border-rowan-border bg-rowan-surface'
+                  isSelected ? 'border-rowan-green bg-rowan-green/5' : 'border-rowan-border bg-rowan-surface'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <PaymentMethodPill network={ad.network} />
-                  {adRate && <span className="text-rowan-yellow text-xs font-medium">{adRate}</span>}
+                  {adRate && <span className="text-rowan-green text-xs font-medium">{adRate}</span>}
                 </div>
                 <p className="text-rowan-text text-sm font-medium mt-3">
                   Limits: {formatCurrency(ad.minAmount, ad.currency)}
                   {' \u2013 '}
                   {formatCurrency(ad.maxAmount, ad.currency)}
                 </p>
-                {isBuyAd && availableUsdc != null && (
-                  <p className="text-rowan-muted text-xs mt-1">
-                    {Number(availableUsdc).toFixed(2)} USDC available
-                  </p>
-                )}
-                {!isBuyAd && ad.availableFloat != null && (
-                  <p className="text-rowan-muted text-xs mt-1">
-                    {formatCurrency(ad.availableFloat, ad.currency)} float available
+                {availableUsdc != null && Number.isFinite(availableUsdc) && availableUsdc > 0 && (
+                  <p className="text-rowan-green text-xs font-medium mt-1">
+                    {availableUsdc.toFixed(2)} USDC available
                   </p>
                 )}
               </button>
@@ -274,11 +274,15 @@ export default function TraderProfile() {
             {' \u2013 '}
             {formatCurrency(selectedAd.maxAmount, selectedAd.currency)}
           </p>
-          {(selectedAd.adSide === 'USER_BUY' || isBuyMode) && (selectedAd.availableUsdc ?? selectedAd.available_usdc) != null && (
-            <p className="text-rowan-muted text-xs mt-1">
-              {(selectedAd.availableUsdc ?? selectedAd.available_usdc).toFixed(2)} USDC available
-            </p>
-          )}
+          {(() => {
+            const u = usdcForAd(selectedAd)
+            if (u == null || !Number.isFinite(u) || u <= 0) return null
+            return (
+              <p className="text-rowan-green text-xs font-medium mt-1">
+                {u.toFixed(2)} USDC available
+              </p>
+            )
+          })()}
         </div>
       )}
 

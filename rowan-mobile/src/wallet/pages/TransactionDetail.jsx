@@ -17,8 +17,8 @@ import PaymentWindowCountdown from '../components/cashout/PaymentWindowCountdown
 import OrderChat from '../components/chat/OrderChat'
 import OrderShortId from '../components/ui/OrderShortId'
 import useJoinOrder from '../hooks/useJoinOrder'
-import { formatXlm, formatDateTime, formatAddress } from '../utils/format'
 import { formatCurrency, getTraderDisplayName } from '../utils/p2pFormat'
+import { formatDateTime, formatAddress } from '../utils/format'
 import { normalizeWalletTransaction, getTransactionStatusTimestamps, isManualP2pTransaction, isBuyOrder } from '../utils/transactions'
 import { NETWORKS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 
@@ -305,15 +305,17 @@ export default function TransactionDetail() {
       <div className="bg-rowan-surface rounded-xl p-4 mb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Star size={16} className="text-rowan-yellow" />
-            <span className="text-rowan-text text-sm">XLM Sent</span>
+            <Star size={16} className="text-rowan-green" />
+            <span className="text-rowan-text text-sm">{isBuy ? 'USDC received' : 'USDC sent'}</span>
           </div>
-          <span className="text-rowan-text font-semibold">{formatXlm(tx.xlmAmount)}</span>
+          <span className="text-rowan-text font-semibold">
+            {Number(tx.usdcAmount || tx.xlmAmount || 0).toFixed(2)} USDC
+          </span>
         </div>
         <div className="flex items-center justify-between mt-3">
           <div className="flex items-center gap-2">
             <Smartphone size={16} className="text-rowan-green" />
-            <span className="text-rowan-text text-sm">Fiat Received</span>
+            <span className="text-rowan-text text-sm">{isBuy ? 'Fiat sent' : 'Fiat received'}</span>
           </div>
           <span className="text-rowan-green font-semibold">
             {formatCurrency(tx.fiatAmount, tx.fiatCurrency || network.currency)}

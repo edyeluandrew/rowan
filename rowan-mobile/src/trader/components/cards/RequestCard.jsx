@@ -85,9 +85,7 @@ export default function RequestCard({ request, onRemove }) {
             ? 'Customer buying USDC — you lock USDC'
             : 'Customer selling USDC — you send fiat'}
           {' · '}
-          {Number(request.usdc_amount || 0) > 0
-            ? `${Number(request.usdc_amount).toFixed(2)} USDC`
-            : `${formatCurrency(request.xlm_amount, 'XLM')} XLM`}
+          {Number(request.usdc_amount || 0).toFixed(2)} USDC
         </div>
       </div>
 

@@ -324,7 +324,7 @@ export default function Cashout() {
             )}
             {exceedsTraderFloat && traderFloatFiat != null && (
               <>
-                <p className="text-rowan-yellow text-sm font-medium">Amount exceeds trader float</p>
+                <p className="text-rowan-yellow text-sm font-medium">Amount exceeds trader capacity</p>
                 <p className="text-rowan-muted text-xs mt-1">
                   This trader only has about {Math.floor(traderFloatFiat).toLocaleString()} {currency} available right now.
                 </p>

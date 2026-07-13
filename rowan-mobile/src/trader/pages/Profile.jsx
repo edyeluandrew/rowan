@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getProfile } from '../api/trader';
-import { formatCurrency } from '../utils/format';
 import { getPreference, setPreference } from '../utils/storage';
 import TrustScore from '../components/ui/TrustScore';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -150,23 +149,6 @@ export default function Profile() {
           Open Rowan Wallet →
         </button>
       </div>
-
-      {/* Float Balances */}
-      {p.float_balances && (
-        <div className="bg-rowan-surface rounded-xl p-4 mb-4">
-          <h3 className="text-rowan-muted text-xs uppercase tracking-wider mb-3">Float Balances</h3>
-          <div className="space-y-2">
-            {Object.entries(p.float_balances).map(([currency, amount]) => (
-              <div key={currency} className="flex justify-between">
-                <span className="text-rowan-muted text-sm">{currency}</span>
-                <span className="text-rowan-text text-sm font-semibold">
-                  {formatCurrency(amount, currency)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Navigation Links */}
       <div className="bg-rowan-surface rounded-xl mb-4 divide-y divide-rowan-border">

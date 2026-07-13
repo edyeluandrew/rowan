@@ -154,6 +154,22 @@ export default function TraderGroupCard({
             {formatCurrency(trader.maxAmount, currency)}
           </p>
         )}
+        {(() => {
+          const listedUsdc = trader.totalAvailableUsdc ?? trader.availableUsdc
+          const floatFiat = trader.totalAvailableFloat ?? trader.availableFloat
+          const rate = trader.bestRatePerUsdc > 0 ? trader.bestRatePerUsdc : usdcToFiat
+          const usdcShown = isBuy
+            ? (listedUsdc != null ? Number(listedUsdc) : null)
+            : (listedUsdc != null && Number(listedUsdc) > 0
+              ? Number(listedUsdc)
+              : (floatFiat != null && rate > 0 ? Number(floatFiat) / Number(rate) : null))
+          if (usdcShown == null || !Number.isFinite(usdcShown) || usdcShown <= 0) return null
+          return (
+            <p className="text-rowan-green text-xs font-medium">
+              {usdcShown.toFixed(2)} USDC available
+            </p>
+          )
+        })()}
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
