@@ -49,11 +49,9 @@ export function normalizeWalletTransaction(tx) {
 }
 
 export function isBuyOrder(tx) {
-  if ((tx?.orderSide ?? tx?.order_side) === 'BUY') return true
-  const usdc = Number(tx?.usdcAmount ?? tx?.usdc_amount ?? 0)
-  const xlm = Number(tx?.xlmAmount ?? tx?.xlm_amount ?? 0)
-  const manual = !!(tx?.preferredPayoutSettingId ?? tx?.preferred_payout_setting_id)
-  return manual && usdc > 0 && xlm === 0
+  // Trust DB order_side only. Manual USDC cash-outs also have preferred_payout_setting_id
+  // + usdc with xlm=0 — that old heuristic wrongly treated sells as buys.
+  return String(tx?.orderSide ?? tx?.order_side ?? 'SELL').toUpperCase() === 'BUY'
 }
 
 /** Order chat is only for manual P2P (user picked a trader ad), not Express auto-match. */

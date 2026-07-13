@@ -58,7 +58,6 @@ export default function TransactionStatus() {
   const [cancelling, setCancelling] = useState(false)
   const [cancelNotice, setCancelNotice] = useState(null)
   const [appealCountdown, setAppealCountdown] = useState('')
-  const [paymentProofReceived, setPaymentProofReceived] = useState(false)
   const [buyPaymentRef, setBuyPaymentRef] = useState('')
   const [submittingBuyPayment, setSubmittingBuyPayment] = useState(false)
   const [buyPaymentError, setBuyPaymentError] = useState(null)
@@ -200,8 +199,6 @@ export default function TransactionStatus() {
         reference: activeTxId ? `ROW-${activeTxId.replace(/-/g, '').slice(0, 8).toUpperCase()}` : 'ROW',
       }
     : null
-  const showConfirmSection = !isBuy && ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
-  const canConfirmPayment = paymentProofReceived && showConfirmSection
 
   const handleSubmitBuyPayment = async () => {
     if (!buyPaymentRef.trim()) {
@@ -302,16 +299,9 @@ export default function TransactionStatus() {
     }
   }
 
-  useEffect(() => {
-    if (transaction?.payoutReference || transaction?.payoutProofUrl) {
-      setPaymentProofReceived(true)
-    }
-  }, [transaction?.payoutReference, transaction?.payoutProofUrl])
-
   useSocketHook('payment_proof_submitted', (data) => {
     const txId = data.transaction_id || data.transactionId
     if (txId === statusId || txId === id || txId === transaction?.id) {
-      setPaymentProofReceived(true)
       setTransaction((prev) => mergeTransaction(prev || { id: txId }, {
         payoutReference: data.reference ?? prev?.payoutReference,
         payoutProofUrl: data.proof_url ?? prev?.payoutProofUrl,
@@ -321,7 +311,10 @@ export default function TransactionStatus() {
 
   useSocketHook('chat_message', (msg) => {
     if (msg.type === 'payment_proof' && msg.transactionId === activeTxId) {
-      setPaymentProofReceived(true)
+      setTransaction((prev) => mergeTransaction(prev || {}, {
+        payoutReference: msg.payload?.reference ?? prev?.payoutReference,
+        payoutProofUrl: msg.payload?.proof_url ?? prev?.payoutProofUrl,
+      }))
     }
   })
 
@@ -562,7 +555,72 @@ export default function TransactionStatus() {
       {isBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
         <div className="bg-rowan-surface rounded-xl p-4 my-4 text-center">
           <p className="text-rowan-text text-sm font-medium">Payment submitted</p>
-          <p className="text-rowan-muted text-xs mt-2">Waiting for the trader to tap <strong className="text-rowan-text">I have received payment</strong>. USDC will then go to your wallet.</p>
+          <p className="text-rowan-muted text-xs mt-2">Waiting for the trader to tap <strong className="text-rowan-text">I received MoMo — release USDC</strong>. USDC will then go to your wallet.</p>
+        </div>
+      )}
+
+      {/* Sell: confirm MoMo ABOVE chat so it is not buried */}
+      {!isBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
+        <div className="bg-rowan-green/10 border-2 border-rowan-green/40 rounded-xl p-4 my-4 space-y-4">
+          <div className="text-center">
+            <p className="text-rowan-green text-sm font-semibold">
+              Trader says they sent your mobile money
+            </p>
+            <p className="text-rowan-text text-sm font-medium mt-2">
+              {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} via {getNetworkLabel(transaction.network)}
+            </p>
+            {transaction.payoutReference && (
+              <p className="text-rowan-muted text-xs mt-1 font-mono">
+                Ref: {transaction.payoutReference}
+              </p>
+            )}
+            <p className="text-rowan-muted text-xs mt-2">
+              Check your MoMo balance. If it arrived, confirm below to release USDC to the trader.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => setShowConfirmModal(true)}
+          >
+            I have received fiat
+          </Button>
+          <Button
+            variant="ghost"
+            className="text-rowan-red border-rowan-red w-full"
+            onClick={() => setShowDisputeModal(true)}
+          >
+            I did not receive it — dispute
+          </Button>
+        </div>
+      )}
+
+      {!isBuy && transaction?.state === 'USER_CONFIRMATION_PENDING' && (
+        <div className="bg-rowan-surface rounded-xl p-4 my-4 space-y-4">
+          <div className="text-center">
+            <p className="text-rowan-text text-sm font-medium">
+              Confirming receipt…
+            </p>
+            <p className="text-rowan-muted text-xs mt-2">
+              If this is stuck, tap confirm again or raise a dispute.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => setShowConfirmModal(true)}
+          >
+            I have received fiat
+          </Button>
+          {showDisputeAction && (
+            <Button
+              variant="ghost"
+              className="text-rowan-red border-rowan-red w-full"
+              onClick={() => setShowDisputeModal(true)}
+            >
+              Raise a Dispute
+            </Button>
+          )}
         </div>
       )}
 
@@ -603,73 +661,6 @@ export default function TransactionStatus() {
           uploadEvidence={uploadDisputeEvidence}
           listEvidence={listDisputeEvidence}
         />
-      )}
-
-      {!isBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
-        <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
-          <div className="text-center">
-            <p className="text-rowan-text text-sm font-medium">
-              {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} sent to your {getNetworkLabel(transaction.network)} account
-            </p>
-            <p className="text-rowan-muted text-xs mt-2">
-              Check your mobile money balance. If the payment has not arrived, you can raise a dispute.
-            </p>
-          </div>
-          {showConfirmSection && (
-            <Button
-              variant="primary"
-              size="lg"
-              disabled={!canConfirmPayment}
-              onClick={() => canConfirmPayment && setShowConfirmModal(true)}
-              className={!canConfirmPayment ? 'opacity-50' : ''}
-            >
-              {canConfirmPayment ? 'Confirm Payment Received' : 'Waiting for trader payment proof...'}
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            className="text-rowan-red border-rowan-red w-full"
-            onClick={() => setShowDisputeModal(true)}
-          >
-            Raise a Dispute
-          </Button>
-        </div>
-      )}
-
-      {!isBuy && transaction?.state === 'USER_CONFIRMATION_PENDING' && (
-        <div className="bg-rowan-surface rounded-xl p-4 my-6 space-y-4">
-          <div className="text-center">
-            <p className="text-rowan-text text-sm font-medium">
-              {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} sent to your {getNetworkLabel(transaction.network)} account
-            </p>
-            <p className="text-rowan-muted text-xs mt-2">
-              Check your mobile money balance, then confirm below.
-            </p>
-          </div>
-          <p className="text-rowan-text text-sm text-center font-medium">
-            Did you receive the money?
-          </p>
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="primary"
-              size="lg"
-              disabled={!canConfirmPayment}
-              onClick={() => canConfirmPayment && setShowConfirmModal(true)}
-              className={!canConfirmPayment ? 'opacity-50' : ''}
-            >
-              {canConfirmPayment ? 'Confirm Payment Received' : 'Waiting for trader payment proof...'}
-            </Button>
-            {showDisputeAction && (
-              <Button
-                variant="ghost"
-                className="text-rowan-red border-rowan-red"
-                onClick={() => setShowDisputeModal(true)}
-              >
-                Raise a Dispute
-              </Button>
-            )}
-          </div>
-        </div>
       )}
 
       {transaction?.state === 'COMPLETE' && (
