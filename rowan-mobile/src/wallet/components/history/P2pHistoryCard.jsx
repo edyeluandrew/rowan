@@ -46,7 +46,10 @@ export default function P2pHistoryCard({ transaction: tx }) {
   return (
     <button
       type="button"
-      onClick={() => navigate(`/wallet/history/${tx.id}`)}
+      onClick={() => {
+        const terminal = ['COMPLETE', 'REFUNDED', 'FAILED'].includes(tx.state)
+        navigate(terminal ? `/wallet/history/${tx.id}` : `/wallet/transaction/${tx.id}`)
+      }}
       className="w-full bg-rowan-surface border border-rowan-border rounded-xl p-4 text-left min-h-11"
     >
       <div className="flex gap-3">

@@ -99,6 +99,18 @@ export const STATE_ORDER = [
   'DISPUTE_REFUND_PENDING',
 ]
 
+/** Buy (user gets USDC): trader locks first, then user pays MoMo. */
+export const BUY_STATE_ORDER = [
+  'TRADER_MATCHED',
+  'ESCROW_LOCKED',
+  'FIAT_PAYOUT_SUBMITTED',
+  'USER_CONFIRMATION_PENDING',
+  'COMPLETE',
+  'DISPUTE_OPENED',
+  'DISPUTE_RELEASE_PENDING',
+  'DISPUTE_REFUND_PENDING',
+]
+
 export const STATE_SUBTITLES = {
   QUOTE_CONFIRMED: 'Waiting for your USDC payment',
   ESCROW_LOCKED:   'Finding a trader for your cash out',
@@ -112,6 +124,28 @@ export const STATE_SUBTITLES = {
   COMPLETE:        'Done — check your mobile money balance',
   REFUNDED:        'Refunded to your wallet',
   FAILED:          'Could not complete — tap for details',
+}
+
+export const BUY_STATE_SUBTITLES = {
+  TRADER_MATCHED: 'Waiting for trader to lock USDC in escrow',
+  ESCROW_LOCKED: 'Pay the trader via MoMo, then tap I have sent fiat',
+  FIAT_PAYOUT_SUBMITTED: 'Waiting for trader to confirm they received MoMo',
+  USER_CONFIRMATION_PENDING: 'Trader confirmed — releasing USDC to you',
+  COMPLETE: 'Done — USDC is in your wallet',
+  DISPUTE_OPENED: 'Dispute opened — under review',
+  DISPUTE_RELEASE_PENDING: 'Resolving dispute',
+  DISPUTE_REFUND_PENDING: 'Processing refund',
+  RELEASE_BLOCKED: 'Needs attention — contact support',
+  REFUNDED: 'Refunded',
+  FAILED: 'Could not complete — tap for details',
+}
+
+export const BUY_TX_LABELS = {
+  TRADER_MATCHED: 'Trader matched',
+  ESCROW_LOCKED: 'Pay trader (MoMo)',
+  FIAT_PAYOUT_SUBMITTED: 'Trader confirming MoMo',
+  USER_CONFIRMATION_PENDING: 'Releasing your USDC',
+  COMPLETE: 'Complete',
 }
 
 export const ALERT_DIRECTIONS = {

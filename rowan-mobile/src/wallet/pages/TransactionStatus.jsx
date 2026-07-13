@@ -504,7 +504,27 @@ export default function TransactionStatus() {
         <TransactionStateTracker
           currentState={transaction.state}
           timestamps={getTransactionStatusTimestamps(transaction)}
+          orderSide={isBuy ? 'BUY' : 'SELL'}
         />
+      )}
+
+      {transaction && (
+        <div
+          className={`rounded-xl p-3 my-4 border ${
+            isBuy
+              ? 'bg-rowan-yellow/10 border-rowan-yellow/30'
+              : 'bg-rowan-green/10 border-rowan-green/30'
+          }`}
+        >
+          <p className={`text-sm font-semibold ${isBuy ? 'text-rowan-yellow' : 'text-rowan-green'}`}>
+            {isBuy ? 'You are buying USDC' : 'You are selling USDC'}
+          </p>
+          <p className="text-rowan-muted text-xs mt-1">
+            {isBuy
+              ? 'Trader locks USDC → you send MoMo → trader confirms → USDC lands in your wallet.'
+              : 'Your USDC is in escrow → trader sends MoMo → you confirm → trader gets USDC.'}
+          </p>
+        </div>
       )}
 
       {transaction?.state === 'TRADER_MATCHED' && transaction.paymentExpiresAt && (
@@ -516,26 +536,28 @@ export default function TransactionStatus() {
 
       {isBuy && transaction?.state === 'TRADER_MATCHED' && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 my-4 text-center">
-          <p className="text-rowan-text text-sm font-semibold">Step 2: Waiting for trader to lock USDC</p>
+          <p className="text-rowan-text text-sm font-semibold">Waiting for trader to lock USDC</p>
           <p className="text-rowan-muted text-xs mt-2">
-            The trader must send USDC to escrow first. After that, you&apos;ll see their mobile money number and the <strong className="text-rowan-text">I&apos;ve sent payment</strong> button.
+            After they lock escrow, you will see their MoMo number and the <strong className="text-rowan-text">I have sent fiat</strong> button.
           </p>
         </div>
       )}
 
       {isBuy && transaction?.state === 'ESCROW_LOCKED' && (
-        <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 my-4 space-y-4">
-          <p className="text-rowan-text text-sm font-semibold text-center">
-            Step 3: Pay trader via mobile money
+        <div className="bg-rowan-surface border-2 border-rowan-yellow/50 rounded-xl p-4 my-4 space-y-4 mb-28">
+          <p className="text-rowan-yellow text-sm font-semibold text-center">
+            Your turn: send mobile money
           </p>
           <p className="text-rowan-text text-xs text-center">
-            Trader locked {Number(transaction.usdcAmount).toFixed(4)} USDC. Send {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} via {getNetworkLabel(transaction.network)}.
+            Trader locked <strong>{Number(transaction.usdcAmount || 0).toFixed(4)} USDC</strong>. Send{' '}
+            <strong>{formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)}</strong>{' '}
+            via {getNetworkLabel(transaction.network)}.
           </p>
           {buyPaymentDetails?.account_number ? (
             <PaymentDetailsCard payload={buyPaymentDetails} viewerRole="user" />
           ) : (
             <p className="text-rowan-yellow text-xs text-center">
-              Payment details should appear in chat below. Trader must use their verified {getNetworkLabel(transaction.network)} number.
+              MoMo details may also appear in chat. Use the trader&apos;s verified {getNetworkLabel(transaction.network)} number.
             </p>
           )}
           <input
@@ -546,16 +568,22 @@ export default function TransactionStatus() {
             className="w-full bg-rowan-bg border border-rowan-border rounded-xl px-4 py-3 text-rowan-text text-sm min-h-11"
           />
           {buyPaymentError && <p className="text-rowan-red text-xs">{buyPaymentError}</p>}
-          <Button loading={submittingBuyPayment} onClick={handleSubmitBuyPayment} size="lg">
-            I&apos;ve sent payment
-          </Button>
         </div>
       )}
 
       {isBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
         <div className="bg-rowan-surface rounded-xl p-4 my-4 text-center">
-          <p className="text-rowan-text text-sm font-medium">Payment submitted</p>
-          <p className="text-rowan-muted text-xs mt-2">Waiting for the trader to tap <strong className="text-rowan-text">I received MoMo — release USDC</strong>. USDC will then go to your wallet.</p>
+          <p className="text-rowan-text text-sm font-medium">Fiat marked as sent</p>
+          <p className="text-rowan-muted text-xs mt-2">
+            Waiting for the trader to tap <strong className="text-rowan-text">I received MoMo — release USDC</strong>.
+          </p>
+        </div>
+      )}
+
+      {isBuy && transaction?.state === 'USER_CONFIRMATION_PENDING' && (
+        <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-4 my-4 text-center">
+          <p className="text-rowan-green text-sm font-medium">Trader confirmed MoMo</p>
+          <p className="text-rowan-muted text-xs mt-2">Releasing USDC to your wallet…</p>
         </div>
       )}
 
@@ -715,6 +743,21 @@ export default function TransactionStatus() {
               Try another cash out
             </button>
           )}
+        </div>
+      )}
+
+      {/* Buy: sticky I have sent fiat — always visible while paying */}
+      {isBuy && transaction?.state === 'ESCROW_LOCKED' && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-rowan-bg/95 border-t border-rowan-yellow/40 backdrop-blur-sm safe-area-pb">
+          <Button
+            loading={submittingBuyPayment}
+            onClick={handleSubmitBuyPayment}
+            size="lg"
+            className="w-full"
+            disabled={!buyPaymentRef.trim()}
+          >
+            I have sent fiat
+          </Button>
         </div>
       )}
 

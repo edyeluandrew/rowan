@@ -465,12 +465,12 @@ export default function RequestDetail() {
 
       {isBuyWaitingCustomer && (
         <div className="bg-rowan-surface rounded-xl p-4 mb-4 border border-rowan-border">
-          <p className="text-rowan-text text-sm font-semibold">Step 2: Waiting for customer payment</p>
+          <p className="text-rowan-text text-sm font-semibold">Step 2: Waiting for customer MoMo</p>
           <p className="text-rowan-muted text-xs mt-2">
-            USDC is locked. The customer must pay your MoMo and tap <strong className="text-rowan-text">&quot;I&apos;ve sent payment&quot;</strong> on their wallet app.
+            USDC is locked. Customer must pay your MoMo and tap <strong className="text-rowan-text">I have sent fiat</strong> on their wallet app.
           </p>
           <p className="text-rowan-yellow text-xs mt-2">
-            The <strong>I have received payment</strong> button appears here only after they do that.
+            Your <strong>I received MoMo — release USDC</strong> button appears only after they do that.
           </p>
         </div>
       )}
@@ -478,7 +478,9 @@ export default function RequestDetail() {
       {isBuyConfirmStep && (
         <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-2 border-2 border-rowan-yellow/50">
           <p className="text-rowan-text text-sm font-semibold">Step 3: Confirm you received MoMo</p>
-          <p className="text-rowan-muted text-xs">Check your mobile money balance, then tap the button below to release USDC to the customer.</p>
+          <p className="text-rowan-muted text-xs">
+            Check your mobile money. Then tap below to release escrowed USDC to the customer.
+          </p>
           {tx.payout_reference && (
             <p className="text-rowan-muted text-xs">Reference: <span className="text-rowan-text font-mono">{tx.payout_reference}</span></p>
           )}

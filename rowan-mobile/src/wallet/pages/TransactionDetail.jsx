@@ -19,7 +19,7 @@ import OrderShortId from '../components/ui/OrderShortId'
 import useJoinOrder from '../hooks/useJoinOrder'
 import { formatXlm, formatDateTime, formatAddress } from '../utils/format'
 import { formatCurrency, getTraderDisplayName } from '../utils/p2pFormat'
-import { normalizeWalletTransaction, getTransactionStatusTimestamps, isManualP2pTransaction } from '../utils/transactions'
+import { normalizeWalletTransaction, getTransactionStatusTimestamps, isManualP2pTransaction, isBuyOrder } from '../utils/transactions'
 import { NETWORKS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 
 export default function TransactionDetail() {
@@ -91,6 +91,15 @@ export default function TransactionDetail() {
 
   const inProgress = tx && !['COMPLETE', 'REFUNDED', 'FAILED'].includes(tx.state)
   const isComplete = tx?.state === 'COMPLETE'
+  const isBuy = isBuyOrder(tx)
+
+  // Active orders use TransactionStatus (has buy "I have sent fiat" / sell confirm)
+  useEffect(() => {
+    if (tx && inProgress) {
+      navigate(`/wallet/transaction/${id}`, { replace: true })
+    }
+  }, [tx, inProgress, id, navigate])
+
   const appealWindowOpen = isComplete
     && tx?.appealExpiresAt
     && new Date(tx.appealExpiresAt) > new Date()
@@ -158,6 +167,16 @@ export default function TransactionDetail() {
     )
   }
 
+  if (inProgress) {
+    return (
+      <div className="bg-rowan-bg min-h-screen flex items-center justify-center">
+        <div className="animate-spin text-rowan-yellow">
+          <Clock size={24} />
+        </div>
+      </div>
+    )
+  }
+
   const network = NETWORKS[tx.network] || {}
 
   return (
@@ -216,8 +235,8 @@ export default function TransactionDetail() {
         </div>
       )}
 
-      {/* Receipt confirmation for FIAT_PAYOUT_SUBMITTED only */}
-      {tx.state === 'FIAT_PAYOUT_SUBMITTED' && (
+      {/* Receipt confirmation — sell only (buy waits for trader) */}
+      {!isBuy && tx.state === 'FIAT_PAYOUT_SUBMITTED' && (
         <div className="mb-4">
           <ReceiptConfirmationCard
             onConfirmReceipt={handleConfirmReceipt}
@@ -227,10 +246,16 @@ export default function TransactionDetail() {
         </div>
       )}
 
-      {/* Confirming receipt status for USER_CONFIRMATION_PENDING */}
-      {tx.state === 'USER_CONFIRMATION_PENDING' && (
+      {!isBuy && tx.state === 'USER_CONFIRMATION_PENDING' && (
         <div className="mb-4">
           <ConfirmingReceiptCard />
+        </div>
+      )}
+
+      {isBuy && tx.state === 'FIAT_PAYOUT_SUBMITTED' && (
+        <div className="bg-rowan-surface rounded-xl p-4 mb-4 text-center">
+          <p className="text-rowan-text text-sm font-medium">Waiting for trader to confirm MoMo</p>
+          <p className="text-rowan-muted text-xs mt-2">Then escrow releases USDC to your wallet.</p>
         </div>
       )}
 
@@ -344,7 +369,7 @@ export default function TransactionDetail() {
       {/* Timeline */}
       <div className="bg-rowan-surface rounded-xl p-4 mb-4">
         <h3 className="text-rowan-text text-sm font-semibold mb-3">Timeline</h3>
-        <TransactionStateTracker currentState={tx.state} timestamps={timestamps} compact />
+        <TransactionStateTracker currentState={tx.state} timestamps={timestamps} orderSide={isBuy ? 'BUY' : 'SELL'} />
       </div>
 
       {isComplete && !reviewSubmitted && (
