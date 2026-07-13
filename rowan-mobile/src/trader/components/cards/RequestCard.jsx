@@ -75,13 +75,19 @@ export default function RequestCard({ request, onRemove }) {
         <span className="text-rowan-muted text-xs font-mono">{txRef}</span>
       </div>
 
-      {/* Row 2: Fiat + XLM */}
+      {/* Row 2: Fiat + crypto */}
       <div className="mt-3">
         <div className="text-rowan-text text-2xl font-bold tabular-nums">
           {formatCurrency(request.fiat_amount, request.fiat_currency)}
         </div>
         <div className="text-rowan-muted text-xs">
-          {formatCurrency(request.xlm_amount, 'XLM')} XLM
+          {(request.order_side || request.orderSide) === 'BUY'
+            ? 'Customer buying USDC — you lock USDC'
+            : 'Customer selling USDC — you send fiat'}
+          {' · '}
+          {Number(request.usdc_amount || 0) > 0
+            ? `${Number(request.usdc_amount).toFixed(2)} USDC`
+            : `${formatCurrency(request.xlm_amount, 'XLM')} XLM`}
         </div>
       </div>
 

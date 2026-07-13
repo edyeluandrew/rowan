@@ -1,7 +1,7 @@
 import { LockKeyhole, ChevronLeft, Copy, CopyCheck } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getRequest, confirmRequest, confirmFiatReceived, verifyUsdcLock } from '../api/trader';
+import { getRequest, confirmRequest, confirmFiatReceived, verifyUsdcLock, acceptRequest } from '../api/trader';
 import { useSocket } from '../context/SocketContext';
 import { useRequests } from '../hooks/useRequests';
 import { useCountdown } from '../hooks/useCountdown';
@@ -102,6 +102,7 @@ export default function RequestDetail() {
   const [confirmingBuy, setConfirmingBuy] = useState(false);
   const [verifyingUsdc, setVerifyingUsdc] = useState(false);
   const [usdcVerifyMsg, setUsdcVerifyMsg] = useState(null);
+  const [accepting, setAccepting] = useState(false);
 
   const fetchTx = useCallback(async () => {
     try {
@@ -152,10 +153,9 @@ export default function RequestDetail() {
   }, [id, on, off, fetchTx]);
 
   const txState = (tx?.state || tx?.status || '').toUpperCase();
-  const isBuyOrderEarly = tx && (
-    (tx.order_side || tx.orderSide) === 'BUY'
-    || (Number(tx.usdc_amount) > 0 && Number(tx.xlm_amount) === 0 && !!tx.preferred_payout_setting_id)
-  );
+  // Trust DB order_side only. Manual USDC cash-outs also have preferred_payout_setting_id
+  // + usdc_amount — the old heuristic wrongly treated those as BUY and hid "I have sent fiat".
+  const isBuyOrderEarly = tx && String(tx.order_side || tx.orderSide || 'SELL').toUpperCase() === 'BUY';
 
   useEffect(() => {
     if (!tx || !isBuyOrderEarly) return undefined;
@@ -227,8 +227,8 @@ export default function RequestDetail() {
   const network = NETWORKS[tx.network] || {};
   const step = getStep(isBuyOrderEarly);
   const isBuyOrder = isBuyOrderEarly;
-  const isPayoutStep = step === 1 && !isBuyOrder;
-  const isBuyLockStep = isBuyOrder && txState === 'TRADER_MATCHED' && tx.matched_at;
+  const isPayoutStep = !isBuyOrder && ['TRADER_MATCHED'].includes(txState);
+  const isBuyLockStep = isBuyOrder && txState === 'TRADER_MATCHED' && !!tx.matched_at;
   const isBuyConfirmStep = isBuyOrder && txState === 'FIAT_PAYOUT_SUBMITTED';
   const isBuyWaitingCustomer = isBuyOrder && txState === 'ESCROW_LOCKED';
   const isAwaitingConfirmation = step === 2;
@@ -337,6 +337,34 @@ export default function RequestDetail() {
       {(tx.payment_expires_at || tx.sla_expires_at) && !isComplete && step <= 1 && (
         <div className="mb-4">
           <SlaCountdown expiresAt={tx.payment_expires_at || tx.sla_expires_at} />
+        </div>
+      )}
+
+      {/* Sell: waiting until matched / accepted */}
+      {!isBuyOrder && txState === 'ESCROW_LOCKED' && (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4">
+          <p className="text-rowan-yellow text-sm font-semibold">Accept this request to send fiat</p>
+          <p className="text-rowan-muted text-xs mt-1">
+            Customer USDC is in escrow. After you accept, you&apos;ll see their MoMo details and the <strong className="text-rowan-text">I have sent fiat</strong> button.
+          </p>
+          <Button
+            className="mt-3"
+            loading={accepting}
+            onClick={async () => {
+              setAccepting(true);
+              try {
+                await acceptRequest(tx.id);
+                await fetchTx();
+                refresh();
+              } catch (err) {
+                alert(err.response?.data?.error || err.message || 'Could not accept');
+              } finally {
+                setAccepting(false);
+              }
+            }}
+          >
+            Accept request
+          </Button>
         </div>
       )}
 
