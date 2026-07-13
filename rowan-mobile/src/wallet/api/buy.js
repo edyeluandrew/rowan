@@ -14,11 +14,19 @@ export function confirmBuyOrder({ quoteId }) {
 }
 
 export function submitBuyPayment({ transactionId, paymentReference, proofFile }) {
+  if (!proofFile) {
+    return client.post('/api/v1/buy/payment-sent', {
+      transactionId,
+      paymentReference,
+    }).then((res) => res.data)
+  }
   const form = new FormData()
   form.append('transactionId', transactionId)
   form.append('paymentReference', paymentReference)
-  if (proofFile) form.append('proof', proofFile)
-  return client.post('/api/v1/buy/payment-sent', form).then((res) => res.data)
+  form.append('proof', proofFile)
+  return client.post('/api/v1/buy/payment-sent', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((res) => res.data)
 }
 
 export function getBuyTransactionStatus(transactionId) {

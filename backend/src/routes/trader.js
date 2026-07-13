@@ -311,9 +311,14 @@ router.post('/requests/:id/accept', authTrader, async (req, res, next) => {
  */
 router.post('/requests/:id/payout-sent', authTrader, sensitiveActionLimiter, payoutProofUpload.single('proof_image'), async (req, res, next) => {
   try {
-    const reference = req.body?.reference;
+    const reference = req.body?.reference ?? req.body?.payout_reference ?? req.body?.payoutReference;
 
     if (!reference || typeof reference !== 'string' || reference.trim().length === 0) {
+      logger.warn(`[Trader] payout-sent missing reference for ${req.params.id}`, {
+        bodyKeys: Object.keys(req.body || {}),
+        contentType: req.headers['content-type'],
+        hasFile: !!req.file,
+      });
       return res.status(400).json({
         error: 'Mobile money reference is required',
         details: 'Please provide a valid reference number from your mobile money provider.',

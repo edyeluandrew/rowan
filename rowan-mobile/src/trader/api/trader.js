@@ -32,12 +32,20 @@ export async function confirmRequest(id) {
 
 /** POST /api/v1/trader/requests/:id/payout-sent */
 export async function submitPayoutSent(id, reference, proofFile = null) {
+  // No proof → JSON body (avoids multipart/Content-Type issues)
+  if (!proofFile) {
+    const { data } = await client.post(`/api/v1/trader/requests/${id}/payout-sent`, {
+      reference,
+    });
+    return data;
+  }
+
   const form = new FormData();
   form.append('reference', reference);
-  if (proofFile) {
-    form.append('proof_image', proofFile);
-  }
-  const { data } = await client.post(`/api/v1/trader/requests/${id}/payout-sent`, form);
+  form.append('proof_image', proofFile);
+  const { data } = await client.post(`/api/v1/trader/requests/${id}/payout-sent`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data;
 }
 

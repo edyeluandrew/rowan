@@ -38,6 +38,15 @@ client.interceptors.request.use((config) => {
   if (_token) {
     config.headers.Authorization = `Bearer ${_token}`;
   }
+  // FormData must use multipart with boundary — never force application/json
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    if (config.headers && typeof config.headers.delete === 'function') {
+      config.headers.delete('Content-Type');
+    } else if (config.headers) {
+      delete config.headers['Content-Type'];
+      delete config.headers['content-type'];
+    }
+  }
   return config;
 });
 
