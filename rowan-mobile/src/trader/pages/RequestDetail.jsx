@@ -22,8 +22,8 @@ import useJoinOrder from '../hooks/useJoinOrder';
 import LockUsdcButton from '../components/wallet/LockUsdcButton';
 import { isManualP2pTransaction } from '../../wallet/utils/transactions';
 
-const SELL_STEPS = ['Escrow Funded', 'Payout Sent', 'Complete'];
-const BUY_STEPS = ['Lock USDC', 'Customer Pays', 'Confirm MoMo', 'Complete'];
+const SELL_STEPS = ['USDC in escrow', 'Send fiat', 'Get USDC'];
+const BUY_STEPS = ['Lock USDC', 'Customer pays MoMo', 'Confirm MoMo', 'Done'];
 
 function StepIndicator({ currentStep, steps = SELL_STEPS }) {
   return (
@@ -285,14 +285,32 @@ export default function RequestDetail() {
         </button>
       )}
 
+      {/* Order type banner */}
+      <div
+        className={`rounded-xl p-3 mb-4 border ${
+          isBuyOrder
+            ? 'bg-rowan-yellow/10 border-rowan-yellow/30'
+            : 'bg-rowan-green/10 border-rowan-green/30'
+        }`}
+      >
+        <p className={`text-sm font-semibold ${isBuyOrder ? 'text-rowan-yellow' : 'text-rowan-green'}`}>
+          {isBuyOrder ? 'Customer buying USDC' : 'Customer selling USDC'}
+        </p>
+        <p className="text-rowan-muted text-xs mt-1">
+          {isBuyOrder
+            ? 'You lock USDC in escrow. Customer sends you mobile money. Then you confirm MoMo → USDC goes to them.'
+            : 'Customer USDC is already in escrow. You send them mobile money (fiat). When they confirm → escrow releases USDC to your Rowan wallet.'}
+        </p>
+      </div>
+
       {/* USDC escrow / lock banner */}
       {isBuyLockStep ? (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-3 mb-4 flex items-center gap-2">
           <LockKeyhole size={20} className="text-rowan-yellow" />
           <div>
-            <span className="text-rowan-yellow text-xs font-medium">Lock USDC in escrow</span>
+            <span className="text-rowan-yellow text-xs font-medium">Your turn: lock USDC in escrow</span>
             <p className="text-rowan-muted text-[10px] mt-0.5">
-              Send USDC to escrow with the memo below to continue.
+              Send USDC from your Rowan wallet (not fiat yet).
             </p>
           </div>
         </div>
@@ -300,7 +318,9 @@ export default function RequestDetail() {
         <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-3 mb-4 flex items-center gap-2">
           <LockKeyhole size={20} className="text-rowan-green" />
           <div>
-            <span className="text-rowan-green text-xs font-medium">USDC Escrowed on Stellar</span>
+            <span className="text-rowan-green text-xs font-medium">
+              {isBuyOrder ? 'Your USDC is locked in escrow' : 'Customer USDC is in escrow'}
+            </span>
             {tx.escrow_address && (
               <p className="text-rowan-muted text-[10px] mt-0.5 font-mono">
                 {formatAddress(tx.escrow_address)}
@@ -472,28 +492,36 @@ export default function RequestDetail() {
       {/* Transaction Summary */}
       <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-3">
         <div className="flex justify-between">
+          <span className="text-rowan-muted text-xs">Order type</span>
+          <span className={`text-xs font-semibold ${isBuyOrder ? 'text-rowan-yellow' : 'text-rowan-green'}`}>
+            {isBuyOrder ? 'Buy (you sell USDC)' : 'Sell (you send fiat)'}
+          </span>
+        </div>
+        <div className="flex justify-between">
           <span className="text-rowan-muted text-xs">Network</span>
           <Badge type="network" value={tx.network} />
         </div>
         <div className="flex justify-between">
-          <span className="text-rowan-muted text-xs">Fiat Amount</span>
+          <span className="text-rowan-muted text-xs">
+            {isBuyOrder ? 'Fiat you receive' : 'Fiat you send'}
+          </span>
           <span className="text-rowan-text text-sm font-semibold">
             {formatCurrency(tx.fiat_amount, tx.fiat_currency)}
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-rowan-muted text-xs">{isBuyOrder ? 'USDC Amount' : 'XLM Amount'}</span>
+          <span className="text-rowan-muted text-xs">
+            {isBuyOrder ? 'USDC you lock' : 'USDC you receive'}
+          </span>
           <span className="text-rowan-text text-sm font-mono">
-            {isBuyOrder
-              ? `${parseFloat(tx.usdc_amount || 0).toFixed(4)} USDC`
-              : `${parseFloat(tx.xlm_amount || 0).toFixed(2)} XLM`}
+            {parseFloat(tx.usdc_amount || tx.xlm_amount || 0).toFixed(4)} USDC
           </span>
         </div>
         {tx.rate && (
           <div className="flex justify-between">
             <span className="text-rowan-muted text-xs">Rate</span>
             <span className="text-rowan-text text-sm">
-              1 XLM = {formatCurrency(tx.rate, tx.fiat_currency)}
+              1 USDC ≈ {formatCurrency(tx.rate, tx.fiat_currency)}
             </span>
           </div>
         )}
@@ -507,15 +535,40 @@ export default function RequestDetail() {
         )}
       </div>
 
-      {/* Payout Instructions — sell / cashout only */}
+      {/* Sell: where USDC will land */}
+      {!isBuyOrder && (tx.trader_stellar_address || tx.stellar_address) && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
+          <p className="text-rowan-muted text-[10px] uppercase tracking-wider mb-1">Your USDC wallet</p>
+          <p className="text-rowan-text text-xs font-mono break-all">
+            {tx.trader_stellar_address || tx.stellar_address}
+          </p>
+          <p className="text-rowan-muted text-[10px] mt-2">
+            After the customer confirms MoMo, escrow releases USDC here. Manage it in Rowan Wallet.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/trader/wallet')}
+            className="text-rowan-green text-xs font-medium mt-2 min-h-9"
+          >
+            Open Rowan Wallet →
+          </button>
+        </div>
+      )}
+
+      {/* Payout Instructions — sell / cashout only (trader sends fiat) */}
       {isPayoutStep && (
-        <div className="bg-rowan-surface rounded-xl p-4 mb-4">
-          <h3 className="text-rowan-yellow text-xs font-semibold mb-3 uppercase tracking-wider">
-            Payout Instructions
+        <div className="bg-rowan-surface border-2 border-rowan-green/40 rounded-xl p-4 mb-4">
+          <h3 className="text-rowan-green text-xs font-semibold mb-1 uppercase tracking-wider">
+            Your turn: send mobile money
           </h3>
+          <p className="text-rowan-muted text-xs mb-3">
+            Do not send USDC. Pay fiat to the customer below, then tap <strong className="text-rowan-text">I have sent fiat</strong>.
+          </p>
           <div className="space-y-3">
             <div>
-              <p className="text-rowan-muted text-xs mb-1">Send {formatCurrency(tx.fiat_amount, tx.fiat_currency)} to:</p>
+              <p className="text-rowan-muted text-xs mb-1">
+                Send {formatCurrency(tx.fiat_amount, tx.fiat_currency)} via {network.label || tx.network} to:
+              </p>
             </div>
             <div className="bg-rowan-bg rounded-lg p-3 space-y-2">
               <div>
@@ -527,11 +580,12 @@ export default function RequestDetail() {
                 <div className="flex items-center gap-2">
                   <p className="text-rowan-text text-sm font-mono flex-1">{tx.payout_phone || 'Unknown'}</p>
                   <button
+                    type="button"
                     onClick={() => {
                       navigator.clipboard.writeText(tx.payout_phone);
                       alert('Phone copied!');
                     }}
-                    className="text-rowan-yellow text-xs font-medium"
+                    className="text-rowan-green text-xs font-medium"
                   >
                     Copy
                   </button>
@@ -540,19 +594,21 @@ export default function RequestDetail() {
             </div>
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => {
                   navigator.clipboard.writeText(`${tx.fiat_amount}`);
                   alert('Amount copied!');
                 }}
-                className="text-rowan-yellow text-xs font-medium flex-1 py-2 border border-rowan-yellow rounded"
+                className="text-rowan-muted text-xs font-medium flex-1 py-3 min-h-11 border border-rowan-border rounded-xl"
               >
-                Copy Amount
+                Copy amount
               </button>
               <button
+                type="button"
                 onClick={() => setShowConfirm(true)}
-                className="text-rowan-yellow text-xs font-medium flex-1 py-2 border border-rowan-yellow rounded hover:bg-rowan-yellow/10"
+                className="text-rowan-bg text-xs font-semibold flex-1 py-3 min-h-11 bg-rowan-green rounded-xl"
               >
-                I've Sent Payment
+                I have sent fiat
               </button>
             </div>
           </div>
@@ -563,10 +619,10 @@ export default function RequestDetail() {
       {isAwaitingConfirmation && !isBuyOrder && (
         <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-4 text-center mb-4">
           <p className="text-rowan-green text-sm font-medium">
-            Payment proof submitted
+            Fiat marked as sent
           </p>
           <p className="text-rowan-muted text-xs mt-1">
-            Waiting for user confirmation.
+            Waiting for the customer to confirm they received MoMo. Then escrow releases USDC to your wallet.
           </p>
         </div>
       )}
@@ -597,7 +653,7 @@ export default function RequestDetail() {
       {isBuyConfirmStep && (
         <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-rowan-bg/95 border-t border-rowan-yellow/30 backdrop-blur-sm">
           <Button loading={confirmingBuy} size="lg" className="w-full" onClick={handleConfirmBuyReceived}>
-            I have received payment
+            I received MoMo — release USDC
           </Button>
         </div>
       )}

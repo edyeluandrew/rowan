@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getProfile } from '../api/trader';
-import { formatCurrency, formatAddress } from '../utils/format';
+import { formatCurrency } from '../utils/format';
 import { getPreference, setPreference } from '../utils/storage';
 import TrustScore from '../components/ui/TrustScore';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -123,20 +123,32 @@ export default function Profile() {
         <TrustScore score={p.trust_score ?? 0} />
       </div>
 
-      {/* Stellar Wallet */}
+      {/* USDC Wallet */}
       <div className="bg-rowan-surface rounded-xl p-4 mb-4">
-        <h3 className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Stellar Wallet</h3>
+        <h3 className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Your USDC wallet address</h3>
+        <p className="text-rowan-muted text-[10px] mb-2">
+          Escrow releases your USDC here after sell-order customers confirm MoMo.
+        </p>
         <div className="flex items-center gap-2">
-          <span className="text-rowan-text text-xs font-mono flex-1 truncate">
-            {formatAddress(p.stellar_address || '')}
+          <span className="text-rowan-text text-xs font-mono flex-1 break-all">
+            {p.stellar_address || 'Not set — open Rowan Wallet to create one'}
           </span>
-          <button
-            onClick={copyAddress}
-            className="text-rowan-yellow text-xs font-medium shrink-0"
-          >
-            {copied ? 'Copied!' : 'Copy'}
-          </button>
+          {p.stellar_address && (
+            <button
+              onClick={copyAddress}
+              className="text-rowan-green text-xs font-medium shrink-0"
+            >
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={() => navigate('/trader/wallet')}
+          className="text-rowan-green text-xs font-medium mt-3 min-h-9"
+        >
+          Open Rowan Wallet →
+        </button>
       </div>
 
       {/* Float Balances */}
@@ -159,7 +171,7 @@ export default function Profile() {
       {/* Navigation Links */}
       <div className="bg-rowan-surface rounded-xl mb-4 divide-y divide-rowan-border">
         {[
-          { to: '/trader/wallet', icon: Globe, label: 'Rowan Wallet', sub: 'Fund, swap & send USDC' },
+          { to: '/trader/wallet', icon: Globe, label: 'Rowan Wallet', sub: 'Your USDC address · fund & swap' },
           { to: '/trader/sla', icon: Timer, label: 'SLA Performance', sub: 'Payout targets' },
           { to: '/trader/performance/networks', icon: BarChart3, label: 'Network Performance', sub: 'Stats by network' },
           { to: '/trader/earnings', icon: TrendingUp, label: 'Earnings', sub: 'Breakdown & history' },

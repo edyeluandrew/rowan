@@ -70,38 +70,38 @@ export default function ConfirmPayoutModal({ open, request, onClose, onPayoutSub
             <div className="w-16 h-16 rounded-full bg-rowan-green flex items-center justify-center animate-scale-in mb-4">
               <Check size={32} className="text-white" strokeWidth={3} />
             </div>
-            <h3 className="text-rowan-green text-xl font-bold">Payment Proof Submitted</h3>
+            <h3 className="text-rowan-green text-xl font-bold">Fiat marked as sent</h3>
             <p className="text-rowan-muted text-sm mt-2 text-center">
-              Payment proof submitted. Waiting for user confirmation.
+              Waiting for the customer to confirm MoMo. Then escrow releases USDC to your wallet.
             </p>
           </div>
         ) : (
           <>
-            <h3 className="text-rowan-text font-bold text-lg">Confirm Payment Sent</h3>
+            <h3 className="text-rowan-text font-bold text-lg">Confirm fiat sent</h3>
             <p className="text-rowan-muted text-sm mt-3 mb-4">
-              I have sent{' '}
-              <span className="text-rowan-yellow font-bold">
+              Confirm you sent{' '}
+              <span className="text-rowan-green font-bold">
                 {formatCurrency(request.fiat_amount, request.fiat_currency)}
               </span>{' '}
-              via {request.network} to the recipient.
+              mobile money (not USDC) via {request.network} to the customer.
             </p>
 
             <div className="mb-4">
               <label className="text-rowan-text text-xs font-medium block mb-2">
-                Mobile Money Reference*
+                Mobile money reference*
               </label>
               <input
                 type="text"
-                placeholder="Enter transaction reference (e.g., MTN123456789)"
+                placeholder="Enter MoMo reference (e.g., MTN123456789)"
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
-                className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text placeholder-rowan-muted text-sm focus:outline-none focus:border-rowan-yellow"
+                className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text placeholder-rowan-muted text-sm focus:outline-none focus:border-rowan-green"
               />
             </div>
 
             <div className="mb-4">
               <label className="text-rowan-text text-xs font-medium block mb-2">
-                Upload payment screenshot
+                Upload payment screenshot (optional)
               </label>
               <input
                 ref={fileRef}
@@ -126,10 +126,10 @@ export default function ConfirmPayoutModal({ open, request, onClose, onPayoutSub
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
-                  className="w-full border border-dashed border-rowan-yellow/50 rounded-xl py-6 flex flex-col items-center gap-2 text-rowan-yellow"
+                  className="w-full border border-dashed border-rowan-green/50 rounded-xl py-6 flex flex-col items-center gap-2 text-rowan-green"
                 >
                   <ImagePlus size={24} />
-                  <span className="text-xs font-medium">Upload payment screenshot</span>
+                  <span className="text-xs font-medium">Upload MoMo screenshot</span>
                   <span className="text-rowan-muted text-[10px]">JPEG or PNG</span>
                 </button>
               )}
@@ -145,7 +145,7 @@ export default function ConfirmPayoutModal({ open, request, onClose, onPayoutSub
                 disabled={!reference.trim()}
                 onClick={handleSubmit}
               >
-                I have sent payment
+                I have sent fiat
               </Button>
               <Button
                 variant="ghost"

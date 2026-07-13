@@ -15,12 +15,12 @@ export default function TraderDisputeStatusCard({ state, data = {} }) {
         <div className="flex items-start gap-3">
           <Clock size={20} className="text-blue-400 flex-shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-rowan-text font-semibold text-sm">Payment Submitted</h3>
+            <h3 className="text-rowan-text font-semibold text-sm">Fiat submitted</h3>
             <p className="text-rowan-muted text-sm mt-1">
-              We are waiting for the customer to confirm receipt.
+              Waiting for the customer to confirm they received mobile money.
             </p>
             <p className="text-rowan-muted text-sm mt-1">
-              USDC will be released after confirmation.
+              After they confirm, escrow releases USDC to your Rowan wallet.
             </p>
           </div>
         </div>
