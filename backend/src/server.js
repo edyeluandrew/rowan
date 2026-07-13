@@ -20,6 +20,7 @@ import wellKnownRoutes from './routes/wellKnown.js';
 import authRoutes from './routes/auth.js';
 import cashoutRoutes from './routes/cashout.js';
 import buyRoutes from './routes/buy.js';
+import expressRoutes from './routes/express.js';
 import traderRoutes from './routes/trader.js';
 import traderOnboardingRoutes from './routes/traderOnboarding.js';
 import payoutSettingsRoutes from './routes/payoutSettings.js';
@@ -219,6 +220,7 @@ app.get('/health', async (req, res) => {
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/cashout', cashoutRoutes);
 app.use('/api/v1/buy', buyRoutes);
+app.use('/api/v1/express', expressRoutes);
 app.use('/api/v1/config', configRoutes);
 app.use('/api/v1/disputes', disputesRoutes);
 app.use('/api/v1/trader/onboarding', traderOnboardingRoutes); // ← SPECIFIC path first

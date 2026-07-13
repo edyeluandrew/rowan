@@ -35,6 +35,8 @@ export default function Buy() {
     traderName: presetTraderName,
     network: presetNetwork,
     express: expressFlag,
+    prefillFiat,
+    expressMatch,
   } = location.state || {}
 
   const { country, fiatCurrency: userFiat } = useUserCountry()
@@ -44,10 +46,11 @@ export default function Buy() {
 
   const adNetwork = presetNetwork || selectedAd?.network || null
   const payoutSettingId = presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
-  const isExpress = Boolean(expressFlag || !payoutSettingId)
-  const networkLocked = !!adNetwork && !isExpress
+  // ExpressMatch = sheet already picked a trader; treat as locked manual. Loose express = old full-page flow.
+  const isExpress = Boolean(expressFlag && !payoutSettingId)
+  const networkLocked = !!adNetwork && (!isExpress || expressMatch)
 
-  const [fiatAmount, setFiatAmount] = useState('')
+  const [fiatAmount, setFiatAmount] = useState(prefillFiat ? String(prefillFiat) : '')
   const [network, setNetwork] = useState(adNetwork)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -136,6 +139,18 @@ export default function Buy() {
         </button>
         <h1 className="text-rowan-text text-lg font-bold">Buy USDC</h1>
       </div>
+
+      {expressMatch && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">
+          <Zap size={20} className="text-rowan-gold shrink-0 mt-0.5" />
+          <div>
+            <p className="text-rowan-text text-sm font-medium">Express match</p>
+            <p className="text-rowan-muted text-xs mt-1">
+              Best trader selected for your amount and network. Confirm when prompted after you pay.
+            </p>
+          </div>
+        </div>
+      )}
 
       {isExpress && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">

@@ -151,14 +151,12 @@ async function createBuyQuoteFromFiat({
 
   if (!resolvedPayoutSettingId) {
     const fiatCurrency = quoteEngine.networkToFiat(network);
-    const traderAdsService = (await import('./traderAdsService.js')).default;
-    const best = await traderAdsService.findBestBuyAdForExpress({
+    const expressMatchingService = (await import('./expressMatchingService.js')).default;
+    const best = await expressMatchingService.findBestBuyAdRanked({
       network,
       currency: fiatCurrency,
       fiatAmount,
       userId,
-      feePercent,
-      spreadPercent,
     });
     resolvedPayoutSettingId = best.payoutSettingId;
     traderName = best.traderName;

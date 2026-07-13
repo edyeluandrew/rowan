@@ -28,6 +28,8 @@ export default function Cashout() {
     payoutSettingId: presetPayoutSettingId,
     traderName: presetTraderName,
     network: presetNetwork,
+    prefillFiat,
+    expressMatch,
   } = location.state || {}
   const { isLocked } = useBiometricProtection()
   const { country, fiatCurrency: userFiat } = useUserCountry()
@@ -37,7 +39,7 @@ export default function Cashout() {
   const adNetwork = presetNetwork || selectedAd?.network || null
   const payoutSettingId = presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
   const networkLocked = !!(payoutSettingId && adNetwork)
-  const [fiatAmount, setFiatAmount] = useState('')
+  const [fiatAmount, setFiatAmount] = useState(prefillFiat ? String(prefillFiat) : '')
   const [network, setNetwork] = useState(adNetwork)
   const [phone, setPhone] = useState('')
   const [recipientName, setRecipientName] = useState('')
@@ -223,6 +225,15 @@ export default function Cashout() {
           <p className="text-rowan-text text-sm font-medium">Express sell</p>
           <p className="text-rowan-muted text-xs mt-1">
             We will auto-match the best available trader for your amount and network.
+          </p>
+        </div>
+      )}
+
+      {expressMatch && (selectedAd || presetTraderName) && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
+          <p className="text-rowan-text text-sm font-medium">Express match</p>
+          <p className="text-rowan-muted text-xs mt-1">
+            Best trader selected for your amount. Confirm receipt after they send MoMo.
           </p>
         </div>
       )}

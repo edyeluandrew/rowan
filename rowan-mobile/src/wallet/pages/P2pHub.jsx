@@ -5,6 +5,7 @@ import { listTraderAds, listBuyAds } from '../api/traders'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import TraderGroupCard from '../components/marketplace/TraderGroupCard'
 import NetworkPickSheet from '../components/marketplace/NetworkPickSheet'
+import ExpressSheet from '../components/marketplace/ExpressSheet'
 import MarketplaceSkeleton from '../components/marketplace/MarketplaceSkeleton'
 import useRates from '../hooks/useRates'
 import useWallet from '../hooks/useWallet'
@@ -29,6 +30,7 @@ export default function P2pHub() {
   const { usdcBalance } = useWallet()
   const [traders, setTraders] = useState([])
   const [pickTrader, setPickTrader] = useState(null)
+  const [expressOpen, setExpressOpen] = useState(false)
   const [typicalTradeMinutes, setTypicalTradeMinutes] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -176,9 +178,7 @@ export default function P2pHub() {
         <button
           type="button"
           disabled={hasActiveOrder}
-          onClick={() => navigate(tab === 'buy' ? '/wallet/buy' : '/wallet/cashout', {
-            state: { express: true },
-          })}
+          onClick={() => setExpressOpen(true)}
           className="shrink-0 inline-flex items-center gap-1.5 bg-rowan-surface border border-rowan-border rounded-xl px-3 py-2.5 min-h-11 text-rowan-text text-sm font-semibold disabled:opacity-50"
         >
           <Zap size={16} className="text-rowan-gold" />
@@ -304,6 +304,12 @@ export default function P2pHub() {
         mode={tab}
         onSelect={(offer) => handleTrade(offer, pickTrader)}
         onClose={() => setPickTrader(null)}
+      />
+
+      <ExpressSheet
+        open={expressOpen}
+        onClose={() => setExpressOpen(false)}
+        initialSide={tab}
       />
     </div>
   )
