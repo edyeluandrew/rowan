@@ -110,7 +110,7 @@ export default function BalanceCard({
               <select
                 value={selectValue}
                 onChange={(e) => selectUnit(e.target.value)}
-                className="appearance-none bg-rowan-bg border border-rowan-border rounded-lg pl-3 pr-8 py-2 text-rowan-yellow text-sm font-semibold focus:outline-none focus:border-rowan-yellow min-h-9"
+                className="appearance-none bg-rowan-bg border border-rowan-border rounded-lg pl-3 pr-8 py-2 text-rowan-green text-sm font-semibold focus:outline-none focus:border-rowan-green min-h-9"
                 aria-label="Display currency"
               >
                 <option value="usdc">USDC</option>

@@ -23,10 +23,10 @@ export default function BottomNav() {
               `flex flex-col items-center justify-center gap-0.5 min-h-11 min-w-11 relative ${
                 primary
                   ? isActive
-                    ? 'text-rowan-yellow'
-                    : 'text-rowan-yellow/80'
+                    ? 'text-rowan-green-dark'
+                    : 'text-rowan-green'
                   : isActive
-                  ? 'text-rowan-yellow'
+                  ? 'text-rowan-green'
                   : 'text-rowan-muted'
               }`
             }

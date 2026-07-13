@@ -1,8 +1,8 @@
 import LoadingSpinner from './LoadingSpinner';
 
 const variants = {
-  primary: 'bg-rowan-yellow text-rowan-bg font-bold',
-  ghost:   'bg-transparent border border-current',
+  primary: 'bg-rowan-green text-white font-bold active:bg-rowan-green-dark',
+  ghost:   'bg-transparent border border-rowan-border text-rowan-muted',
   danger:  'bg-rowan-red text-white font-bold',
 };
 
@@ -23,7 +23,7 @@ export default function Button({
   className = '',
   ...rest
 }) {
-  const base = 'rounded flex items-center justify-center gap-2 transition-opacity select-none';
+  const base = 'rounded-xl flex items-center justify-center gap-2 transition-opacity select-none';
   const w = fullWidth ? 'w-full' : '';
   const dis = (loading || disabled) ? 'opacity-70 pointer-events-none' : '';
 

@@ -108,7 +108,7 @@ export default function Home() {
           onClick={() => navigate('/wallet/receive')}
           className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
         >
-          <ArrowDownLeft size={20} className="text-rowan-yellow" />
+          <ArrowDownLeft size={20} className="text-rowan-green" />
           <span className="text-rowan-text text-xs font-medium">Receive</span>
         </button>
         <button
@@ -117,7 +117,7 @@ export default function Home() {
           onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })}
           className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
         >
-          <ArrowDownToLine size={20} className="text-rowan-yellow" />
+          <ArrowDownToLine size={20} className="text-rowan-green" />
           <span className="text-rowan-text text-xs font-medium">Buy</span>
         </button>
         <button
@@ -126,13 +126,13 @@ export default function Home() {
           onClick={() => navigate('/wallet/marketplace', { state: { tab: 'sell' } })}
           className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
         >
-          <ArrowUpFromLine size={20} className="text-rowan-yellow" />
+          <ArrowUpFromLine size={20} className="text-rowan-green" />
           <span className="text-rowan-text text-xs font-medium">Sell</span>
         </button>
       </div>
 
       {needsUsdc && CURRENT_NETWORK.isTest && (
-        <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4">
+        <div className="mt-4 bg-rowan-mint border border-rowan-green/30 rounded-xl p-4">
           <p className="text-rowan-text text-sm font-medium">Get started on testnet</p>
           <p className="text-rowan-muted text-xs mt-1">
             Add free test USDC, or buy / receive to fund your wallet.
@@ -140,7 +140,7 @@ export default function Home() {
           <button
             onClick={handleGetTestUsdc}
             disabled={testUsdcState === 'loading'}
-            className="mt-3 w-full flex items-center justify-center gap-2 bg-rowan-yellow text-rowan-bg font-medium rounded-xl px-3 py-3 min-h-11 text-sm disabled:opacity-50"
+            className="mt-3 w-full flex items-center justify-center gap-2 bg-rowan-green text-white font-medium rounded-xl px-3 py-3 min-h-11 text-sm disabled:opacity-50 active:bg-rowan-green-dark"
           >
             <Coins size={16} />
             {testUsdcState === 'loading' && 'Adding test USDC...'}

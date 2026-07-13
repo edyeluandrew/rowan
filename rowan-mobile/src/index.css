@@ -2,13 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --rowan-green: #12B81A;
+  --rowan-green-dark: #087A12;
+  --rowan-mint: #EAF8EE;
+  --rowan-lime: #DDEB3A;
+  --rowan-gold: #FFD51F;
+  --rowan-yellow: #12B81A; /* legacy class alias → brand green */
+  --rowan-white: #FFFFFF;
+  --rowan-bg: #F7F9F7;
+  --rowan-border: #D8E0D9;
+  --rowan-grey: #7B8587;
+  --rowan-text: #22272B;
+  --rowan-red: #E53935;
+  --rowan-dark: #0B0F0C;
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
 }
 
 html {
-  background-color: #0B0E11;
+  background-color: var(--rowan-bg);
 }
 
 body {
@@ -17,8 +33,8 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0B0E11;
-  color: #EAECEF;
+  background-color: var(--rowan-bg);
+  color: var(--rowan-text);
   overscroll-behavior: none;
 }
 

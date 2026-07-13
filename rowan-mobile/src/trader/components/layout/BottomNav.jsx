@@ -29,7 +29,7 @@ export default function BottomNav() {
             to={tab.to}
             className={({ isActive }) =>
               `flex-1 flex flex-col items-center justify-center py-3 gap-1 relative select-none ${
-                isActive ? 'text-rowan-yellow' : 'text-rowan-muted'
+                isActive ? 'text-rowan-green' : 'text-rowan-muted'
               }`
             }
           >

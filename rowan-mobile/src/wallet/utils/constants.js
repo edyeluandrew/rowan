@@ -7,8 +7,8 @@ export const NETWORKS = {
     label: 'MTN MoMo',
     currency: 'UGX',
     country: 'UG',
-    color: 'text-rowan-yellow',
-    bg: 'bg-rowan-yellow/20',
+    color: 'text-rowan-gold',
+    bg: 'bg-rowan-gold/20',
   },
   AIRTEL_UG: {
     label: 'Airtel',
@@ -28,15 +28,15 @@ export const NETWORKS = {
     label: 'MTN',
     currency: 'TZS',
     country: 'TZ',
-    color: 'text-rowan-muted',
-    bg: 'bg-rowan-surface',
+    color: 'text-rowan-gold',
+    bg: 'bg-rowan-gold/20',
   },
   AIRTEL_TZ: {
     label: 'Airtel',
     currency: 'TZS',
     country: 'TZ',
-    color: 'text-blue-400',
-    bg: 'bg-blue-400/20',
+    color: 'text-rowan-red',
+    bg: 'bg-rowan-red/20',
   },
 }
 

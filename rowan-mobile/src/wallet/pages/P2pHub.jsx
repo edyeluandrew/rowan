@@ -18,12 +18,12 @@ export default function P2pHub() {
       </p>
 
       {hasActiveOrder && activeTransaction && (
-        <div className="bg-rowan-yellow rounded-xl p-4 mb-4">
-          <p className="text-rowan-bg text-sm font-semibold">
+        <div className="bg-rowan-mint border border-rowan-green/30 rounded-xl p-4 mb-4">
+          <p className="text-rowan-text text-sm font-semibold">
             You have an active order. Finish it before starting another.
           </p>
           <Button
-            className="mt-3 bg-rowan-bg text-rowan-text hover:bg-rowan-bg/90"
+            className="mt-3"
             onClick={() => navigate(`/wallet/transaction/${activeTransaction.id}`)}
           >
             View order
@@ -36,12 +36,12 @@ export default function P2pHub() {
           type="button"
           disabled={hasActiveOrder}
           onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })}
-          className="w-full flex items-center gap-3 bg-rowan-yellow text-rowan-bg font-semibold rounded-xl px-4 py-4 min-h-11 disabled:opacity-50"
+          className="w-full flex items-center gap-3 bg-rowan-green text-white font-semibold rounded-xl px-4 py-4 min-h-11 disabled:opacity-50 active:bg-rowan-green-dark"
         >
           <ArrowDownToLine size={20} />
           <span className="flex-1 text-left">
             <span className="block text-base">Buy</span>
-            <span className="block text-xs font-medium opacity-80">Pay MoMo · get USDC</span>
+            <span className="block text-xs font-medium text-white/80">Pay MoMo · get USDC</span>
           </span>
         </button>
 
@@ -51,7 +51,7 @@ export default function P2pHub() {
           onClick={() => navigate('/wallet/marketplace', { state: { tab: 'sell' } })}
           className="w-full flex items-center gap-3 bg-rowan-surface border border-rowan-border text-rowan-text font-semibold rounded-xl px-4 py-4 min-h-11 disabled:opacity-50"
         >
-          <ArrowUpFromLine size={20} className="text-rowan-yellow" />
+          <ArrowUpFromLine size={20} className="text-rowan-green" />
           <span className="flex-1 text-left">
             <span className="block text-base">Sell</span>
             <span className="block text-xs font-medium text-rowan-muted">Send USDC · get MoMo</span>
@@ -63,9 +63,9 @@ export default function P2pHub() {
         type="button"
         disabled={hasActiveOrder}
         onClick={() => navigate('/wallet/cashout')}
-        className="mt-4 w-full flex items-center justify-center gap-2 bg-rowan-bg border border-rowan-border rounded-xl px-4 py-3 min-h-11 text-rowan-muted text-sm disabled:opacity-50"
+        className="mt-4 w-full flex items-center justify-center gap-2 bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 min-h-11 text-rowan-muted text-sm disabled:opacity-50"
       >
-        <Zap size={16} className="text-rowan-yellow" />
+        <Zap size={16} className="text-rowan-gold" />
         Express sell · auto-match
       </button>
     </div>

@@ -6,13 +6,13 @@
     "SplashScreen": {
       "launchShowDuration": 3000,
       "launchAutoHide": true,
-      "backgroundColor": "#000000",
+      "backgroundColor": "#F7F9F7",
       "androidSpin": false,
       "showSpinner": false
     },
     "LocalNotifications": {
       "smallIcon": "ic_stat_icon_config_sample",
-      "iconColor": "#F0B90B"
+      "iconColor": "#12B81A"
     }
   },
   "server": {

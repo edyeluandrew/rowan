@@ -1,7 +1,7 @@
 import { RefreshCw } from 'lucide-react'
 
 /**
- * Primary button component with loading state.
+ * Primary button — green brand CTA.
  */
 export default function Button({
   children,
@@ -15,7 +15,7 @@ export default function Button({
   const base = 'flex items-center justify-center gap-2 font-bold rounded-xl py-4 w-full text-base transition-opacity min-h-11'
 
   const variants = {
-    primary: 'bg-rowan-yellow text-rowan-bg',
+    primary: 'bg-rowan-green text-white active:bg-rowan-green-dark',
     ghost: 'bg-transparent border border-rowan-border text-rowan-muted',
     danger: 'bg-transparent border border-rowan-red text-rowan-red',
   }

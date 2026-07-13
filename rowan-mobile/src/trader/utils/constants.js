@@ -14,7 +14,7 @@ export const FLOAT_UPDATE_CLOSE_MS = 1500;
 export const ONBOARDING_VERIFIED_REDIRECT_MS = 1500;
 /** Mobile money network metadata */
 export const NETWORKS = {
-  MTN_UG:    { label: 'MTN MoMo',  color: 'bg-rowan-yellow/20 text-rowan-yellow' },
+  MTN_UG:    { label: 'MTN MoMo',  color: 'bg-rowan-gold/20 text-rowan-gold' },
   AIRTEL_UG: { label: 'Airtel UG', color: 'bg-rowan-red/20 text-rowan-red' },
   MPESA_KE:  { label: 'M-Pesa KE', color: 'bg-rowan-green/20 text-rowan-green' },
   MPESA_TZ:  { label: 'M-Pesa TZ', color: 'bg-rowan-green/20 text-rowan-green' },
