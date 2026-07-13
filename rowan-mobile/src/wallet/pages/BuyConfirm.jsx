@@ -11,7 +11,7 @@ import useWallet from '../hooks/useWallet'
 export default function BuyConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, traderName, selectedAd } = location.state || {}
+  const { quote, traderName, selectedAd, express } = location.state || {}
   const [expired, setExpired] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -20,11 +20,11 @@ export default function BuyConfirm() {
     error && /trustline|USDC/i.test(error)
 
   if (!quote) {
-    navigate('/wallet/buy', { replace: true })
+    navigate('/wallet/p2p', { replace: true, state: { tab: 'buy' } })
     return null
   }
 
-  const chosenTrader = traderName || selectedAd?.traderName
+  const chosenTrader = traderName || selectedAd?.traderName || quote.traderName
   const rateLine = quote.fiatCurrency && quote.userRate
     ? formatLockedRateLine(quote.fiatCurrency, quote.userRate)
     : null
@@ -54,6 +54,15 @@ export default function BuyConfirm() {
         </button>
         <h1 className="text-rowan-text text-lg font-bold">Confirm Buy</h1>
       </div>
+
+      {express && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
+          <p className="text-rowan-text text-sm font-medium">Express match</p>
+          <p className="text-rowan-muted text-xs mt-1">
+            Auto-matched to the best available trader for your amount.
+          </p>
+        </div>
+      )}
 
       {chosenTrader && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">

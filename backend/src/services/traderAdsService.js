@@ -418,6 +418,91 @@ async function listBuyAds({
   return { ads, page: Math.max(1, page), limit: Math.min(limit, 50) };
 }
 
+/**
+ * Pick the best USER_BUY ad for Express (auto-match) buy quotes.
+ * Prefers better user price (lower rate_per_usdc), then trust, then inventory.
+ */
+async function findBestBuyAdForExpress({
+  network,
+  currency,
+  fiatAmount,
+  userId = null,
+  feePercent = 1,
+  spreadPercent = 1,
+} = {}) {
+  const fiat = Number(fiatAmount);
+  if (!Number.isFinite(fiat) || fiat <= 0) {
+    const err = new Error('Invalid fiat amount');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const params = [network.toUpperCase(), currency.toUpperCase(), fiat];
+  const conditions = [
+    `ps.is_active = TRUE`,
+    `ps.ad_side = 'USER_BUY'`,
+    `t.status = 'ACTIVE'`,
+    `t.verification_status = 'VERIFIED'`,
+    `t.stellar_address IS NOT NULL`,
+    `ps.network = $1::mobile_network`,
+    `ps.currency = $2`,
+    `$3 BETWEEN ps.min_amount AND ps.max_amount`,
+    `ps.rate_per_usdc IS NOT NULL`,
+    `ps.rate_per_usdc > 0`,
+    `(ps.available_usdc - ps.reserved_usdc) > 0`,
+    `(SELECT COUNT(*) FROM transactions tx
+        WHERE tx.trader_id = t.id
+          AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[]))
+      < COALESCE(t.max_concurrent_orders, 3)`,
+  ];
+
+  if (userId) {
+    params.push(userId);
+    conditions.push(`t.id NOT IN (SELECT trader_id FROM blocked_traders WHERE user_id = $${params.length})`);
+  }
+
+  const result = await db.query(
+    `SELECT ps.id AS payout_setting_id, ps.trader_id, t.name AS trader_name,
+            t.trust_score, t.stellar_address, ps.rate_per_usdc,
+            (ps.available_usdc - ps.reserved_usdc) AS net_usdc,
+            (SELECT COUNT(*)::int FROM transactions tx
+               WHERE tx.trader_id = t.id
+                 AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_load
+     FROM trader_payout_settings ps
+     JOIN traders t ON t.id = ps.trader_id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY ps.rate_per_usdc ASC, t.trust_score DESC, active_load ASC, net_usdc DESC
+     LIMIT 20`,
+    params
+  );
+
+  const feeMul = 1 - (Number(feePercent) / 100);
+  const spreadMul = 1 - (Number(spreadPercent) / 100);
+
+  for (const row of result.rows) {
+    const rate = parseFloat(row.rate_per_usdc);
+    if (!rate || rate <= 0) continue;
+    const usdcNeeded = (fiat * feeMul * spreadMul) / rate;
+    if (parseFloat(row.net_usdc) < usdcNeeded) continue;
+
+    const trustStatus = await getTraderUsdcTrustlineStatus(row.stellar_address);
+    if (!trustStatus.hasTrustline) continue;
+
+    return {
+      payoutSettingId: row.payout_setting_id,
+      traderId: row.trader_id,
+      traderName: row.trader_name,
+      ratePerUsdc: rate,
+      availableUsdc: parseFloat(row.net_usdc),
+    };
+  }
+
+  const err = new Error('No traders available to sell USDC for this amount right now.');
+  err.statusCode = 503;
+  err.code = 'NO_BUY_TRADERS';
+  throw err;
+}
+
 async function validateBuyAdForQuote(payoutSettingId, { network, currency, fiatAmount, usdcAmount, userId = null }) {
   const result = await db.query(
     `SELECT ps.*, t.status, t.verification_status, t.stellar_address, t.max_concurrent_orders,
@@ -485,5 +570,6 @@ export default {
   getAdById,
   validateAdForQuote,
   validateBuyAdForQuote,
+  findBestBuyAdForExpress,
   ACTIVE_ORDER_STATES,
 };

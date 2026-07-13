@@ -30,12 +30,12 @@ const paymentProofUpload = multer({
 
 /**
  * POST /api/v1/buy/quote
- * Manual P2P buy quote — user pays MoMo, receives USDC.
+ * Buy quote — with payoutSettingId = manual P2P; without = Express auto-match.
  */
 router.post(
   '/quote',
   authUser,
-  validate(['network', 'phoneHash', 'payoutSettingId', 'fiatAmount']),
+  validate(['network', 'phoneHash', 'fiatAmount']),
   validateTypes({ fiatAmount: 'positiveNumber', network: 'mobileNetwork', phoneHash: 'phoneHash' }),
   checkUserLimits,
   async (req, res, next) => {
@@ -79,7 +79,7 @@ router.post(
         fiatAmount: fiatNum,
         network,
         phoneHash,
-        payoutSettingId,
+        payoutSettingId: payoutSettingId || null,
       });
 
       res.json({
@@ -93,7 +93,9 @@ router.post(
         platformFee: Number(quote.platform_fee),
         expiresAt: quote.expires_at,
         payoutSettingId: quote.preferred_payout_setting_id,
+        traderName: quote.expressTraderName || null,
         orderSide: 'BUY',
+        express: !payoutSettingId,
       });
     } catch (err) {
       if (err.statusCode) return res.status(err.statusCode).json({ error: err.message, code: err.code });

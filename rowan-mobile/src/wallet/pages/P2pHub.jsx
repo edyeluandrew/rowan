@@ -176,7 +176,9 @@ export default function P2pHub() {
         <button
           type="button"
           disabled={hasActiveOrder}
-          onClick={() => navigate('/wallet/cashout')}
+          onClick={() => navigate(tab === 'buy' ? '/wallet/buy' : '/wallet/cashout', {
+            state: { express: true },
+          })}
           className="shrink-0 inline-flex items-center gap-1.5 bg-rowan-surface border border-rowan-border rounded-xl px-3 py-2.5 min-h-11 text-rowan-text text-sm font-semibold disabled:opacity-50"
         >
           <Zap size={16} className="text-rowan-gold" />

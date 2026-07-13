@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ChevronLeft, Coins, UserCheck } from 'lucide-react'
+import { ChevronLeft, Coins, UserCheck, Zap } from 'lucide-react'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import useUserCountry from '../hooks/useUserCountry'
 import useWallet from '../hooks/useWallet'
+import useRates from '../hooks/useRates'
 import { getBuyQuote } from '../api/buy'
 import { hashPhoneNumber } from '../utils/crypto'
 import { NETWORKS } from '../utils/constants'
@@ -33,26 +34,23 @@ export default function Buy() {
     payoutSettingId: presetPayoutSettingId,
     traderName: presetTraderName,
     network: presetNetwork,
+    express: expressFlag,
   } = location.state || {}
 
   const { country, fiatCurrency: userFiat } = useUserCountry()
   const { hasUsdcTrustline } = useWallet()
+  const { rates } = useRates(userFiat)
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
 
   const adNetwork = presetNetwork || selectedAd?.network || null
+  const payoutSettingId = presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
+  const isExpress = Boolean(expressFlag || !payoutSettingId)
+  const networkLocked = !!adNetwork && !isExpress
+
   const [fiatAmount, setFiatAmount] = useState('')
   const [network, setNetwork] = useState(adNetwork)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-
-  const payoutSettingId = presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
-  const networkLocked = !!adNetwork
-
-  useEffect(() => {
-    if (!payoutSettingId) {
-      navigate('/wallet/p2p', { replace: true, state: { tab: 'buy' } })
-    }
-  }, [payoutSettingId, navigate])
 
   useEffect(() => {
     if (adNetwork) setNetwork(adNetwork)
@@ -70,6 +68,7 @@ export default function Buy() {
   const maxNetFiat = selectedAd?.maxAmount ?? null
   const traderRate = selectedAd?.ratePerUsdc != null ? Number(selectedAd.ratePerUsdc) : null
   const availableUsdc = selectedAd?.availableUsdc ?? selectedAd?.available_usdc
+  const liveUsdcToFiat = rates?.usdcToFiat != null ? Number(rates.usdcToFiat) : null
   const maxFiatFromUsdc =
     traderRate && availableUsdc
       ? Math.floor(Number(availableUsdc) * traderRate * FEE_FACTOR * SPREAD_FACTOR)
@@ -81,17 +80,18 @@ export default function Buy() {
   const belowMin = minNetFiat != null && netFiat > 0 && netFiat < minNetFiat
   const exceedsMax = effectiveMaxFiat != null && netFiat > effectiveMaxFiat
 
-  const usdcToFiat = traderRate && traderRate > 0 ? traderRate : null
+  const usdcToFiat = traderRate && traderRate > 0
+    ? traderRate
+    : (liveUsdcToFiat && liveUsdcToFiat > 0 ? liveUsdcToFiat : null)
 
   const usdcEstimate = estimateUsdcFromFiat(netFiat, usdcToFiat)
   const platformFeeFiat = netFiat > 0 ? netFiat * 0.01 : 0
   const traderRateLine = formatUsdcRateLine(currency, traderRate)
 
   const canProceed =
-    payoutSettingId &&
     network &&
     netFiat > 0 &&
-    traderRate &&
+    (isExpress || traderRate) &&
     !belowMin &&
     !exceedsMax &&
     !loading &&
@@ -107,7 +107,7 @@ export default function Buy() {
         fiatAmount: netFiat,
         network,
         phoneHash,
-        payoutSettingId,
+        payoutSettingId: isExpress ? undefined : payoutSettingId,
       })
       navigate('/wallet/buy/confirm', {
         state: {
@@ -116,8 +116,9 @@ export default function Buy() {
             fiatCurrency: quote.fiatCurrency || currency,
           },
           network,
-          traderName: presetTraderName || selectedAd?.traderName,
-          selectedAd,
+          traderName: presetTraderName || selectedAd?.traderName || quote.traderName,
+          selectedAd: isExpress ? null : selectedAd,
+          express: isExpress,
         },
       })
     } catch (err) {
@@ -136,7 +137,19 @@ export default function Buy() {
         <h1 className="text-rowan-text text-lg font-bold">Buy USDC</h1>
       </div>
 
-      {(presetTraderName || selectedAd?.traderName) && (
+      {isExpress && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">
+          <Zap size={20} className="text-rowan-gold shrink-0 mt-0.5" />
+          <div>
+            <p className="text-rowan-text text-sm font-medium">Express buy</p>
+            <p className="text-rowan-muted text-xs mt-1">
+              We will auto-match the best available trader selling USDC for your amount and network.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!isExpress && (presetTraderName || selectedAd?.traderName) && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">
           <UserCheck size={20} className="text-rowan-yellow shrink-0 mt-0.5" />
           <div>
@@ -168,13 +181,15 @@ export default function Buy() {
         onFiatAmountChange={setFiatAmount}
         currency={currency}
         cryptoEstimate={usdcEstimate}
-        cryptoLabel="USDC you'll receive (estimate at trader price)"
+        cryptoLabel={isExpress
+          ? "USDC you'll receive (estimate — final at quote)"
+          : "USDC you'll receive (estimate at trader price)"}
         fiatSubLabel={`${currency || userFiat} you'll pay via MoMo`}
         platformFeeFiat={platformFeeFiat}
         maxFiat={effectiveMaxFiat}
       />
 
-      {!traderRate && (
+      {!isExpress && !traderRate && (
         <p className="text-rowan-red text-xs mt-2 text-center">
           This trader has not set a USDC price. Choose another ad in the marketplace.
         </p>
@@ -196,7 +211,7 @@ export default function Buy() {
         )}
       </div>
 
-      {minNetFiat != null && effectiveMaxFiat != null && (
+      {!isExpress && minNetFiat != null && effectiveMaxFiat != null && (
         <p className="text-rowan-muted text-xs mt-4 text-center">
           Order limits: {minNetFiat.toLocaleString()} – {effectiveMaxFiat.toLocaleString()} {currency}
         </p>

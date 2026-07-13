@@ -135,26 +135,39 @@ async function persistBuyQuote({
 }
 
 /**
- * Create a locked buy quote (user pays fiat, receives USDC). Manual P2P only.
+ * Create a locked buy quote (user pays fiat, receives USDC).
+ * With payoutSettingId: manual P2P against that ad.
+ * Without: Express — auto-pick best available buy ad.
  */
 async function createBuyQuoteFromFiat({
   userId,
   fiatAmount,
   network,
   phoneHash,
-  payoutSettingId,
+  payoutSettingId = null,
 }) {
-  if (!payoutSettingId) {
-    const err = new Error('payoutSettingId is required for manual P2P buy');
-    err.statusCode = 400;
-    err.code = 'PAYOUT_SETTING_REQUIRED';
-    throw err;
+  let resolvedPayoutSettingId = payoutSettingId || null;
+  let traderName = null;
+
+  if (!resolvedPayoutSettingId) {
+    const fiatCurrency = quoteEngine.networkToFiat(network);
+    const traderAdsService = (await import('./traderAdsService.js')).default;
+    const best = await traderAdsService.findBestBuyAdForExpress({
+      network,
+      currency: fiatCurrency,
+      fiatAmount,
+      userId,
+      feePercent,
+      spreadPercent,
+    });
+    resolvedPayoutSettingId = best.payoutSettingId;
+    traderName = best.traderName;
   }
 
   const adRateResult = await db.query(
     `SELECT rate_per_usdc FROM trader_payout_settings
      WHERE id = $1 AND is_active = TRUE AND ad_side = 'USER_BUY'`,
-    [payoutSettingId]
+    [resolvedPayoutSettingId]
   );
   const ratePerUsdc = adRateResult.rows[0]?.rate_per_usdc != null
     ? parseFloat(adRateResult.rows[0].rate_per_usdc)
@@ -168,7 +181,7 @@ async function createBuyQuoteFromFiat({
 
   const computed = await computeBuyQuoteFromFiat(fiatAmount, network, { ratePerUsdc });
   const traderAdsService = (await import('./traderAdsService.js')).default;
-  await traderAdsService.validateBuyAdForQuote(payoutSettingId, {
+  await traderAdsService.validateBuyAdForQuote(resolvedPayoutSettingId, {
     network,
     currency: computed.fiatCurrency,
     fiatAmount: computed.fiatAmountNum,
@@ -183,13 +196,25 @@ async function createBuyQuoteFromFiat({
     throw err;
   }
 
-  return persistBuyQuote({
+  const quote = await persistBuyQuote({
     userId,
     network,
     phoneHash,
     computed,
-    preferredPayoutSettingId: payoutSettingId,
+    preferredPayoutSettingId: resolvedPayoutSettingId,
   });
+
+  if (!traderName) {
+    const nameRes = await db.query(
+      `SELECT t.name FROM trader_payout_settings ps
+       JOIN traders t ON t.id = ps.trader_id
+       WHERE ps.id = $1`,
+      [resolvedPayoutSettingId]
+    );
+    traderName = nameRes.rows[0]?.name || null;
+  }
+
+  return { ...quote, expressTraderName: traderName };
 }
 
 async function getBuyQuoteById(quoteId, userId) {
