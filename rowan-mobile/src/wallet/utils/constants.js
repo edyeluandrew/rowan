@@ -146,7 +146,7 @@ export const CURRENT_NETWORK =
   STELLAR_NETWORKS.testnet
 
 /** Testnet pilot: auto-grant this much USDC after wallet setup (via XLM→USDC swap). */
-export const TESTNET_AUTO_USDC_AMOUNT = 20
+export const TESTNET_AUTO_USDC_AMOUNT = 100
 /** Skip auto-fund when wallet already holds at least this much USDC. */
 export const TESTNET_MIN_USDC_FOR_SKIP = 1
 

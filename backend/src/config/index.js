@@ -85,7 +85,7 @@ const config = {
   // Testnet pilot: auto-fund new wallets with starter USDC (direct payment from faucet wallet)
   testnetFaucet: {
     secretKey: process.env.TESTNET_FAUCET_SECRET_KEY || null,
-    amount: parseFloat(process.env.TESTNET_FAUCET_USDC_AMOUNT) || 20,
+    amount: parseFloat(process.env.TESTNET_FAUCET_USDC_AMOUNT) || 100,
     minBalanceToSkip: parseFloat(process.env.TESTNET_FAUCET_MIN_BALANCE) || 1,
     cooldownSeconds: parseInt(process.env.TESTNET_FAUCET_COOLDOWN_SECONDS, 10) || 7200,
   },

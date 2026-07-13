@@ -33,8 +33,9 @@ Balances are always read from **Horizon** (not simulated).
 STELLAR_NETWORK=testnet
 HORIZON_URL=https://horizon-testnet.stellar.org
 TESTNET_FAUCET_SECRET_KEY=S...
-TESTNET_FAUCET_USDC_AMOUNT=20
+TESTNET_FAUCET_USDC_AMOUNT=100
 TESTNET_FAUCET_COOLDOWN_SECONDS=7200
+TESTNET_FAUCET_MIN_BALANCE=1
 ```
 
 6. Redeploy backend after env changes.
@@ -55,13 +56,13 @@ Expect:
 
 - `Network: testnet`
 - `Treasury USDC:` > 0 (e.g. 920)
-- `Rough capacity @ 20 USDC/tester:` enough for your pilot
+- `Rough capacity @ 100 USDC/tester:` enough for your pilot
 
 **Smoke test (app):**
 
 1. Testnet mobile build (`VITE_STELLAR_NETWORK=testnet`, `VITE_API_URL` = your Render API).
 2. **Create a new wallet** (not an old one).
-3. Home shows **~20 USDC** within a few seconds.
+3. Home shows **~100 USDC** within a few seconds.
 4. Optional: [stellar.expert testnet](https://stellar.expert/explorer/testnet) — payment treasury → new wallet.
 
 If faucet fails:
@@ -80,7 +81,7 @@ If faucet fails:
 | New testers get **no USDC** on create | Top up now |
 | Capacity < testers you’re inviting | Top up before pilot batch |
 
-**Rule of thumb:** `treasury USDC ÷ 20` = max new wallets at 20 USDC each.
+**Rule of thumb:** `treasury USDC ÷ 100` = max new wallets at 100 USDC each.
 
 ---
 
@@ -146,10 +147,10 @@ That helper was not funded on Circle yet. Fund it on Circle, then run `sweep` ag
 
 1. Create wallet in app.
 2. App sets USDC trustline (automatic).
-3. App calls backend faucet → **20 USDC** from treasury.
+3. App calls backend faucet → **100 USDC** from treasury.
 4. Home shows balance from Horizon.
 
-If balance is empty: Home → **Get 20 free test USDC** (retry).
+If balance is empty: Home → **Get 100 free test USDC** (retry).
 
 ---
 
@@ -159,7 +160,7 @@ Ensure these exist on the **backend** service:
 
 - `STELLAR_NETWORK=testnet`
 - `TESTNET_FAUCET_SECRET_KEY` (treasury secret)
-- `TESTNET_FAUCET_USDC_AMOUNT=20` (optional)
+- `TESTNET_FAUCET_USDC_AMOUNT=100` (optional)
 - `DATABASE_URL`, `REDIS_URL`, `ESCROW_*`, `JWT_SECRET`, etc. (unchanged)
 
 Mobile app env:
