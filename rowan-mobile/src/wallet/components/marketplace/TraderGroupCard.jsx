@@ -91,7 +91,7 @@ export default function TraderGroupCard({
           </div>
 
           {rateLine && (
-            <p className="text-rowan-yellow text-sm font-medium mt-1">{rateLine}</p>
+            <p className="text-rowan-green text-sm font-medium mt-1">{rateLine}</p>
           )}
           {!isBuy && estimateLine && (
             <p className="text-rowan-text text-xs mt-1">{estimateLine} <span className="text-rowan-muted">(estimate)</span></p>
@@ -165,7 +165,7 @@ export default function TraderGroupCard({
           onClick={handleTradeClick}
           disabled={tradeDisabled || (isBuy && !canBuy)}
         >
-          {isBuy ? 'Buy USDC' : `Sell to ${getTraderDisplayName(trader.traderName).split(' ')[0]}`}
+          {isBuy ? 'Buy' : 'Sell'}
         </Button>
       </div>
     </div>

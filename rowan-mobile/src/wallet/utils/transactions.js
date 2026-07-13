@@ -88,10 +88,13 @@ export function normalizeWalletHistoryStats(stats) {
 
   const completed = Number(stats.total_completed ?? stats.completed ?? 0)
   const failed = Number(stats.total_failed ?? stats.failed ?? 0)
+  const totalRaw = stats.total ?? stats.total_transactions
 
   return {
     completed,
-    total: Number(stats.total ?? completed + failed),
+    failed,
+    // Prefer explicit total (all orders). Never undercount as only completed+failed.
+    total: totalRaw != null ? Number(totalRaw) : completed + failed,
     totalXlm: stats.total_xlm_cashed ?? stats.totalXlm ?? 0,
     totalFiatReceived: stats.total_fiat_received ?? stats.totalFiatReceived ?? 0,
   }

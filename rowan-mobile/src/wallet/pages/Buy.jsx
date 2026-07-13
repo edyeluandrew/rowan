@@ -50,7 +50,7 @@ export default function Buy() {
 
   useEffect(() => {
     if (!payoutSettingId) {
-      navigate('/wallet/marketplace', { replace: true, state: { tab: 'buy' } })
+      navigate('/wallet/p2p', { replace: true, state: { tab: 'buy' } })
     }
   }, [payoutSettingId, navigate])
 

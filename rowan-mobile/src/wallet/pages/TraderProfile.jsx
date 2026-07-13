@@ -99,7 +99,7 @@ export default function TraderProfile() {
       } else {
         await blockTrader(id)
         setToast('Trader blocked')
-        setTimeout(() => navigate('/wallet/marketplace', { replace: true }), 1200)
+        setTimeout(() => navigate('/wallet/p2p', { replace: true }), 1200)
       }
       setBlockConfirm(false)
       setMenuOpen(false)

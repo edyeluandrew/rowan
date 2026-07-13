@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react'
 import useP2pHistory from '../hooks/useP2pHistory'
 import P2pHistoryCard from '../components/history/P2pHistoryCard'
@@ -20,8 +20,12 @@ const RANGE_FILTERS = [
   { id: 'month', label: 'This month' },
 ]
 
+const VALID_STATUS = new Set(STATUS_FILTERS.map((f) => f.id))
+
 export default function History() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const initialStatus = VALID_STATUS.has(location.state?.status) ? location.state.status : 'all'
   const {
     transactions,
     loading,
@@ -32,8 +36,8 @@ export default function History() {
     loadMore,
     refresh,
     updateFilters,
-  } = useP2pHistory()
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  } = useP2pHistory({ status: initialStatus, range: 'all' })
+  const [filtersOpen, setFiltersOpen] = useState(initialStatus !== 'all')
 
   const setStatus = (status) => updateFilters({ ...filters, status })
   const setRange = (range) => updateFilters({ ...filters, range })
@@ -131,7 +135,7 @@ export default function History() {
           <p className="text-rowan-muted text-xs mt-2">
             Start your first trade to see your history here
           </p>
-          <Button className="mt-4" onClick={() => navigate('/wallet/marketplace')}>
+          <Button className="mt-4" onClick={() => navigate('/wallet/p2p')}>
             Go to Marketplace
           </Button>
         </div>

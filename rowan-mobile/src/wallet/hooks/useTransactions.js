@@ -63,7 +63,11 @@ export default function useTransactions() {
   }, [fetchPage])
 
   useEffect(() => {
-    if (pathname === '/wallet/home' || pathname === '/wallet/history') {
+    if (
+      pathname === '/wallet/home' ||
+      pathname === '/wallet/history' ||
+      pathname === '/wallet/profile'
+    ) {
       refresh()
     }
   }, [pathname, refresh])

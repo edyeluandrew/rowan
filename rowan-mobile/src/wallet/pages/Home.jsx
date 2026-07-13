@@ -114,7 +114,7 @@ export default function Home() {
         <button
           type="button"
           disabled={hasActiveOrder}
-          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })}
+          onClick={() => navigate('/wallet/p2p', { state: { tab: 'buy' } })}
           className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
         >
           <ArrowDownToLine size={20} className="text-rowan-green" />
@@ -123,7 +123,7 @@ export default function Home() {
         <button
           type="button"
           disabled={hasActiveOrder}
-          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'sell' } })}
+          onClick={() => navigate('/wallet/p2p', { state: { tab: 'sell' } })}
           className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
         >
           <ArrowUpFromLine size={20} className="text-rowan-green" />

@@ -98,8 +98,9 @@ router.get('/history', authUser, async (req, res, next) => {
     // Also get summary stats
     const statsResult = await db.query(
       `SELECT
-         COUNT(*) FILTER (WHERE state = 'COMPLETE') as total_completed,
-         COUNT(*) FILTER (WHERE state = 'FAILED' OR state = 'REFUNDED') as total_failed,
+         COUNT(*)::int as total,
+         COUNT(*) FILTER (WHERE state = 'COMPLETE')::int as total_completed,
+         COUNT(*) FILTER (WHERE state = 'FAILED' OR state = 'REFUNDED')::int as total_failed,
          COALESCE(SUM(fiat_amount) FILTER (WHERE state = 'COMPLETE'), 0) as total_fiat_received,
          COALESCE(SUM(xlm_amount) FILTER (WHERE state = 'COMPLETE'), 0) as total_xlm_cashed
        FROM transactions

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  UserCircle, Star, Shield, Copy, CopyCheck, LogOut, Volume2, VolumeX,
+  UserCircle, Shield, Copy, CopyCheck, LogOut, Volume2, VolumeX,
   Vibrate, ShieldCheck, Clock, Fingerprint, Bell, ChevronRight, Lock, Globe,
   HelpCircle,
 } from 'lucide-react'
@@ -10,7 +10,7 @@ import useWallet from '../hooks/useWallet'
 import useTransactions from '../hooks/useTransactions'
 import useUserCountry from '../hooks/useUserCountry'
 import { getPreference, setPreference } from '../utils/storage'
-import { formatAddress, formatXlm } from '../utils/format'
+import { formatAddress } from '../utils/format'
 import { KYC_LEVELS, COPY_FEEDBACK_TIMEOUT_MS, COUNTRY_CODES } from '../utils/constants'
 import { COUNTRY_FIAT } from '../utils/country'
 import CountryPicker from '../components/settings/CountryPicker'
@@ -20,7 +20,7 @@ import Badge from '../components/ui/Badge'
 export default function Profile() {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
-  const { balance, usdcBalance, hasUsdcTrustline, publicKey } = useWallet()
+  const { usdcBalance, hasUsdcTrustline, publicKey } = useWallet()
   const { stats } = useTransactions()
   const { country, setCountry } = useUserCountry()
   const [showCountryPicker, setShowCountryPicker] = useState(false)
@@ -123,23 +123,26 @@ export default function Profile() {
         {hasUsdcTrustline === false && <UsdcTrustlineSetup compact />}
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-rowan-surface rounded-xl p-3 text-center">
-          <Star size={16} className="text-rowan-yellow mx-auto mb-1" />
-          <p className="text-rowan-text text-sm font-semibold">{formatXlm(balance || 0)}</p>
-          <p className="text-rowan-muted text-[10px]">Balance</p>
-        </div>
-        <div className="bg-rowan-surface rounded-xl p-3 text-center">
+      {/* Stats — tap to open History */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => navigate('/wallet/history', { state: { status: 'all' } })}
+          className="bg-rowan-surface rounded-xl p-3 text-center min-h-11"
+        >
           <Clock size={16} className="text-rowan-muted mx-auto mb-1" />
-          <p className="text-rowan-text text-sm font-semibold">{stats?.total || 0}</p>
+          <p className="text-rowan-text text-sm font-semibold tabular-nums">{stats?.total ?? 0}</p>
           <p className="text-rowan-muted text-[10px]">Transactions</p>
-        </div>
-        <div className="bg-rowan-surface rounded-xl p-3 text-center">
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/wallet/history', { state: { status: 'completed' } })}
+          className="bg-rowan-surface rounded-xl p-3 text-center min-h-11"
+        >
           <ShieldCheck size={16} className="text-rowan-green mx-auto mb-1" />
-          <p className="text-rowan-text text-sm font-semibold">{stats?.completed || 0}</p>
+          <p className="text-rowan-text text-sm font-semibold tabular-nums">{stats?.completed ?? 0}</p>
           <p className="text-rowan-muted text-[10px]">Completed</p>
-        </div>
+        </button>
       </div>
 
       {/* Country / market */}
