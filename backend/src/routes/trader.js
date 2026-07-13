@@ -469,7 +469,7 @@ router.get('/history', authTrader, async (req, res, next) => {
     const offset = (page - 1) * limit;
 
     const result = await db.query(
-      `SELECT id, usdc_amount, fiat_amount, fiat_currency, network,
+      `SELECT id, usdc_amount, fiat_amount, fiat_currency, network, order_side,
               state, stellar_release_tx, completed_at, created_at
        FROM transactions
        WHERE trader_id = $1
@@ -482,6 +482,7 @@ router.get('/history', authTrader, async (req, res, next) => {
     const transactions = result.rows.map(tx => ({
       ...tx,
       usdc_amount: Number(tx.usdc_amount) || 0,
+      order_side: tx.order_side || 'SELL',
     }));
 
     res.json({ transactions });

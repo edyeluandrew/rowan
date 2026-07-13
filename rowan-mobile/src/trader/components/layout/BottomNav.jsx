@@ -1,11 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import { Home, Inbox, Clock, UserCircle } from 'lucide-react';
 import { useRequests } from '../../hooks/useRequests';
-import { useNotifications } from '../../hooks/useNotifications';
-import NotificationBadge from '../notifications/NotificationBadge';
 
 const tabs = [
-  { to: '/trader/home',     label: 'Home',     icon: Home,       showNotif: true },
+  { to: '/trader/home',     label: 'Home',     icon: Home },
   { to: '/trader/requests', label: 'Requests', icon: Inbox,      showBadge: true },
   { to: '/trader/history',  label: 'History',  icon: Clock },
   { to: '/trader/profile',  label: 'Profile',  icon: UserCircle },
@@ -13,7 +11,6 @@ const tabs = [
 
 export default function BottomNav() {
   const { pending } = useRequests();
-  const { unreadCount } = useNotifications();
   const pendingCount = pending?.length || 0;
 
   return (
@@ -35,11 +32,10 @@ export default function BottomNav() {
           >
             <div className="relative">
               <Icon size={22} />
-              {tab.showNotif && unreadCount > 0 && <NotificationBadge count={unreadCount} />}
             </div>
             <span className="text-xs">{tab.label}</span>
             {tab.showBadge && pendingCount > 0 && (
-              <span className="absolute top-1 right-1/4 bg-rowan-red text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+              <span className="absolute top-1 right-1/4 bg-rowan-red text-white text-xs rounded-full min-w-4 h-4 px-1 flex items-center justify-center">
                 {pendingCount > 9 ? '9+' : pendingCount}
               </span>
             )}

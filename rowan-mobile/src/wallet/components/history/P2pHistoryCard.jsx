@@ -4,7 +4,8 @@ import {
 } from 'lucide-react'
 import PaymentMethodPill from '../ui/PaymentMethodPill'
 import { formatCurrency, getTraderDisplayName, formatShortId } from '../../utils/p2pFormat'
-import { formatXlm } from '../../utils/format'
+import { formatTimeAgo, formatDateTime } from '../../utils/format'
+import { isBuyOrder } from '../../utils/transactions'
 
 function StatusIcon({ state, wasDisputed }) {
   if (wasDisputed || state === 'DISPUTE_OPENED') {
@@ -22,12 +23,6 @@ function StatusIcon({ state, wasDisputed }) {
   return <Clock size={20} className="text-rowan-muted" />
 }
 
-function formatHistoryDate(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
 function formatDuration(mins) {
   if (!mins) return null
   return `${mins} min${mins === 1 ? '' : 's'}`
@@ -37,11 +32,25 @@ export default function P2pHistoryCard({ transaction: tx }) {
   const navigate = useNavigate()
   const currency = tx.currency || tx.fiatCurrency || 'UGX'
   const rate = tx.lockedRate || tx.rate
-  const dateLabel = formatHistoryDate(tx.createdAt)
+  const when = tx.completedAt || tx.createdAt
   const duration = formatDuration(tx.durationMinutes)
-  const dateLine = duration
-    ? `${formatShortId(tx.id)} · ${dateLabel} · ${duration}`
-    : `${formatShortId(tx.id)} · ${dateLabel}`
+  const isBuy = isBuyOrder(tx)
+  const usdc = Number(tx.usdcAmount || 0)
+  const fiat = Number(tx.fiatAmount || 0)
+
+  // Buy: +USDC in / −fiat out. Sell: −USDC out / +fiat in.
+  const cryptoLine = isBuy
+    ? { text: `+${usdc.toFixed(2)} USDC`, tone: 'text-rowan-green' }
+    : { text: `−${usdc > 0 ? usdc.toFixed(2) : Number(tx.xlmAmount || 0).toFixed(2)} USDC`, tone: 'text-rowan-red' }
+  const fiatLine = isBuy
+    ? { text: `−${formatCurrency(fiat, currency)}`, tone: 'text-rowan-red' }
+    : { text: `+${formatCurrency(fiat, currency)}`, tone: 'text-rowan-green' }
+
+  const meta = [
+    formatShortId(tx.id),
+    formatTimeAgo(when),
+    duration,
+  ].filter(Boolean).join(' · ')
 
   return (
     <button
@@ -60,7 +69,7 @@ export default function P2pHistoryCard({ transaction: tx }) {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="text-rowan-text text-sm font-medium truncate">
-                {getTraderDisplayName(tx.traderName) || 'Trader'}
+                {isBuy ? 'Bought USDC' : 'Sold USDC'} · {getTraderDisplayName(tx.traderName) || 'Trader'}
               </p>
               <div className="flex flex-wrap items-center gap-2 mt-1">
                 {tx.network && <PaymentMethodPill network={tx.network} />}
@@ -70,20 +79,21 @@ export default function P2pHistoryCard({ transaction: tx }) {
               </div>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-rowan-text text-sm font-bold tabular-nums">
-                −{formatXlm(tx.xlmAmount)}
+              <p className={`text-sm font-bold tabular-nums ${cryptoLine.tone}`}>
+                {cryptoLine.text}
               </p>
-              <p className="text-rowan-muted text-xs tabular-nums mt-0.5">
-                {formatCurrency(tx.fiatAmount, currency)}
+              <p className={`text-xs tabular-nums mt-0.5 ${fiatLine.tone}`}>
+                {fiatLine.text}
               </p>
             </div>
           </div>
           {rate != null && (
             <p className="text-rowan-muted text-xs mt-2">
-              @ {formatCurrency(rate, currency)}/XLM
+              @ {formatCurrency(rate, currency)}/USDC
             </p>
           )}
-          <p className="text-rowan-muted text-xs mt-1">{dateLine}</p>
+          <p className="text-rowan-muted text-xs mt-1">{meta}</p>
+          <p className="text-rowan-muted text-[10px]">{formatDateTime(when)}</p>
           <div className="flex flex-wrap gap-2 mt-2">
             {tx.wasDisputed && (
               <span className="text-[10px] font-medium text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded-full">

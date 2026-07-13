@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, CheckCircle2, BellDot } from 'lucide-react';
 import { useNotifications } from '../hooks/useNotifications';
@@ -43,29 +43,36 @@ function groupByDate(notifications) {
 
 export default function Notifications() {
   const navigate = useNavigate();
-  const { notifications, unreadCount, markRead, markAllRead, isLoading, handleTap } = useNotifications();
+  const { notifications, unreadCount, markAllRead, isLoading, handleTap, refetch } = useNotifications();
   const [filter, setFilter] = useState('all'); // 'all' | 'unread'
   const [page, setPage] = useState(1);
   const [allNotifs, setAllNotifs] = useState([]);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [markingAll, setMarkingAll] = useState(false);
 
-  /* Sync hook-loaded data */
   useEffect(() => {
     setAllNotifs(notifications);
   }, [notifications]);
 
   useEffect(() => {
-    if (unreadCount > 0) {
-      markAllRead();
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    refetch();
+  }, [refetch]);
 
   const filtered = filter === 'unread'
     ? allNotifs.filter((n) => !n.readAt && !n.read && !n.read_at)
     : allNotifs;
 
   const groups = groupByDate(filtered);
+
+  const handleMarkAll = async () => {
+    setMarkingAll(true);
+    try {
+      await markAllRead();
+    } finally {
+      setMarkingAll(false);
+    }
+  };
 
   const loadMore = async () => {
     const next = page + 1;
@@ -83,16 +90,20 @@ export default function Notifications() {
 
   return (
     <div className="bg-rowan-bg min-h-screen">
-      {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-rowan-border">
-        <button onClick={() => navigate(-1)} className="text-rowan-text p-1">
+        <button type="button" onClick={() => navigate(-1)} className="text-rowan-text p-1">
           <ChevronLeft size={22} />
         </button>
         <span className="text-rowan-text font-bold">Notifications</span>
         {unreadCount > 0 ? (
-          <button onClick={markAllRead} className="flex items-center gap-1.5 text-rowan-yellow text-sm">
+          <button
+            type="button"
+            disabled={markingAll}
+            onClick={handleMarkAll}
+            className="flex items-center gap-1.5 text-rowan-green text-sm disabled:opacity-50"
+          >
             <CheckCircle2 size={15} />
-            <span className="text-xs">Mark all read</span>
+            <span className="text-xs">{markingAll ? 'Clearing…' : 'Mark all read'}</span>
           </button>
         ) : <div className="w-10" />}
       </div>

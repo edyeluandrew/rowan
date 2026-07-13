@@ -4,6 +4,7 @@
  */
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { SocketProvider } from './context/SocketContext';
+import { NotificationsProvider } from './context/NotificationsContext';
 
 import ErrorBoundary from './components/ui/ErrorBoundary';
 import OnboardingGate from './pages/onboarding/OnboardingGate';
@@ -31,40 +32,36 @@ import TwoFactorSettings from './pages/security/TwoFactorSettings';
 export default function TraderApp() {
   return (
     <SocketProvider>
-      <Routes>
-        {/* Onboarding flow (before full access) */}
-        <Route path="onboarding" element={<OnboardingWizard />} />
+      <NotificationsProvider>
+        <Routes>
+          <Route path="onboarding" element={<OnboardingWizard />} />
 
-        {/* All main routes behind onboarding gate */}
-        <Route element={<OnboardingGate />}>
-          {/* Tab routes with bottom nav */}
-          <Route element={<AppShell />}>
-            <Route path="home" element={<Home />} />
-            <Route path="requests" element={<Requests />} />
-            <Route path="history" element={<ErrorBoundary title="History unavailable"><History /></ErrorBoundary>} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="notifications" element={<Notifications />} />
+          <Route element={<OnboardingGate />}>
+            <Route element={<AppShell />}>
+              <Route path="home" element={<Home />} />
+              <Route path="requests" element={<Requests />} />
+              <Route path="history" element={<ErrorBoundary title="History unavailable"><History /></ErrorBoundary>} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="notifications" element={<Notifications />} />
+            </Route>
+
+            <Route path="requests/:id" element={<ErrorBoundary title="Request unavailable"><RequestDetail /></ErrorBoundary>} />
+            <Route path="earnings" element={<Earnings />} />
+            <Route path="disputes/:id" element={<DisputeDetail />} />
+            <Route path="wallet" element={<StellarWallet />} />
+            <Route path="sla" element={<SlaTracker />} />
+            <Route path="performance/networks" element={<NetworkPerformance />} />
+            <Route path="payout-settings" element={<PayoutSettings />} />
+
+            <Route path="security" element={<SecuritySettings />} />
+            <Route path="security/change-password" element={<ChangePassword />} />
+            <Route path="security/sessions" element={<ActiveSessions />} />
+            <Route path="security/2fa" element={<TwoFactorSettings />} />
           </Route>
 
-          {/* Full-screen routes */}
-          <Route path="requests/:id" element={<ErrorBoundary title="Request unavailable"><RequestDetail /></ErrorBoundary>} />
-          <Route path="earnings" element={<Earnings />} />
-          <Route path="disputes/:id" element={<DisputeDetail />} />
-          <Route path="wallet" element={<StellarWallet />} />
-          <Route path="sla" element={<SlaTracker />} />
-          <Route path="performance/networks" element={<NetworkPerformance />} />
-          <Route path="payout-settings" element={<PayoutSettings />} />
-
-          {/* Security sub-routes */}
-          <Route path="security" element={<SecuritySettings />} />
-          <Route path="security/change-password" element={<ChangePassword />} />
-          <Route path="security/sessions" element={<ActiveSessions />} />
-          <Route path="security/2fa" element={<TwoFactorSettings />} />
-        </Route>
-
-        {/* Catch-all within trader */}
-        <Route path="*" element={<Navigate to="home" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="home" replace />} />
+        </Routes>
+      </NotificationsProvider>
     </SocketProvider>
   );
 }
