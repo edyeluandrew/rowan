@@ -1,22 +1,14 @@
 import { useNavigate } from 'react-router-dom'
-import { useState } from 'react'
-import { Zap } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpFromLine, Zap } from 'lucide-react'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import Button from '../components/ui/Button'
 
 /**
- * P2P hub — Buy / Sell segmented control (same style as balance unit toggle).
+ * P2P hub — separate Buy / Sell actions (click → leave to that flow).
  */
 export default function P2pHub() {
   const navigate = useNavigate()
   const { activeTransaction, hasActiveOrder } = useActiveTransaction()
-  const [mode, setMode] = useState('buy') // 'buy' | 'sell'
-
-  const goTrade = (nextMode) => {
-    setMode(nextMode)
-    if (hasActiveOrder) return
-    navigate('/wallet/marketplace', { state: { tab: nextMode } })
-  }
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
@@ -39,37 +31,32 @@ export default function P2pHub() {
         </div>
       )}
 
-      <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5">
-        <p className="text-rowan-muted text-xs uppercase tracking-wider mb-3">Trade</p>
+      <div className="space-y-3">
+        <button
+          type="button"
+          disabled={hasActiveOrder}
+          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })}
+          className="w-full flex items-center gap-3 bg-rowan-yellow text-rowan-bg font-semibold rounded-xl px-4 py-4 min-h-11 disabled:opacity-50"
+        >
+          <ArrowDownToLine size={20} />
+          <span className="flex-1 text-left">
+            <span className="block text-base">Buy</span>
+            <span className="block text-xs font-medium opacity-80">Pay MoMo · get USDC</span>
+          </span>
+        </button>
 
-        <div className="inline-flex w-full bg-rowan-bg border border-rowan-border rounded-xl p-1">
-          <button
-            type="button"
-            disabled={hasActiveOrder}
-            onClick={() => goTrade('buy')}
-            className={`flex-1 px-3 py-3 rounded-lg text-sm font-semibold min-h-11 disabled:opacity-50 ${
-              mode === 'buy' ? 'bg-rowan-yellow text-rowan-bg' : 'text-rowan-muted'
-            }`}
-          >
-            Buy
-          </button>
-          <button
-            type="button"
-            disabled={hasActiveOrder}
-            onClick={() => goTrade('sell')}
-            className={`flex-1 px-3 py-3 rounded-lg text-sm font-semibold min-h-11 disabled:opacity-50 ${
-              mode === 'sell' ? 'bg-rowan-yellow text-rowan-bg' : 'text-rowan-muted'
-            }`}
-          >
-            Sell
-          </button>
-        </div>
-
-        <p className="text-rowan-muted text-xs mt-3 leading-relaxed">
-          {mode === 'buy'
-            ? 'Pay mobile money · receive USDC'
-            : 'Send USDC · get mobile money'}
-        </p>
+        <button
+          type="button"
+          disabled={hasActiveOrder}
+          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'sell' } })}
+          className="w-full flex items-center gap-3 bg-rowan-surface border border-rowan-border text-rowan-text font-semibold rounded-xl px-4 py-4 min-h-11 disabled:opacity-50"
+        >
+          <ArrowUpFromLine size={20} className="text-rowan-yellow" />
+          <span className="flex-1 text-left">
+            <span className="block text-base">Sell</span>
+            <span className="block text-xs font-medium text-rowan-muted">Send USDC · get MoMo</span>
+          </span>
+        </button>
       </div>
 
       <button
