@@ -1,6 +1,15 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDownToLine, ArrowDownLeft, Plus, Clock, Star, AlertTriangle, Bell, Coins, UserCheck } from 'lucide-react'
+import {
+  ArrowDownLeft,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Clock,
+  Star,
+  AlertTriangle,
+  Bell,
+  Coins,
+} from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import useUserCountry from '../hooks/useUserCountry'
@@ -16,7 +25,6 @@ import CashoutInProgressBanner from '../components/cashout/CashoutInProgressBann
 import ConnectionDot from '../components/ui/ConnectionDot'
 import NotificationBadge from '../components/ui/NotificationBadge'
 import TransactionCard from '../components/transactions/TransactionCard'
-import Button from '../components/ui/Button'
 import { CURRENT_NETWORK, TESTNET_AUTO_USDC_AMOUNT } from '../utils/constants'
 import { usdcToFiat } from '../utils/fiat'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
@@ -63,7 +71,7 @@ export default function Home() {
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-rowan-text text-lg font-bold">Rowan Wallet</h1>
+        <h1 className="text-rowan-text text-lg font-bold">Rowan</h1>
         <div className="flex items-center gap-3">
           <ConnectionDot />
           <button
@@ -93,44 +101,53 @@ export default function Home() {
 
       {activeCashout && <CashoutInProgressBanner transaction={activeCashout} />}
 
-      {needsUsdc && (
+      {/* Primary actions — short labels */}
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <button
+          type="button"
+          onClick={() => navigate('/wallet/receive')}
+          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
+        >
+          <ArrowDownLeft size={20} className="text-rowan-yellow" />
+          <span className="text-rowan-text text-xs font-medium">Receive</span>
+        </button>
+        <button
+          type="button"
+          disabled={hasActiveOrder}
+          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })}
+          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
+        >
+          <ArrowDownToLine size={20} className="text-rowan-yellow" />
+          <span className="text-rowan-text text-xs font-medium">Buy</span>
+        </button>
+        <button
+          type="button"
+          disabled={hasActiveOrder}
+          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'sell' } })}
+          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
+        >
+          <ArrowUpFromLine size={20} className="text-rowan-yellow" />
+          <span className="text-rowan-text text-xs font-medium">Sell</span>
+        </button>
+      </div>
+
+      {needsUsdc && CURRENT_NETWORK.isTest && (
         <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4">
-          <p className="text-rowan-text text-sm font-medium">Add USDC to get started</p>
+          <p className="text-rowan-text text-sm font-medium">Get started on testnet</p>
           <p className="text-rowan-muted text-xs mt-1">
-            {CURRENT_NETWORK.isTest
-              ? 'On testnet, Rowan can add free test USDC to your wallet automatically.'
-              : 'Buy USDC with mobile money, or receive USDC from another Stellar wallet.'}
+            Add free test USDC, or buy / receive to fund your wallet.
           </p>
-          {CURRENT_NETWORK.isTest ? (
-            <button
-              onClick={handleGetTestUsdc}
-              disabled={testUsdcState === 'loading'}
-              className="mt-3 w-full flex items-center justify-center gap-2 bg-rowan-yellow text-rowan-bg font-medium rounded-xl px-3 py-3 min-h-11 text-sm disabled:opacity-50"
-            >
-              <Coins size={16} />
-              {testUsdcState === 'loading' && 'Adding test USDC...'}
-              {testUsdcState === 'success' && 'Test USDC added — refresh if needed'}
-              {testUsdcState === 'error' && 'Could not add test USDC — tap to retry'}
-              {testUsdcState === 'idle' && `Get ${TESTNET_AUTO_USDC_AMOUNT} free test USDC`}
-            </button>
-          ) : (
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })}
-                className="flex items-center justify-center gap-2 bg-rowan-yellow text-rowan-bg font-medium rounded-xl px-3 py-3 min-h-11 text-sm"
-              >
-                <Plus size={16} />
-                Buy USDC
-              </button>
-              <button
-                onClick={() => navigate('/wallet/receive')}
-                className="flex items-center justify-center gap-2 bg-rowan-surface border border-rowan-border text-rowan-text font-medium rounded-xl px-3 py-3 min-h-11 text-sm"
-              >
-                <ArrowDownLeft size={16} />
-                Receive
-              </button>
-            </div>
-          )}
+          <button
+            onClick={handleGetTestUsdc}
+            disabled={testUsdcState === 'loading'}
+            className="mt-3 w-full flex items-center justify-center gap-2 bg-rowan-yellow text-rowan-bg font-medium rounded-xl px-3 py-3 min-h-11 text-sm disabled:opacity-50"
+          >
+            <Coins size={16} />
+            {testUsdcState === 'loading' && 'Adding test USDC...'}
+            {testUsdcState === 'success' && 'Test USDC added — refresh if needed'}
+            {testUsdcState === 'error' && 'Could not add test USDC — tap to retry'}
+            {testUsdcState === 'idle' && `Get ${TESTNET_AUTO_USDC_AMOUNT} free test USDC`}
+          </button>
         </div>
       )}
 
@@ -146,49 +163,6 @@ export default function Home() {
           {testUsdcState === 'error' && 'Retry test USDC'}
         </button>
       )}
-
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <Button variant="ghost" onClick={() => navigate('/wallet/receive')}>
-          <ArrowDownLeft size={18} />
-          Receive USDC
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })}
-          disabled={hasActiveOrder}
-        >
-          <Plus size={18} />
-          Add money
-        </Button>
-      </div>
-
-      <div className="mt-3">
-        <Button onClick={() => navigate('/wallet/cashout')}>
-          <ArrowDownToLine size={18} />
-          Express Cash Out
-        </Button>
-        <p className="text-rowan-muted text-xs text-center mt-1.5 px-2">
-          Auto-match the fastest available trader — no need to pick from the marketplace.
-        </p>
-        <Button
-          variant="ghost"
-          className="mt-2"
-          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })}
-          disabled={hasActiveOrder}
-        >
-          <Coins size={18} />
-          Buy USDC
-        </Button>
-        <Button
-          variant="ghost"
-          className="mt-2"
-          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'sell' } })}
-          disabled={hasActiveOrder}
-        >
-          <UserCheck size={18} />
-          Sell with a trader
-        </Button>
-      </div>
 
       {!permissionGranted && !dismissed && (
         <div className="mt-4 bg-rowan-surface border border-rowan-border rounded-xl p-4 flex items-start gap-3">
@@ -239,13 +213,13 @@ export default function Home() {
 
       <div className="mt-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-rowan-text text-sm font-semibold">Recent Activity</h3>
+          <h3 className="text-rowan-text text-sm font-semibold">Recent</h3>
           {transactions.length > 0 && (
             <button
               onClick={() => navigate('/wallet/history')}
-              className="text-rowan-yellow text-xs"
+              className="text-rowan-yellow text-xs min-h-9"
             >
-              View All
+              View all
             </button>
           )}
         </div>
@@ -261,7 +235,7 @@ export default function Home() {
             <Star size={32} className="text-rowan-muted mx-auto mb-3" />
             <p className="text-rowan-muted text-sm">No transactions yet</p>
             <p className="text-rowan-muted text-xs mt-1">
-              Receive USDC or cash out to get started
+              Receive, buy, or sell to get started
             </p>
           </div>
         ) : (

@@ -17,6 +17,7 @@ import BackupWallet from './pages/BackupWallet';
 import ImportWallet from './pages/ImportWallet';
 import Register from './pages/Register';
 import Home from './pages/Home';
+import P2pHub from './pages/P2pHub';
 import Marketplace from './pages/Marketplace';
 import TraderProfile from './pages/TraderProfile';
 import BlockedTraders from './pages/BlockedTraders';
@@ -55,6 +56,7 @@ export default function WalletApp() {
             {/* Tab routes with bottom nav */}
             <Route element={<AppShell />}>
               <Route path="home" element={<Home />} />
+              <Route path="p2p" element={<P2pHub />} />
               <Route path="history" element={<History />} />
               <Route path="profile" element={<Profile />} />
             </Route>

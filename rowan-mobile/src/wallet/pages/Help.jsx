@@ -197,7 +197,7 @@ export default function Help() {
         <HelpLink
           icon={<Store size={18} />}
           label="Marketplace"
-          onClick={() => navigate('/wallet/marketplace')}
+          onClick={() => navigate('/wallet/p2p')}
         />
         {activeTransaction && (
           <HelpLink
@@ -349,7 +349,7 @@ export default function Help() {
       <section className="bg-rowan-surface rounded-xl p-4 mb-4">
         <div className="flex items-center gap-2 mb-3">
           <ArrowDownToLine size={16} className="text-rowan-muted" />
-          <p className="text-rowan-text text-sm font-semibold">Buy USDC</p>
+          <p className="text-rowan-text text-sm font-semibold">Buy</p>
         </div>
         <ol className="space-y-2 text-rowan-muted text-xs leading-relaxed list-decimal list-inside">
           <li>Pick a trader ad and follow the quote</li>

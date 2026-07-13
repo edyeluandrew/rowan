@@ -59,7 +59,7 @@ export default function ReceiveXlm() {
           >
             <ArrowLeft size={24} />
           </button>
-          <h1 className="text-rowan-text text-lg font-bold">Receive USDC</h1>
+          <h1 className="text-rowan-text text-lg font-bold">Receive</h1>
         </div>
         <p className="text-rowan-muted text-sm text-center py-12">Wallet not loaded</p>
       </div>
@@ -76,7 +76,7 @@ export default function ReceiveXlm() {
         >
           <ArrowLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">Receive USDC</h1>
+        <h1 className="text-rowan-text text-lg font-bold">Receive</h1>
       </div>
 
       <UsdcTrustlineSetup onEnabled={refresh} />

@@ -1,9 +1,9 @@
 import { NavLink } from 'react-router-dom'
-import { House, ArrowDownToLine, Clock, UserCircle } from 'lucide-react'
+import { House, ArrowLeftRight, Clock, UserCircle } from 'lucide-react'
 
 const tabs = [
   { path: '/wallet/home', label: 'Home', Icon: House },
-  { path: '/wallet/cashout', label: 'Cash Out', Icon: ArrowDownToLine, primary: true },
+  { path: '/wallet/p2p', label: 'P2P', Icon: ArrowLeftRight, primary: true },
   { path: '/wallet/history', label: 'History', Icon: Clock },
   { path: '/wallet/profile', label: 'You', Icon: UserCircle },
 ]
@@ -22,7 +22,9 @@ export default function BottomNav() {
             className={({ isActive }) =>
               `flex flex-col items-center justify-center gap-0.5 min-h-11 min-w-11 relative ${
                 primary
-                  ? 'text-rowan-yellow'
+                  ? isActive
+                    ? 'text-rowan-yellow'
+                    : 'text-rowan-yellow/80'
                   : isActive
                   ? 'text-rowan-yellow'
                   : 'text-rowan-muted'

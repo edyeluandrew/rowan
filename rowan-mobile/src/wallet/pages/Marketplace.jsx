@@ -157,13 +157,15 @@ export default function Marketplace() {
         >
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold flex-1 text-center pr-11">Choose a Trader</h1>
+        <h1 className="text-rowan-text text-lg font-bold flex-1 text-center pr-11">
+          {tab === 'buy' ? 'Buy' : 'Sell'}
+        </h1>
       </div>
 
       <p className="text-rowan-muted text-sm text-center mb-5">
         {tab === 'buy'
-          ? 'Add money — pick a trader, pay with mobile money, receive USDC.'
-          : 'Sell to a trader you choose. For fastest matching without picking, use Express Cash Out on Home.'}
+          ? 'Pick a trader · pay mobile money · receive USDC'
+          : 'Pick a trader · send USDC · get mobile money'}
       </p>
 
       <div className="flex gap-2 mb-5">
@@ -174,7 +176,7 @@ export default function Marketplace() {
             tab === 'buy' ? 'bg-rowan-yellow text-rowan-bg' : 'bg-rowan-surface border border-rowan-border text-rowan-muted'
           }`}
         >
-          Buy USDC
+          Buy
         </button>
         <button
           type="button"
@@ -307,7 +309,7 @@ export default function Marketplace() {
       {tab === 'sell' && (
         <div className="mt-6">
           <Button variant="ghost" onClick={() => navigate('/wallet/cashout')} disabled={hasActiveOrder}>
-            Express Cash Out instead
+            Express sell instead
           </Button>
         </div>
       )}

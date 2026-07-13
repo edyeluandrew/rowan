@@ -192,7 +192,7 @@ export default function Cashout() {
         <button onClick={() => navigate(-1)} className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center">
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">Cash Out</h1>
+        <h1 className="text-rowan-text text-lg font-bold">Sell</h1>
       </div>
 
       <UsdcTrustlineSetup compact />
@@ -213,7 +213,7 @@ export default function Cashout() {
 
       {!selectedAd && !presetTraderName && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
-          <p className="text-rowan-text text-sm font-medium">Express Cash Out</p>
+          <p className="text-rowan-text text-sm font-medium">Express sell</p>
           <p className="text-rowan-muted text-xs mt-1">
             We will auto-match the best available trader for your amount and network.
           </p>
