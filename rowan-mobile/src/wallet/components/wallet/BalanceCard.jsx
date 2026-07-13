@@ -1,9 +1,13 @@
-import { Wallet, RefreshCw, ChevronDown } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Wallet, RefreshCw, Eye, EyeOff } from 'lucide-react'
 import LoadingSpinner from '../ui/LoadingSpinner'
-import { FIAT_OPTIONS } from '../../utils/fiat'
+import { getPreference, setPreference } from '../../utils/storage'
+
+const PREF_UNIT = 'rowan_balance_display_unit'
+const PREF_HIDDEN = 'rowan_balance_hidden'
 
 /**
- * Fiat-first balance card with USDC primary balance.
+ * Balance card with USDC/fiat toggle and hide/reveal.
  */
 export default function BalanceCard({
   fiatAmount,
@@ -12,25 +16,105 @@ export default function BalanceCard({
   loading,
   refreshing,
   onRefresh,
-  onFiatCurrencyChange,
 }) {
-  const selected = FIAT_OPTIONS.find((o) => o.code === fiatCurrency) || FIAT_OPTIONS[0]
+  const [unit, setUnit] = useState('usdc') // 'usdc' | 'fiat'
+  const [hidden, setHidden] = useState(false)
+  const [prefsReady, setPrefsReady] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [savedUnit, savedHidden] = await Promise.all([
+          getPreference(PREF_UNIT),
+          getPreference(PREF_HIDDEN),
+        ])
+        if (cancelled) return
+        if (savedUnit === 'usdc' || savedUnit === 'fiat') setUnit(savedUnit)
+        if (savedHidden === 'true') setHidden(true)
+      } catch {
+        // defaults
+      } finally {
+        if (!cancelled) setPrefsReady(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const selectUnit = async (next) => {
+    setUnit(next)
+    await setPreference(PREF_UNIT, next)
+  }
+
+  const toggleHidden = async () => {
+    const next = !hidden
+    setHidden(next)
+    await setPreference(PREF_HIDDEN, String(next))
+  }
+
+  const fiatDigits = fiatCurrency === 'KES' ? 2 : 0
+  const usdcLabel = usdcBalance != null
+    ? Number(usdcBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '—'
+  const fiatLabel = fiatAmount != null
+    ? Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: fiatDigits })
+    : '—'
+
+  const primaryValue = unit === 'usdc' ? usdcLabel : fiatLabel
+  const primarySuffix = unit === 'usdc' ? 'USDC' : (fiatCurrency || '')
+  const secondaryLine = unit === 'usdc'
+    ? (fiatAmount != null ? `≈ ${fiatLabel} ${fiatCurrency}` : null)
+    : (usdcBalance != null ? `${usdcLabel} USDC in wallet` : null)
+
+  const showMasked = hidden && prefsReady
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5 mb-4">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Wallet size={16} className="text-rowan-muted" />
-          <span className="text-rowan-muted text-xs uppercase tracking-wider">Total balance</span>
+          <span className="text-rowan-muted text-xs uppercase tracking-wider">Balance</span>
         </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={toggleHidden}
+            className="text-rowan-muted p-1 min-h-9 min-w-9 flex items-center justify-center"
+            aria-label={hidden ? 'Show balance' : 'Hide balance'}
+          >
+            {hidden ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            className="text-rowan-muted p-1 min-h-9 min-w-9 flex items-center justify-center"
+            aria-label="Refresh balance"
+          >
+            <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
+          </button>
+        </div>
+      </div>
+
+      {/* Unit toggle */}
+      <div className="mt-3 inline-flex bg-rowan-bg border border-rowan-border rounded-xl p-1">
         <button
           type="button"
-          onClick={onRefresh}
-          disabled={refreshing}
-          className="text-rowan-muted p-1 min-h-9 min-w-9 flex items-center justify-center"
-          aria-label="Refresh balance"
+          onClick={() => selectUnit('usdc')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold min-h-9 ${
+            unit === 'usdc' ? 'bg-rowan-yellow text-rowan-bg' : 'text-rowan-muted'
+          }`}
         >
-          <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
+          USDC
+        </button>
+        <button
+          type="button"
+          onClick={() => selectUnit('fiat')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold min-h-9 ${
+            unit === 'fiat' ? 'bg-rowan-yellow text-rowan-bg' : 'text-rowan-muted'
+          }`}
+        >
+          {fiatCurrency || 'Fiat'}
         </button>
       </div>
 
@@ -40,49 +124,21 @@ export default function BalanceCard({
         </div>
       ) : (
         <>
-          <div className="mt-3 flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-baseline gap-2 flex-wrap">
-                <span className="text-rowan-text text-4xl font-bold tabular-nums">
-                  {fiatAmount != null
-                    ? Number(fiatAmount).toLocaleString('en-US', {
-                        maximumFractionDigits: fiatCurrency === 'KES' ? 2 : 0,
-                      })
-                    : '—'}
-                </span>
-                {onFiatCurrencyChange ? (
-                  <div className="relative">
-                    <select
-                      value={fiatCurrency}
-                      onChange={(e) => onFiatCurrencyChange(e.target.value)}
-                      className="appearance-none bg-rowan-bg border border-rowan-border rounded-lg pl-2 pr-7 py-1 text-rowan-yellow text-sm font-semibold focus:outline-none focus:border-rowan-yellow min-h-9"
-                      aria-label="Display currency"
-                    >
-                      {FIAT_OPTIONS.map((opt) => (
-                        <option key={opt.code} value={opt.code}>
-                          {opt.flag} {opt.code}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      size={14}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-rowan-muted pointer-events-none"
-                    />
-                  </div>
-                ) : (
-                  <span className="text-rowan-yellow text-lg font-semibold">{fiatCurrency}</span>
-                )}
-              </div>
-              <p className="text-rowan-muted text-xs mt-1">
-                Indicative value · {selected.label}
-              </p>
-            </div>
+          <div className="mt-3 flex items-baseline gap-2 flex-wrap">
+            <span className="text-rowan-text text-4xl font-bold tabular-nums tracking-tight">
+              {showMasked ? '••••••' : primaryValue}
+            </span>
+            {!showMasked && (
+              <span className="text-rowan-yellow text-lg font-semibold">{primarySuffix}</span>
+            )}
           </div>
-
-          {usdcBalance != null && (
-            <p className="text-rowan-muted text-sm tabular-nums mt-3 pt-3 border-t border-rowan-border">
-              {Number(usdcBalance).toFixed(2)} USDC in wallet
+          {secondaryLine && (
+            <p className="text-rowan-muted text-sm tabular-nums mt-2">
+              {showMasked ? '••••' : secondaryLine}
             </p>
+          )}
+          {unit === 'fiat' && !showMasked && (
+            <p className="text-rowan-muted text-[10px] mt-1">Indicative · from live rate</p>
           )}
         </>
       )}
