@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Wallet, RefreshCw, Eye, EyeOff } from 'lucide-react'
+import { Wallet, RefreshCw, Eye, EyeOff, ChevronDown } from 'lucide-react'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import { getPreference, setPreference } from '../../utils/storage'
 
@@ -7,7 +7,7 @@ const PREF_UNIT = 'rowan_balance_display_unit'
 const PREF_HIDDEN = 'rowan_balance_hidden'
 
 /**
- * Balance card with USDC/fiat toggle and hide/reveal.
+ * Balance card — primary amount + currency dropdown on the right, hide/reveal.
  */
 export default function BalanceCard({
   fiatAmount,
@@ -61,12 +61,12 @@ export default function BalanceCard({
     : '—'
 
   const primaryValue = unit === 'usdc' ? usdcLabel : fiatLabel
-  const primarySuffix = unit === 'usdc' ? 'USDC' : (fiatCurrency || '')
   const secondaryLine = unit === 'usdc'
     ? (fiatAmount != null ? `≈ ${fiatLabel} ${fiatCurrency}` : null)
     : (usdcBalance != null ? `${usdcLabel} USDC in wallet` : null)
 
   const showMasked = hidden && prefsReady
+  const selectValue = unit === 'usdc' ? 'usdc' : 'fiat'
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5 mb-4">
@@ -96,41 +96,31 @@ export default function BalanceCard({
         </div>
       </div>
 
-      {/* Unit toggle */}
-      <div className="mt-3 inline-flex bg-rowan-bg border border-rowan-border rounded-xl p-1">
-        <button
-          type="button"
-          onClick={() => selectUnit('usdc')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold min-h-9 ${
-            unit === 'usdc' ? 'bg-rowan-yellow text-rowan-bg' : 'text-rowan-muted'
-          }`}
-        >
-          USDC
-        </button>
-        <button
-          type="button"
-          onClick={() => selectUnit('fiat')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold min-h-9 ${
-            unit === 'fiat' ? 'bg-rowan-yellow text-rowan-bg' : 'text-rowan-muted'
-          }`}
-        >
-          {fiatCurrency || 'Fiat'}
-        </button>
-      </div>
-
       {loading && fiatAmount == null && usdcBalance == null ? (
         <div className="flex justify-center py-6">
           <LoadingSpinner size={24} />
         </div>
       ) : (
         <>
-          <div className="mt-3 flex items-baseline gap-2 flex-wrap">
-            <span className="text-rowan-text text-4xl font-bold tabular-nums tracking-tight">
+          <div className="mt-3 flex items-end justify-between gap-3">
+            <span className="text-rowan-text text-4xl font-bold tabular-nums tracking-tight min-w-0 truncate">
               {showMasked ? '••••••' : primaryValue}
             </span>
-            {!showMasked && (
-              <span className="text-rowan-yellow text-lg font-semibold">{primarySuffix}</span>
-            )}
+            <div className="relative shrink-0 mb-1">
+              <select
+                value={selectValue}
+                onChange={(e) => selectUnit(e.target.value)}
+                className="appearance-none bg-rowan-bg border border-rowan-border rounded-lg pl-3 pr-8 py-2 text-rowan-yellow text-sm font-semibold focus:outline-none focus:border-rowan-yellow min-h-9"
+                aria-label="Display currency"
+              >
+                <option value="usdc">USDC</option>
+                <option value="fiat">{fiatCurrency || 'Fiat'}</option>
+              </select>
+              <ChevronDown
+                size={14}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-rowan-muted pointer-events-none"
+              />
+            </div>
           </div>
           {secondaryLine && (
             <p className="text-rowan-muted text-sm tabular-nums mt-2">
