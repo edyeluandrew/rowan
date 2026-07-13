@@ -93,6 +93,13 @@ export default function Cashout() {
   const traderMinFiat = selectedAd?.minAmount ?? null
   const traderMaxFiat = selectedAd?.maxAmount ?? null
   const traderFloatFiat = selectedAd?.availableFloat ?? selectedAd?.available_float ?? null
+  const traderUsdcAvailable = useMemo(() => {
+    const listed = selectedAd?.availableUsdc ?? selectedAd?.available_usdc
+    if (listed != null && Number(listed) > 0) return Number(listed)
+    const rate = Number(selectedAd?.ratePerUsdc || selectedAd?.rate_per_usdc || usdcToFiatRate || 0)
+    if (traderFloatFiat != null && rate > 0) return Number(traderFloatFiat) / rate
+    return null
+  }, [selectedAd, traderFloatFiat, usdcToFiatRate])
 
   const maxNetFiat = useMemo(() => {
     const caps = [
@@ -322,11 +329,13 @@ export default function Cashout() {
                 </p>
               </>
             )}
-            {exceedsTraderFloat && traderFloatFiat != null && (
+            {exceedsTraderFloat && (
               <>
                 <p className="text-rowan-yellow text-sm font-medium">Amount exceeds trader capacity</p>
                 <p className="text-rowan-muted text-xs mt-1">
-                  This trader only has about {Math.floor(traderFloatFiat).toLocaleString()} {currency} available right now.
+                  {traderUsdcAvailable != null && Number.isFinite(traderUsdcAvailable)
+                    ? `This trader only has about ${traderUsdcAvailable.toFixed(2)} USDC available right now.`
+                    : 'This trader does not have enough capacity for that amount right now.'}
                 </p>
               </>
             )}
