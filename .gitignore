@@ -70,3 +70,4 @@ ehthumbs.db
 **/tmp/
 **/temp/
 **/*.orig
+node_modules

@@ -77,5 +77,6 @@ Rowan is currently **testnet demo-ready only**. Do **not** cut over to mainnet u
 
 ## Related
 
+- [Stellar Strengthen Tracker](./STELLAR_STRENGTHEN_TRACKER.md) — Week 1–4 harden plan before multi-chain
 - [Pilot Go/No-Go](./PILOT_GO_NO_GO_CHECKLIST.md)
 - [Security Incident](./SECURITY_INCIDENT_RUNBOOK.md)
