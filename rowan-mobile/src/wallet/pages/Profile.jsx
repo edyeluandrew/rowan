@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   UserCircle, Star, Shield, Copy, CopyCheck, LogOut, Volume2, VolumeX,
-  Vibrate, ShieldCheck, Clock, Fingerprint, Bell, ChevronRight, Lock, Globe
+  Vibrate, ShieldCheck, Clock, Fingerprint, Bell, ChevronRight, Lock, Globe,
+  HelpCircle,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import useWallet from '../hooks/useWallet'
@@ -173,6 +174,24 @@ export default function Profile() {
             />
           </div>
         )}
+      </div>
+
+      {/* Help */}
+      <div className="bg-rowan-surface rounded-xl divide-y divide-rowan-border mb-4">
+        <button
+          type="button"
+          onClick={() => navigate('/wallet/help')}
+          className="flex items-center justify-between w-full px-4 py-3 min-h-11"
+        >
+          <div className="flex items-center gap-3">
+            <HelpCircle size={18} className="text-rowan-yellow" />
+            <div className="text-left">
+              <span className="text-rowan-text text-sm block">Help</span>
+              <span className="text-rowan-muted text-xs">Pilot guide · WhatsApp · Email</span>
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-rowan-muted" />
+        </button>
       </div>
 
       {/* Settings */}

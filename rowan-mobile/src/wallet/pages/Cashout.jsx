@@ -18,7 +18,6 @@ import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
 import PaymentMethodPill from '../components/ui/PaymentMethodPill'
 import Button from '../components/ui/Button'
-import MvpPilotBanner from '../components/ui/MvpPilotBanner'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 
 export default function Cashout() {
@@ -195,8 +194,6 @@ export default function Cashout() {
         </button>
         <h1 className="text-rowan-text text-lg font-bold">Cash Out</h1>
       </div>
-
-      <MvpPilotBanner className="mb-4" />
 
       <UsdcTrustlineSetup compact />
 

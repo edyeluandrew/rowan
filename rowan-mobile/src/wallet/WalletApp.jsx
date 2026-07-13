@@ -33,6 +33,7 @@ import TransactionDetail from './pages/TransactionDetail';
 import TransactionReceipt from './pages/TransactionReceipt';
 import Notifications from './pages/Notifications';
 import Profile from './pages/Profile';
+import Help from './pages/Help';
 import DisputeForm from './pages/DisputeForm';
 import BiometricSetup from './pages/BiometricSetup';
 import RateAlerts from './pages/RateAlerts';
@@ -75,6 +76,7 @@ export default function WalletApp() {
             <Route path="dispute/:id" element={<DisputeForm />} />
             <Route path="biometric-setup" element={<BiometricSetup />} />
             <Route path="rate-alerts" element={<RateAlerts />} />
+            <Route path="help" element={<Help />} />
             <Route path="security/2fa" element={<TwoFactorSettings />} />
             <Route path="receipt/:transactionId" element={<TransactionReceipt />} />
 
