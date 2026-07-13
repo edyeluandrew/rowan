@@ -152,7 +152,11 @@ export default function Home() {
           <ArrowDownLeft size={18} />
           Receive USDC
         </Button>
-        <Button variant="ghost" onClick={() => navigate('/wallet/add-money')}>
+        <Button
+          variant="ghost"
+          onClick={() => navigate('/wallet/marketplace', { state: { tab: 'buy' } })}
+          disabled={hasActiveOrder}
+        >
           <Plus size={18} />
           Add money
         </Button>

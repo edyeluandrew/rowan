@@ -35,6 +35,16 @@ export default function Marketplace() {
   const touchStartY = useRef(0)
   const pulling = useRef(false)
 
+  useEffect(() => {
+    if (location.state?.tab === 'buy' || location.state?.tab === 'sell') {
+      setTab(location.state.tab)
+    }
+  }, [location.state?.tab])
+
+  useEffect(() => {
+    setNetwork(null)
+  }, [country, tab])
+
   const loadAds = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
     else setLoading(true)
@@ -152,7 +162,7 @@ export default function Marketplace() {
 
       <p className="text-rowan-muted text-sm text-center mb-5">
         {tab === 'buy'
-          ? 'Buy USDC — pay mobile money, receive USDC in your wallet.'
+          ? 'Add money — pick a trader, pay with mobile money, receive USDC.'
           : 'Sell to a trader you choose. For fastest matching without picking, use Express Cash Out on Home.'}
       </p>
 
@@ -193,34 +203,25 @@ export default function Marketplace() {
 
       <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 space-y-4">
         <div>
-          <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Network</p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setNetwork(null)}
-              className={`rounded-full px-4 py-2 text-sm font-medium min-h-11 ${
-                !network
-                  ? 'bg-rowan-yellow text-rowan-bg'
-                  : 'bg-rowan-bg border border-rowan-border text-rowan-muted'
-              }`}
-            >
-              All
-            </button>
+          <label htmlFor="momo-provider" className="text-rowan-muted text-xs uppercase tracking-wider">
+            Mobile money provider
+          </label>
+          <select
+            id="momo-provider"
+            value={network || ''}
+            onChange={(e) => setNetwork(e.target.value || null)}
+            className="w-full mt-2 bg-rowan-bg border border-rowan-border rounded-xl px-4 py-3 text-rowan-text text-sm min-h-11 appearance-none"
+          >
+            <option value="">All providers</option>
             {countryNetworks.map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setNetwork(key)}
-                className={`rounded-full px-4 py-2 text-sm font-medium min-h-11 ${
-                  network === key
-                    ? 'bg-rowan-yellow text-rowan-bg'
-                    : 'bg-rowan-bg border border-rowan-border text-rowan-muted'
-                }`}
-              >
-                {NETWORKS[key]?.label?.replace(' MoMo', '') || key}
-              </button>
+              <option key={key} value={key}>
+                {NETWORKS[key]?.label || key}
+              </option>
             ))}
-          </div>
+          </select>
+          <p className="text-rowan-muted text-[10px] mt-1.5">
+            Only traders who accept this network are shown.
+          </p>
         </div>
         <div>
           <label htmlFor="min-amount" className="text-rowan-muted text-xs uppercase tracking-wider">
@@ -232,7 +233,7 @@ export default function Marketplace() {
             inputMode="numeric"
             value={minAmount}
             onChange={(e) => setMinAmount(e.target.value)}
-            placeholder="Enter amount in local currency"
+            placeholder={`Optional · ${fiatCurrency}`}
             className="w-full mt-2 bg-rowan-bg border border-rowan-border rounded-xl px-4 py-3 text-rowan-text text-sm min-h-11"
           />
         </div>
