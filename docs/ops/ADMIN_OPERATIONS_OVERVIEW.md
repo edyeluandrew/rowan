@@ -1,17 +1,22 @@
 # Admin Operations Overview
 
 **Status:** Testnet demo operations guide  
-**Last updated:** Phase 2H-3 (June 2026)  
+**Last updated:** 2026-07-14  
 **Network:** Stellar testnet only unless explicitly approved for pilot/mainnet
+
+**Master index:** [docs/README.md](../README.md) · Full AML/dispute pack: [ROWAN_OPS_RUNBOOKS](../ROWAN_OPS_RUNBOOKS.md)
 
 ---
 
 ## What admins are responsible for
 
-- **Monitoring platform health** — liquidity, quote source, pending pipeline, orphan counts.
+- **Monitoring platform health** — liquidity, quote source, pending pipeline, orphan counts, **escrow reconciliation**.
 - **Reviewing disputes** — evidence, payout references, on-chain escrow state; resolving via escrow-integrated endpoints only.
 - **Recovering blocked settlements** — `RELEASE_BLOCKED`, `DISPUTE_REFUND_PENDING`, failed refunds; never DB-only fixes.
+- **KYC review** — approve/reject identity submissions; respect sanctions hits (override only with documented reason).
+- **Sanctions / fraud** — triage screening HITs and fraud alerts; freeze accounts when needed.
 - **Trader lifecycle** — onboarding review, verification, suspension for fraud or SLA failure.
+- **Wallet users** — inspect risk signals; freeze/unfreeze with reason (audit-logged).
 - **Security response** — disable compromised accounts, preserve audit logs, escalate secret rotation.
 - **Demo/pilot support** — manual mobile money payout oversight (Rowan does not send mobile money automatically).
 - **Audit discipline** — every settlement action must leave an audit trail.
@@ -32,6 +37,8 @@
 | Run orphan recovery on mainnet without executive/legal approval | Irreversible fund movement |
 | Rotate `ENCRYPTION_KEY` without a TOTP re-encryption plan | Breaks stored 2FA secrets |
 | Print secrets in tickets, chat, or logs | Credential exposure |
+| **Dismiss a dispute while escrow still holds USDC** | Known bug — dismiss leaves tx locked; resolve for user/trader instead |
+| Override a sanctions HIT without a written reason + compliance sign-off | AML exposure |
 
 ---
 

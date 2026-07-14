@@ -1,10 +1,13 @@
 # Stellar Strengthen Tracker
 
 **Goal:** Harden Stellar cash-out / buy / disputes before any multi-chain (Alchemy) work.  
-**Status:** Week 1 in progress  
+**Status:** Week 1–2 in progress (compliance/ops tooling landed Jul 2026; E2E A1 still open)  
 **Network:** testnet until Week 3 cutover items are green  
 
-Do **not** start Base/Alchemy until the Week 1 matrix is mostly PASS and a tiny private pilot is defined.
+Do **not** start Base/Alchemy until the Week 1 matrix is mostly PASS and a tiny private pilot is defined.  
+Do **not** flip mainnet until [MAINNET_CUTOVER_CHECKLIST](./MAINNET_CUTOVER_CHECKLIST.md) is signed and [PRE_MAINNET_HARDENING_BACKLOG](./PRE_MAINNET_HARDENING_BACKLOG.md) P0s are closed.
+
+**Docs index:** [docs/README.md](../README.md)
 
 ---
 
@@ -13,8 +16,9 @@ Do **not** start Base/Alchemy until the Week 1 matrix is mostly PASS and a tiny 
 | Phase | Focus | Status |
 |-------|--------|--------|
 | Week 1–2 | E2E matrix on testnet (happy + failure paths) | 🟡 IN PROGRESS |
-| Week 2 | Health + alerts + escrow balance monitoring | ⬜ NOT STARTED |
-| Week 3 | Mainnet cutover checklist (config + keys) | ⬜ NOT STARTED |
+| Week 2 | Health + alerts + escrow balance monitoring | 🟡 PARTIAL (admin health/recon exist; external uptime alert still open) |
+| Compliance desk | KYC, sanctions, fraud alerts, freeze, recon, ops runbooks | ✅ LANDED 2026-07-14 (practice drills still open) |
+| Week 3 | Mainnet cutover checklist (config + keys) | ⬜ NOT STARTED — see [KEY_CUSTODY](./KEY_CUSTODY_AND_ACCOUNT_FUNDING.md) |
 | Week 3–4 | Critical-path automated tests | ⬜ NOT STARTED |
 | Then | Tiny real-money private pilot (1–2 traders) | ⬜ BLOCKED |
 | Only then | Sketch Base + Alchemy adapter #2 | ⬜ DEFERRED |
@@ -229,5 +233,6 @@ No EVM work before this tracker’s pilot gate.
 | Date | What ran | Outcome |
 |------|----------|---------|
 | 2026-07-13 | Tracker created; Week 1 matrix defined | Ready to execute cases A–F |
+| 2026-07-14 | KYC/sanctions/recon/freeze + ops runbooks; docs index + custody + hardening backlog | Compliance desk landed; A1 still TODO; mainnet still NO-GO |
 
 _Add a row each test session._

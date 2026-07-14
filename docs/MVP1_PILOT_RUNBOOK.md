@@ -1,8 +1,10 @@
 # Rowan MVP1 Pilot Runbook
 
-Plain-English guide for running the first live pilot. Use this when something goes wrong, when a user asks for help, or when you are checking the system each day.3ekiom8  
+Plain-English guide for running the first live pilot. Use this when something goes wrong, when a user asks for help, or when you are checking the system each day.
 
 **Admin app:** https://rowan-dbb4.vercel.app/login
+
+**Start here for all docs:** [docs/README.md](./README.md)
 
 **Detailed technical runbooks** (deeper steps):
 - [Testnet USDC treasury & Circle top-up](./ops/TESTNET_TREASURY_RUNBOOK.md)
@@ -11,6 +13,8 @@ Plain-English guide for running the first live pilot. Use this when something go
 - [Refund retry](./ops/REFUND_RETRY_RUNBOOK.md)
 - [Orphan / stuck recovery](./ops/ORPHAN_RECOVERY_RUNBOOK.md)
 - [Manual mobile money payout policy](./MANUAL_MOBILE_MONEY_PAYOUT_POLICY.md)
+- [Pre-mainnet hardening backlog](./ops/PRE_MAINNET_HARDENING_BACKLOG.md)
+- [AML / KYC / freeze / recon ops](./ROWAN_OPS_RUNBOOKS.md)
 
 ---
 
