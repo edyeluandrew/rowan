@@ -215,6 +215,21 @@ router.post('/kyc/submit', authUser, sensitiveActionLimiter, async (req, res, ne
       return res.status(400).json({ error: 'document_number is required' });
     }
 
+    // Document references must be storage keys this user uploaded via
+    // POST /kyc/documents (kyc/<userId>/...). Reject arbitrary keys (IDOR to
+    // other users' documents) and arbitrary external URLs (which the admin
+    // panel would otherwise render as clickable links).
+    const ownPrefix = `kyc/${req.userId}/`;
+    for (const [field, val] of [
+      ['document_front_url', document_front_url],
+      ['document_back_url', document_back_url],
+      ['selfie_url', selfie_url],
+    ]) {
+      if (val != null && val !== '' && !String(val).startsWith(ownPrefix)) {
+        return res.status(400).json({ error: `${field} must reference a document you uploaded` });
+      }
+    }
+
     // Don't allow requesting a level the user already has or below.
     const userRes = await db.query(`SELECT kyc_level FROM users WHERE id = $1`, [req.userId]);
     if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });

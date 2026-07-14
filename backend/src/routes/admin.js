@@ -2032,13 +2032,21 @@ router.post('/disputes/:id/retry-refund', authAdmin, async (req, res, next) => {
 router.post('/disputes/:id/escalate', authAdmin, async (req, res, next) => {
   try {
     const { reason } = req.body;
-    await db.query(
-      `UPDATE disputes SET status = 'UNDER_REVIEW', admin_notes = COALESCE(admin_notes, '') || $1 WHERE id = $2`,
-      [`\n[ESCALATED] ${reason || 'No reason provided'}`, req.params.id]
-    );
-    logger.info(`[Admin] Dispute ${req.params.id} escalated: ${reason}`);
-    res.json({ success: true, disputeId: req.params.id });
-  } catch (err) { next(err); }
+    // Delegate to the dispute service so escalation is consistent with the rest
+    // of the workflow: status → ESCALATED (not UNDER_REVIEW), escalated_by/at/reason
+    // recorded, audit-logged, and admins notified. The priority engine keys high
+    // priority off ESCALATED, so the raw-SQL UNDER_REVIEW path used to mis-rank it.
+    const dispute = await disputeService.adminAction(req.params.id, req.adminId, 'escalate', {
+      reason: reason || 'No reason provided',
+    });
+    logger.info(`[Admin] Dispute ${req.params.id} escalated by ${req.adminId}: ${reason || 'No reason provided'}`);
+    res.json({ success: true, disputeId: req.params.id, status: dispute.status });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    next(err);
+  }
 });
 
 /**

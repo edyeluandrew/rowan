@@ -11,7 +11,7 @@ import ConfirmDialog from '../../../shared/components/ui/ConfirmDialog'
 import CopyButton from '../../../shared/components/ui/CopyButton'
 import Button from '../../../shared/components/ui/Button'
 import LoadingSpinner from '../../../shared/components/ui/LoadingSpinner'
-import { getDispute, resolveDispute, escalateDispute, addDisputeNote } from '../../../shared/services/api/disputes'
+import { getDispute, resolveDispute, escalateDispute, addDisputeNote, retryDisputeRefund } from '../../../shared/services/api/disputes'
 import { logAdminAction } from '../../../shared/services/api/system'
 import { formatUsdc, formatCurrency, formatDateTime, formatAddress } from '../../../shared/utils/format'
 
@@ -26,6 +26,8 @@ export default function DisputeDetailPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [note, setNote] = useState('')
   const [noteLoading, setNoteLoading] = useState(false)
+  const [retryLoading, setRetryLoading] = useState(false)
+  const [retryResult, setRetryResult] = useState(null)
 
   const fetchDispute = useCallback(async () => {
     setLoading(true)
@@ -67,6 +69,21 @@ export default function DisputeDetailPage() {
       /* handled by interceptor */
     } finally {
       setActionLoading(false)
+    }
+  }
+
+  const handleRetryRefund = async () => {
+    setRetryLoading(true)
+    setRetryResult(null)
+    try {
+      const res = await retryDisputeRefund(id)
+      logAdminAction('retry_dispute_refund', { disputeId: id, status: res?.status })
+      setRetryResult(res || { status: 'unknown' })
+      await fetchDispute()
+    } catch (err) {
+      setRetryResult({ status: 'error', message: err?.message || 'Retry failed' })
+    } finally {
+      setRetryLoading(false)
     }
   }
 
@@ -159,6 +176,26 @@ export default function DisputeDetailPage() {
                     <Button className="w-full" onClick={() => setResolveModal(true)}>Resolve Dispute</Button>
                     <Button variant="ghost" className="w-full" onClick={() => setEscalateConfirm(true)} loading={actionLoading}>Escalate</Button>
                   </div>
+                </div>
+              )}
+
+              {['DISPUTE_REFUND_PENDING', 'RELEASE_BLOCKED'].includes(dispute.transaction_state) && (
+                <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4">
+                  <h3 className="text-rowan-text font-bold mb-1">Refund pending</h3>
+                  <p className="text-rowan-muted text-xs mb-3">
+                    This dispute was resolved for the user but the on-chain USDC refund has not settled
+                    (often a missing USDC trustline on the user wallet). Retry once the user can receive USDC.
+                  </p>
+                  <Button className="w-full" onClick={handleRetryRefund} loading={retryLoading}>Retry refund</Button>
+                  {retryResult && (
+                    <p className={`text-xs mt-2 ${retryResult.status === 'refunded' || retryResult.status === 'already_refunded' ? 'text-rowan-green' : 'text-rowan-red'}`}>
+                      {retryResult.status === 'refunded' && 'Refund completed.'}
+                      {retryResult.status === 'already_refunded' && 'Already refunded.'}
+                      {retryResult.status === 'blocked' && `Still blocked${retryResult.code ? ` (${retryResult.code})` : ''}. Retry later.`}
+                      {retryResult.status === 'failed' && `Failed${retryResult.code ? ` (${retryResult.code})` : ''}. Retry later.`}
+                      {retryResult.status === 'error' && (retryResult.message || 'Retry failed.')}
+                    </p>
+                  )}
                 </div>
               )}
 
