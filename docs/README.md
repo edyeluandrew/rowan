@@ -39,6 +39,9 @@
 | [ops/STELLAR_STRENGTHEN_TRACKER.md](./ops/STELLAR_STRENGTHEN_TRACKER.md) | Week-by-week E2E + monitoring before cutover |
 | [ops/PRE_MAINNET_HARDENING_BACKLOG.md](./ops/PRE_MAINNET_HARDENING_BACKLOG.md) | Ranked gaps to close before real money |
 | [ops/KEY_CUSTODY_AND_ACCOUNT_FUNDING.md](./ops/KEY_CUSTODY_AND_ACCOUNT_FUNDING.md) | New keys, XLM/USDC funding, never reuse testnet |
+| [ops/A1_E2E_CASHOUT_RUNBOOK.md](./ops/A1_E2E_CASHOUT_RUNBOOK.md) | Execute A1 on-chain cash-out PASS |
+| [ops/UPTIME_MONITORING_SETUP.md](./ops/UPTIME_MONITORING_SETUP.md) | Wire external /health monitor (P0-2) |
+| [ops/PARTNER_MOMO_PILOT_ADDENDUM.md](./ops/PARTNER_MOMO_PILOT_ADDENDUM.md) | Draft partner MoMo agreement for outreach |
 
 ---
 

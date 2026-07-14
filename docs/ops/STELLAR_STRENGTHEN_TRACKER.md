@@ -234,5 +234,6 @@ No EVM work before this tracker’s pilot gate.
 |------|----------|---------|
 | 2026-07-13 | Tracker created; Week 1 matrix defined | Ready to execute cases A–F |
 | 2026-07-14 | KYC/sanctions/recon/freeze + ops runbooks; docs index + custody + hardening backlog | Compliance desk landed; A1 still TODO; mainnet still NO-GO |
+| 2026-07-14 | Health 200; escrow ~1564 USDC; treasury ~180 USDC; smoke vs Render **19/19**; A1/monitoring/partner docs | A1 on-chain still needs one manual wallet pass |
 
 _Add a row each test session._

@@ -12,11 +12,11 @@ Master index: [docs/README.md](../README.md)
 
 | ID | Item | Why | Owner | Status |
 |----|------|-----|-------|--------|
-| P0-1 | Finish Week 1–2 E2E matrix ([STELLAR_STRENGTHEN_TRACKER](./STELLAR_STRENGTHEN_TRACKER.md)) — especially **A1** on-chain deposit→COMPLETE | Proves money path works end-to-end | Eng | 🟡 Partial |
-| P0-2 | External uptime monitor on `GET /health` + alert on admin health criticals | Blind ops = lost funds | Ops | ☐ |
+| P0-1 | Finish Week 1–2 E2E matrix ([STELLAR_STRENGTHEN_TRACKER](./STELLAR_STRENGTHEN_TRACKER.md)) — especially **A1** on-chain deposit→COMPLETE | Proves money path works end-to-end | Eng | 🟡 Partial — prereqs OK + API smoke 19/19 (2026-07-14); on-chain A1 still manual per [A1_E2E_CASHOUT_RUNBOOK](./A1_E2E_CASHOUT_RUNBOOK.md) |
+| P0-2 | External uptime monitor on `GET /health` + alert on admin health criticals | Blind ops = lost funds | Ops | 🟡 Setup doc ready ([UPTIME_MONITORING_SETUP](./UPTIME_MONITORING_SETUP.md)); **create monitor account** |
 | P0-3 | Escrow USDC/XLM low-balance alerts practiced | Empty escrow = failed releases | Ops | ☐ |
 | P0-4 | Legal opinion (Kenya corridor first) | Mainnet without legal = existential risk | Exec / Legal | ☐ |
-| P0-5 | Partner MoMo agreements signed (1–2 traders) | Manual fiat leg is the product | Ops / Legal | ☐ |
+| P0-5 | Partner MoMo agreements signed (1–2 traders) | Manual fiat leg is the product | Ops / Legal | 🟡 Draft addendum ready ([PARTNER_MOMO_PILOT_ADDENDUM](./PARTNER_MOMO_PILOT_ADDENDUM.md)); **outreach + sign** |
 | P0-6 | Admin 2FA **enabled** for all live admin accounts | Console = money controls | Ops | ☐ |
 | P0-7 | Dispute desk drill: open → evidence → resolve user + resolve trader + retry refund | Ops must not guess | Ops | ☐ |
 | P0-8 | KYC + sanctions + freeze drill ([ROWAN_OPS_RUNBOOKS](../ROWAN_OPS_RUNBOOKS.md)) | Compliance surface is new — practice it | Ops / Compliance | ☐ |
@@ -96,5 +96,6 @@ Track these as **done foundations** — keep them working:
 | Date | What | Outcome |
 |------|------|---------|
 | 2026-07-14 | Backlog created; docs index + custody runbook; cutover/pilot checklists updated for KYC/sanctions/recon | Active |
+| 2026-07-14 | A1 runbook + uptime setup + partner addendum; Render smoke 19/19; escrow/treasury healthy | P0-1/2/5 partial — human steps remain (on-chain A1, create monitor, partner sign) |
 
 _Add a row whenever a P0/P1 item flips status._
