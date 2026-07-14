@@ -145,9 +145,6 @@ export default function ExpressSheet({ open, onClose, initialSide = 'buy' }) {
               <X size={20} />
             </button>
           </div>
-          <p className="text-rowan-muted text-xs mt-1">
-            Auto-match the best trader. You still confirm payment and release like normal P2P.
-          </p>
 
           <div className="flex mt-3 bg-rowan-surface border border-rowan-border rounded-xl p-1">
             <button

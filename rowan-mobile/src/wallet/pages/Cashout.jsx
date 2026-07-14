@@ -209,32 +209,21 @@ export default function Cashout() {
       {(selectedAd || presetTraderName) && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4 flex items-start gap-3">
           <UserCheck size={18} className="text-rowan-yellow shrink-0 mt-0.5" />
-          <div>
-            <p className="text-rowan-text text-sm font-medium">
-              Trading with {presetTraderName || selectedAd?.traderName || 'selected trader'}
-            </p>
-            <p className="text-rowan-muted text-xs mt-1">
-              Only this trader will handle your order — we will not switch you to another trader.
-            </p>
-          </div>
+          <p className="text-rowan-text text-sm font-medium">
+            Trading with {presetTraderName || selectedAd?.traderName || 'selected trader'}
+          </p>
         </div>
       )}
 
       {!selectedAd && !presetTraderName && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm font-medium">Express sell</p>
-          <p className="text-rowan-muted text-xs mt-1">
-            We will auto-match the best available trader for your amount and network.
-          </p>
         </div>
       )}
 
       {expressMatch && (selectedAd || presetTraderName) && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm font-medium">Express match</p>
-          <p className="text-rowan-muted text-xs mt-1">
-            Best trader selected for your amount. Confirm receipt after they send MoMo.
-          </p>
         </div>
       )}
 
@@ -259,9 +248,6 @@ export default function Cashout() {
             </button>
           )}
         </div>
-        <p className="text-rowan-muted text-xs mt-1">
-          {usdcBalance != null ? `${Number(usdcBalance).toFixed(2)} USDC in wallet` : ''}
-        </p>
       </div>
 
       <AmountInput
@@ -269,7 +255,7 @@ export default function Cashout() {
         onFiatAmountChange={setFiatAmount}
         currency={currency}
         cryptoEstimate={usdcEstimate}
-        cryptoLabel="USDC to send (estimate)"
+        cryptoLabel="USDC"
         platformFeeFiat={platformFeeFiat}
         maxFiat={maxNetFiat}
       />
@@ -280,21 +266,14 @@ export default function Cashout() {
             <p className="text-rowan-muted text-xs uppercase tracking-wider mb-3">
               Mobile money network
             </p>
-            <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 flex items-center justify-between">
+            <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4">
               <PaymentMethodPill network={network} />
-              <span className="text-rowan-muted text-xs">From trader ad</span>
             </div>
           </div>
         ) : (
           <NetworkSelector selected={network} onSelect={setNetwork} country={country} />
         )}
       </div>
-
-      {networkLocked && minNetFiat != null && maxNetFiat != null && (
-        <p className="text-rowan-muted text-xs mt-4 text-center">
-          Order limits: {Math.ceil(minNetFiat).toLocaleString()} – {Math.floor(maxNetFiat).toLocaleString()} {currency}
-        </p>
-      )}
 
       <div className="mt-6">
         <PhoneInput
@@ -315,7 +294,6 @@ export default function Cashout() {
           placeholder="e.g., Edyelu Andrew"
           className="w-full bg-rowan-surface border border-rowan-border rounded-lg px-4 py-3 text-rowan-text placeholder-rowan-muted focus:outline-none focus:border-rowan-yellow"
         />
-        <p className="text-rowan-muted text-xs mt-1">The mobile money account holder name</p>
       </div>
 
       {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
@@ -325,52 +303,15 @@ export default function Cashout() {
           <AlertTriangle size={18} className="text-rowan-yellow shrink-0 mt-0.5" />
           <div>
             {exceedsWallet && (
-              <>
-                <p className="text-rowan-yellow text-sm font-medium">Amount exceeds your balance</p>
-                <p className="text-rowan-muted text-xs mt-1">
-                  Maximum is about {Math.floor(maxNetFiat).toLocaleString()} {currency} with your current USDC.
-                </p>
-              </>
+              <p className="text-rowan-yellow text-sm font-medium">Amount exceeds your balance</p>
             )}
             {belowMin && (
-              <>
-                <p className="text-rowan-yellow text-sm font-medium">Amount too small</p>
-                <p className="text-rowan-muted text-xs mt-1">
-                  Minimum payout is {Math.ceil(minNetFiat).toLocaleString()} {currency}.
-                </p>
-              </>
+              <p className="text-rowan-yellow text-sm font-medium">Amount too small</p>
             )}
             {exceedsTraderFloat && (
-              <>
-                <p className="text-rowan-yellow text-sm font-medium">Amount exceeds trader capacity</p>
-                <p className="text-rowan-muted text-xs mt-1">
-                  {traderUsdcAvailable != null && Number.isFinite(traderUsdcAvailable)
-                    ? `This trader only has about ${traderUsdcAvailable.toFixed(2)} USDC available right now.`
-                    : 'This trader does not have enough capacity for that amount right now.'}
-                </p>
-              </>
+              <p className="text-rowan-yellow text-sm font-medium">Amount exceeds trader capacity</p>
             )}
           </div>
-        </div>
-      )}
-
-      {!canProceed && (
-        <div className="mt-6 p-3 bg-rowan-surface rounded-lg border border-rowan-border">
-          <p className="text-rowan-muted text-xs font-medium mb-2">To proceed, you need:</p>
-          <ul className="text-xs space-y-1">
-            <li className={netFiat > 0 && !exceedsWallet && !belowMin ? 'text-rowan-green' : 'text-rowan-muted'}>
-              {netFiat > 0 && !exceedsWallet && !belowMin ? '✓' : '✗'} Valid {currency || 'fiat'} amount
-            </li>
-            <li className={network ? 'text-rowan-green' : 'text-rowan-muted'}>
-              {network ? '✓' : '✗'} Mobile money provider selected
-            </li>
-            <li className={phone.length >= 7 ? 'text-rowan-green' : 'text-rowan-muted'}>
-              {phone.length >= 7 ? '✓' : '✗'} Phone number: {phone.length}/7+ digits
-            </li>
-            <li className={recipientName.trim().length >= 2 ? 'text-rowan-green' : 'text-rowan-muted'}>
-              {recipientName.trim().length >= 2 ? '✓' : '✗'} Recipient name: {recipientName.length}/2+ characters
-            </li>
-          </ul>
         </div>
       )}
 

@@ -12,14 +12,14 @@ import ConfirmingReceiptCard from '../components/disputes/ConfirmingReceiptCard'
 import DisputeConfirmModal from '../components/disputes/DisputeConfirmModal'
 import useSocketHook from '../hooks/useSocket'
 import TransactionStatusBadge from '../components/transactions/TransactionStatusBadge'
-import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
+// import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
 import PaymentWindowCountdown from '../components/cashout/PaymentWindowCountdown'
 import OrderChat from '../components/chat/OrderChat'
 import OrderShortId from '../components/ui/OrderShortId'
 import useJoinOrder from '../hooks/useJoinOrder'
 import { formatCurrency, getTraderDisplayName } from '../utils/p2pFormat'
 import { formatDateTime, formatAddress } from '../utils/format'
-import { normalizeWalletTransaction, getTransactionStatusTimestamps, isManualP2pTransaction, isBuyOrder } from '../utils/transactions'
+import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder } from '../utils/transactions'
 import { NETWORKS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 
 export default function TransactionDetail() {
@@ -104,7 +104,6 @@ export default function TransactionDetail() {
     && tx?.appealExpiresAt
     && new Date(tx.appealExpiresAt) > new Date()
     && !tx?.appealArchivedAt
-  const timestamps = getTransactionStatusTimestamps(tx || {})
   useJoinOrder(inProgress && isManualP2pTransaction(tx) ? id : null)
 
   const handleCopy = async (text, field) => {
@@ -368,11 +367,11 @@ export default function TransactionDetail() {
         )}
       </div>
 
-      {/* Timeline */}
-      <div className="bg-rowan-surface rounded-xl p-4 mb-4">
+      {/* Pilot: hide history timeline */}
+      {/* <div className="bg-rowan-surface rounded-xl p-4 mb-4">
         <h3 className="text-rowan-text text-sm font-semibold mb-3">Timeline</h3>
         <TransactionStateTracker currentState={tx.state} timestamps={timestamps} orderSide={isBuy ? 'BUY' : 'SELL'} />
-      </div>
+      </div> */}
 
       {isComplete && !reviewSubmitted && (
         <button

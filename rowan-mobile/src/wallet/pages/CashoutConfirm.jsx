@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ChevronLeft, ShieldCheck, AlertTriangle, UserCheck, Lock } from 'lucide-react'
+import { ChevronLeft, ShieldCheck, AlertTriangle, UserCheck } from 'lucide-react'
 import QuoteSummary from '../components/cashout/QuoteSummary'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import Button from '../components/ui/Button'
 import { getActiveTransaction } from '../api/user'
 import {
   formatLockedRateLine,
-  formatXlmRateLine,
   getTraderDisplayName,
 } from '../utils/p2pFormat'
 
@@ -77,15 +76,8 @@ export default function CashoutConfirm() {
                 <ShieldCheck size={14} className="text-rowan-green" />
               </div>
               {rateLine && (
-                <p className="text-rowan-muted text-xs mt-2 flex items-center gap-1 flex-wrap">
-                  <span>Rate: {rateLine}</span>
-                  <Lock size={12} className="text-rowan-muted shrink-0" />
-                  <span>Locked for this order</span>
-                </p>
+                <p className="text-rowan-muted text-xs mt-2">Rate: {rateLine}</p>
               )}
-              <p className="text-rowan-muted text-xs mt-2">
-                Only this trader will handle your order. If they are unavailable, we will wait and retry — we will not auto-match someone else.
-              </p>
             </div>
           </div>
         </div>

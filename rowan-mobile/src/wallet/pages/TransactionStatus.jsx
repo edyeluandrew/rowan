@@ -7,7 +7,7 @@ import PaymentDetailsCard from '../components/chat/PaymentDetailsCard'
 import { uploadDisputeEvidence, listDisputeEvidence } from '../api/user'
 import DisputeEvidenceSection from '../components/disputes/DisputeEvidenceSection'
 import useSocketHook from '../hooks/useSocket'
-import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
+// import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
 import PaymentWindowCountdown from '../components/cashout/PaymentWindowCountdown'
 import OrderChat from '../components/chat/OrderChat'
 import ReviewModal from '../components/reviews/ReviewModal'
@@ -18,7 +18,7 @@ import Button from '../components/ui/Button'
 import OrderShortId from '../components/ui/OrderShortId'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
-import { normalizeWalletTransaction, getTransactionStatusTimestamps, isManualP2pTransaction, isBuyOrder } from '../utils/transactions'
+import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder } from '../utils/transactions'
 import { STATE_SUBTITLES } from '../utils/constants'
 import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine } from '../utils/p2pFormat'
 
@@ -405,9 +405,10 @@ export default function TransactionStatus() {
           >
             <ChevronLeft size={24} />
           </button>
-          <h1 className="text-rowan-text text-lg font-bold">Transaction Status</h1>
+          <h1 className="text-rowan-text text-lg font-bold">Your order</h1>
         </div>
-        <TransactionStateTracker currentState="QUOTE_CONFIRMED" />
+        {/* Pilot: hide verbose state timeline — keep waiting UI only */}
+        {/* <TransactionStateTracker currentState="QUOTE_CONFIRMED" /> */}
         <div className="bg-rowan-surface rounded-xl p-8 text-center mt-6">
           <div className="animate-pulse mb-4">
             <Clock size={40} className="text-rowan-yellow mx-auto" />
@@ -454,7 +455,7 @@ export default function TransactionStatus() {
         <button onClick={() => navigate('/wallet/home')} className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center">
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">Transaction Status</h1>
+        <h1 className="text-rowan-text text-lg font-bold">Your order</h1>
       </div>
 
       {isTerminal && (
@@ -500,13 +501,14 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {transaction && (
+      {/* Pilot: hide step timeline — status chip + CTAs are enough */}
+      {/* {transaction && (
         <TransactionStateTracker
           currentState={transaction.state}
           timestamps={getTransactionStatusTimestamps(transaction)}
           orderSide={isBuy ? 'BUY' : 'SELL'}
         />
-      )}
+      )} */}
 
       {transaction && (
         <div
@@ -518,11 +520,6 @@ export default function TransactionStatus() {
         >
           <p className={`text-sm font-semibold ${isBuy ? 'text-rowan-yellow' : 'text-rowan-green'}`}>
             {isBuy ? 'You are buying USDC' : 'You are selling USDC'}
-          </p>
-          <p className="text-rowan-muted text-xs mt-1">
-            {isBuy
-              ? 'Trader locks USDC → you send MoMo → trader confirms → USDC lands in your wallet.'
-              : 'Your USDC is in escrow → trader sends MoMo → you confirm → trader gets USDC.'}
           </p>
         </div>
       )}

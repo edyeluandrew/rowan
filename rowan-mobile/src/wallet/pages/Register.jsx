@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Hash } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { maskPhoneNumber } from '../utils/crypto'
 import { getSecure } from '../../shared/utils/storage'
 import { COUNTRY_CODES } from '../utils/constants'
 import { getDialCodeForCountry } from '../utils/country'
@@ -25,7 +23,6 @@ export default function Register() {
 
   const countryCode = getDialCodeForCountry(country)
   const fullPhone = `${countryCode}${phone}`
-  const masked = phone.length >= 4 ? maskPhoneNumber(fullPhone) : ''
 
   const saveCountryAndGoHome = async () => {
     await persistUserCountry(country)
@@ -126,15 +123,6 @@ export default function Register() {
           className="rounded-l-none border-l-0"
         />
       </div>
-
-      {masked && (
-        <div className="flex items-center gap-1 mt-2">
-          <Hash size={14} className="text-rowan-muted" />
-          <span className="text-rowan-muted text-xs">
-            Your phone: {masked} → SHA-256 → sent to server
-          </span>
-        </div>
-      )}
 
       {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
 

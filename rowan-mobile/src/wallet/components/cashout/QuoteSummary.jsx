@@ -43,7 +43,7 @@ export default function QuoteSummary({ quote, phone, requestedFiat }) {
           <Smartphone size={20} className="text-rowan-green" />
         </div>
         <div>
-          <p className="text-rowan-muted text-xs">You receive on mobile money</p>
+          <p className="text-rowan-muted text-xs">You receive</p>
           <p className="text-rowan-green text-2xl font-bold tabular-nums">
             {Number(displayFiat).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
           </p>

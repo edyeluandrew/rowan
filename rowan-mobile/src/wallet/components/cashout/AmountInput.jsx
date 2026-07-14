@@ -1,7 +1,7 @@
 import { ArrowDownToLine } from 'lucide-react'
 
 /**
- * Fiat-first amount input with live crypto estimate below (XLM for sell, USDC for buy).
+ * Fiat-first amount input with live crypto estimate below.
  */
 export default function AmountInput({
   fiatAmount,
@@ -9,10 +9,10 @@ export default function AmountInput({
   currency,
   xlmEstimate,
   cryptoEstimate,
-  cryptoLabel = 'USDC to send (estimate)',
+  cryptoLabel = 'USDC',
   fiatSubLabel,
-  platformFeeFiat,
-  maxFiat,
+  platformFeeFiat: _platformFeeFiat,
+  maxFiat: _maxFiat,
 }) {
   const handleChange = (e) => {
     const val = e.target.value
@@ -21,11 +21,10 @@ export default function AmountInput({
     }
   }
 
-  const netFiat = parseFloat(fiatAmount) || 0
   const estimate = cryptoEstimate ?? xlmEstimate
-  const estimateDecimals = cryptoEstimate != null ? 4 : 4
-  const estimateCaption = cryptoEstimate != null ? cryptoLabel : 'USDC to send (estimate)'
-  const fiatCaption = fiatSubLabel ?? `${currency || 'UGX'} you receive`
+  const estimateDecimals = 4
+  const fiatCaption = fiatSubLabel ?? (currency || 'UGX')
+  const estimateCaption = cryptoEstimate != null ? cryptoLabel : 'USDC'
 
   return (
     <div className="py-4">
@@ -49,18 +48,6 @@ export default function AmountInput({
         </p>
         <p className="text-rowan-muted text-sm">{estimateCaption}</p>
       </div>
-
-      {maxFiat != null && maxFiat > 0 && (
-        <p className="text-rowan-muted text-xs text-center mt-3">
-          Max ~{Math.floor(maxFiat).toLocaleString()} {currency}
-        </p>
-      )}
-
-      {platformFeeFiat > 0 && netFiat > 0 && (
-        <p className="text-rowan-muted text-xs text-center mt-1">
-          Includes ~{Math.ceil(platformFeeFiat).toLocaleString()} {currency} platform fee
-        </p>
-      )}
     </div>
   )
 }

@@ -55,9 +55,6 @@ export default function UsdcTrustlineSetup({ onEnabled, compact = false }) {
     return (
       <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mt-4">
         <p className="text-rowan-text text-sm font-medium">Finishing USDC setup</p>
-        <p className="text-rowan-muted text-xs mt-1">
-          Your wallet is still being prepared to receive USDC.
-        </p>
         {error && <p className="text-rowan-red text-xs mt-2">{error}</p>}
         <Button className="w-full mt-3" size="sm" loading={loading} onClick={handleRetry}>
           Retry USDC setup
@@ -72,9 +69,6 @@ export default function UsdcTrustlineSetup({ onEnabled, compact = false }) {
         <Coins size={20} className="text-rowan-yellow shrink-0 mt-0.5" />
         <div className="flex-1">
           <p className="text-rowan-text text-sm font-semibold">Finishing USDC setup</p>
-          <p className="text-rowan-muted text-xs mt-1">
-            Rowan sets up USDC automatically. If this is taking longer than expected, tap retry.
-          </p>
           {error && (
             <div className="flex items-start gap-2 mt-2">
               <AlertTriangle size={14} className="text-rowan-yellow shrink-0 mt-0.5" />

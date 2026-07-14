@@ -64,11 +64,9 @@ export default function TraderAdCard({
           {rateLine && (
             <p className="text-rowan-green text-sm font-medium mt-1">{rateLine}</p>
           )}
-          {!isBuy && !rateLine && (
-            <p className="text-rowan-muted text-sm mt-1">Live market rate at quote</p>
-          )}
+          {!isBuy && !rateLine && null}
           {isBuy && !rateLine && (
-            <p className="text-rowan-muted text-xs mt-1">Trader has not set a USDC price on this ad</p>
+            <p className="text-rowan-red text-xs mt-1">No USDC price on this ad</p>
           )}
         </div>
       </div>

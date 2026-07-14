@@ -58,9 +58,6 @@ export default function BuyConfirm() {
       {express && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm font-medium">Express match</p>
-          <p className="text-rowan-muted text-xs mt-1">
-            Auto-matched to the best available trader for your amount.
-          </p>
         </div>
       )}
 
@@ -69,9 +66,8 @@ export default function BuyConfirm() {
           <div className="flex items-start gap-3">
             <UserCheck size={20} className="text-rowan-yellow shrink-0 mt-0.5" />
             <div>
-              <p className="text-rowan-text text-sm font-semibold">Trader</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-rowan-text text-sm">{getTraderDisplayName(chosenTrader)}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-rowan-text text-sm font-semibold">{getTraderDisplayName(chosenTrader)}</span>
                 <ShieldCheck size={14} className="text-rowan-green" />
               </div>
               {rateLine && <p className="text-rowan-muted text-xs mt-2">Rate: {rateLine}</p>}
@@ -103,10 +99,6 @@ export default function BuyConfirm() {
           <span className="text-rowan-text">{Number(quote.platformFee).toLocaleString()} {quote.fiatCurrency}</span>
         </div>
       </div>
-
-      <p className="text-rowan-muted text-xs mt-4">
-        After you confirm, the trader must lock USDC in escrow. Then you send mobile money and upload proof.
-      </p>
 
       {(hasUsdcTrustline === false || trustlineError) && (
         <UsdcTrustlineSetup compact onEnabled={() => setError(null)} />

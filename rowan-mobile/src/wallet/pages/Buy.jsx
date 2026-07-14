@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ChevronLeft, Coins, UserCheck, Zap } from 'lucide-react'
+import { ChevronLeft, UserCheck, Zap } from 'lucide-react'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import useUserCountry from '../hooks/useUserCountry'
 import useWallet from '../hooks/useWallet'
@@ -143,24 +143,14 @@ export default function Buy() {
       {expressMatch && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">
           <Zap size={20} className="text-rowan-gold shrink-0 mt-0.5" />
-          <div>
-            <p className="text-rowan-text text-sm font-medium">Express match</p>
-            <p className="text-rowan-muted text-xs mt-1">
-              Best trader selected for your amount and network. Confirm when prompted after you pay.
-            </p>
-          </div>
+          <p className="text-rowan-text text-sm font-medium">Express match</p>
         </div>
       )}
 
       {isExpress && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">
           <Zap size={20} className="text-rowan-gold shrink-0 mt-0.5" />
-          <div>
-            <p className="text-rowan-text text-sm font-medium">Express buy</p>
-            <p className="text-rowan-muted text-xs mt-1">
-              We will auto-match the best available trader selling USDC for your amount and network.
-            </p>
-          </div>
+          <p className="text-rowan-text text-sm font-medium">Express buy</p>
         </div>
       )}
 
@@ -168,8 +158,9 @@ export default function Buy() {
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">
           <UserCheck size={20} className="text-rowan-yellow shrink-0 mt-0.5" />
           <div>
-            <p className="text-rowan-text text-sm font-semibold">Trader</p>
-            <p className="text-rowan-muted text-sm">{presetTraderName || selectedAd?.traderName}</p>
+            <p className="text-rowan-text text-sm font-semibold">
+              {presetTraderName || selectedAd?.traderName}
+            </p>
             {traderRateLine && (
               <p className="text-rowan-yellow text-xs font-medium mt-1">{traderRateLine}</p>
             )}
@@ -182,13 +173,6 @@ export default function Buy() {
         </div>
       )}
 
-      <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">
-        <Coins size={20} className="text-rowan-yellow shrink-0 mt-0.5" />
-        <p className="text-rowan-muted text-sm">
-          Pay mobile money, receive USDC in your wallet after the trader confirms payment.
-        </p>
-      </div>
-
       <UsdcTrustlineSetup />
 
       <AmountInput
@@ -196,10 +180,8 @@ export default function Buy() {
         onFiatAmountChange={setFiatAmount}
         currency={currency}
         cryptoEstimate={usdcEstimate}
-        cryptoLabel={isExpress
-          ? "USDC you'll receive (estimate — final at quote)"
-          : "USDC you'll receive (estimate at trader price)"}
-        fiatSubLabel={`${currency || userFiat} you'll pay via MoMo`}
+        cryptoLabel="USDC"
+        fiatSubLabel={currency || userFiat}
         platformFeeFiat={platformFeeFiat}
         maxFiat={effectiveMaxFiat}
       />
@@ -216,9 +198,8 @@ export default function Buy() {
             <p className="text-rowan-muted text-xs uppercase tracking-wider mb-3">
               Mobile money network
             </p>
-            <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 flex items-center justify-between">
+            <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4">
               <PaymentMethodPill network={network} />
-              <span className="text-rowan-muted text-xs">From trader ad</span>
             </div>
           </div>
         ) : (
@@ -226,18 +207,9 @@ export default function Buy() {
         )}
       </div>
 
-      {!isExpress && minNetFiat != null && effectiveMaxFiat != null && (
-        <p className="text-rowan-muted text-xs mt-4 text-center">
-          Order limits: {minNetFiat.toLocaleString()} – {effectiveMaxFiat.toLocaleString()} {currency}
-        </p>
-      )}
       {belowMin && <p className="text-rowan-red text-xs mt-2 text-center">Amount below trader minimum</p>}
       {exceedsMax && (
-        <p className="text-rowan-red text-xs mt-2 text-center">
-          Amount above trader limit{maxFiatFromUsdc != null && maxFiatFromUsdc < (maxNetFiat ?? Infinity)
-            ? ' or available USDC'
-            : ''}
-        </p>
+        <p className="text-rowan-red text-xs mt-2 text-center">Amount above trader limit</p>
       )}
 
       {error && (

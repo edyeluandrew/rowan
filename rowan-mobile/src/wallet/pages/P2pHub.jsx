@@ -187,9 +187,7 @@ export default function P2pHub() {
       </div>
 
       <p className="text-rowan-muted text-xs mb-4">
-        {tab === 'buy'
-          ? 'Pay mobile money · receive USDC'
-          : 'Send USDC · get mobile money'}
+        {tab === 'buy' ? 'Buy USDC' : 'Sell USDC'}
       </p>
 
       {hasActiveOrder && activeTransaction && (
