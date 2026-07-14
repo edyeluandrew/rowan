@@ -35,7 +35,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--rowan-bg);
   color: var(--rowan-text);
-  overscroll-behavior: none;
+  overscroll-behavior-y: none;
 }
 
 /* Hide scrollbars globally for mobile feel */

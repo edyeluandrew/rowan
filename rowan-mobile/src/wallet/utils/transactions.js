@@ -7,7 +7,7 @@ export function normalizeWalletTransaction(tx) {
   return {
     id: tx.id,
     state: tx.state,
-    network: tx.network,
+    network: tx.network ?? tx.payment_method ?? tx.paymentMethod,
     xlmAmount: tx.xlmAmount ?? tx.xlm_amount ?? 0,
     fiatAmount: tx.fiatAmount ?? tx.fiat_amount ?? 0,
     currency: tx.currency ?? tx.fiat_currency ?? 'UGX',
@@ -32,6 +32,7 @@ export function normalizeWalletTransaction(tx) {
     appealExpiresAt: tx.appealExpiresAt ?? tx.appeal_expires_at,
     appealArchivedAt: tx.appealArchivedAt ?? tx.appeal_archived_at,
     lockedRate: tx.lockedRate ?? tx.locked_rate ?? tx.rate,
+    rate: tx.rate ?? tx.locked_rate ?? tx.lockedRate,
     selectionMethod: tx.selectionMethod ?? tx.selection_method
       ?? (tx.preferred_payout_setting_id ? 'manual' : 'auto'),
     shortId: tx.shortId ?? tx.short_id,

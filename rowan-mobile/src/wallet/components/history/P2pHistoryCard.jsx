@@ -31,17 +31,20 @@ function formatDuration(mins) {
 export default function P2pHistoryCard({ transaction: tx }) {
   const navigate = useNavigate()
   const currency = tx.currency || tx.fiatCurrency || 'UGX'
-  const rate = tx.lockedRate || tx.rate
+  const rate = Number(tx.lockedRate || tx.rate || 0)
   const when = tx.completedAt || tx.createdAt
   const duration = formatDuration(tx.durationMinutes)
   const isBuy = isBuyOrder(tx)
-  const usdc = Number(tx.usdcAmount || 0)
   const fiat = Number(tx.fiatAmount || 0)
+  let usdc = Number(tx.usdcAmount ?? tx.usdc_amount ?? 0)
+  if (!(usdc > 0) && fiat > 0 && rate > 0) {
+    usdc = fiat / rate
+  }
 
   // Buy: +USDC in / −fiat out. Sell: −USDC out / +fiat in.
   const cryptoLine = isBuy
     ? { text: `+${usdc.toFixed(2)} USDC`, tone: 'text-rowan-green' }
-    : { text: `−${usdc > 0 ? usdc.toFixed(2) : Number(tx.xlmAmount || 0).toFixed(2)} USDC`, tone: 'text-rowan-red' }
+    : { text: `−${usdc.toFixed(2)} USDC`, tone: 'text-rowan-red' }
   const fiatLine = isBuy
     ? { text: `−${formatCurrency(fiat, currency)}`, tone: 'text-rowan-red' }
     : { text: `+${formatCurrency(fiat, currency)}`, tone: 'text-rowan-green' }
@@ -87,7 +90,7 @@ export default function P2pHistoryCard({ transaction: tx }) {
               </p>
             </div>
           </div>
-          {rate != null && (
+          {rate > 0 && (
             <p className="text-rowan-muted text-xs mt-2">
               @ {formatCurrency(rate, currency)}/USDC
             </p>

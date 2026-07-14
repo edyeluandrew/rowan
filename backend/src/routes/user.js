@@ -1024,10 +1024,12 @@ router.get('/transactions/history', authUser, async (req, res, next) => {
          t.id,
          t.state,
          t.xlm_amount,
+         t.usdc_amount,
          t.fiat_amount,
          t.fiat_currency,
          t.locked_rate,
          t.network,
+         t.order_side,
          t.created_at,
          t.completed_at,
          t.dispute_id,
@@ -1055,14 +1057,27 @@ router.get('/transactions/history', authUser, async (req, res, next) => {
           Math.round((new Date(row.completed_at) - new Date(row.created_at)) / 60000)
         );
       }
+      const usdcAmount = row.usdc_amount != null ? parseFloat(row.usdc_amount) : null;
+      const fiatAmount = row.fiat_amount != null ? parseFloat(row.fiat_amount) : null;
+      const rate = row.locked_rate != null ? parseFloat(row.locked_rate) : null;
+      // Prefer stored USDC; if missing (legacy rows), derive from fiat ÷ rate.
+      let resolvedUsdc = Number.isFinite(usdcAmount) && usdcAmount > 0 ? usdcAmount : null;
+      if (resolvedUsdc == null && Number.isFinite(fiatAmount) && fiatAmount > 0
+          && Number.isFinite(rate) && rate > 0) {
+        resolvedUsdc = parseFloat((fiatAmount / rate).toFixed(7));
+      }
       return {
         id: row.id,
         short_id: `ROW-${shortRef}`,
         state: row.state,
         xlm_amount: row.xlm_amount != null ? parseFloat(row.xlm_amount) : null,
-        fiat_amount: row.fiat_amount != null ? parseFloat(row.fiat_amount) : null,
+        usdc_amount: resolvedUsdc,
+        fiat_amount: fiatAmount,
         currency: row.fiat_currency,
-        rate: row.locked_rate != null ? parseFloat(row.locked_rate) : null,
+        rate,
+        locked_rate: rate,
+        network: row.network,
+        order_side: row.order_side || 'SELL',
         trader_name: row.trader_name,
         trader_id: row.trader_id,
         payment_method: row.network,

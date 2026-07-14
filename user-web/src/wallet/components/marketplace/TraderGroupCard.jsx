@@ -172,12 +172,12 @@ export default function TraderGroupCard({
         })()}
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <Button variant="ghost" className="py-3" onClick={() => onViewProfile?.(trader)}>
+      <div className="mt-4 flex flex-col sm:grid sm:grid-cols-2 gap-2">
+        <Button variant="ghost" className="py-3 w-full" onClick={() => onViewProfile?.(trader)}>
           View profile
         </Button>
         <Button
-          className="py-3"
+          className="py-3 w-full"
           onClick={handleTradeClick}
           disabled={tradeDisabled || (isBuy && !canBuy)}
         >

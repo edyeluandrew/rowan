@@ -115,11 +115,11 @@ export default function Profile() {
         <p className="text-rowan-yellow text-2xl font-bold tabular-nums">
           {hasUsdcTrustline ? Number(usdcBalance || 0).toFixed(2) : '—'}
         </p>
-        <p className="text-rowan-muted text-xs mt-1">
-          {hasUsdcTrustline
-            ? 'Live from Stellar — updates after buy orders complete'
-            : 'Enable USDC below to receive tokens from P2P buy'}
-        </p>
+        {hasUsdcTrustline === false && (
+          <p className="text-rowan-muted text-xs mt-1">
+            Enable USDC below to receive tokens from P2P buy
+          </p>
+        )}
         {hasUsdcTrustline === false && <UsdcTrustlineSetup compact />}
       </div>
 
