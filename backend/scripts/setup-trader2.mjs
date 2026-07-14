@@ -17,7 +17,7 @@ dotenv.config();
 
 const email = process.env.TRADER2_EMAIL || 'test.trader2@rowan.local';
 const password = process.env.TRADER2_PASSWORD || 'TestTrader2!Pass123';
-const name = process.env.TRADER2_NAME || 'Test Trader 2';
+const name = process.env.TRADER2_NAME || 'Muhereza Alouzious';
 const phone = process.env.TRADER2_PHONE || '+256701234567';
 
 const networks = [

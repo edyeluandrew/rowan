@@ -141,6 +141,7 @@ async function logAlert(userId, alertType, details, traderId = null) {
     CONCURRENT_QUOTES: 'MEDIUM',
     LARGE_TX: 'LOW',
     TRADER_REPEATED_FAILURES: 'HIGH',
+    SANCTIONS_HIT: 'HIGH',
   };
   const severity = severityMap[alertType] || 'MEDIUM';
 

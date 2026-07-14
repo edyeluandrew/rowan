@@ -9,6 +9,7 @@ import disputeService from '../services/disputeService.js';
 import auditLogService from '../services/auditLogService.js';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
+import config from '../config/index.js';
 import { stroopsToUsdc } from '../utils/financial.js';
 import {
   generateTotpSecret,
@@ -26,6 +27,7 @@ import notificationService from '../services/notificationService.js';
 import websocket from '../services/websocket.js';
 import { formatShortId } from '../utils/shortId.js';
 import disputeEvidenceService from '../services/disputeEvidenceService.js';
+import storageService from '../services/storageService.js';
 import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 
 const router = Router();
@@ -132,6 +134,156 @@ router.get('/profile', authUser, async (req, res, next) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({ user });
   } catch (err) {
+    next(err);
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   KYC UPGRADE FLOW
+   Users submit identity docs to move from NONE -> BASIC/VERIFIED, lifting
+   the per-transaction / daily limits enforced by fraudMonitor + auth guard.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const KYC_LEVELS = ['NONE', 'BASIC', 'VERIFIED'];
+const KYC_DOCUMENT_TYPES = ['NATIONAL_ID', 'PASSPORT', 'DRIVERS_LICENSE'];
+
+/**
+ * GET /api/v1/user/kyc
+ * Current KYC level + limits for that level + latest submission status.
+ */
+router.get('/kyc', authUser, async (req, res, next) => {
+  try {
+    const userRes = await db.query(
+      `SELECT kyc_level, daily_limit_ugx FROM users WHERE id = $1`,
+      [req.userId]
+    );
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const { kyc_level, daily_limit_ugx } = userRes.rows[0];
+
+    const subRes = await db.query(
+      `SELECT id, requested_level, status, review_notes, created_at, reviewed_at
+         FROM kyc_submissions
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [req.userId]
+    );
+
+    res.json({
+      kyc_level,
+      daily_limit_ugx: parseInt(daily_limit_ugx, 10),
+      limits: config.kycLimits[kyc_level] || config.kycLimits.NONE,
+      tiers: config.kycLimits,
+      latest_submission: subRes.rows[0] || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/user/kyc/submit
+ * Body: { requested_level, full_name, document_type, document_number,
+ *         date_of_birth?, document_country?, document_front_url?,
+ *         document_back_url?, selfie_url? }
+ */
+router.post('/kyc/submit', authUser, sensitiveActionLimiter, async (req, res, next) => {
+  try {
+    const {
+      requested_level,
+      full_name,
+      date_of_birth,
+      document_type,
+      document_number,
+      document_country,
+      document_front_url,
+      document_back_url,
+      selfie_url,
+    } = req.body || {};
+
+    // Validation
+    if (!KYC_LEVELS.includes(requested_level) || requested_level === 'NONE') {
+      return res.status(400).json({ error: 'requested_level must be BASIC or VERIFIED' });
+    }
+    if (!full_name || String(full_name).trim().length < 2) {
+      return res.status(400).json({ error: 'full_name is required' });
+    }
+    if (!KYC_DOCUMENT_TYPES.includes(document_type)) {
+      return res.status(400).json({ error: `document_type must be one of ${KYC_DOCUMENT_TYPES.join(', ')}` });
+    }
+    if (!document_number || String(document_number).trim().length < 3) {
+      return res.status(400).json({ error: 'document_number is required' });
+    }
+
+    // Don't allow requesting a level the user already has or below.
+    const userRes = await db.query(`SELECT kyc_level FROM users WHERE id = $1`, [req.userId]);
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const currentIdx = KYC_LEVELS.indexOf(userRes.rows[0].kyc_level);
+    const requestedIdx = KYC_LEVELS.indexOf(requested_level);
+    if (requestedIdx <= currentIdx) {
+      return res.status(400).json({ error: `Already at KYC level ${userRes.rows[0].kyc_level} or higher` });
+    }
+
+    // Reject if a pending submission already exists.
+    const pending = await db.query(
+      `SELECT id FROM kyc_submissions WHERE user_id = $1 AND status = 'PENDING'`,
+      [req.userId]
+    );
+    if (pending.rows.length > 0) {
+      return res.status(409).json({ error: 'You already have a KYC submission under review' });
+    }
+
+    const insert = await db.query(
+      `INSERT INTO kyc_submissions
+         (user_id, requested_level, full_name, date_of_birth, document_type,
+          document_number, document_country, document_front_url, document_back_url, selfie_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id, requested_level, status, created_at`,
+      [
+        req.userId,
+        requested_level,
+        String(full_name).trim(),
+        date_of_birth || null,
+        document_type,
+        String(document_number).trim(),
+        document_country || null,
+        document_front_url || null,
+        document_back_url || null,
+        selfie_url || null,
+      ]
+    );
+
+    logger.info(`[KYC] User ${req.userId} submitted KYC upgrade to ${requested_level}`);
+    res.status(201).json({ success: true, submission: insert.rows[0] });
+  } catch (err) {
+    // Unique-pending index race -> 409
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'You already have a KYC submission under review' });
+    }
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/user/kyc/documents
+ * Multipart upload of a KYC identity document. Field: file; body: slot (front|back|selfie).
+ * Returns a private storage key to include in the KYC submission payload.
+ */
+router.post('/kyc/documents', authUser, sensitiveActionLimiter, evidenceUpload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'file is required' });
+    const slot = ['front', 'back', 'selfie'].includes(req.body?.slot) ? req.body.slot : 'doc';
+    const key = await storageService.saveKycDocument(
+      req.file.buffer,
+      req.file.originalname || 'document.jpg',
+      req.userId,
+      slot
+    );
+    res.status(201).json({ success: true, key, slot });
+  } catch (err) {
+    if (/not allowed|too large|not configured/i.test(err.message || '')) {
+      return res.status(400).json({ error: err.message });
+    }
     next(err);
   }
 });

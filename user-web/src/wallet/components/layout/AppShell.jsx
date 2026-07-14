@@ -27,7 +27,7 @@ export default function AppShell() {
       <aside className="hidden lg:flex lg:w-60 lg:flex-col lg:fixed lg:inset-y-0 lg:border-r lg:border-rowan-border lg:bg-rowan-surface">
         <div className="px-5 py-6">
           <p className="text-rowan-green font-bold text-xl tracking-tight">Rowan</p>
-          <p className="text-rowan-muted text-xs mt-1">Web wallet</p>
+          {/* <p className="text-rowan-muted text-xs mt-1">Web wallet</p> */}
         </div>
         <nav className="flex-1 px-3 space-y-1">
           {tabs.map(({ path, label, Icon }) => (

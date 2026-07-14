@@ -177,6 +177,17 @@ const config = {
     },
   },
 
+  // Sanctions / PEP screening (AML). Names are screened against a local list
+  // (OFAC SDN + internal blocklist). A hit hard-blocks the action + raises an alert.
+  screening: {
+    enabled: process.env.SCREENING_ENABLED !== 'false',
+    // Similarity 0-1 above which a name is treated as a sanctions HIT.
+    threshold: parseFloat(process.env.SCREENING_THRESHOLD) || 0.85,
+    // 'local' = built-in fuzzy matcher over sanctioned_entities.
+    // Swap to a paid provider ('complyadvantage', 'chainalysis', ...) once keyed.
+    provider: process.env.SCREENING_PROVIDER || 'local',
+  },
+
   // [PHASE 4] Fraud monitoring thresholds
   fraud: {
     // Concurrent open quotes threshold before blocking

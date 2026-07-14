@@ -107,6 +107,19 @@ export default function Profile() {
             </Badge>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => navigate('/wallet/verify-identity')}
+          className="flex items-center justify-between w-full border-t border-rowan-border pt-3 min-h-11"
+        >
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={16} className="text-rowan-yellow" />
+            <span className="text-rowan-text text-sm">
+              {kycLevel === 'VERIFIED' ? 'Identity verified' : 'Verify identity to raise limits'}
+            </span>
+          </div>
+          <ChevronRight size={16} className="text-rowan-muted" />
+        </button>
       </div>
 
       {/* USDC wallet */}

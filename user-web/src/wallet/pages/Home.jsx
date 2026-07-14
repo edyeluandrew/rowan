@@ -71,7 +71,10 @@ export default function Home() {
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-rowan-text text-lg font-bold">Rowan</h1>
+        <div>
+          <h1 className="text-rowan-text text-lg font-bold leading-tight">Rowan</h1>
+          <p className="text-rowan-muted text-xs">Borderless value. Local payouts.</p>
+        </div>
         <div className="flex items-center gap-3">
           <ConnectionDot />
           <button

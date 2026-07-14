@@ -11,6 +11,11 @@ import DisputesPage from './features/disputes/pages/DisputesPage'
 import DisputeDetailPage from './features/dispute-detail/pages/DisputeDetailPage'
 import AnalyticsPage from './features/analytics/pages/AnalyticsPage'
 import EscrowPage from './features/escrow/pages/EscrowPage'
+import ReconciliationPage from './features/reconciliation/pages/ReconciliationPage'
+import FraudAlertsPage from './features/fraud/pages/FraudAlertsPage'
+import KycSubmissionsPage from './features/kyc/pages/KycSubmissionsPage'
+import ScreeningPage from './features/screening/pages/ScreeningPage'
+import UsersPage from './features/users/pages/UsersPage'
 import RateManagementPage from './features/rates/pages/RateManagementPage'
 import SystemHealthPage from './features/system-health/pages/SystemHealthPage'
 import AuditLogsPage from './features/audit-logs/pages/AuditLogsPage'
@@ -40,8 +45,13 @@ export default function App() {
           <Route path="traders/:id" element={<TraderDetailPage />} />
           <Route path="disputes" element={<DisputesPage />} />
           <Route path="disputes/:id" element={<DisputeDetailPage />} />
+          <Route path="fraud-alerts" element={<FraudAlertsPage />} />
+          <Route path="kyc" element={<KycSubmissionsPage />} />
+          <Route path="screening" element={<ScreeningPage />} />
+          <Route path="users" element={<UsersPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="escrow" element={<EscrowPage />} />
+          <Route path="reconciliation" element={<ReconciliationPage />} />
           <Route path="rates" element={<RateManagementPage />} />
           <Route path="health" element={<SystemHealthPage />} />
           <Route path="audit-logs" element={<AuditLogsPage />} />

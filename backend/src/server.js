@@ -422,6 +422,7 @@ async function start() {
       await storageService.ensureBucket();
       await storageService.ensureChatBucket();
       await storageService.ensureDisputeEvidenceBucket();
+      await storageService.ensureKycBucket();
     } catch (err) {
       logger.warn('[Bootstrap] Supabase Storage bucket check skipped', { error: err.message });
     }

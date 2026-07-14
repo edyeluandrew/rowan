@@ -121,6 +121,7 @@ async function saveFile(buffer, originalName, traderId) {
  */
 const CHAT_BUCKET = process.env.CHAT_IMAGE_BUCKET || 'order-chat';
 const DISPUTE_EVIDENCE_BUCKET = process.env.DISPUTE_EVIDENCE_BUCKET || 'dispute-evidence';
+const KYC_BUCKET = process.env.KYC_DOC_BUCKET || 'kyc-documents';
 
 async function ensureChatBucket() {
   if (!supabase) return;
@@ -172,7 +173,61 @@ async function saveChatImage(buffer, originalName, transactionId) {
 function resolveBucket(storageKey) {
   if (storageKey.startsWith('chat/')) return CHAT_BUCKET;
   if (storageKey.startsWith('disputes/')) return DISPUTE_EVIDENCE_BUCKET;
+  if (storageKey.startsWith('kyc/')) return KYC_BUCKET;
   return BUCKET;
+}
+
+async function ensureKycBucket() {
+  if (!supabase) return;
+  try {
+    const { data: existing } = await supabase.storage.getBucket(KYC_BUCKET);
+    if (existing) return;
+  } catch {
+    /* create below */
+  }
+  const { error } = await supabase.storage.createBucket(KYC_BUCKET, {
+    public: false,
+    fileSizeLimit: MAX_FILE_SIZE,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+  });
+  if (error && !error.message?.includes('already exists')) {
+    logger.error(`[Storage] Failed to create KYC bucket "${KYC_BUCKET}":`, error.message);
+  } else {
+    logger.info(`[Storage] Bucket "${KYC_BUCKET}" ready`);
+  }
+}
+
+/**
+ * Upload a KYC identity document. Stored privately; admins view via signed URLs.
+ * @returns {Promise<string>} storage key: kyc/<userId>/<slot>-<uuid>.<ext>
+ */
+async function saveKycDocument(buffer, originalName, userId, slot = 'doc') {
+  if (!supabase) {
+    throw new Error('Storage not configured — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+  }
+  const ext = path.extname(originalName).toLowerCase() || '.jpg';
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    throw new Error(`File type ${ext} not allowed. Allowed: ${ALLOWED_EXTENSIONS.join(', ')}`);
+  }
+  if (buffer.length > MAX_FILE_SIZE) {
+    throw new Error(`File too large (${(buffer.length / 1024 / 1024).toFixed(1)}MB). Max: 10MB`);
+  }
+  const MIME_MAP = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.png': 'image/png', '.webp': 'image/webp',
+    '.pdf': 'application/pdf',
+  };
+  const safeSlot = ['front', 'back', 'selfie'].includes(slot) ? slot : 'doc';
+  const storageKey = `kyc/${userId}/${safeSlot}-${crypto.randomUUID()}${ext}`;
+  const { error } = await supabase.storage
+    .from(KYC_BUCKET)
+    .upload(storageKey, buffer, {
+      contentType: MIME_MAP[ext] || 'application/octet-stream',
+      upsert: false,
+    });
+  if (error) throw new Error(`KYC document upload failed: ${error.message}`);
+  logger.info(`[Storage] Uploaded KYC doc ${storageKey} (${(buffer.length / 1024).toFixed(1)}KB)`);
+  return storageKey;
 }
 
 async function ensureDisputeEvidenceBucket() {
@@ -271,9 +326,11 @@ export default {
   ensureBucket,
   ensureChatBucket,
   ensureDisputeEvidenceBucket,
+  ensureKycBucket,
   saveFile,
   saveChatImage,
   saveDisputeEvidence,
+  saveKycDocument,
   getSignedUrl,
   deleteFile,
 };

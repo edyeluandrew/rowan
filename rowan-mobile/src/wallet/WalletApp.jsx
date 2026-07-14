@@ -34,6 +34,7 @@ import TransactionDetail from './pages/TransactionDetail';
 import TransactionReceipt from './pages/TransactionReceipt';
 import Notifications from './pages/Notifications';
 import Profile from './pages/Profile';
+import VerifyIdentity from './pages/VerifyIdentity';
 import Help from './pages/Help';
 import DisputeForm from './pages/DisputeForm';
 import BiometricSetup from './pages/BiometricSetup';
@@ -70,6 +71,7 @@ export default function WalletApp() {
             <Route path="marketplace" element={<Marketplace />} />
             <Route path="traders/:id" element={<TraderProfile />} />
             <Route path="blocked-traders" element={<BlockedTraders />} />
+            <Route path="verify-identity" element={<VerifyIdentity />} />
             <Route path="cashout" element={<Cashout />} />
             <Route path="cashout/confirm" element={<CashoutConfirm />} />
             <Route path="cashout/send" element={<CashoutSend />} />

@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../shared/context/AuthContext'
-import { LogOut, BarChart3, DollarSign, Users, AlertCircle, Settings, TrendingUp, Zap, FileText } from 'lucide-react'
+import { LogOut, BarChart3, DollarSign, Users, UserCog, AlertCircle, Settings, TrendingUp, Zap, FileText, Scale, ShieldAlert, BadgeCheck, ScanSearch } from 'lucide-react'
 
 /**
  * Sidebar navigation component
@@ -16,9 +16,14 @@ export default function Sidebar() {
     { path: '/', icon: BarChart3, label: 'Overview' },
     { path: '/transactions', icon: DollarSign, label: 'Transactions' },
     { path: '/traders', icon: Users, label: 'Traders' },
+    { path: '/users', icon: UserCog, label: 'Users' },
+    { path: '/kyc', icon: BadgeCheck, label: 'KYC' },
     { path: '/disputes', icon: AlertCircle, label: 'Disputes' },
+    { path: '/fraud-alerts', icon: ShieldAlert, label: 'Fraud Alerts' },
+    { path: '/screening', icon: ScanSearch, label: 'Screening' },
     { path: '/analytics', icon: TrendingUp, label: 'Analytics' },
     { path: '/escrow', icon: Zap, label: 'Escrow' },
+    { path: '/reconciliation', icon: Scale, label: 'Reconciliation' },
     { path: '/rates', icon: BarChart3, label: 'Rates' },
     { path: '/health', icon: Settings, label: 'Health' },
     { path: '/audit-logs', icon: FileText, label: 'Audit Logs' },

@@ -20,7 +20,7 @@ if (!process.env.JWT_SECRET) {
 
 const FLOW_TRADER_EMAIL = process.env.TEST_TRADER_EMAIL || 'test.trader.flow@rowan.local';
 const FLOW_TRADER_PASSWORD = process.env.TEST_TRADER_PASSWORD || 'TestFlow123!@#';
-const FLOW_TRADER_NAME = process.env.TEST_TRADER_NAME || 'Test Trader Flow';
+const FLOW_TRADER_NAME = process.env.TEST_TRADER_NAME || 'Edyelu Andrew';
 const FLOW_TRADER_PHONE = process.env.TEST_TRADER_PHONE || '+256704888999';
 const FLOW_TRADER_STELLAR =
   process.env.TEST_TRADER_STELLAR_ADDRESS ||

@@ -28,6 +28,23 @@ export function listDisputeEvidence(disputeId) {
   return client.get(`/api/v1/user/disputes/${disputeId}/evidence`).then((res) => res.data?.evidence || [])
 }
 
+export function getKycStatus() {
+  return client.get('/api/v1/user/kyc').then((res) => res.data)
+}
+
+export function submitKyc(payload) {
+  return client.post('/api/v1/user/kyc/submit', payload).then((res) => res.data)
+}
+
+export function uploadKycDocument(file, slot) {
+  const form = new FormData()
+  form.append('file', file)
+  if (slot) form.append('slot', slot)
+  return client.post('/api/v1/user/kyc/documents', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((res) => res.data)
+}
+
 export function getActiveTransaction() {
   return client.get('/api/v1/user/transactions/active').then((res) => res.data)
 }

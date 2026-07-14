@@ -7,6 +7,9 @@ import disputeService from '../services/disputeService.js';
 import stateMachine from '../services/transactionStateMachine.js';
 import notificationService from '../services/notificationService.js';
 import healthService from '../services/healthService.js';
+import reconciliationService from '../services/reconciliationService.js';
+import sanctionsService from '../services/sanctionsService.js';
+import fraudMonitor from '../services/fraudMonitor.js';
 import db from '../db/index.js';
 import bcrypt from 'bcryptjs';
 import logger from '../utils/logger.js';
@@ -1045,6 +1048,18 @@ router.get('/escrow/pending-refunds', authAdmin, async (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/v1/admin/reconciliation
+ * Escrow reconciliation: on-chain USDC vs DB liability + drift + float snapshot.
+ * Money-safety keystone — a negative drift (shortfall) is CRITICAL.
+ */
+router.get('/reconciliation', authAdmin, async (req, res, next) => {
+  try {
+    const report = await reconciliationService.getEscrowReconciliation();
+    res.json(report);
+  } catch (err) { next(err); }
+});
+
 /* ═══════════════════════════════════════════════════════════
  *  SYSTEM / HEALTH / ALERTS ENDPOINTS
  * ═══════════════════════════════════════════════════════════ */
@@ -1112,6 +1127,496 @@ router.get('/system/alerts', authAdmin, async (req, res, next) => {
 router.post('/system/alerts/:id/resolve', authAdmin, async (req, res, next) => {
   try {
     logger.info(`[Admin] Alert ${req.params.id} resolved by admin ${req.adminId}`);
+    res.json({ success: true, id: req.params.id });
+  } catch (err) { next(err); }
+});
+
+/* ═══════════════════════════════════════════════════════════
+ *  FRAUD ALERTS ENDPOINTS
+ *  Surfaces the fraud_alerts table (written by fraudMonitor) so ops
+ *  can review + acknowledge AML/velocity/limit-breach signals.
+ * ═══════════════════════════════════════════════════════════ */
+
+/**
+ * GET /api/v1/admin/fraud-alerts
+ * Query: acknowledged (true|false), severity, type, limit, offset
+ */
+router.get('/fraud-alerts', authAdmin, async (req, res, next) => {
+  try {
+    const { acknowledged, severity, type } = req.query;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+    const conditions = [];
+    const params = [];
+
+    if (acknowledged === 'true' || acknowledged === 'false') {
+      params.push(acknowledged === 'true');
+      conditions.push(`fa.acknowledged = $${params.length}`);
+    }
+    if (severity) {
+      params.push(String(severity).toUpperCase());
+      conditions.push(`fa.severity = $${params.length}`);
+    }
+    if (type) {
+      params.push(String(type).toUpperCase());
+      conditions.push(`fa.alert_type = $${params.length}`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    params.push(limit);
+    const limitIdx = params.length;
+    params.push(offset);
+    const offsetIdx = params.length;
+
+    const result = await db.query(
+      `SELECT fa.id, fa.user_id, fa.trader_id, fa.alert_type, fa.details,
+              fa.severity, fa.acknowledged, fa.acknowledged_by, fa.acknowledged_at,
+              fa.created_at,
+              u.email           AS user_email,
+              u.stellar_address AS user_stellar,
+              u.kyc_level       AS user_kyc,
+              t.name            AS trader_name
+         FROM fraud_alerts fa
+         LEFT JOIN users u   ON u.id = fa.user_id
+         LEFT JOIN traders t ON t.id = fa.trader_id
+         ${where}
+         ORDER BY fa.created_at DESC
+         LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      params
+    );
+
+    const counts = await db.query(
+      `SELECT
+         COUNT(*)::int                                              AS total,
+         COUNT(*) FILTER (WHERE acknowledged = FALSE)::int          AS unacknowledged,
+         COUNT(*) FILTER (WHERE acknowledged = FALSE AND severity = 'HIGH')::int AS unack_high
+       FROM fraud_alerts`
+    );
+
+    res.json({
+      alerts: result.rows,
+      summary: counts.rows[0],
+      pagination: { limit, offset, count: result.rows.length },
+    });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/v1/admin/fraud-alerts/:id/acknowledge
+ */
+router.post('/fraud-alerts/:id/acknowledge', authAdmin, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `UPDATE fraud_alerts
+          SET acknowledged = TRUE,
+              acknowledged_by = $1,
+              acknowledged_at = NOW()
+        WHERE id = $2 AND acknowledged = FALSE
+        RETURNING id, alert_type, severity, acknowledged, acknowledged_at`,
+      [req.adminId, req.params.id]
+    );
+
+    if (result.rowCount === 0) {
+      // Either not found or already acknowledged — disambiguate.
+      const exists = await db.query('SELECT acknowledged FROM fraud_alerts WHERE id = $1', [req.params.id]);
+      if (exists.rowCount === 0) return res.status(404).json({ error: 'Fraud alert not found' });
+      return res.status(409).json({ error: 'Fraud alert already acknowledged' });
+    }
+
+    await auditLogService.logAdminAction(req.adminId, 'fraud_alert_acknowledge', {
+      alert_id: req.params.id,
+      alert_type: result.rows[0].alert_type,
+      severity: result.rows[0].severity,
+    });
+
+    logger.info(`[Admin] Fraud alert ${req.params.id} acknowledged by admin ${req.adminId}`);
+    res.json({ success: true, alert: result.rows[0] });
+  } catch (err) { next(err); }
+});
+
+/* ═══════════════════════════════════════════════════════════
+ *  KYC SUBMISSIONS ENDPOINTS
+ *  Review user identity submissions and, on approval, raise the
+ *  user's kyc_level + daily_limit_ugx (both limit-enforcement paths).
+ * ═══════════════════════════════════════════════════════════ */
+
+/**
+ * GET /api/v1/admin/kyc-submissions
+ * Query: status (PENDING|APPROVED|REJECTED), limit, offset
+ */
+router.get('/kyc-submissions', authAdmin, async (req, res, next) => {
+  try {
+    const { status } = req.query;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+    const conditions = [];
+    const params = [];
+    if (status) {
+      params.push(String(status).toUpperCase());
+      conditions.push(`k.status = $${params.length}`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    params.push(limit);
+    const limitIdx = params.length;
+    params.push(offset);
+    const offsetIdx = params.length;
+
+    const result = await db.query(
+      `SELECT k.id, k.user_id, k.requested_level, k.full_name, k.date_of_birth,
+              k.document_type, k.document_number, k.document_country,
+              k.document_front_url, k.document_back_url, k.selfie_url,
+              k.status, k.review_notes, k.reviewed_by, k.reviewed_at, k.created_at,
+              u.email       AS user_email,
+              u.kyc_level   AS user_current_level,
+              u.stellar_address AS user_stellar
+         FROM kyc_submissions k
+         LEFT JOIN users u ON u.id = k.user_id
+         ${where}
+         ORDER BY k.created_at DESC
+         LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      params
+    );
+
+    const counts = await db.query(
+      `SELECT
+         COUNT(*)::int                                     AS total,
+         COUNT(*) FILTER (WHERE status = 'PENDING')::int   AS pending,
+         COUNT(*) FILTER (WHERE status = 'APPROVED')::int  AS approved,
+         COUNT(*) FILTER (WHERE status = 'REJECTED')::int  AS rejected
+       FROM kyc_submissions`
+    );
+
+    // Resolve private storage keys -> time-limited signed URLs for review.
+    const { default: storageService } = await import('../services/storageService.js');
+    const resolveDoc = async (val) => {
+      if (!val) return null;
+      if (/^https?:\/\//i.test(val)) return val; // legacy absolute URL
+      const signed = await storageService.getSignedUrl(val);
+      return signed?.url || null;
+    };
+    const submissions = await Promise.all(
+      result.rows.map(async (row) => ({
+        ...row,
+        document_front_url: await resolveDoc(row.document_front_url),
+        document_back_url: await resolveDoc(row.document_back_url),
+        selfie_url: await resolveDoc(row.selfie_url),
+      }))
+    );
+
+    res.json({
+      submissions,
+      summary: counts.rows[0],
+      pagination: { limit, offset, count: result.rows.length },
+    });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/v1/admin/kyc-submissions/:id/approve
+ * Approves the submission and raises the user's kyc_level + daily_limit_ugx.
+ */
+router.post('/kyc-submissions/:id/approve', authAdmin, async (req, res, next) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const subRes = await client.query(
+      `SELECT id, user_id, requested_level, status, full_name, date_of_birth, document_country
+         FROM kyc_submissions WHERE id = $1 FOR UPDATE`,
+      [req.params.id]
+    );
+    if (subRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'KYC submission not found' });
+    }
+    const sub = subRes.rows[0];
+    if (sub.status !== 'PENDING') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: `Submission already ${sub.status.toLowerCase()}` });
+    }
+
+    // [AML] Sanctions screening before we upgrade the user. A hit blocks approval
+    // unless the admin explicitly overrides it as a false positive with a reason.
+    const override = req.body?.override === true;
+    const overrideReason = (req.body?.override_reason || '').trim();
+    let screen = null;
+    try {
+      screen = await sanctionsService.screen({
+        name: sub.full_name,
+        dob: sub.date_of_birth ? String(sub.date_of_birth).slice(0, 10) : null,
+        country: sub.document_country || null,
+        subjectType: 'KYC',
+        subjectRef: sub.id,
+        userId: sub.user_id,
+      });
+    } catch (screenErr) {
+      await client.query('ROLLBACK');
+      logger.error('[Admin] KYC sanctions screening error:', screenErr.message);
+      return res.status(503).json({ error: 'Compliance screening unavailable. Approval blocked.', code: 'SCREENING_UNAVAILABLE' });
+    }
+
+    if (screen.match && !override) {
+      await client.query('ROLLBACK');
+      await fraudMonitor.logAlert(
+        sub.user_id,
+        'SANCTIONS_HIT',
+        `KYC applicant "${sub.full_name}" matched sanctioned entity "${screen.matchedName}" [${screen.matchedSource}] score ${screen.score}`
+      );
+      return res.status(409).json({
+        error: 'Sanctions screening returned a potential match. Review and override with a reason to proceed.',
+        code: 'SANCTIONS_HIT',
+        screening: {
+          check_id: screen.checkId,
+          score: screen.score,
+          matched_name: screen.matchedName,
+          matched_source: screen.matchedSource,
+          threshold: screen.threshold,
+        },
+      });
+    }
+
+    if (screen.match && override) {
+      if (!overrideReason) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'override_reason is required to override a sanctions hit' });
+      }
+      if (screen.checkId) {
+        try { await sanctionsService.recordOverride(screen.checkId, req.adminId, overrideReason); }
+        catch (e) { logger.warn('[Admin] Failed to record screening override', { error: e.message }); }
+      }
+    }
+
+    const level = sub.requested_level;
+    const tier = config.kycLimits[level] || config.kycLimits.NONE;
+
+    await client.query(
+      `UPDATE kyc_submissions
+          SET status = 'APPROVED', reviewed_by = $1, reviewed_at = NOW(), updated_at = NOW()
+        WHERE id = $2`,
+      [req.adminId, sub.id]
+    );
+
+    await client.query(
+      `UPDATE users SET kyc_level = $1, daily_limit_ugx = $2, updated_at = NOW() WHERE id = $3`,
+      [level, tier.daily, sub.user_id]
+    );
+
+    await client.query('COMMIT');
+
+    await auditLogService.logAdminAction(req.adminId, 'kyc_approve', {
+      submission_id: sub.id,
+      user_id: sub.user_id,
+      new_level: level,
+      daily_limit_ugx: tier.daily,
+      sanctions_screen: screen ? { result: screen.result, score: screen.score } : null,
+      sanctions_override: screen?.match && override ? overrideReason : null,
+    });
+
+    try {
+      await notificationService.notifyUser(sub.user_id, 'KYC_APPROVED', {
+        message: `Your identity verification was approved. You are now ${level}.`,
+      });
+    } catch { /* notification failure must not block approval */ }
+
+    logger.info(`[Admin] KYC submission ${sub.id} approved -> ${level} by admin ${req.adminId}`);
+    res.json({ success: true, user_id: sub.user_id, new_level: level, daily_limit_ugx: tier.daily });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * POST /api/v1/admin/kyc-submissions/:id/reject
+ * Body: { reason }
+ */
+router.post('/kyc-submissions/:id/reject', authAdmin, async (req, res, next) => {
+  try {
+    const reason = (req.body?.reason || '').trim();
+    if (!reason) return res.status(400).json({ error: 'reason is required' });
+
+    const result = await db.query(
+      `UPDATE kyc_submissions
+          SET status = 'REJECTED', review_notes = $1, reviewed_by = $2,
+              reviewed_at = NOW(), updated_at = NOW()
+        WHERE id = $3 AND status = 'PENDING'
+        RETURNING id, user_id, requested_level`,
+      [reason, req.adminId, req.params.id]
+    );
+
+    if (result.rowCount === 0) {
+      const exists = await db.query('SELECT status FROM kyc_submissions WHERE id = $1', [req.params.id]);
+      if (exists.rowCount === 0) return res.status(404).json({ error: 'KYC submission not found' });
+      return res.status(409).json({ error: `Submission already ${exists.rows[0].status.toLowerCase()}` });
+    }
+
+    await auditLogService.logAdminAction(req.adminId, 'kyc_reject', {
+      submission_id: req.params.id,
+      user_id: result.rows[0].user_id,
+      reason,
+    });
+
+    try {
+      await notificationService.notifyUser(result.rows[0].user_id, 'KYC_REJECTED', {
+        message: `Your identity verification was not approved. Reason: ${reason}`,
+      });
+    } catch { /* notification failure must not block rejection */ }
+
+    logger.info(`[Admin] KYC submission ${req.params.id} rejected by admin ${req.adminId}`);
+    res.json({ success: true, submission: result.rows[0] });
+  } catch (err) { next(err); }
+});
+
+/* ═══════════════════════════════════════════════════════════
+ *  SANCTIONS / PEP SCREENING ENDPOINTS
+ * ═══════════════════════════════════════════════════════════ */
+
+/**
+ * POST /api/v1/admin/screening/check
+ * Ad-hoc screen of a name. Body: { name, dob?, country? }
+ */
+router.post('/screening/check', authAdmin, async (req, res, next) => {
+  try {
+    const { name, dob, country } = req.body || {};
+    if (!name || String(name).trim().length < 2) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+    const result = await sanctionsService.screen({
+      name: String(name).trim(),
+      dob: dob || null,
+      country: country || null,
+      subjectType: 'MANUAL',
+      userId: null,
+    });
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/v1/admin/screening/checks
+ * Query: result (HIT|CLEAR), subject_type, limit, offset
+ */
+router.get('/screening/checks', authAdmin, async (req, res, next) => {
+  try {
+    const { result: resultFilter, subject_type } = req.query;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+    const conditions = [];
+    const params = [];
+    if (resultFilter === 'HIT' || resultFilter === 'CLEAR') {
+      params.push(resultFilter);
+      conditions.push(`result = $${params.length}`);
+    }
+    if (subject_type) {
+      params.push(String(subject_type).toUpperCase());
+      conditions.push(`subject_type = $${params.length}`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    params.push(limit);
+    const limitIdx = params.length;
+    params.push(offset);
+    const offsetIdx = params.length;
+
+    const rows = await db.query(
+      `SELECT id, subject_type, subject_ref, user_id, query_name, query_dob, query_country,
+              result, top_score, matched_name, matched_source, decision, override_reason, created_at
+         FROM screening_checks ${where}
+         ORDER BY created_at DESC
+         LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      params
+    );
+    const counts = await db.query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE result = 'HIT')::int AS hits
+         FROM screening_checks`
+    );
+    res.json({ checks: rows.rows, summary: counts.rows[0], pagination: { limit, offset, count: rows.rows.length } });
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/v1/admin/sanctions
+ * List the internal blocklist. Query: q (name search), limit, offset
+ */
+router.get('/sanctions', authAdmin, async (req, res, next) => {
+  try {
+    const q = (req.query.q || '').trim();
+    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+    const conditions = [`source = 'INTERNAL'`, `is_active = TRUE`];
+    const params = [];
+    if (q) {
+      params.push(`%${sanctionsService.normalizeName(q)}%`);
+      conditions.push(`normalized_name LIKE $${params.length}`);
+    }
+    params.push(limit);
+    const limitIdx = params.length;
+    params.push(offset);
+    const offsetIdx = params.length;
+
+    const rows = await db.query(
+      `SELECT id, entity_type, full_name, aliases, programs, countries, dob, remarks, created_at
+         FROM sanctioned_entities
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY created_at DESC
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      params
+    );
+
+    const totals = await db.query(
+      `SELECT source, COUNT(*)::int AS count
+         FROM sanctioned_entities WHERE is_active = TRUE GROUP BY source`
+    );
+    const bySource = {};
+    for (const r of totals.rows) bySource[r.source] = r.count;
+
+    res.json({ entities: rows.rows, by_source: bySource });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/v1/admin/sanctions
+ * Add an entity to the internal blocklist.
+ * Body: { full_name, entity_type?, aliases?, programs?, countries?, dob?, remarks? }
+ */
+router.post('/sanctions', authAdmin, async (req, res, next) => {
+  try {
+    const { full_name, entity_type, aliases, programs, countries, dob, remarks } = req.body || {};
+    if (!full_name || String(full_name).trim().length < 2) {
+      return res.status(400).json({ error: 'full_name is required' });
+    }
+    const entity = await sanctionsService.addInternalEntity({
+      fullName: String(full_name).trim(),
+      entityType: entity_type || 'INDIVIDUAL',
+      aliases: Array.isArray(aliases) ? aliases : [],
+      programs: Array.isArray(programs) ? programs : [],
+      countries: Array.isArray(countries) ? countries : [],
+      dob: dob || null,
+      remarks: remarks || null,
+      addedBy: req.adminId,
+    });
+    await auditLogService.logAdminAction(req.adminId, 'sanctions_add', { entity_id: entity.id, full_name: entity.full_name });
+    res.status(201).json({ success: true, entity });
+  } catch (err) { next(err); }
+});
+
+/**
+ * DELETE /api/v1/admin/sanctions/:id
+ * Deactivate an internal blocklist entry.
+ */
+router.delete('/sanctions/:id', authAdmin, async (req, res, next) => {
+  try {
+    const removed = await sanctionsService.deactivateEntity(req.params.id);
+    if (!removed) return res.status(404).json({ error: 'Internal sanctions entry not found' });
+    await auditLogService.logAdminAction(req.adminId, 'sanctions_remove', { entity_id: req.params.id });
     res.json({ success: true, id: req.params.id });
   } catch (err) { next(err); }
 });
@@ -1601,6 +2106,152 @@ router.get('/audit-logs/:id', authAdmin, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+/* ═══════════════════════════════════════════════════════════
+ *  USER MANAGEMENT ENDPOINTS
+ *  Ops needs to inspect and freeze wallet users (e.g. after a
+ *  sanctions/fraud hit). Freezing sets is_active = FALSE which
+ *  blocks the user's session (auth) AND their transactions (fraudMonitor).
+ * ═══════════════════════════════════════════════════════════ */
+
+/**
+ * GET /api/v1/admin/users
+ * Query: q (id/stellar/email search), status (active|frozen), kyc_level, limit, offset
+ */
+router.get('/users', authAdmin, async (req, res, next) => {
+  try {
+    const { q, status, kyc_level } = req.query;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+    const conditions = [`role = 'user'`];
+    const params = [];
+    if (q) {
+      params.push(`%${q.trim()}%`);
+      conditions.push(`(id::text ILIKE $${params.length} OR stellar_address ILIKE $${params.length} OR COALESCE(email,'') ILIKE $${params.length})`);
+    }
+    if (status === 'active') conditions.push(`is_active = TRUE`);
+    if (status === 'frozen') conditions.push(`is_active = FALSE`);
+    if (kyc_level) {
+      params.push(String(kyc_level).toUpperCase());
+      conditions.push(`kyc_level = $${params.length}`);
+    }
+    const where = `WHERE ${conditions.join(' AND ')}`;
+    params.push(limit);
+    const limitIdx = params.length;
+    params.push(offset);
+    const offsetIdx = params.length;
+
+    const rows = await db.query(
+      `SELECT id, stellar_address, email, kyc_level, daily_limit_ugx, is_active, created_at
+         FROM users ${where}
+         ORDER BY created_at DESC
+         LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      params
+    );
+
+    const counts = await db.query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE is_active = FALSE)::int AS frozen
+         FROM users WHERE role = 'user'`
+    );
+
+    res.json({ users: rows.rows, summary: counts.rows[0], pagination: { limit, offset, count: rows.rows.length } });
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/v1/admin/users/:id
+ * User detail + recent risk signals.
+ */
+router.get('/users/:id', authAdmin, async (req, res, next) => {
+  try {
+    const userRes = await db.query(
+      `SELECT id, stellar_address, email, kyc_level, daily_limit, per_tx_limit,
+              daily_limit_ugx, is_active, device_id, created_at, updated_at
+         FROM users WHERE id = $1 AND role = 'user'`,
+      [req.params.id]
+    );
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    const [txCount, alerts, screens, kyc] = await Promise.all([
+      db.query(`SELECT COUNT(*)::int AS c FROM transactions WHERE user_id = $1`, [req.params.id]),
+      db.query(
+        `SELECT id, alert_type, severity, details, acknowledged, created_at
+           FROM fraud_alerts WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5`,
+        [req.params.id]
+      ),
+      db.query(
+        `SELECT id, subject_type, query_name, result, top_score, matched_name, created_at
+           FROM screening_checks WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5`,
+        [req.params.id]
+      ),
+      db.query(
+        `SELECT id, requested_level, status, created_at FROM kyc_submissions
+          WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [req.params.id]
+      ),
+    ]);
+
+    res.json({
+      user: userRes.rows[0],
+      transaction_count: txCount.rows[0].c,
+      recent_fraud_alerts: alerts.rows,
+      recent_screening_checks: screens.rows,
+      latest_kyc_submission: kyc.rows[0] || null,
+    });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/v1/admin/users/:id/freeze
+ * Body: { reason }
+ */
+router.post('/users/:id/freeze', authAdmin, sensitiveActionLimiter, async (req, res, next) => {
+  try {
+    const reason = (req.body?.reason || '').trim();
+    if (!reason) return res.status(400).json({ error: 'reason is required' });
+
+    const result = await db.query(
+      `UPDATE users SET is_active = FALSE, updated_at = NOW()
+        WHERE id = $1 AND role = 'user' AND is_active = TRUE
+        RETURNING id`,
+      [req.params.id]
+    );
+    if (result.rowCount === 0) {
+      const exists = await db.query(`SELECT is_active FROM users WHERE id = $1 AND role = 'user'`, [req.params.id]);
+      if (exists.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+      return res.status(409).json({ error: 'User is already frozen' });
+    }
+
+    await auditLogService.logAdminAction(req.adminId, 'user_freeze', { user_id: req.params.id, reason });
+    logger.info(`[Admin] User ${req.params.id} frozen by admin ${req.adminId}: ${reason}`);
+    res.json({ success: true, id: req.params.id, is_active: false });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/v1/admin/users/:id/unfreeze
+ */
+router.post('/users/:id/unfreeze', authAdmin, sensitiveActionLimiter, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `UPDATE users SET is_active = TRUE, updated_at = NOW()
+        WHERE id = $1 AND role = 'user' AND is_active = FALSE
+        RETURNING id`,
+      [req.params.id]
+    );
+    if (result.rowCount === 0) {
+      const exists = await db.query(`SELECT is_active FROM users WHERE id = $1 AND role = 'user'`, [req.params.id]);
+      if (exists.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+      return res.status(409).json({ error: 'User is already active' });
+    }
+
+    await auditLogService.logAdminAction(req.adminId, 'user_unfreeze', { user_id: req.params.id });
+    logger.info(`[Admin] User ${req.params.id} unfrozen by admin ${req.adminId}`);
+    res.json({ success: true, id: req.params.id, is_active: true });
+  } catch (err) { next(err); }
 });
 
 export default router;

@@ -12,7 +12,7 @@ dotenv.config();
 
 const email = process.env.TEST_TRADER_EMAIL || 'test.trader.flow@rowan.local';
 const password = process.env.TEST_TRADER_PASSWORD || 'TestFlow123!@#';
-const name = process.env.TEST_TRADER_NAME || 'Test Trader Flow';
+const name = process.env.TEST_TRADER_NAME || 'Edyelu Andrew';
 const phone = process.env.TEST_TRADER_PHONE || '+256704888999';
 // Testnet keypair with USDC trustline (same as escrow/MM test infra)
 const stellarAddress =

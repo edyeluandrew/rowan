@@ -4,6 +4,7 @@ import { validate, validateTypes } from '../middleware/validate.js';
 import { cashoutStatusLimiter } from '../middleware/rateLimits.js';
 import quoteEngine from '../services/quoteEngine.js';
 import fraudMonitor from '../services/fraudMonitor.js';
+import sanctionsService from '../services/sanctionsService.js';
 import notificationService from '../services/notificationService.js';
 import payoutSettingsService from '../services/payoutSettingsService.js';
 import config from '../config/index.js';
@@ -118,6 +119,37 @@ router.post(
       if (!fraudCheck.allowed) {
         logger.warn(`[Cashout] Fraud check failed: ${fraudCheck.reason}`);
         return res.status(403).json({ error: fraudCheck.reason });
+      }
+
+      // [AML] Sanctions screening on the payout counterparty (the person whose
+      // mobile-money account receives the fiat). A hit hard-blocks the cash-out.
+      const payoutNameTrimmed = payoutName?.trim();
+      if (payoutNameTrimmed) {
+        try {
+          const screen = await sanctionsService.screen({
+            name: payoutNameTrimmed,
+            subjectType: 'PAYOUT',
+            userId: req.userId,
+          });
+          if (screen.match) {
+            await fraudMonitor.logAlert(
+              req.userId,
+              'SANCTIONS_HIT',
+              `Payout name "${payoutNameTrimmed}" matched sanctioned entity "${screen.matchedName}" [${screen.matchedSource}] score ${screen.score}`
+            );
+            return res.status(403).json({
+              error: 'This payout recipient could not be verified and the transaction has been blocked. Please contact support.',
+              code: 'SANCTIONS_BLOCK',
+            });
+          }
+        } catch (screenErr) {
+          // Fail closed: if screening is misconfigured/errors, do NOT create an unscreened payout.
+          logger.error('[Cashout] Sanctions screening error:', screenErr.message);
+          return res.status(503).json({
+            error: 'Compliance screening is temporarily unavailable. Please try again shortly.',
+            code: 'SCREENING_UNAVAILABLE',
+          });
+        }
       }
 
       const networkLimits = await payoutSettingsService.getActiveNetworkLimits(network, fiatCurrency);
