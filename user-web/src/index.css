@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --rowan-green: #12B81A;
+  --rowan-green-dark: #087A12;
+  --rowan-mint: #EAF8EE;
+  --rowan-lime: #DDEB3A;
+  --rowan-gold: #FFD51F;
+  --rowan-yellow: #12B81A; /* legacy class alias → brand green */
+  --rowan-white: #FFFFFF;
+  --rowan-bg: #F7F9F7;
+  --rowan-border: #D8E0D9;
+  --rowan-grey: #7B8587;
+  --rowan-text: #22272B;
+  --rowan-red: #E53935;
+  --rowan-dark: #0B0F0C;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+html {
+  background-color: var(--rowan-bg);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--rowan-bg);
+  color: var(--rowan-text);
+  overscroll-behavior: none;
+}
+
+/* Hide scrollbars globally for mobile feel */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe area padding for notched devices */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Input number spinner removal */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+/* Prevent iOS zoom on inputs */
+input, select, textarea {
+  font-size: 16px;
+}
