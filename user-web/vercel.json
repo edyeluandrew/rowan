@@ -1,17 +1,21 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm install",
   "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
   "outputDirectory": "dist",
-  "routes": [
+  "redirects": [
     {
-      "src": "/favicon.ico",
-      "dest": "/favicon.svg"
-    },
+      "source": "/favicon.ico",
+      "destination": "/favicon.svg",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/.*",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

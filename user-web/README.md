@@ -24,6 +24,18 @@ Copy `.env.example` → `.env` and point `VITE_API_URL` at your backend.
 
 ## Deploy (Vercel / Render / Netlify)
 
+### Auto-deploy on every push (Vercel)
+
+`vercel.json` configures the build. **Git auto-deploy** is enabled in the Vercel dashboard:
+
+1. [vercel.com](https://vercel.com) → **Add New Project** → import `edyeluandrew/rowan` (or your repo).
+2. **Root Directory:** `user-web` (required — monorepo).
+3. **Framework Preset:** Vite (or leave auto-detect).
+4. **Production Branch:** `master`.
+5. **Settings → Git →** ensure **Production Deployments** are enabled for that branch.
+
+Every push to `master` that touches `user-web/` triggers a new deploy. Vercel reads `user-web/vercel.json` automatically.
+
 Vite **bakes env vars in at build time**. A missing `VITE_API_URL` causes:
 
 `Failed to fetch stellar.toml from localhost: Failed to fetch`
