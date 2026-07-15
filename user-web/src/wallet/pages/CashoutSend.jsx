@@ -7,6 +7,7 @@ import { getSecure } from '../utils/storage'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import QuoteSummary from '../components/cashout/QuoteSummary'
+import Button from '../components/ui/Button'
 import { getHorizonUrl } from '../../shared/utils/config'
 
 export default function CashoutSend() {
@@ -29,7 +30,7 @@ export default function CashoutSend() {
     return null
   }
 
-  const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL
+  const horizonUrl = getHorizonUrl()
 
   const handleSendNow = async () => {
     if (quoteExpired) return
