@@ -15,6 +15,7 @@ export default function useWallet() {
   const [hasUsdcTrustline, setHasUsdcTrustline] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [testUsdcProvisioning, setTestUsdcProvisioning] = useState('idle')
   const provisionAttempted = useRef(null)
   const testUsdcAttempted = useRef(null)
 
@@ -76,6 +77,7 @@ export default function useWallet() {
 
     let cancelled = false
     testUsdcAttempted.current = keypair.publicKey
+    setTestUsdcProvisioning('loading')
 
     ;(async () => {
       try {
@@ -89,29 +91,18 @@ export default function useWallet() {
           publicKey: kp.publicKey,
           horizonUrl,
         })
-        if (!cancelled) await fetchBalance()
+        if (!cancelled) {
+          await fetchBalance()
+          setTestUsdcProvisioning('done')
+        }
       } catch {
+        if (!cancelled) setTestUsdcProvisioning('error')
         testUsdcAttempted.current = null
       }
     })()
 
     return () => { cancelled = true }
   }, [fetchBalance, hasUsdcTrustline, horizonUrl, keypair?.publicKey, loading, usdcBalance])
-
-  const fundTestUsdc = useCallback(async () => {
-    const stored = await getSecure('rowan_stellar_keypair')
-    if (!stored) throw new Error('Wallet not found')
-    const kp = JSON.parse(stored)
-    if (!kp.secretKey) throw new Error('Wallet key data is missing')
-
-    await fundTestUsdcWallet({
-      secretKey: kp.secretKey,
-      publicKey: kp.publicKey || keypair?.publicKey,
-      horizonUrl,
-    })
-    testUsdcAttempted.current = keypair?.publicKey || kp.publicKey
-    await fetchBalance()
-  }, [fetchBalance, horizonUrl, keypair?.publicKey])
 
   return {
     balance,
@@ -120,7 +111,7 @@ export default function useWallet() {
     loading,
     error,
     refresh: fetchBalance,
-    fundTestUsdc,
+    testUsdcProvisioning,
     publicKey: keypair?.publicKey,
   }
 }

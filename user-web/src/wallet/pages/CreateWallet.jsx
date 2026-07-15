@@ -23,7 +23,7 @@ export default function CreateWallet() {
       await setSecure('rowan_wallet_created_at', new Date().toISOString())
       if (cancelled) return
 
-      setStatusMessage('Preparing your wallet...')
+      setStatusMessage('Adding test USDC to your wallet...')
       let funded = false
       try {
         const result = await fundTestUsdcWallet({
@@ -83,7 +83,7 @@ export default function CreateWallet() {
       {CURRENT_NETWORK.isTest && testUsdcReady === false && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm">
-            Wallet is set up. Tap &quot;Get free test USDC&quot; on Home if your balance is still empty.
+            Wallet is ready. Test USDC will be added automatically when you finish signup — usually within a few seconds.
           </p>
         </div>
       )}

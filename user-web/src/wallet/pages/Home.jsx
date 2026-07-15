@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowDownLeft,
@@ -8,7 +7,7 @@ import {
   Star,
   AlertTriangle,
   Bell,
-  Coins,
+  RefreshCw,
 } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
@@ -33,10 +32,9 @@ import { getInProgressTransactions } from '../utils/transactions'
 export default function Home() {
   const navigate = useNavigate()
   const { isLocked } = useBiometricProtection()
-  const { usdcBalance, hasUsdcTrustline, loading: balanceLoading, refresh: refreshBalance, fundTestUsdc } = useWallet()
+  const { usdcBalance, hasUsdcTrustline, loading: balanceLoading, refresh: refreshBalance, testUsdcProvisioning } = useWallet()
   const { country, fiatCurrency, ready: countryReady } = useUserCountry()
   const { hasActiveOrder } = useActiveTransaction()
-  const [testUsdcState, setTestUsdcState] = useState('idle')
   const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates(fiatCurrency)
   const { transactions, loading: txLoading } = useTransactions()
   const { unreadCount } = useNotificationsContext()
@@ -56,15 +54,7 @@ export default function Home() {
     && (usdcBalance == null || parseFloat(usdcBalance) < 0.01)
     && !activeCashout
 
-  const handleGetTestUsdc = async () => {
-    setTestUsdcState('loading')
-    try {
-      await fundTestUsdc()
-      setTestUsdcState('success')
-    } catch {
-      setTestUsdcState('error')
-    }
-  }
+  const autoFundingTestnet = CURRENT_NETWORK.isTest && needsUsdc
 
   if (isLocked) return <BiometricLock />
 
@@ -134,37 +124,25 @@ export default function Home() {
         </button>
       </div>
 
-      {needsUsdc && CURRENT_NETWORK.isTest && (
-        <div className="mt-4 bg-rowan-mint border border-rowan-green/30 rounded-xl p-4">
-          <p className="text-rowan-text text-sm font-medium">Get started on testnet</p>
-          <p className="text-rowan-muted text-xs mt-1">
-            Add free test USDC, or buy / receive to fund your wallet.
-          </p>
-          <button
-            onClick={handleGetTestUsdc}
-            disabled={testUsdcState === 'loading'}
-            className="mt-3 w-full flex items-center justify-center gap-2 bg-rowan-green text-white font-medium rounded-xl px-3 py-3 min-h-11 text-sm disabled:opacity-50 active:bg-rowan-green-dark"
-          >
-            <Coins size={16} />
-            {testUsdcState === 'loading' && 'Adding test USDC...'}
-            {testUsdcState === 'success' && 'Test USDC added — refresh if needed'}
-            {testUsdcState === 'error' && 'Could not add test USDC — tap to retry'}
-            {testUsdcState === 'idle' && `Get ${TESTNET_AUTO_USDC_AMOUNT} free test USDC`}
-          </button>
+      {autoFundingTestnet && testUsdcProvisioning === 'loading' && (
+        <div className="mt-4 bg-rowan-mint border border-rowan-green/30 rounded-xl p-4 flex items-center gap-3">
+          <RefreshCw size={18} className="text-rowan-green animate-spin-slow shrink-0" />
+          <div>
+            <p className="text-rowan-text text-sm font-medium">Setting up your testnet wallet</p>
+            <p className="text-rowan-muted text-xs mt-1">
+              Adding {TESTNET_AUTO_USDC_AMOUNT} test USDC automatically — no action needed.
+            </p>
+          </div>
         </div>
       )}
 
-      {!needsUsdc && CURRENT_NETWORK.isTest && !balanceLoading && (usdcBalance == null || parseFloat(usdcBalance) < 0.01) && (
-        <button
-          onClick={handleGetTestUsdc}
-          disabled={testUsdcState === 'loading'}
-          className="mt-4 w-full flex items-center justify-center gap-2 bg-rowan-surface border border-rowan-border rounded-xl px-4 py-2 min-h-9 disabled:opacity-50 text-rowan-muted text-xs"
-        >
-          {testUsdcState === 'idle' && `Get ${TESTNET_AUTO_USDC_AMOUNT} free test USDC`}
-          {testUsdcState === 'loading' && 'Adding test USDC...'}
-          {testUsdcState === 'success' && 'Test USDC added'}
-          {testUsdcState === 'error' && 'Retry test USDC'}
-        </button>
+      {autoFundingTestnet && testUsdcProvisioning === 'error' && (
+        <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4">
+          <p className="text-rowan-text text-sm font-medium">Test USDC is taking longer than usual</p>
+          <p className="text-rowan-muted text-xs mt-1">
+            Pull to refresh your balance in a moment. If it stays empty, the testnet treasury may need a top-up.
+          </p>
+        </div>
       )}
 
       {!permissionGranted && !dismissed && (

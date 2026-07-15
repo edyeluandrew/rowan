@@ -38,7 +38,7 @@ export default function ImportWallet() {
             horizonUrl: import.meta.env.VITE_STELLAR_HORIZON_URL,
           })
         } catch {
-          /* can retry from Home */
+          /* Home auto-retries test USDC funding */
         }
       }
       navigate('/register')
