@@ -4,18 +4,20 @@ import Button from '../ui/Button'
 import { getSecure } from '../../utils/storage'
 import { provisionUsdcWallet, fundTestUsdcWallet } from '../../utils/stellar'
 import { CURRENT_NETWORK } from '../../utils/constants'
+import { getHorizonUrl } from '../../../shared/utils/config'
 import useWallet from '../../hooks/useWallet'
 
 /**
  * Fallback retry when automatic USDC trustline setup did not complete.
  */
 export default function UsdcTrustlineSetup({ onEnabled, compact = false }) {
-  const { hasUsdcTrustline, refresh, publicKey } = useWallet()
+  const { hasUsdcTrustline, refresh, publicKey, testUsdcProvisioning } = useWallet()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
 
   if (hasUsdcTrustline === true || success) return null
+  if (CURRENT_NETWORK.isTest && testUsdcProvisioning === 'loading') return null
 
   const handleRetry = async () => {
     setLoading(true)
@@ -26,7 +28,7 @@ export default function UsdcTrustlineSetup({ onEnabled, compact = false }) {
       const kp = JSON.parse(stored)
       if (!kp.secretKey) throw new Error('Wallet key data is corrupted. Please re-import your wallet.')
 
-      const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL
+      const horizonUrl = getHorizonUrl()
       const result = CURRENT_NETWORK.isTest
         ? await fundTestUsdcWallet({
             secretKey: kp.secretKey,

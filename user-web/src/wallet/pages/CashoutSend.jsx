@@ -7,7 +7,7 @@ import { getSecure } from '../utils/storage'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import QuoteSummary from '../components/cashout/QuoteSummary'
-import Button from '../components/ui/Button'
+import { getHorizonUrl } from '../../shared/utils/config'
 
 export default function CashoutSend() {
   const navigate = useNavigate()

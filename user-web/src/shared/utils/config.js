@@ -23,6 +23,19 @@ export function getApiUrl() {
   return raw.replace(/\/+$/, '')
 }
 
+const HORIZON_BY_NETWORK = {
+  testnet: 'https://horizon-testnet.stellar.org',
+  mainnet: 'https://horizon.stellar.org',
+}
+
+/** Horizon URL — env override, else default for active network (testnet default). */
+export function getHorizonUrl() {
+  const explicit = import.meta.env.VITE_STELLAR_HORIZON_URL?.trim()
+  if (explicit) return explicit.replace(/\/+$/, '')
+  const net = import.meta.env.VITE_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet'
+  return HORIZON_BY_NETWORK[net]
+}
+
 /** True when stellar.toml should be fetched from VITE_API_URL (not StellarToml.Resolver). */
 export function shouldFetchTomlFromApi() {
   if (import.meta.env.VITE_API_URL?.trim()) return true

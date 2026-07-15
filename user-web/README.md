@@ -36,6 +36,19 @@ Copy `.env.example` → `.env` and point `VITE_API_URL` at your backend.
 
 Every push to `master` that touches `user-web/` triggers a new deploy. Vercel reads `user-web/vercel.json` automatically.
 
+**Auto-deploy not firing?** Check:
+
+| Check | Where |
+|-------|--------|
+| Project linked to **GitHub** (not manual upload only) | Vercel → Project → Settings → Git |
+| **Root Directory** = `user-web` | Settings → General |
+| **Production Branch** = `master` | Settings → Git |
+| New commit appears under **Deployments** after `git push` | Vercel → Deployments tab |
+
+If you only ever used **Deploy manually**, create a **new** Vercel project from the GitHub repo with root `user-web`.
+
+**Render (backend)** auto-deploy is separate: Render dashboard → `rowan-backend` → Settings → **Auto-Deploy** = Yes, connected to same GitHub repo (`master`). Pushes to `backend/` or root `render.yaml` trigger backend redeploys — not Vercel.
+
 Vite **bakes env vars in at build time**. A missing `VITE_API_URL` causes:
 
 `Failed to fetch stellar.toml from localhost: Failed to fetch`

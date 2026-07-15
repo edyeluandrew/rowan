@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, Eye, EyeOff, TriangleAlert } from 'lucide-react'
 import { isValidSecretKey, keypairFromSecret, fundTestUsdcWallet } from '../utils/stellar'
 import { CURRENT_NETWORK } from '../utils/constants'
+import { getHorizonUrl } from '../../shared/utils/config'
 import { setSecure } from '../utils/storage'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -35,7 +36,7 @@ export default function ImportWallet() {
           await fundTestUsdcWallet({
             secretKey: keypairData.secretKey,
             publicKey: keypairData.publicKey,
-            horizonUrl: import.meta.env.VITE_STELLAR_HORIZON_URL,
+            horizonUrl: getHorizonUrl(),
           })
         } catch {
           /* Home auto-retries test USDC funding */

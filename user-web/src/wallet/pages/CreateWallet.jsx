@@ -4,6 +4,7 @@ import { RefreshCw, TriangleAlert } from 'lucide-react'
 import { generateKeypair, fundTestUsdcWallet, loadAccountBalances } from '../utils/stellar'
 import { setSecure } from '../utils/storage'
 import { WALLET_GEN_DELAY_MS, TESTNET_AUTO_USDC_AMOUNT, CURRENT_NETWORK } from '../utils/constants'
+import { getHorizonUrl } from '../../shared/utils/config'
 import AddressDisplay from '../components/wallet/AddressDisplay'
 import Button from '../components/ui/Button'
 
@@ -26,19 +27,17 @@ export default function CreateWallet() {
       setStatusMessage('Adding test USDC to your wallet...')
       let funded = false
       try {
+        const horizonUrl = getHorizonUrl()
         const result = await fundTestUsdcWallet({
           secretKey: kp.secretKey,
           publicKey: kp.publicKey,
-          horizonUrl: import.meta.env.VITE_STELLAR_HORIZON_URL,
+          horizonUrl,
         })
         funded = result.usdcFunded !== false && result.skipped !== 'already_has_usdc'
           ? !!result.usdcFunded
           : (result.usdcBalance ?? 0) >= 1
         if (!funded && CURRENT_NETWORK.isTest) {
-          const balances = await loadAccountBalances(
-            kp.publicKey,
-            import.meta.env.VITE_STELLAR_HORIZON_URL
-          )
+          const balances = await loadAccountBalances(kp.publicKey, horizonUrl)
           funded = balances.usdc >= 1
         }
       } catch {

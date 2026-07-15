@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { loadAccountBalances, provisionUsdcWallet, fundTestUsdcWallet } from '../utils/stellar'
 import { getSecure } from '../utils/storage'
 import { CURRENT_NETWORK, TESTNET_MIN_USDC_FOR_SKIP } from '../utils/constants'
+import { getHorizonUrl } from '../../shared/utils/config'
 
 /**
  * Hook to load and refresh the user's Stellar wallet balances from Horizon.
@@ -19,7 +20,7 @@ export default function useWallet() {
   const provisionAttempted = useRef(null)
   const testUsdcAttempted = useRef(null)
 
-  const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL
+  const horizonUrl = getHorizonUrl()
 
   const fetchBalance = useCallback(async () => {
     if (!keypair?.publicKey) return
