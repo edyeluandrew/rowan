@@ -42,6 +42,7 @@
 | [ops/A1_E2E_CASHOUT_RUNBOOK.md](./ops/A1_E2E_CASHOUT_RUNBOOK.md) | Execute A1 on-chain cash-out PASS |
 | [ops/UPTIME_MONITORING_SETUP.md](./ops/UPTIME_MONITORING_SETUP.md) | Wire external /health monitor (P0-2) |
 | [ops/PARTNER_MOMO_PILOT_ADDENDUM.md](./ops/PARTNER_MOMO_PILOT_ADDENDUM.md) | Draft partner MoMo agreement for outreach |
+| [ops/TESTNET_PILOT_BRIEF.md](./ops/TESTNET_PILOT_BRIEF.md) | Invite-only testnet pilot — caps, support, stop rules |
 
 ---
 

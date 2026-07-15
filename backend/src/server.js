@@ -56,7 +56,11 @@ app.set('trust proxy', 1);
 
 // ─── Middleware ──────────────────────────────────────────────
 // [P8 FIX] Security headers via Helmet
-app.use(helmet());
+// crossOriginResourcePolicy must allow cross-origin reads — wallet web (Vercel) fetches
+// /.well-known/stellar.toml and API routes from a different origin than Render.
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
 // [AUDIT FIX] Validate critical env vars before proceeding
 // [STROOPS FIX] USDC amounts stored as stroops (integers) to avoid bigint conversion errors

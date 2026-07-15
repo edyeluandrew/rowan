@@ -19,5 +19,14 @@ export function getHomeDomain() {
 }
 
 export function getApiUrl() {
-  return import.meta.env.VITE_API_URL || 'http://localhost:4000'
+  const raw = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+  return raw.replace(/\/+$/, '')
+}
+
+/** True when stellar.toml should be fetched from VITE_API_URL (not StellarToml.Resolver). */
+export function shouldFetchTomlFromApi() {
+  if (import.meta.env.VITE_API_URL?.trim()) return true
+  const domain = getHomeDomain()
+  // API hosts (Render, Railway, etc.) serve toml from the backend — not a separate anchor domain
+  return /^(localhost|127\.|10\.|192\.168\.|172\.|\d+\.\d+\.\d+\.\d+|.*\.onrender\.com$)/.test(domain)
 }
