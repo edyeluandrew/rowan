@@ -39,7 +39,7 @@ Use this checklist before submitting the Phase 1 completion package. Check items
 - [x] Horizon detection log captured (Render logs)
 - [x] Detection timing recorded (~3s: 16:43:10Z → 16:43:13Z)
 - [x] Screenshot: test payment explorer (`07-test-payment-explorer.png`) — captured
-- [x] Screenshot: Horizon detection log (`08-horizon-detection-log.png`) — captured (upgrade optional: include ⭐ line)
+- [x] Screenshot: Horizon detection log (`08-horizon-detection-log.png`) — captured with ⭐ event + addresses + tx hash
 
 ### Safe fresh payment test procedure
 

@@ -51,15 +51,15 @@ Replace `GXXX...` in the challenge URL with any valid 56-character Stellar publi
 
 | Resource | Value / URL |
 |----------|-------------|
-| Evidence transaction hash | `52ba2f9708431f304af7c5581259d1af7e3680b515382293d666e2700fb366c5` |
-| Evidence transaction (Stellar Expert) | https://stellar.expert/explorer/testnet/tx/52ba2f9708431f304af7c5581259d1af7e3680b515382293d666e2700fb366c5 |
+| Evidence transaction hash | `183796303ae529608943bf4405f643eb31e6340e4ef15798a92340bc488930d7` |
+| Evidence transaction (Stellar Expert) | https://stellar.expert/explorer/testnet/tx/183796303ae529608943bf4405f643eb31e6340e4ef15798a92340bc488930d7 |
 | Payment type | Inbound native XLM to escrow (no memo — safe evidence test) |
 | Amount | 0.1 XLM |
-| Sender (public) | `GAZFTOHMOBLEWXH3FZBU2ZZORVF7WHAHUUJCR7IOH6IYRAOCMG7DY6FJ` |
+| Sender (public) | `GBEMAXEUIZZCQHDP2CBOLFBAHY6KP5KAOJHH65PI2L2SRE4PJ6VUV4E2` |
 | Escrow (public) | `GCIRNEH3ERTDIF3YVNUDXPCAAWCB36LRDPGAYRSDORZDQJWPY55NBUEA` |
-| Confirmed (on-chain) | 2026-07-20T16:43:10Z |
-| Backend log (Render) | `[Horizon] ⚠️ Payment without Rowan sell memo — ignoring` at ~2026-07-20T16:43:13Z |
-| Detection latency | **~3 seconds** (on-chain confirm → backend log) |
+| Confirmed (on-chain) | ~2026-07-20T17:06:00Z |
+| Backend log (Render) | `[Horizon] ⭐ Payment event: GBEMAX... → GCIRNEH3... (0.1000000 XLM)` + memo-ignore warn with tx hash |
+| Detection latency | **<1 second** (both log lines at 09:06:00 PM local) |
 
 Screenshots: `07-test-payment-explorer.png`, `08-horizon-detection-log.png`
 
