@@ -1,10 +1,16 @@
 export const ACTION_TYPES = {
   'trader_approved': { label: 'Trader Approved', color: 'green' },
+  'approve_trader': { label: 'Trader Approved', color: 'green' },
+  'trader_verify_approve': { label: 'Trader Verified', color: 'green' },
   'trader_suspended': { label: 'Trader Suspended', color: 'red' },
+  'suspend_trader': { label: 'Trader Suspended', color: 'red' },
   'trader_reactivated': { label: 'Trader Reactivated', color: 'green' },
+  'reactivate_trader': { label: 'Trader Reactivated', color: 'green' },
   'trader_verified': { label: 'Trader Verified', color: 'green' },
   'trader_limits_updated': { label: 'Limits Updated', color: 'blue' },
+  'update_trader_limits': { label: 'Limits Updated', color: 'blue' },
   'trader_float_adjusted': { label: 'Float Adjusted', color: 'blue' },
+  'adjust_float': { label: 'Float Adjusted', color: 'blue' },
   'dispute_resolved': { label: 'Dispute Resolved', color: 'green' },
   'dispute_escalated': { label: 'Dispute Escalated', color: 'yellow' },
   'dispute_note_added': { label: 'Note Added', color: 'blue' },
@@ -13,8 +19,11 @@ export const ACTION_TYPES = {
   'transaction_reassigned': { label: 'Transaction Reassigned', color: 'blue' },
   'rate_updated': { label: 'Rate Updated', color: 'blue' },
   'alert_resolved': { label: 'Alert Resolved', color: 'green' },
+  'resolve_alert': { label: 'Alert Resolved', color: 'green' },
   'alert_created': { label: 'Alert Created', color: 'yellow' },
   'admin_login': { label: 'Admin Login', color: 'gray' },
+  'admin_login_started': { label: 'Admin Login Started', color: 'gray' },
+  'admin_2fa_bypassed': { label: '2FA Bypassed', color: 'yellow' },
   'admin_logout': { label: 'Admin Logout', color: 'gray' },
 }
 
@@ -31,6 +40,8 @@ export const ENTITY_TYPES = {
   'rate': 'Rate',
   'alert': 'Alert',
   'admin': 'Admin',
+  'admin_action': 'Admin Action',
+  'user': 'User',
   'system': 'System',
 }
 

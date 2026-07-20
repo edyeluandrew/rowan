@@ -2097,7 +2097,7 @@ router.get('/audit-logs', authAdmin, async (req, res, next) => {
       page: parseInt(req.query.page) || 1,
       limit: parseInt(req.query.limit) || 50,
       action: req.query.action,
-      entity_type: req.query.entity_type,
+      resource_type: req.query.resource_type || req.query.entity_type,
       search: req.query.search,
       date_from: req.query.date_from,
     };

@@ -75,11 +75,29 @@ async function log(entry) {
  * Legacy function for backward compatibility
  */
 async function logAdminAction(adminId, action, details = {}) {
+  let resource_type = 'admin_action';
+  let resource_id = details.resource_id || details.resourceId || null;
+
+  if (!resource_id && details.traderId) {
+    resource_type = 'trader';
+    resource_id = details.traderId;
+  } else if (!resource_id && (details.transactionId || details.transaction_id)) {
+    resource_type = 'transaction';
+    resource_id = details.transactionId || details.transaction_id;
+  } else if (!resource_id && (details.disputeId || details.dispute_id)) {
+    resource_type = 'dispute';
+    resource_id = details.disputeId || details.dispute_id;
+  } else if (!resource_id && details.user_id) {
+    resource_type = 'user';
+    resource_id = details.user_id;
+  }
+
   return log({
     admin_id: adminId,
     actor_role: 'admin',
     action,
-    resource_type: 'admin_action',
+    resource_type,
+    resource_id,
     metadata: details,
   });
 }
@@ -92,48 +110,52 @@ async function getAuditLogs(filters = {}) {
     const { page = 1, limit = 50, action, resource_type, search, date_from, admin_id } = filters;
     const offset = (page - 1) * limit;
 
-    let query = 'SELECT * FROM audit_logs WHERE 1=1';
+    let query = `
+      SELECT al.*, u.email AS admin_email
+      FROM audit_logs al
+      LEFT JOIN users u ON u.id = al.admin_id
+      WHERE 1=1
+    `;
     const params = [];
     let paramCount = 1;
 
     if (action) {
-      query += ` AND action = $${paramCount}`;
+      query += ` AND al.action = $${paramCount}`;
       params.push(action);
       paramCount++;
     }
 
     if (resource_type) {
-      query += ` AND resource_type = $${paramCount}`;
+      query += ` AND al.resource_type = $${paramCount}`;
       params.push(resource_type);
       paramCount++;
     }
 
     if (admin_id) {
-      query += ` AND admin_id = $${paramCount}`;
+      query += ` AND al.admin_id = $${paramCount}`;
       params.push(admin_id);
       paramCount++;
     }
 
     if (search) {
-      query += ` AND (admin_id ILIKE $${paramCount} OR metadata::text ILIKE $${paramCount + 1})`;
+      query += ` AND (u.email ILIKE $${paramCount} OR al.admin_id::text ILIKE $${paramCount} OR al.resource_id::text ILIKE $${paramCount} OR al.metadata::text ILIKE $${paramCount})`;
       params.push(`%${search}%`);
-      params.push(`%${search}%`);
-      paramCount += 2;
+      paramCount++;
     }
 
     if (date_from) {
-      query += ` AND created_at >= $${paramCount}`;
+      query += ` AND al.created_at >= $${paramCount}`;
       params.push(date_from);
       paramCount++;
     }
 
     // Get total count
-    const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as count');
+    const countQuery = query.replace('SELECT al.*, u.email AS admin_email', 'SELECT COUNT(*) as count');
     const countResult = await db.query(countQuery, params);
     const total = parseInt(countResult.rows[0]?.count || 0, 10);
 
     // Get paginated results
-    query += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+    query += ` ORDER BY al.created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
     params.push(limit, offset);
 
     const result = await db.query(query, params);

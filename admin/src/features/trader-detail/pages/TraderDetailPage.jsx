@@ -57,7 +57,6 @@ export default function TraderDetailPage() {
     try {
       if (confirm.action === 'approve') {
         await approveTrader(id)
-        logAdminAction('approve_trader', { traderId: id })
       } else if (confirm.action === 'suspend') {
         await suspendTrader(id, suspendReason)
         logAdminAction('suspend_trader', { traderId: id, reason: suspendReason })
