@@ -629,10 +629,11 @@ router.get('/traders/:id/verification', authAdmin, async (req, res, next) => {
  */
 async function handleTraderVerify(req, res, next) {
   try {
+    const body = req.body || {};
     const result = await verificationService.adminVerifyTrader(
       req.params.id,
       req.adminId,
-      { notes: req.body.notes, checks: req.body.checks }
+      { notes: body.notes, checks: body.checks }
     );
     await auditLogService.log({
       admin_id: req.adminId,
@@ -641,7 +642,7 @@ async function handleTraderVerify(req, res, next) {
       resource_type: 'trader',
       resource_id: req.params.id,
       new_value: { verification_status: 'VERIFIED' },
-      metadata: { notes: req.body.notes },
+      metadata: { notes: body.notes },
     });
     res.json({ success: true, ...result, message: 'Trader verified and activated. They will now receive matches.' });
   } catch (err) {

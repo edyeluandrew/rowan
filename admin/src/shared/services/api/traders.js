@@ -9,7 +9,7 @@ export function getTrader(id) {
 }
 
 export function approveTrader(id) {
-  return client.post(`/api/v1/admin/traders/${id}/verify`)
+  return client.post(`/api/v1/admin/traders/${id}/verify`, {})
 }
 
 export function suspendTrader(id, reason) {
