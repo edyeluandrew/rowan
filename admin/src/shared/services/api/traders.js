@@ -9,15 +9,15 @@ export function getTrader(id) {
 }
 
 export function approveTrader(id) {
-  return client.post(`/api/v1/admin/traders/${id}/approve`)
+  return client.post(`/api/v1/admin/traders/${id}/verify`)
 }
 
 export function suspendTrader(id, reason) {
-  return client.post(`/api/v1/admin/traders/${id}/suspend`, { reason })
+  return client.put(`/api/v1/admin/traders/${id}/suspend`, { suspended: true, reason })
 }
 
 export function reactivateTrader(id) {
-  return client.post(`/api/v1/admin/traders/${id}/reactivate`)
+  return client.put(`/api/v1/admin/traders/${id}/suspend`, { suspended: false })
 }
 
 export function updateTraderLimits(id, limits) {
