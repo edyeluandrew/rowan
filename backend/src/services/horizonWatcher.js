@@ -61,7 +61,11 @@ async function startWatcher() {
     .stream({
       onmessage: (payment) => {
         lastPaymentAt = Date.now();
-        logger.info(`[Horizon] ⭐ Payment event: ${payment.from} → ${payment.to} (${payment.amount} XLM)`);
+        const assetLabel = payment.asset_type === 'native'
+          ? 'XLM'
+          : (payment.asset_code || payment.asset_type);
+        // warn level so payment detection is visible in production (LOG_LEVEL defaults to warn)
+        logger.warn(`[Horizon] ⭐ Payment event: ${payment.from} → ${payment.to} (${payment.amount} ${assetLabel})`);
         handlePayment(payment);
       },
       onerror: (err) => {
@@ -125,7 +129,9 @@ async function handlePayment(payment) {
       logger.info(`[Horizon] 📋 Transaction memo: "${memo}"`);
 
       if (!memo.startsWith('ROWAN-qt_')) {
-        logger.warn(`[Horizon] ⚠️  Payment without Rowan sell memo — ignoring`);
+        logger.warn(
+          `[Horizon] ⚠️  Payment without Rowan sell memo — ignoring (${payment.from} → ${payment.to}, ${payment.amount} XLM, tx ${tx.hash})`
+        );
         return;
       }
 
