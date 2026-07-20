@@ -625,8 +625,9 @@ router.get('/traders/:id/verification', authAdmin, async (req, res, next) => {
 
 /**
  * POST /api/v1/admin/traders/:id/verify
+ * POST /api/v1/admin/traders/:id/approve — Phase 1 alias
  */
-router.post('/traders/:id/verify', authAdmin, async (req, res, next) => {
+async function handleTraderVerify(req, res, next) {
   try {
     const result = await verificationService.adminVerifyTrader(
       req.params.id,
@@ -644,13 +645,19 @@ router.post('/traders/:id/verify', authAdmin, async (req, res, next) => {
     });
     res.json({ success: true, ...result, message: 'Trader verified and activated. They will now receive matches.' });
   } catch (err) {
-    const clientErrors = ['Cannot verify', 'not accepted', 'already verified', 'Verification record not found'];
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    const clientErrors = ['Cannot verify', 'not accepted', 'already verified', 'Verification record not found', 'Trader not found'];
     if (clientErrors.some((msg) => err.message.includes(msg))) {
       return res.status(400).json({ error: err.message });
     }
     next(err);
   }
-});
+}
+
+router.post('/traders/:id/verify', authAdmin, handleTraderVerify);
+router.post('/traders/:id/approve', authAdmin, handleTraderVerify);
 
 /**
  * POST /api/v1/admin/traders/:id/reject

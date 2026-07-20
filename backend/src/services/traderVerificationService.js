@@ -236,56 +236,67 @@ async function getVerificationDetail(traderId) {
  * or pass nothing to auto-verify all remaining PENDING checks.
  */
 async function adminVerifyTrader(traderId, adminId, { notes, checks = {} } = {}) {
-  // Load current state — self-signup traders may not have a row yet
-  let vResult = await db.query(
-    `SELECT * FROM trader_verifications WHERE trader_id = $1`,
+  const traderRes = await db.query(
+    `SELECT id, verification_status, status FROM traders WHERE id = $1`,
     [traderId]
   );
-  if (vResult.rows.length === 0) {
-    await createVerificationRecord(traderId);
-    vResult = await db.query(
-      `SELECT * FROM trader_verifications WHERE trader_id = $1`,
-      [traderId]
-    );
+  if (traderRes.rows.length === 0) {
+    const err = new Error('Trader not found');
+    err.statusCode = 404;
+    throw err;
   }
-  const v = vResult.rows[0];
-  if (!v) throw new Error('Verification record not found');
-
-  if (v.verification_status === 'VERIFIED') {
+  const trader = traderRes.rows[0];
+  if (trader.verification_status === 'VERIFIED' && trader.status === 'ACTIVE') {
     throw new Error('Trader is already verified');
   }
 
   // Admin approval is authoritative (Phase 1 one-click approve).
-  // Explicit checks in body can override; otherwise default unset items to PASSED.
-  const identity = checks.identity || (v.identity_check === 'FAILED' ? v.identity_check : 'PASSED');
-  const momo = checks.momo || (v.momo_check === 'FAILED' ? v.momo_check : 'PASSED');
-  const p2p = checks.p2p || (v.p2p_check === 'FAILED' ? v.p2p_check : 'PASSED');
+  const identity = checks.identity || 'PASSED';
+  const momo = checks.momo || 'PASSED';
+  const p2p = checks.p2p || 'PASSED';
   const agreement = checks.agreement || 'PASSED';
 
-  const allPassed = identity === 'PASSED' && momo === 'PASSED' && p2p === 'PASSED' && agreement === 'PASSED';
-  if (!allPassed) {
+  if (identity !== 'PASSED' || momo !== 'PASSED' || p2p !== 'PASSED' || agreement !== 'PASSED') {
     throw new Error(
       `Cannot verify: identity=${identity}, momo=${momo}, p2p=${p2p}, agreement=${agreement}. All must be PASSED.`
     );
   }
 
-  // Update verification record
+  // Upsert verification row — self-signup traders may not have one yet.
   await db.query(
-    `UPDATE trader_verifications SET
-       identity_check = $1, momo_check = $2, p2p_check = $3, agreement_check = $4,
+    `INSERT INTO trader_verifications (
+       trader_id, verification_status, identity_check, momo_check, p2p_check, agreement_check,
+       review_notes, reviewed_at
+     ) VALUES ($1, 'VERIFIED', $2, $3, $4, $5, $6, NOW())
+     ON CONFLICT (trader_id) DO UPDATE SET
+       identity_check = EXCLUDED.identity_check,
+       momo_check = EXCLUDED.momo_check,
+       p2p_check = EXCLUDED.p2p_check,
+       agreement_check = EXCLUDED.agreement_check,
        verification_status = 'VERIFIED',
-       reviewed_by = $5, review_notes = $6, reviewed_at = NOW()
-     WHERE trader_id = $7`,
-    [identity, momo, p2p, agreement, adminId, notes || null, traderId]
+       review_notes = EXCLUDED.review_notes,
+       reviewed_at = NOW()`,
+    [traderId, identity, momo, p2p, agreement, notes || null]
   );
 
-  // Update traders table — make trader matchable
+  // reviewed_by FK is best-effort — must not block admin approval.
+  if (adminId) {
+    try {
+      await db.query(
+        `UPDATE trader_verifications SET reviewed_by = $1 WHERE trader_id = $2`,
+        [adminId, traderId]
+      );
+    } catch (err) {
+      logger.warn(`[Verification] Could not set reviewed_by for trader ${traderId}: ${err.message}`);
+    }
+  }
+
   await db.query(
     `UPDATE traders SET verification_status = 'VERIFIED', status = 'ACTIVE', is_active = TRUE, is_suspended = FALSE WHERE id = $1`,
     [traderId]
   );
 
-  logger.info(`[Verification] Trader ${traderId} VERIFIED by admin ${adminId}`);
+  logger.info(`[Verification] Trader ${traderId} VERIFIED by admin ${adminId || 'unknown'}`);
   return { traderId, status: 'VERIFIED' };
 }
 
