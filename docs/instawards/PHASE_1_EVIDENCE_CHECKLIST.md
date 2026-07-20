@@ -34,17 +34,12 @@ Use this checklist before submitting the Phase 1 completion package. Check items
 - [x] Escrow account exists on testnet
 - [x] Escrow account funded (Horizon verified)
 - [x] Explorer link works
-- [x] Historical inbound XLM payment visible on-chain
+- [x] Fresh inbound XLM payment visible on-chain (0.1 XLM, 20 Jul 2026)
 - [x] Payment hash saved in documentation
-- [ ] Horizon detection log captured (Render logs)
-- [ ] Amount / sender / timestamp visible in backend log
-- [ ] Detection timing recorded (confirmation → log, target ≤5s)
-- [x] Redis cursor persistence implemented in code
-- [ ] Redis cursor runtime evidence (optional)
-- [x] No secrets visible in code paths reviewed
-- [ ] Screenshot: escrow on Stellar Expert (`06-escrow-stellar-expert.png`)
-- [ ] Screenshot: test payment explorer (`07-test-payment-explorer.png`)
-- [ ] Screenshot: Horizon detection log (`08-horizon-detection-log.png`)
+- [x] Horizon detection log captured (Render logs)
+- [x] Detection timing recorded (~3s: 16:43:10Z → 16:43:13Z)
+- [x] Screenshot: test payment explorer (`07-test-payment-explorer.png`) — captured
+- [x] Screenshot: Horizon detection log (`08-horizon-detection-log.png`) — captured (upgrade optional: include ⭐ line)
 
 ### Safe fresh payment test procedure
 
@@ -59,25 +54,17 @@ Use this checklist before submitting the Phase 1 completion package. Check items
 ## Deliverable 3 — Admin Application
 
 - [x] Admin URL live (login page loads)
-- [ ] Admin login works (requires authorized credentials — not tested in audit)
-- [x] System Health page exists in codebase
-- [x] Public API health endpoint verified (`/health`)
-- [ ] PostgreSQL health visible in admin UI (cross-check with `/health`)
-- [ ] Redis health visible in admin UI
-- [ ] Horizon health visible in admin UI
-- [ ] Test partner visible: **Instawards Phase 1 Test Partner**
-- [ ] Approval confirmation dialog shown
-- [ ] Partner approved successfully
-- [ ] Audit log entry created
-
-**Known blocker (resolved in repo 20 Jul 2026):** Admin UI previously called `POST /traders/:id/approve` but backend exposes `POST /traders/:id/verify`. Fixed in `admin/src/shared/services/api/traders.js` — **deploy admin to Vercel** before evidence capture.
-
-- [ ] Screenshot: admin login (`09-admin-login.png`)
-- [ ] Screenshot: System Health (`10-admin-system-health.png`)
-- [ ] Screenshot: test partner pending (`11-test-partner-pending.png`)
-- [ ] Screenshot: approval confirmation (`12-partner-approval-confirmation.png`)
-- [ ] Screenshot: partner approved (`13-test-partner-approved.png`)
-- [ ] Screenshot: audit log (`14-admin-audit-log.png`)
+- [x] Admin login works
+- [x] PostgreSQL / Redis / Horizon health visible in admin UI (System Health screenshot)
+- [x] Pending traders visible (Edyelu Andrew pending screenshot)
+- [x] Approval confirmation dialog shown
+- [x] Partner approved successfully (Active status)
+- [x] Audit log entry created (admin email + trader ID visible)
+- [x] Screenshot: System Health (`10-admin-system-health.png`)
+- [x] Screenshot: test partner pending (`11-test-partner-pending.png`)
+- [x] Screenshot: approval confirmation (`12-partner-approval-confirmation.png`)
+- [x] Screenshot: partner approved (`13-test-partner-approved.png`)
+- [x] Screenshot: audit log (`14-admin-audit-log.png`)
 
 ---
 

@@ -47,7 +47,25 @@ Replace `GXXX...` in the challenge URL with any valid 56-character Stellar publi
 
 ---
 
-## Transaction Evidence (Historical — On-Chain Verified)
+## Transaction Evidence (Fresh — 20 July 2026, On-Chain + Log Verified)
+
+| Resource | Value / URL |
+|----------|-------------|
+| Evidence transaction hash | `52ba2f9708431f304af7c5581259d1af7e3680b515382293d666e2700fb366c5` |
+| Evidence transaction (Stellar Expert) | https://stellar.expert/explorer/testnet/tx/52ba2f9708431f304af7c5581259d1af7e3680b515382293d666e2700fb366c5 |
+| Payment type | Inbound native XLM to escrow (no memo — safe evidence test) |
+| Amount | 0.1 XLM |
+| Sender (public) | `GAZFTOHMOBLEWXH3FZBU2ZZORVF7WHAHUUJCR7IOH6IYRAOCMG7DY6FJ` |
+| Escrow (public) | `GCIRNEH3ERTDIF3YVNUDXPCAAWCB36LRDPGAYRSDORZDQJWPY55NBUEA` |
+| Confirmed (on-chain) | 2026-07-20T16:43:10Z |
+| Backend log (Render) | `[Horizon] ⚠️ Payment without Rowan sell memo — ignoring` at ~2026-07-20T16:43:13Z |
+| Detection latency | **~3 seconds** (on-chain confirm → backend log) |
+
+Screenshots: `07-test-payment-explorer.png`, `08-horizon-detection-log.png`
+
+---
+
+## Transaction Evidence (Historical — On-Chain Only)
 
 | Resource | Value / URL |
 |----------|-------------|
@@ -57,8 +75,6 @@ Replace `GXXX...` in the challenge URL with any valid 56-character Stellar publi
 | Amount | 6.2382206 XLM |
 | Sender (public) | `GCM674LIRDH6JA7XPB3VPVHLNND7M3GQTRCNOO3LQ64DAPI72SOQTNMZ` |
 | Confirmed (on-chain) | 2026-07-04T08:24:48Z |
-
-**Pending:** Render backend log screenshot correlating this transaction (or a fresh memo-free test payment).
 
 ---
 
