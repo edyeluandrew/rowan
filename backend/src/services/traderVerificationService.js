@@ -236,11 +236,18 @@ async function getVerificationDetail(traderId) {
  * or pass nothing to auto-verify all remaining PENDING checks.
  */
 async function adminVerifyTrader(traderId, adminId, { notes, checks = {} } = {}) {
-  // Load current state
-  const vResult = await db.query(
+  // Load current state — self-signup traders may not have a row yet
+  let vResult = await db.query(
     `SELECT * FROM trader_verifications WHERE trader_id = $1`,
     [traderId]
   );
+  if (vResult.rows.length === 0) {
+    await createVerificationRecord(traderId);
+    vResult = await db.query(
+      `SELECT * FROM trader_verifications WHERE trader_id = $1`,
+      [traderId]
+    );
+  }
   const v = vResult.rows[0];
   if (!v) throw new Error('Verification record not found');
 
@@ -248,32 +255,28 @@ async function adminVerifyTrader(traderId, adminId, { notes, checks = {} } = {})
     throw new Error('Trader is already verified');
   }
 
-  // Agreement must be accepted
-  if (v.agreement_check !== 'PASSED') {
-    throw new Error('Trader has not accepted the agreement yet');
-  }
+  // Admin approval is authoritative (Phase 1 one-click approve).
+  // Explicit checks in body can override; otherwise default unset items to PASSED.
+  const identity = checks.identity || (v.identity_check === 'FAILED' ? v.identity_check : 'PASSED');
+  const momo = checks.momo || (v.momo_check === 'FAILED' ? v.momo_check : 'PASSED');
+  const p2p = checks.p2p || (v.p2p_check === 'FAILED' ? v.p2p_check : 'PASSED');
+  const agreement = checks.agreement || 'PASSED';
 
-  // Apply check overrides or default to PASSED
-  const identity = checks.identity || (v.identity_check === 'PENDING' ? 'PASSED' : v.identity_check);
-  const momo = checks.momo || (v.momo_check === 'PENDING' ? 'PASSED' : v.momo_check);
-  const p2p = checks.p2p || (v.p2p_check === 'PENDING' ? 'PASSED' : v.p2p_check);
-
-  // Triple-check enforcement: all three must be PASSED to verify
-  const allPassed = identity === 'PASSED' && momo === 'PASSED' && p2p === 'PASSED';
+  const allPassed = identity === 'PASSED' && momo === 'PASSED' && p2p === 'PASSED' && agreement === 'PASSED';
   if (!allPassed) {
     throw new Error(
-      `Cannot verify: identity=${identity}, momo=${momo}, p2p=${p2p}. All must be PASSED.`
+      `Cannot verify: identity=${identity}, momo=${momo}, p2p=${p2p}, agreement=${agreement}. All must be PASSED.`
     );
   }
 
   // Update verification record
   await db.query(
     `UPDATE trader_verifications SET
-       identity_check = $1, momo_check = $2, p2p_check = $3,
+       identity_check = $1, momo_check = $2, p2p_check = $3, agreement_check = $4,
        verification_status = 'VERIFIED',
-       reviewed_by = $4, review_notes = $5, reviewed_at = NOW()
-     WHERE trader_id = $6`,
-    [identity, momo, p2p, adminId, notes || null, traderId]
+       reviewed_by = $5, review_notes = $6, reviewed_at = NOW()
+     WHERE trader_id = $7`,
+    [identity, momo, p2p, agreement, adminId, notes || null, traderId]
   );
 
   // Update traders table — make trader matchable

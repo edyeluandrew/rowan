@@ -644,7 +644,8 @@ router.post('/traders/:id/verify', authAdmin, async (req, res, next) => {
     });
     res.json({ success: true, ...result, message: 'Trader verified and activated. They will now receive matches.' });
   } catch (err) {
-    if (err.message.includes('Cannot verify') || err.message.includes('not accepted') || err.message.includes('already verified')) {
+    const clientErrors = ['Cannot verify', 'not accepted', 'already verified', 'Verification record not found'];
+    if (clientErrors.some((msg) => err.message.includes(msg))) {
       return res.status(400).json({ error: err.message });
     }
     next(err);

@@ -9,6 +9,7 @@ import redis from '../db/redis.js';
 import bcrypt from 'bcryptjs';
 import { StellarSdk, networkPassphrase } from '../config/stellar.js';
 import auditLogService from '../services/auditLogService.js';
+import verificationService from '../services/traderVerificationService.js';
 import logger from '../utils/logger.js';
 import {
   generateTotpSecret,
@@ -420,6 +421,7 @@ router.post(
       );
 
       const trader = result.rows[0];
+      await verificationService.createVerificationRecord(trader.id);
       const token = signToken(trader.id, 'trader');
 
       res.status(201).json({
