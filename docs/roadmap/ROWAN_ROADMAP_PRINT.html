@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Rowan Product Roadmap — Beta Tech Labs</title>
+<style>
+  @page { margin: 2.54cm; }
+  body {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 12pt;
+    line-height: 1.5;
+    color: #000;
+    margin: 0;
+    padding: 24pt;
+  }
+  h1 { font-size: 16pt; font-weight: bold; margin: 18pt 0 12pt 0; }
+  h2 { font-size: 14pt; font-weight: bold; margin: 14pt 0 10pt 0; }
+  h3 { font-size: 12pt; font-weight: bold; margin: 12pt 0 8pt 0; }
+  h4 { font-size: 12pt; font-weight: bold; font-style: italic; margin: 10pt 0 6pt 0; }
+  p { margin: 0 0 8pt 0; text-align: justify; }
+  table { font-size: 11pt; }
+  td, th { padding: 4pt 6pt; vertical-align: top; border: 1px solid #000; }
+  th { font-weight: bold; background: #f0f0f0; }
+  code { font-family: Consolas, monospace; font-size: 10pt; }
+  hr { margin: 18pt 0; border: none; border-top: 1px solid #999; }
+  .cover { text-align: center; padding: 100pt 0 60pt 0; page-break-after: always; }
+  .cover h1 { font-size: 22pt; }
+  .cover .sub { font-size: 14pt; margin: 8pt 0; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>Rowan Product Roadmap</h1>
+  <p class="sub"><strong>Beta Tech Labs Company Limited</strong></p>
+  <p class="sub">Complete Pre-Implementation Documentation</p>
+  <p class="sub">Version 1.0 — 24 July 2026</p>
+  <p class="sub">Font: Times New Roman, 12pt</p>
+  <p class="sub">55 Build Items | Phase 2A → Phase 3</p>
+  <p class="sub">Team: Edyelu Andrew, Eragu Enoch, Laloyo Joshua, Kabuye Wamala</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: README.md</p><h1>Rowan Product Roadmap — Documentation Index</h1>
+
+<p><strong>Company:</strong> Beta Tech Labs Company Limited (URSB, Uganda)  </p>
+<p><strong>Product:</strong> Rowan — Digital dollar wallet &amp; Stellar on/off-ramp for East Africa  </p>
+<p><strong>Document set version:</strong> 1.0  </p>
+<p><strong>Last updated:</strong> 24 July 2026  </p>
+<p><strong>Primary contact:</strong> Edyelu Andrew — edyeluandrew1@gmail.com  </p>
+
+<hr/>
+
+<h2>Purpose</h2>
+
+<p>This folder contains the <strong>complete pre-implementation roadmap</strong> for Rowan Phase 2 and beyond. Read these documents <strong>before</strong> starting any new feature work. Phase 1 (Instawards foundation) is complete and submitted; everything here builds on top of that.</p>
+
+<hr/>
+
+<h2>Document Map</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>#</th><th>Document</th><th>Description</th></tr>
+<tr><td>00</td><td>[Executive Overview](./00_EXECUTIVE_OVERVIEW.md)</td><td>Vision, positioning, B2B vs B2C, competitive angle</td></tr>
+<tr><td>01</td><td>[Current State Assessment](./01_CURRENT_STATE.md)</td><td>What exists in the codebase today (% complete per area)</td></tr>
+<tr><td>02</td><td>[Master Build List](./02_MASTER_BUILD_LIST.md)</td><td>All 55 build items (A–G) with IDs, priority, dependencies</td></tr>
+<tr><td>03</td><td>[Phase Timeline &amp; Sequencing](./03_PHASE_TIMELINE.md)</td><td>Phase 2A / 2B / 2C / 3 with weeks and milestones</td></tr>
+<tr><td>04</td><td>[Compliance &amp; Foundation (A)](./04_COMPLIANCE_FOUNDATION.md)</td><td>Bank, TIN, AML, Smile ID, tiered KYC</td></tr>
+<tr><td>05</td><td>[Utilities &amp; Wallet (B)](./05_UTILITIES_WALLET.md)</td><td>Airtime, bills, savings, yield, virtual cards</td></tr>
+<tr><td>06</td><td>[Payment Aggregators (C)](./06_PAYMENT_AGGREGATORS.md)</td><td>Yellow Pay, Onafriq, Flutterwave, hybrid architecture</td></tr>
+<tr><td>07</td><td>[P2P Trader Upgrades (D)](./07_P2P_TRADER_UPGRADES.md)</td><td>Rwanda, merchant agents, dispute reduction</td></tr>
+<tr><td>08</td><td>[Multi-Country Expansion (E)](./08_MULTI_COUNTRY.md)</td><td>Country registry, per-country rules, West Africa</td></tr>
+<tr><td>09</td><td>[Cross-Chain &amp; CCTP (F)](./09_CROSS_CHAIN.md)</td><td>Stellar → EVM, Wormhole/LayerZero, timing</td></tr>
+<tr><td>10</td><td>[Platform &amp; Operations (G)](./10_PLATFORM_OPS.md)</td><td>Domains, monitoring, B2B, partner MoUs</td></tr>
+<tr><td>11</td><td>[Decision Record](./11_DECISION_RECORD.md)</td><td>Locked decisions, open questions, aggregator/KYC choices</td></tr>
+<tr><td>12</td><td>[Implementation Starter Guide](./12_IMPLEMENTATION_STARTER.md)</td><td>How to pick the first sprint after reading this set</td></tr>
+</table>
+
+<hr/>
+
+<h2>Word / PDF Export (Times New Roman, 12pt)</h2>
+
+<p>Open <strong><code>ROWAN_ROADMAP_PRINT.html</code></strong> in Microsoft Word:</p>
+
+<p>1. File → Open → select <code>docs/roadmap/ROWAN_ROADMAP_PRINT.html</code></p>
+<p>2. Word will import with <strong>Times New Roman 12pt</strong> styling</p>
+<p>3. Save As → <code>.docx</code> or export to PDF</p>
+
+<p>Alternatively, copy any <code>.md</code> file into Word and apply Times New Roman 12pt to the full document.</p>
+
+<hr/>
+
+<h2>Live URLs (Reference)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Resource</th><th>URL</th></tr>
+<tr><td>GitHub</td><td>https://github.com/edyeluandrew/rowan.git</td></tr>
+<tr><td>Backend</td><td>https://rowan-1-9crb.onrender.com</td></tr>
+<tr><td>User app</td><td>https://rowan-nt9a.vercel.app/</td></tr>
+<tr><td>Admin</td><td>https://rowan-dbb4.vercel.app/</td></tr>
+<tr><td>Phase 1 evidence</td><td>`docs/instawards/`</td></tr>
+</table>
+
+<hr/>
+
+<h2>Quick Stats</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Metric</th><th>Value</th></tr>
+<tr><td>Total build items</td><td>55</td></tr>
+<tr><td>Phase 2A items</td><td>18</td></tr>
+<tr><td>Phase 2B items</td><td>14</td></tr>
+<tr><td>Phase 2C items</td><td>15</td></tr>
+<tr><td>Phase 3 items</td><td>8</td></tr>
+<tr><td>Countries (current)</td><td>Uganda, Kenya, Tanzania</td></tr>
+<tr><td>Countries (planned near-term)</td><td>+ Rwanda</td></tr>
+<tr><td>Blockchain (current)</td><td>Stellar testnet/mainnet path</td></tr>
+<tr><td>Blockchain (future)</td><td>EVM via CCTP (Phase 3)</td></tr>
+</table>
+
+<hr/>
+
+<p>*After reading this index, start with <code>00_EXECUTIVE_OVERVIEW.md</code>, then <code>01_CURRENT_STATE.md</code>, then <code>02_MASTER_BUILD_LIST.md</code>. Use <code>12_IMPLEMENTATION_STARTER.md</code> when ready to choose the first sprint.*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 00_EXECUTIVE_OVERVIEW.md</p><h1>Rowan — Executive Overview</h1>
+
+<p><strong>Document:</strong> 00 of 12  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+<p><strong>Font (print):</strong> Times New Roman, 12pt  </p>
+
+<hr/>
+
+<h2>1. Company &amp; Product</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Field</th><th>Detail</th></tr>
+<tr><td>Legal entity</td><td>Beta Tech Labs Company Limited</td></tr>
+<tr><td>Registration</td><td>Uganda Registration Services Bureau (URSB)</td></tr>
+<tr><td>Product name</td><td>Rowan</td></tr>
+<tr><td>Product registration</td><td>Operates under Beta Tech Labs (trading name / product line)</td></tr>
+<tr><td>Tagline direction</td><td>*The digital dollar wallet for East Africa*</td></tr>
+<tr><td>Core problem</td><td>Africans receiving USDC/XLM cannot easily spend, save, or convert without friction, fees, and app-hopping</td></tr>
+<tr><td>Primary blockchain</td><td>Stellar (USDC native, low fees, fast settlement)</td></tr>
+<tr><td>Planned expansion chain</td><td>EVM (Base, Arbitrum) via Circle CCTP — Phase 3 only</td></tr>
+</table>
+
+<hr/>
+
+<h2>2. What Phase 1 Delivered (Complete)</h2>
+
+<p>Phase 1 Instawards foundation is <strong>submitted</strong> with evidence. Do not rebuild these:</p>
+
+<p>1. <strong>Backend API</strong> — Node.js on Render, PostgreSQL, Redis, env validation  </p>
+<p>2. <strong>SEP-1</strong> — Public <code>stellar.toml</code> with testnet passphrase, WEB_AUTH, SIGNING_KEY, CURRENCIES  </p>
+<p>3. <strong>SEP-10</strong> — Challenge/response authentication returning JWT  </p>
+<p>4. <strong>Escrow + Horizon</strong> — Funded testnet escrow, real-time payment streaming, Redis cursor  </p>
+<p>5. <strong>Admin application</strong> — Trader approval, System Health, audit log  </p>
+
+<p>Evidence package: <code>docs/instawards/</code> (17 screenshots, submission report, public links).</p>
+
+<hr/>
+
+<h2>3. What Phase 2 Must Deliver (Strategic)</h2>
+
+<p>Phase 2 transforms Rowan from a <strong>conversion corridor</strong> into a <strong>financial remote control</strong> — users receive USDC and can do more than send/receive:</p>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Pillar</th><th>Outcome</th></tr>
+<tr><td>**Spend**</td><td>Pay airtime, data, and utility bills directly from USDC balance</td></tr>
+<tr><td>**Save**</td><td>Hold USDC in a savings product (inflation hedge vs local currency)</td></tr>
+<tr><td>**Convert**</td><td>Off-ramp to mobile money via verified P2P traders **or** automated aggregator rails</td></tr>
+<tr><td>**Comply**</td><td>Tiered KYC, Smile ID, AML policy, transaction monitoring</td></tr>
+<tr><td>**Scale**</td><td>Country registry, Rwanda, aggregator APIs for corridors beyond manual traders</td></tr>
+</table>
+
+<p>Phase 2C adds virtual USD cards. Phase 3 adds cross-chain and B2B treasury.</p>
+
+<hr/>
+
+<h2>4. B2C vs B2B — Primary Strategy</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Dimension</th><th>B2C (Primary — Phase 2)</th><th>B2B (Secondary — Phase 3)</th></tr>
+<tr><td>Customer</td><td>Freelancers, remittance receivers, gig workers</td><td>Importers, payroll platforms, crypto businesses</td></tr>
+<tr><td>Transaction size</td><td>Small to medium ($10–$1,000)</td><td>Large ($1,000–$100,000+)</td></tr>
+<tr><td>Sales cycle</td><td>Instant (app download)</td><td>Weeks to months (contracts)</td></tr>
+<tr><td>Rowan fit today</td><td>P2P traders + utilities + savings</td><td>Requires aggregator bulk rails</td></tr>
+<tr><td>Marketing</td><td>Viral, word of mouth, trader networks</td><td>Direct sales, partnerships</td></tr>
+</table>
+
+<p><strong>Decision:</strong> Launch utilities and retention features for <strong>B2C first</strong>. Introduce B2B merchant accounts after automated fiat rails (Yellow Pay) are live in at least three countries.</p>
+
+<hr/>
+
+<h2>5. Competitive Positioning</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Competitor</th><th>Their strength</th><th>Rowan differentiation</th></tr>
+<tr><td>**Kotani Pay**</td><td>Stellar-native MoMo rails, brand recognition</td><td>Hold-and-spend utilities; verified trader escrow; admin audit trail</td></tr>
+<tr><td>**Pretium**</td><td>East Africa off-ramp focus</td><td>USDC savings + bill pay without leaving app</td></tr>
+<tr><td>**Yellow Card**</td><td>Licensed crypto exchange + B2B API</td><td>Consumer UX layer on top; P2P + aggregator hybrid</td></tr>
+<tr><td>**Transak / Ramp**</td><td>Global embedded ramps</td><td>Africa-native: local ID, MoMo, airtime, Swahili-ready UX</td></tr>
+</table>
+
+<p><strong>One-line positioning:</strong>  </p>
+<p>*Rowan is the digital dollar wallet for East Africa — receive USDC, off-ramp to MoMo, or spend it on airtime, bills, and savings without multiple apps.*</p>
+
+<hr/>
+
+<h2>6. Why Pure Send/Receive Is Not Enough</h2>
+
+<p>1. <strong>Low margin trap</strong> — P2P spread competition with MoMo giants (MTN, M-Pesa) compresses fees.  </p>
+<p>2. <strong>Double fee problem</strong> — User off-ramps to fiat, then pays again for airtime/bills.  </p>
+<p>3. <strong>No retention</strong> — User leaves app immediately after conversion.  </p>
+<p>4. <strong>Commodity risk</strong> — Without utilities, Rowan is interchangeable with every other ramp.</p>
+
+<p>Utilities (bill pay, savings) create <strong>daily touchpoints</strong> and <strong>reasons to keep USDC in Rowan</strong>.</p>
+
+<hr/>
+
+<h2>7. Geographic Scope</h2>
+
+<h3>Current (operational / scaffolded)</h3>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Uganda (UGX) — MTN MoMo, Airtel Money  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Kenya (KES) — M-Pesa  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Tanzania (TZS) — Vodacom, Tigo  </p>
+
+<h3>Near-term (Phase 2A–2B)</h3>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Rwanda (RWF) — MTN MoMo Rwanda  </p>
+
+<h3>Mid-term (Phase 2C)</h3>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Nigeria (NGN), Ghana (GHS) via Yellow Pay / Onafriq  </p>
+
+<h3>Long-term (Phase 3)</h3>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Pan-African coverage through aggregator network, not manual traders in every country  </p>
+
+<hr/>
+
+<h2>8. Hybrid Rails Architecture (Target State)</h2>
+
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">                    ┌─────────────────────────┐
+                    │     ROWAN USER APP      │
+                    │  (USDC balance + utils) │
+                    └───────────┬─────────────┘
+                                │
+          ┌─────────────────────┼─────────────────────┐
+          ▼                     ▼                     ▼
+   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+   │  P2P TRADERS │    │  YELLOW PAY  │    │ RELOADLY /   │
+   │  (UG/KE/TZ/RW)│    │  (on/off-ramp)│    │ FLUTTERWAVE  │
+   │  Large/custom │    │  Auto MoMo   │    │ (utilities)  │
+   └──────────────┘    └──────────────┘    └──────────────┘</pre>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>East Africa (now):</strong> P2P traders for cashout/cashin where relationships exist.  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>Expansion corridors:</strong> Yellow Pay API for automated fiat without recruiting traders.  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>Utilities:</strong> Separate commerce API track (Reloadly/Flutterwave) — not mixed with crypto backend in aggregator pitches.</p>
+
+<hr/>
+
+<h2>9. Regulatory Framing (Beta Tech Labs)</h2>
+
+<p>When opening bank accounts or applying to aggregators:</p>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Context</th><th>Recommended description</th></tr>
+<tr><td>Bank account opening</td><td>Software development, information technology, digital platform management</td></tr>
+<tr><td>Traditional aggregator (Flutterwave)</td><td>Digital wallet providing cross-border payment infrastructure and utility payments for East African users</td></tr>
+<tr><td>Crypto-native aggregator (Yellow Pay)</td><td>Stablecoin wallet on Stellar requiring B2B fiat liquidity API for mobile money corridors</td></tr>
+<tr><td>Avoid</td><td>"P2P crypto exchange," "unregulated trading platform"</td></tr>
+</table>
+
+<p>AML compliance requires <strong>technology (Smile ID) + policy (AML doc) + monitoring (backend rules)</strong> — not any single vendor alone.</p>
+
+<hr/>
+
+<h2>10. Success Metrics (Phase 2)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Metric</th><th>Target (indicative)</th></tr>
+<tr><td>Utility transactions / month</td><td>500+ within 90 days of bill pay launch</td></tr>
+<tr><td>USDC balance held (avg)</td><td>Increase 40% vs off-ramp-only cohort</td></tr>
+<tr><td>Off-ramp completion time</td><td>&lt;15 min (P2P), &lt;5 min (aggregator path)</td></tr>
+<tr><td>KYC Tier 2 conversion</td><td>30% of active users within 60 days</td></tr>
+<tr><td>Countries live</td><td>4 (UG, KE, TZ, RW) by end Phase 2B</td></tr>
+<tr><td>Aggregator corridors</td><td>2+ automated by end Phase 2B</td></tr>
+</table>
+
+<hr/>
+
+<h2>11. Document Navigation</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Next read</th><th>Purpose</th></tr>
+<tr><td>`01_CURRENT_STATE.md`</td><td>Honest codebase assessment</td></tr>
+<tr><td>`02_MASTER_BUILD_LIST.md`</td><td>Full itemized build list (55 items)</td></tr>
+<tr><td>`12_IMPLEMENTATION_STARTER.md`</td><td>Pick first sprint</td></tr>
+</table>
+
+<hr/>
+
+<p>*End of Document 00*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 01_CURRENT_STATE.md</p><h1>Rowan — Current State Assessment</h1>
+
+<p><strong>Document:</strong> 01 of 12  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+<p><strong>Font (print):</strong> Times New Roman, 12pt  </p>
+
+<hr/>
+
+<h2>1. Purpose</h2>
+
+<p>This document records <strong>what already exists in the Rowan repository and live deployment</strong> as of 24 July 2026. Every roadmap item in Documents 02–10 is measured against this baseline. Items marked "Done" or "Partial" should <strong>not be rebuilt</strong> — only extended.</p>
+
+<hr/>
+
+<h2>2. Repository Structure</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Path</th><th>Role</th></tr>
+<tr><td>`backend/`</td><td>Node.js Express API — core business logic</td></tr>
+<tr><td>`admin/`</td><td>React admin dashboard (Vercel)</td></tr>
+<tr><td>`user-web/`</td><td>User-facing web wallet (Vercel)</td></tr>
+<tr><td>`rowan-mobile/`</td><td>Capacitor mobile app</td></tr>
+<tr><td>`frontend/`</td><td>Additional frontend (legacy/alternate)</td></tr>
+<tr><td>`docs/instawards/`</td><td>Phase 1 evidence &amp; submission</td></tr>
+<tr><td>`docs/roadmap/`</td><td>This roadmap document set</td></tr>
+</table>
+
+<hr/>
+
+<h2>3. Feature Completeness Matrix</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Area</th><th>Completeness</th><th>Status summary</th></tr>
+<tr><td>Stellar backend (SEP-1, SEP-10, escrow, Horizon)</td><td>**100%**</td><td>Phase 1 complete, live on Render</td></tr>
+<tr><td>P2P cashout (sell USDC → MoMo)</td><td>**~85%**</td><td>Core flow works; fiat leg is manual</td></tr>
+<tr><td>P2P buy (MoMo → USDC)</td><td>**~85%**</td><td>Core flow works; fiat leg is manual</td></tr>
+<tr><td>Express auto-match</td><td>**~80%**</td><td>Preview + matching engine exists</td></tr>
+<tr><td>Trader marketplace ads</td><td>**~80%**</td><td>Ads, accept, float, SLA</td></tr>
+<tr><td>Trader onboarding &amp; verification</td><td>**~85%**</td><td>Admin approve flow fixed and evidenced</td></tr>
+<tr><td>Disputes, chat, reviews</td><td>**~75%**</td><td>Built; ops maturity varies</td></tr>
+<tr><td>Internal KYC (user tiers)</td><td>**~60%**</td><td>Routes + admin review; no Smile ID</td></tr>
+<tr><td>AML screening</td><td>**~40%**</td><td>Local sanctions/PEP; no paid provider</td></tr>
+<tr><td>Fraud monitoring</td><td>**~50%**</td><td>Velocity caps; needs tier integration</td></tr>
+<tr><td>Multi-country (UG/KE/TZ)</td><td>**~30%**</td><td>Constants + FX; not config-driven</td></tr>
+<tr><td>Rwanda</td><td>**~10%**</td><td>Mentioned in strategy; not in code</td></tr>
+<tr><td>Bill payments / airtime</td><td>**0%**</td><td>Not started</td></tr>
+<tr><td>Savings / yield</td><td>**0%**</td><td>Not started</td></tr>
+<tr><td>Virtual cards</td><td>**0%**</td><td>Not started</td></tr>
+<tr><td>Payment aggregators</td><td>**0%**</td><td>Manual MoMo by design in MVP</td></tr>
+<tr><td>CCTP / cross-chain</td><td>**0%**</td><td>Stellar only; future doc references only</td></tr>
+<tr><td>Corporate compliance (Beta Tech Labs)</td><td>**~20%**</td><td>URSB registered; no bank account yet</td></tr>
+</table>
+
+<hr/>
+
+<h2>4. Backend — Existing Modules</h2>
+
+<h3>4.1 Authentication &amp; identity</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Module</th><th>Path</th><th>Notes</th></tr>
+<tr><td>SEP-10 auth</td><td>`backend/src/routes/auth.js`</td><td>challenge, register, submit, admin login</td></tr>
+<tr><td>JWT middleware</td><td>`backend/src/middleware/auth.js`</td><td>Token signing and verification</td></tr>
+<tr><td>User KYC routes</td><td>`backend/src/routes/user.js`</td><td>GET/POST kyc, documents</td></tr>
+<tr><td>Admin KYC review</td><td>`backend/src/routes/admin.js`</td><td>Approve/reject submissions</td></tr>
+<tr><td>Sanctions screening</td><td>`backend/src/services/sanctionsService.js`</td><td>Local list screening</td></tr>
+<tr><td>Fraud monitor</td><td>`backend/src/services/fraudMonitor.js`</td><td>Velocity, daily caps</td></tr>
+</table>
+
+<h3>4.2 P2P &amp; escrow</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Module</th><th>Path</th><th>Notes</th></tr>
+<tr><td>Cashout (sell)</td><td>`backend/src/routes/cashout.js`</td><td>User sells crypto for MoMo</td></tr>
+<tr><td>Buy</td><td>`backend/src/routes/buy.js`</td><td>User buys crypto with MoMo</td></tr>
+<tr><td>Express</td><td>`backend/src/routes/express.js`</td><td>Auto-match preview</td></tr>
+<tr><td>Traders public</td><td>`backend/src/routes/traders.js`</td><td>Marketplace ads</td></tr>
+<tr><td>Trader ops</td><td>`backend/src/routes/trader.js`</td><td>Accept, payout, earnings</td></tr>
+<tr><td>Trader onboarding</td><td>`backend/src/routes/traderOnboarding.js`</td><td>Registration pipeline</td></tr>
+<tr><td>Payout settings</td><td>`backend/src/routes/payoutSettings.js`</td><td>MoMo numbers, country</td></tr>
+<tr><td>Escrow controller</td><td>`backend/src/services/escrowController.js`</td><td>Stellar escrow logic</td></tr>
+<tr><td>Matching engines</td><td>`matchingEngine.js`, `buyMatchingEngine.js`</td><td>Trader matching</td></tr>
+<tr><td>Horizon watcher</td><td>`backend/src/services/horizonWatcher.js`</td><td>Payment stream</td></tr>
+<tr><td>Trader verification</td><td>`backend/src/services/traderVerificationService.js`</td><td>ID, MoMo OTP, history</td></tr>
+</table>
+
+<h3>4.3 Admin &amp; ops</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Module</th><th>Path</th><th>Notes</th></tr>
+<tr><td>Audit log</td><td>`backend/src/services/auditLogService.js`</td><td>Admin action persistence</td></tr>
+<tr><td>System health API</td><td>Admin routes + public `/health`</td><td>DB, Redis, Horizon status</td></tr>
+<tr><td>Admin frontend</td><td>`admin/src/features/*`</td><td>Traders, KYC, audit, health</td></tr>
+</table>
+
+<h3>4.4 Configuration</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Module</th><th>Path</th><th>Notes</th></tr>
+<tr><td>App config</td><td>`backend/src/config/index.js`</td><td>KYC tiers, limits, JWT</td></tr>
+<tr><td>Stellar config</td><td>`backend/src/config/stellar.js`</td><td>Horizon URL, passphrase</td></tr>
+<tr><td>FX providers</td><td>`backend/src/services/fx/fxProviders.js`</td><td>UGX/KES/TZS normalization</td></tr>
+<tr><td>Country constants</td><td>`rowan-mobile/src/wallet/utils/constants.js`</td><td>Networks per country</td></tr>
+</table>
+
+<hr/>
+
+<h2>5. Frontend — Existing Surfaces</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>App</th><th>URL</th><th>Features</th></tr>
+<tr><td>User web</td><td>https://rowan-nt9a.vercel.app/</td><td>Wallet, cashout, buy flows</td></tr>
+<tr><td>Admin</td><td>https://rowan-dbb4.vercel.app/</td><td>Traders, KYC, health, audit</td></tr>
+<tr><td>Mobile</td><td>Capacitor build</td><td>VerifyIdentity, wallet pages</td></tr>
+</table>
+
+<hr/>
+
+<h2>6. Explicit Gaps (Do Not Assume Built)</h2>
+
+<p>The following are <strong>not in the codebase</strong> and appear only in strategy discussions or competitor research:</p>
+
+<p>1. Reloadly / Flutterwave / Yellow Pay API integrations  </p>
+<p>2. Smile ID / MetaMap SDK  </p>
+<p>3. Virtual card provider (Maplerad, Bridge)  </p>
+<p>4. Stellar AMM / yield product  </p>
+<p>5. CCTP / Wormhole / LayerZero  </p>
+<p>6. Nigeria, Ghana, South Africa corridors  </p>
+<p>7. Automated MoMo disbursement webhooks  </p>
+<p>8. STR reporting workflow to Financial Intelligence Authority  </p>
+<p>9. Corporate bank settlement pipeline  </p>
+<p>10. B2B merchant bulk payout API  </p>
+
+<hr/>
+
+<h2>7. Technical Debt Relevant to Roadmap</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Item</th><th>Impact</th><th>Address in</th></tr>
+<tr><td>Hardcoded country list (UG/KE/TZ)</td><td>Blocks RW + aggregator per-country config</td><td>E1</td></tr>
+<tr><td>Manual MoMo payout (trader sends, user confirms)</td><td>Does not scale pan-Africa</td><td>C1–C6</td></tr>
+<tr><td>KYC without third-party ID verification</td><td>Aggregator rejection risk</td><td>A5</td></tr>
+<tr><td>No utility spend from USDC balance</td><td>No retention hook</td><td>B2–B7</td></tr>
+<tr><td>Production LOG_LEVEL hides info logs</td><td>Ops visibility (fixed for Horizon)</td><td>G3</td></tr>
+<tr><td>Custom domains not configured</td><td>Professional URLs for launch</td><td>G1</td></tr>
+</table>
+
+<hr/>
+
+<h2>8. Live Infrastructure</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Service</th><th>Provider</th><th>URL</th></tr>
+<tr><td>Backend API</td><td>Render</td><td>https://rowan-1-9crb.onrender.com</td></tr>
+<tr><td>User app</td><td>Vercel</td><td>https://rowan-nt9a.vercel.app/</td></tr>
+<tr><td>Admin</td><td>Vercel</td><td>https://rowan-dbb4.vercel.app/</td></tr>
+<tr><td>Database</td><td>Render PostgreSQL</td><td>(env `DATABASE_URL`)</td></tr>
+<tr><td>Cache</td><td>Render Redis</td><td>(env `REDIS_URL`)</td></tr>
+<tr><td>Blockchain</td><td>Stellar testnet</td><td>Horizon testnet</td></tr>
+<tr><td>Escrow (public)</td><td>`GCIRNEH3ERTDIF3YVNUDXPCAAWCB36LRDPGAYRSDORZDQJWPY55NBUEA`</td></tr>
+</table>
+
+<hr/>
+
+<h2>9. Beta Tech Labs — Corporate Readiness</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Requirement</th><th>Status</th></tr>
+<tr><td>URSB incorporation</td><td>**Done**</td></tr>
+<tr><td>Corporate TIN (URA)</td><td>**Verify / complete if missing**</td></tr>
+<tr><td>Corporate bank account</td><td>**Not opened**</td></tr>
+<tr><td>AML/CFT written policy</td><td>**Not drafted**</td></tr>
+<tr><td>Smile ID developer account</td><td>**Not opened**</td></tr>
+<tr><td>Yellow Pay sandbox</td><td>**Not opened**</td></tr>
+<tr><td>Reloadly sandbox</td><td>**Not opened**</td></tr>
+</table>
+
+<hr/>
+
+<h2>10. Baseline Conclusion</h2>
+
+<p>Rowan has a <strong>strong Stellar P2P core</strong> suitable for Phase 2 extension. The roadmap does <strong>not</strong> require rewriting Phase 1. New work falls into three buckets:</p>
+
+<p>1. <strong>Compliance shell</strong> (Beta Tech Labs + Smile ID + AML) — unlocks aggregators  </p>
+<p>2. <strong>Utility layer</strong> (airtime, bills, savings) — unlocks retention  </p>
+<p>3. <strong>Aggregator layer</strong> (Yellow Pay, etc.) — unlocks pan-African scale  </p>
+
+<hr/>
+
+<p>*Next: <code>02_MASTER_BUILD_LIST.md</code>*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 02_MASTER_BUILD_LIST.md</p><h1>Rowan — Master Build List (55 Items)</h1>
+
+<p><strong>Document:</strong> 02 of 12  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+<p><strong>Font (print):</strong> Times New Roman, 12pt  </p>
+
+<hr/>
+
+<h2>Legend</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Priority</th><th>Meaning</th></tr>
+<tr><td>**Critical**</td><td>Blocks aggregator onboarding or legal operation</td></tr>
+<tr><td>**High**</td><td>Core Phase 2A/2B deliverable</td></tr>
+<tr><td>**Medium**</td><td>Important but can follow first utility launch</td></tr>
+<tr><td>**Low**</td><td>Phase 2C or Phase 3</td></tr>
+</table>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Status</th><th>Meaning</th></tr>
+<tr><td>**Done**</td><td>Exists in codebase (Phase 1 or prior)</td></tr>
+<tr><td>**Partial**</td><td>Scaffolded; needs completion</td></tr>
+<tr><td>**Not started**</td><td>Net-new build</td></tr>
+</table>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Phase</th><th>Timeline (indicative)</th></tr>
+<tr><td>2A</td><td>Weeks 1–12</td></tr>
+<tr><td>2B</td><td>Weeks 13–24</td></tr>
+<tr><td>2C</td><td>Weeks 25–36</td></tr>
+<tr><td>3</td><td>Weeks 37+</td></tr>
+</table>
+
+<hr/>
+
+<h2>Category A — Compliance &amp; Foundation (9 items)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>ID</th><th>Build item</th><th>Description</th><th>Status</th><th>Priority</th><th>Phase</th><th>Depends on</th></tr>
+<tr><td>A1</td><td>Corporate bank account</td><td>Open Stanbic or Ecobank account for Beta Tech Labs</td><td>Not started</td><td>Critical</td><td>2A</td><td>URSB docs</td></tr>
+<tr><td>A2</td><td>URA corporate TIN</td><td>Tax identification for company</td><td>Verify</td><td>Critical</td><td>2A</td><td>—</td></tr>
+<tr><td>A3</td><td>AML/CFT policy document</td><td>Written policy: tiers, limits, STR process, FIA reporting</td><td>Not started</td><td>Critical</td><td>2A</td><td>—</td></tr>
+<tr><td>A4</td><td>Tiered KYC product rules</td><td>Enforce Tier 1/2/3 limits in backend middleware</td><td>Partial</td><td>High</td><td>2A</td><td>A3</td></tr>
+<tr><td>A5</td><td>Smile ID integration</td><td>SDK + API for NIN/IPRS/ID verification per country</td><td>Not started</td><td>High</td><td>2A</td><td>A3</td></tr>
+<tr><td>A6</td><td>Transaction monitoring upgrades</td><td>Auto-freeze: velocity spikes, structuring, corridor abuse</td><td>Partial</td><td>High</td><td>2B</td><td>A4</td></tr>
+<tr><td>A7</td><td>STR / suspicious activity workflow</td><td>Admin UI + export for FIA reporting</td><td>Not started</td><td>Medium</td><td>2B</td><td>A3, A6</td></tr>
+<tr><td>A8</td><td>Data protection registration</td><td>Uganda DPA; per-country as expanded</td><td>Not started</td><td>Medium</td><td>2B</td><td>—</td></tr>
+<tr><td>A9</td><td>Rwanda country config</td><td>RWF, MTN MoMo RW in constants + payout settings</td><td>Not started</td><td>Medium</td><td>2B</td><td>E1</td></tr>
+</table>
+
+<hr/>
+
+<h2>Category B — Utilities &amp; Wallet (13 items)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>ID</th><th>Build item</th><th>Description</th><th>Status</th><th>Priority</th><th>Phase</th><th>Depends on</th></tr>
+<tr><td>B1</td><td>USDC balance wallet UI</td><td>Clear available vs locked balance</td><td>Partial</td><td>High</td><td>2A</td><td>—</td></tr>
+<tr><td>B2</td><td>Airtime purchase</td><td>USDC → MTN/Airtel airtime via Reloadly</td><td>Not started</td><td>High</td><td>2A</td><td>B6, C8 or Reloadly</td></tr>
+<tr><td>B3</td><td>Data bundles</td><td>Mobile data packages same pipeline as airtime</td><td>Not started</td><td>High</td><td>2A</td><td>B2</td></tr>
+<tr><td>B4</td><td>Bill payments</td><td>Electricity, TV, water via utility API</td><td>Not started</td><td>High</td><td>2A</td><td>B6</td></tr>
+<tr><td>B5</td><td>Utility checkout flow</td><td>Provider picker → amount → confirm → receipt</td><td>Not started</td><td>High</td><td>2A</td><td>B2</td></tr>
+<tr><td>B6</td><td>USDC debit for utilities</td><td>Backend: deduct USDC, settle fiat to provider</td><td>Not started</td><td>High</td><td>2A</td><td>A4</td></tr>
+<tr><td>B7</td><td>Utility transaction history</td><td>Category filter in user tx list</td><td>Not started</td><td>Medium</td><td>2A</td><td>B5</td></tr>
+<tr><td>B8</td><td>USDC savings account</td><td>"Digital dollar savings" product surface</td><td>Not started</td><td>Medium</td><td>2B</td><td>B1</td></tr>
+<tr><td>B9</td><td>Yield integration</td><td>Stellar AMM or partner yield on USDC</td><td>Not started</td><td>Medium</td><td>2B</td><td>B8, legal review</td></tr>
+<tr><td>B10</td><td>Savings deposit/withdraw</td><td>Move USDC between wallet and savings</td><td>Not started</td><td>Medium</td><td>2B</td><td>B8</td></tr>
+<tr><td>B11</td><td>Virtual USD card issuance</td><td>Maplerad/Bridge card API</td><td>Not started</td><td>Low</td><td>2C</td><td>A5 Tier 2</td></tr>
+<tr><td>B12</td><td>Card top-up from USDC</td><td>Fund virtual card from wallet</td><td>Not started</td><td>Low</td><td>2C</td><td>B11</td></tr>
+<tr><td>B13</td><td>Card transaction history</td><td>Online spend tracking</td><td>Not started</td><td>Low</td><td>2C</td><td>B11</td></tr>
+</table>
+
+<hr/>
+
+<h2>Category C — Payment Aggregators (11 items)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>ID</th><th>Build item</th><th>Description</th><th>Status</th><th>Priority</th><th>Phase</th><th>Depends on</th></tr>
+<tr><td>C1</td><td>Yellow Pay sandbox</td><td>Crypto-native on/off-ramp API integration</td><td>Not started</td><td>High</td><td>2B</td><td>A1, A3</td></tr>
+<tr><td>C2</td><td>Aggregator abstraction layer</td><td>`PayoutProvider` / `DepositProvider` interfaces</td><td>Not started</td><td>High</td><td>2B</td><td>—</td></tr>
+<tr><td>C3</td><td>Automated off-ramp path</td><td>User MoMo payout without manual trader</td><td>Not started</td><td>High</td><td>2B</td><td>C1, C2</td></tr>
+<tr><td>C4</td><td>Automated on-ramp path</td><td>MoMo deposit → USDC credit</td><td>Not started</td><td>High</td><td>2B</td><td>C1, C2</td></tr>
+<tr><td>C5</td><td>Aggregator webhooks</td><td>Payment confirmed / failed callbacks</td><td>Not started</td><td>High</td><td>2B</td><td>C1</td></tr>
+<tr><td>C6</td><td>Fallback routing</td><td>Yellow Pay primary; P2P trader fallback</td><td>Not started</td><td>Medium</td><td>2B</td><td>C3, D1</td></tr>
+<tr><td>C7</td><td>Onafriq integration</td><td>Backup pan-African MoMo gateway</td><td>Not started</td><td>Medium</td><td>2C</td><td>A1, C2</td></tr>
+<tr><td>C8</td><td>Flutterwave integration</td><td>Utilities + bank (separate from crypto pitch)</td><td>Not started</td><td>Medium</td><td>2A/2B</td><td>A1</td></tr>
+<tr><td>C9</td><td>Per-country provider config</td><td>Map UG/KE/TZ/RW → provider + method</td><td>Not started</td><td>Medium</td><td>2B</td><td>E1, C2</td></tr>
+<tr><td>C10</td><td>Nigeria corridor (NGN)</td><td>Yellow Pay or dedicated NG provider</td><td>Not started</td><td>Low</td><td>2C</td><td>C1</td></tr>
+<tr><td>C11</td><td>Ghana corridor (GHS)</td><td>Same pattern as C10</td><td>Not started</td><td>Low</td><td>2C</td><td>C1</td></tr>
+</table>
+
+<hr/>
+
+<h2>Category D — P2P Trader Upgrades (6 items)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>ID</th><th>Build item</th><th>Description</th><th>Status</th><th>Priority</th><th>Phase</th><th>Depends on</th></tr>
+<tr><td>D1</td><td>Rwanda trader support</td><td>RW onboarding, MoMo networks, limits</td><td>Not started</td><td>Medium</td><td>2B</td><td>E1, A9</td></tr>
+<tr><td>D2</td><td>Trader liquidity dashboard</td><td>Float, corridor stats, performance</td><td>Not started</td><td>Medium</td><td>2B</td><td>—</td></tr>
+<tr><td>D3</td><td>Merchant-agent model</td><td>Retail shops as liquidity nodes</td><td>Not started</td><td>Low</td><td>3</td><td>D2</td></tr>
+<tr><td>D4</td><td>Automated payout verification</td><td>Carrier reference / webhook where available</td><td>Not started</td><td>Medium</td><td>2B</td><td>—</td></tr>
+<tr><td>D5</td><td>Trader utility referral commission</td><td>Optional rev share on bill pay</td><td>Not started</td><td>Low</td><td>2C</td><td>B2</td></tr>
+<tr><td>D6</td><td>Dispute reduction</td><td>Better proof-of-payment, fewer screenshot disputes</td><td>Not started</td><td>Medium</td><td>2B</td><td>D4</td></tr>
+</table>
+
+<hr/>
+
+<h2>Category E — Multi-Country Expansion (6 items)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>ID</th><th>Build item</th><th>Description</th><th>Status</th><th>Priority</th><th>Phase</th><th>Depends on</th></tr>
+<tr><td>E1</td><td>Country registry (config-driven)</td><td>Replace hardcoded UG/KE/TZ constants</td><td>Not started</td><td>High</td><td>2A</td><td>—</td></tr>
+<tr><td>E2</td><td>Per-country KYC rules</td><td>Different tiers/limits per jurisdiction</td><td>Not started</td><td>High</td><td>2B</td><td>E1, A5</td></tr>
+<tr><td>E3</td><td>Per-country payment methods</td><td>MoMo networks from DB/config</td><td>Not started</td><td>High</td><td>2B</td><td>E1</td></tr>
+<tr><td>E4</td><td>FX rate source formalization</td><td>Document + admin override per corridor</td><td>Partial</td><td>Medium</td><td>2B</td><td>E1</td></tr>
+<tr><td>E5</td><td>Localized UI (languages)</td><td>Swahili, etc.</td><td>Not started</td><td>Low</td><td>3</td><td>—</td></tr>
+<tr><td>E6</td><td>West Africa expansion pack</td><td>NG, GH, CI launch checklist</td><td>Not started</td><td>Low</td><td>2C/3</td><td>C10, C11</td></tr>
+</table>
+
+<hr/>
+
+<h2>Category F — Cross-Chain &amp; CCTP (4 items)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>ID</th><th>Build item</th><th>Description</th><th>Status</th><th>Priority</th><th>Phase</th><th>Depends on</th></tr>
+<tr><td>F1</td><td>CCTP research + POC</td><td>Stellar USDC burn → EVM mint test</td><td>Not started</td><td>Low</td><td>3</td><td>Stellar mainnet stable</td></tr>
+<tr><td>F2</td><td>Wormhole/LayerZero SDK</td><td>Use existing SDK; do not write bridge contracts</td><td>Not started</td><td>Low</td><td>3</td><td>F1</td></tr>
+<tr><td>F3</td><td>Multi-chain USDC receive</td><td>User selects destination chain</td><td>Not started</td><td>Low</td><td>3</td><td>F2</td></tr>
+<tr><td>F4</td><td>EVM deposit detection</td><td>Webhook/indexer for Base/Arbitrum deposits</td><td>Not started</td><td>Low</td><td>3</td><td>F2</td></tr>
+</table>
+
+<hr/>
+
+<h2>Category G — Platform &amp; Operations (6 items)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>ID</th><th>Build item</th><th>Description</th><th>Status</th><th>Priority</th><th>Phase</th><th>Depends on</th></tr>
+<tr><td>G1</td><td>Custom domains</td><td>api.rowan.app, admin.rowan.app, app.rowan.app</td><td>Not started</td><td>Medium</td><td>2B</td><td>—</td></tr>
+<tr><td>G2</td><td>External uptime monitoring</td><td>UptimeRobot / Better Stack</td><td>Not started</td><td>Medium</td><td>2A</td><td>—</td></tr>
+<tr><td>G3</td><td>Production alerting runbook</td><td>Escalation when services down</td><td>Partial</td><td>Medium</td><td>2A</td><td>G2</td></tr>
+<tr><td>G4</td><td>Partner MoU templates</td><td>Formal trader / pilot agreements</td><td>Partial</td><td>Medium</td><td>2A</td><td>—</td></tr>
+<tr><td>G5</td><td>B2B merchant accounts</td><td>Separate onboarding for businesses</td><td>Not started</td><td>Low</td><td>3</td><td>C3, C4</td></tr>
+<tr><td>G6</td><td>B2B bulk payout API</td><td>Payroll / supplier batch payments</td><td>Not started</td><td>Low</td><td>3</td><td>G5, C2</td></tr>
+</table>
+
+<hr/>
+
+<h2>Summary by Category</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Category</th><th>Items</th><th>Critical/High</th><th>Not started</th></tr>
+<tr><td>A — Compliance</td><td>9</td><td>5</td><td>7</td></tr>
+<tr><td>B — Utilities</td><td>13</td><td>7</td><td>12</td></tr>
+<tr><td>C — Aggregators</td><td>11</td><td>6</td><td>11</td></tr>
+<tr><td>D — P2P upgrades</td><td>6</td><td>0</td><td>5</td></tr>
+<tr><td>E — Multi-country</td><td>6</td><td>3</td><td>5</td></tr>
+<tr><td>F — Cross-chain</td><td>4</td><td>0</td><td>4</td></tr>
+<tr><td>G — Platform ops</td><td>6</td><td>0</td><td>4</td></tr>
+<tr><td>**Total**</td><td>**55**</td><td>**21**</td><td>**48**</td></tr>
+</table>
+
+<hr/>
+
+<h2>Summary by Phase</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Phase</th><th>Item IDs</th><th>Count</th></tr>
+<tr><td>2A</td><td>A1–A5, B1–B7, E1, G2–G4, (C8 partial)</td><td>~18</td></tr>
+<tr><td>2B</td><td>A6–A9, B8–B10, C1–C6, C9, D1–D2, D4, D6, E2–E4, G1</td><td>~14</td></tr>
+<tr><td>2C</td><td>B11–B13, C7, C10–C11, D5, E6</td><td>~15</td></tr>
+<tr><td>3</td><td>D3, E5, F1–F4, G5–G6</td><td>~8</td></tr>
+</table>
+
+<hr/>
+
+<p>*Detailed specs per category: Documents 04–10. Sequencing: <code>03_PHASE_TIMELINE.md</code>.*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 03_PHASE_TIMELINE.md</p><h1>Rowan — Phase Timeline &amp; Sequencing</h1>
+
+<p><strong>Document:</strong> 03 of 12  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+<p><strong>Font (print):</strong> Times New Roman, 12pt  </p>
+
+<hr/>
+
+<h2>1. Overview</h2>
+
+<p>This timeline assumes a <strong>small team (4 builders)</strong> working alongside existing Rowan maintenance. Durations are indicative — adjust based on funding and aggregator approval timelines (bank + Yellow Pay can take 2–8 weeks alone).</p>
+
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">2026 Q3          2026 Q4          2027 Q1          2027 Q2+
+│ Phase 2A       │ Phase 2B       │ Phase 2C       │ Phase 3
+│ Foundation +   │ Aggregators +  │ Cards + WA     │ CCTP + B2B
+│ Bill Pay       │ Savings        │ expansion      │</pre>
+
+<hr/>
+
+<h2>2. Phase 2A — Foundation + First Utility (Weeks 1–12)</h2>
+
+<p><strong>Goal:</strong> Legal readiness + first reason to keep USDC in Rowan (airtime/bills).</p>
+
+<h3>Week 1–2: Corporate &amp; compliance paperwork</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Task</th><th>IDs</th><th>Owner suggestion</th><th>Output</th></tr>
+<tr><td>Confirm URA TIN</td><td>A2</td><td>Edyelu / ops</td><td>TIN certificate</td></tr>
+<tr><td>Open corporate bank account</td><td>A1</td><td>Edyelu + directors</td><td>Stanbic/Ecobank account</td></tr>
+<tr><td>Draft AML/CFT policy</td><td>A3</td><td>Edyelu + legal review</td><td>5–10 page PDF</td></tr>
+<tr><td>Open Smile ID sandbox</td><td>A5</td><td>Backend dev</td><td>API keys</td></tr>
+<tr><td>Open Reloadly sandbox</td><td>B2</td><td>Backend dev</td><td>API keys</td></tr>
+</table>
+
+<h3>Week 3–4: KYC &amp; country refactor</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Task</th><th>IDs</th><th>Output</th></tr>
+<tr><td>Implement tiered KYC limits in API</td><td>A4</td><td>Middleware enforces Tier 1/2/3</td></tr>
+<tr><td>Smile ID SDK in mobile/web</td><td>A5</td><td>ID verify flow</td></tr>
+<tr><td>Country registry refactor</td><td>E1</td><td>DB/config replaces hardcoded constants</td></tr>
+<tr><td>Uptime monitoring</td><td>G2</td><td>Public status page</td></tr>
+</table>
+
+<h3>Week 5–8: Airtime &amp; bill pay MVP</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Task</th><th>IDs</th><th>Output</th></tr>
+<tr><td>USDC balance UI polish</td><td>B1</td><td>Clear spendable balance</td></tr>
+<tr><td>Reloadly backend service</td><td>B2, B6</td><td>`utilityService.js`</td></tr>
+<tr><td>Utility checkout API + UI</td><td>B5</td><td>End-to-end airtime purchase</td></tr>
+<tr><td>Data bundles</td><td>B3</td><td>Same pipeline</td></tr>
+<tr><td>Bill payments (1–2 providers)</td><td>B4</td><td>Electricity or TV test</td></tr>
+<tr><td>Transaction history</td><td>B7</td><td>Utilities category</td></tr>
+</table>
+
+<h3>Week 9–12: Test, pilot, document</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Task</th><th>IDs</th><th>Output</th></tr>
+<tr><td>Partner MoU with 2 traders</td><td>G4</td><td>Signed pilots</td></tr>
+<tr><td>Internal QA + testnet → mainnet plan</td><td>—</td><td>Launch checklist</td></tr>
+<tr><td>Flutterwave sandbox (utilities track)</td><td>C8</td><td>Separate merchant account</td></tr>
+<tr><td>Alerting runbook</td><td>G3</td><td>Ops doc</td></tr>
+</table>
+
+<p><strong>Phase 2A exit criteria:</strong></p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Beta Tech Labs bank account active  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] AML policy written  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Smile ID Tier 2 live in sandbox  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] User can buy airtime with USDC in app  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Country registry supports UG/KE/TZ + RW scaffold  </p>
+
+<hr/>
+
+<h2>3. Phase 2B — Aggregators + Savings (Weeks 13–24)</h2>
+
+<p><strong>Goal:</strong> Automated rails + retention (savings); reduce trader ops burden.</p>
+
+<h3>Week 13–16: Yellow Pay integration</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Task</th><th>IDs</th><th>Output</th></tr>
+<tr><td>Aggregator abstraction layer</td><td>C2</td><td>Provider interfaces</td></tr>
+<tr><td>Yellow Pay sandbox</td><td>C1</td><td>Deposit + payout test</td></tr>
+<tr><td>Webhook handlers</td><td>C5</td><td>Callback routes</td></tr>
+<tr><td>Automated off-ramp MVP</td><td>C3</td><td>One corridor (e.g. UG)</td></tr>
+<tr><td>Automated on-ramp MVP</td><td>C4</td><td>One corridor</td></tr>
+</table>
+
+<h3>Week 17–20: Hybrid routing + Rwanda</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Task</th><th>IDs</th><th>Output</th></tr>
+<tr><td>P2P fallback when aggregator fails</td><td>C6</td><td>Routing logic</td></tr>
+<tr><td>Per-country provider config</td><td>C9</td><td>Admin or config file</td></tr>
+<tr><td>Rwanda traders + config</td><td>A9, D1</td><td>RW live</td></tr>
+<tr><td>Transaction monitoring v2</td><td>A6</td><td>Auto-freeze rules</td></tr>
+<tr><td>Trader dashboard</td><td>D2</td><td>Admin/trader UI</td></tr>
+</table>
+
+<h3>Week 21–24: Savings + compliance depth</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Task</th><th>IDs</th><th>Output</th></tr>
+<tr><td>USDC savings product UI</td><td>B8, B10</td><td>Savings account</td></tr>
+<tr><td>Yield integration (AMM or partner)</td><td>B9</td><td>Legal-reviewed APY display</td></tr>
+<tr><td>STR workflow</td><td>A7</td><td>Admin export</td></tr>
+<tr><td>Custom domains</td><td>G1</td><td>api/admin/app.rowan.app</td></tr>
+<tr><td>Per-country KYC rules</td><td>E2, E3</td><td>Config per country</td></tr>
+</table>
+
+<p><strong>Phase 2B exit criteria:</strong></p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] At least 1 automated aggregator corridor live  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] P2P fallback tested  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Savings product in beta  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Rwanda traders onboarded  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] STR process documented  </p>
+
+<hr/>
+
+<h2>4. Phase 2C — Premium + West Africa (Weeks 25–36)</h2>
+
+<p><strong>Goal:</strong> Virtual cards, West Africa corridors, merchant scale.</p>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Task</th><th>IDs</th><th>Output</th></tr>
+<tr><td>Virtual USD card</td><td>B11–B13</td><td>Card in app</td></tr>
+<tr><td>Onafriq backup rails</td><td>C7</td><td>Secondary provider</td></tr>
+<tr><td>Nigeria corridor</td><td>C10</td><td>NGN</td></tr>
+<tr><td>Ghana corridor</td><td>C11</td><td>GHS</td></tr>
+<tr><td>West Africa playbook</td><td>E6</td><td>Launch checklist</td></tr>
+<tr><td>Trader utility commissions</td><td>D5</td><td>Optional</td></tr>
+</table>
+
+<p><strong>Phase 2C exit criteria:</strong></p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Virtual card beta (Tier 2 users)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] NG or GH corridor live via Yellow Pay  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] 4+ countries operational  </p>
+
+<hr/>
+
+<h2>5. Phase 3 — Cross-Chain + B2B (Week 37+)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Task</th><th>IDs</th><th>Output</th></tr>
+<tr><td>CCTP POC</td><td>F1, F2</td><td>Stellar → Base test</td></tr>
+<tr><td>Multi-chain receive</td><td>F3, F4</td><td>EVM deposit path</td></tr>
+<tr><td>B2B merchant accounts</td><td>G5</td><td>Business onboarding</td></tr>
+<tr><td>Bulk payout API</td><td>G6</td><td>Payroll use case</td></tr>
+<tr><td>Merchant-agent model</td><td>D3</td><td>Shop-based liquidity</td></tr>
+<tr><td>Localization</td><td>E5</td><td>Swahili UI</td></tr>
+</table>
+
+<hr/>
+
+<h2>6. Dependency Graph (Critical Path)</h2>
+
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">A2 TIN → A1 Bank → A3 AML → A5 Smile ID
+                              ↓
+E1 Country registry → B6 USDC debit → B2 Airtime
+                              ↓
+A1 Bank → C1 Yellow Pay → C2 Abstraction → C3/C4 Auto ramp
+                              ↓
+B8 Savings → B9 Yield (legal) → B11 Virtual card
+                              ↓
+F1 CCTP (only after Stellar mainnet product stable)</pre>
+
+<hr/>
+
+<h2>7. Parallel Workstreams</h2>
+
+<p>Teams can parallelize:</p>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Stream</th><th>Focus</th><th>Can start</th></tr>
+<tr><td>**Ops/Legal**</td><td>A1, A2, A3, G4</td><td>Immediately</td></tr>
+<tr><td>**Backend platform**</td><td>E1, A4, A6, C2</td><td>Week 1</td></tr>
+<tr><td>**Utilities**</td><td>B2–B7</td><td>Week 3 (after E1 scaffold)</td></tr>
+<tr><td>**Mobile/UI**</td><td>B1, B5, Smile ID UX</td><td>Week 3</td></tr>
+<tr><td>**Aggregators**</td><td>C1–C6</td><td>Week 13 (after bank)</td></tr>
+<tr><td>**Cross-chain**</td><td>F1–F4</td><td>Phase 3 only</td></tr>
+</table>
+
+<hr/>
+
+<h2>8. External Timeline Risks</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Risk</th><th>Typical delay</th><th>Mitigation</th></tr>
+<tr><td>Corporate bank account approval</td><td>1–3 weeks</td><td>Apply immediately; use MoMo merchant line interim</td></tr>
+<tr><td>Yellow Pay compliance review</td><td>4–12 weeks</td><td>Apply early with honest crypto use case</td></tr>
+<tr><td>Smile ID production keys</td><td>1–2 weeks</td><td>Sandbox first</td></tr>
+<tr><td>Flutterwave crypto sensitivity</td><td>Account freeze risk</td><td>Separate utilities merchant; no crypto in description</td></tr>
+<tr><td>Legal review for yield product</td><td>2–6 weeks</td><td>Start before B9 build</td></tr>
+</table>
+
+<hr/>
+
+<p>*Next: Category deep-dives in Documents 04–10, or <code>12_IMPLEMENTATION_STARTER.md</code> to pick first sprint.*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 04_COMPLIANCE_FOUNDATION.md</p><h1>Category A — Compliance &amp; Foundation</h1>
+
+<p><strong>Document:</strong> 04 of 12 | <strong>Items:</strong> A1–A9  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+
+<hr/>
+
+<h2>A1 — Corporate Bank Account</h2>
+
+<p><strong>Priority:</strong> Critical | <strong>Phase:</strong> 2A  </p>
+
+<h3>Objective</h3>
+<p>Open a corporate bank account for Beta Tech Labs Company Limited to receive aggregator settlements and pay operational expenses.</p>
+
+<h3>Recommended banks (Uganda)</h3>
+<p>1. <strong>Stanbic Bank Uganda</strong> — fintech-friendly, aggregator settlement experience  </p>
+<p>2. <strong>Ecobank Uganda</strong> — pan-African cross-border focus  </p>
+<p>3. <strong>Absa Bank Uganda</strong> — solid corporate API options  </p>
+
+<h3>Documents required</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; URSB Certificate of Incorporation  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Memorandum &amp; Articles of Association  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Form 20 (Directors)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; URA TIN  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Director IDs/passports  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Board resolution to open account  </p>
+
+<h3>Business description (for bank forms)</h3>
+<p>*"Software development, information technology services, and digital platform management."*  </p>
+<p>Do <strong>not</strong> lead with "crypto exchange" at retail branch level.</p>
+
+<h3>Acceptance criteria</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Account active in company name  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Online banking (Velocity or equivalent) enabled  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Signatories documented  </p>
+
+<hr/>
+
+<h2>A2 — URA Corporate TIN</h2>
+
+<p><strong>Priority:</strong> Critical | <strong>Phase:</strong> 2A  </p>
+
+<p>Apply via Uganda Revenue Authority portal if not already issued. Mandatory for bank and aggregator onboarding.</p>
+
+<hr/>
+
+<h2>A3 — AML/CFT Policy Document</h2>
+
+<p><strong>Priority:</strong> Critical | <strong>Phase:</strong> 2A  </p>
+
+<h3>Must include</h3>
+<p>1. Company overview and appointed compliance officer  </p>
+<p>2. Customer due diligence (CDD) procedures  </p>
+<p>3. Tiered KYC limits (see A4)  </p>
+<p>4. Sanctions and PEP screening process  </p>
+<p>5. Transaction monitoring rules  </p>
+<p>6. Suspicious transaction reporting (STR) to Uganda FIA  </p>
+<p>7. Record retention (minimum 5 years)  </p>
+<p>8. Training schedule for staff  </p>
+
+<h3>Template structure</h3>
+<p>1. Introduction  </p>
+<p>2. Legal framework (AML Act Uganda, etc.)  </p>
+<p>3. Risk assessment  </p>
+<p>4. KYC tiers  </p>
+<p>5. Ongoing monitoring  </p>
+<p>6. STR procedure  </p>
+<p>7. Data protection  </p>
+<p>8. Review cycle (annual)  </p>
+
+<hr/>
+
+<h2>A4 — Tiered KYC Product Rules</h2>
+
+<p><strong>Priority:</strong> High | <strong>Phase:</strong> 2A  </p>
+
+<h3>Proposed tiers</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Tier</th><th>Verification</th><th>Daily limit (indicative)</th><th>Unlocks</th></tr>
+<tr><td>1</td><td>Phone OTP + full name</td><td>$50</td><td>Small off-ramp, airtime</td></tr>
+<tr><td>2</td><td>National ID + selfie (Smile ID)</td><td>$1,000</td><td>Full off-ramp, savings</td></tr>
+<tr><td>3</td><td>Address + source of funds</td><td>Custom</td><td>B2B, high volume</td></tr>
+</table>
+
+<h3>Backend work</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Extend `backend/src/config/index.js` tier definitions  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Middleware on cashout, buy, utility routes  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Admin override for edge cases  </p>
+
+<h3>Existing code to extend</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `backend/src/routes/user.js` — KYC routes  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `backend/src/services/fraudMonitor.js` — velocity caps  </p>
+
+<hr/>
+
+<h2>A5 — Smile ID Integration</h2>
+
+<p><strong>Priority:</strong> High | <strong>Phase:</strong> 2A  </p>
+
+<h3>Why Smile ID over MetaMap</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Stronger African ID database coverage (UG, KE, TZ, RW, NG)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Optimized mobile selfie capture on low-end devices  </p>
+
+<h3>Integration points</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>SDK:</strong> Mobile (`rowan-mobile`) + web (`user-web`) for selfie + ID capture  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>API:</strong> Backend webhook for verification result  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>Admin:</strong> Smile ID status on KYC submissions page  </p>
+
+<h3>Country configurations</h3>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Country</th><th>ID type</th></tr>
+<tr><td>Uganda</td><td>NIN (NIRA)</td></tr>
+<tr><td>Kenya</td><td>National ID / IPRS</td></tr>
+<tr><td>Tanzania</td><td>NIDA</td></tr>
+<tr><td>Rwanda</td><td>National ID</td></tr>
+</table>
+
+<h3>Sandbox first</h3>
+<p>Apply at https://usesmileid.com with Beta Tech Labs registration documents.</p>
+
+<hr/>
+
+<h2>A6 — Transaction Monitoring Upgrades</h2>
+
+<p><strong>Priority:</strong> High | <strong>Phase:</strong> 2B  </p>
+
+<h3>Rules to implement</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Tier limit exceeded → block + notify  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; &gt;3 off-ramps same amount in 1 hour → flag  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; New account + max tier transaction → hold for review  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Sanctions hit → instant freeze  </p>
+
+<h3>Extend</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `backend/src/services/fraudMonitor.js`  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; New table: `compliance_flags`  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Admin UI: compliance queue  </p>
+
+<hr/>
+
+<h2>A7 — STR / Suspicious Activity Workflow</h2>
+
+<p><strong>Priority:</strong> Medium | <strong>Phase:</strong> 2B  </p>
+
+<p>Admin can mark transaction/user → generate STR export → manual submit to FIA. Full automation not required in Phase 2B.</p>
+
+<hr/>
+
+<h2>A8 — Data Protection Registration</h2>
+
+<p><strong>Priority:</strong> Medium | <strong>Phase:</strong> 2B  </p>
+
+<p>Register with Uganda Personal Data Protection Office. Repeat per country when launching NG, GH, etc.</p>
+
+<hr/>
+
+<h2>A9 — Rwanda Country Config</h2>
+
+<p><strong>Priority:</strong> Medium | <strong>Phase:</strong> 2B  </p>
+
+<p>Add RWF, MTN MoMo Rwanda to country registry (E1), payout settings, and trader onboarding flows.</p>
+
+<hr/>
+
+<p>*End Category A — See <code>06_PAYMENT_AGGREGATORS.md</code> for aggregator compliance requirements.*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 05_UTILITIES_WALLET.md</p><h1>Category B — Utilities &amp; Wallet</h1>
+
+<p><strong>Document:</strong> 05 of 12 | <strong>Items:</strong> B1–B13  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+
+<hr/>
+
+<h2>Strategic rationale</h2>
+
+<p>Utilities convert Rowan from a <strong>pass-through ramp</strong> into a <strong>daily-use wallet</strong>. Target order: <strong>airtime → bills → savings → virtual cards</strong>.</p>
+
+<hr/>
+
+<h2>B1 — USDC Balance Wallet UI</h2>
+
+<p>Show:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>Available</strong> — spendable USDC  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>Locked</strong> — in active P2P trades  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>Savings</strong> — in savings product (Phase 2B)  </p>
+
+<p>Surfaces: <code>user-web</code>, <code>rowan-mobile</code></p>
+
+<hr/>
+
+<h2>B2–B7 — Airtime &amp; Bill Payments (Phase 2A MVP)</h2>
+
+<h3>Recommended provider: Reloadly</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Feature</th><th>Reloadly</th><th>Flutterwave</th></tr>
+<tr><td>Airtime</td><td>Yes, pan-African</td><td>Yes</td></tr>
+<tr><td>Data bundles</td><td>Yes</td><td>Limited</td></tr>
+<tr><td>Bill pay</td><td>Yes</td><td>Yes (strong in NG/KE)</td></tr>
+<tr><td>Crypto sensitivity</td><td>Low (digital commerce)</td><td>Medium</td></tr>
+<tr><td>Integration</td><td>REST API</td><td>REST API</td></tr>
+</table>
+
+<p><strong>Hybrid approach:</strong> Reloadly for Phase 2A MVP; add Flutterwave for NG/KE bill depth in 2B.</p>
+
+<h3>Backend architecture (new modules)</h3>
+
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">backend/src/services/utilities/
+  reloadlyClient.js      # API wrapper
+  utilityService.js        # Business logic
+  utilityPricing.js        # USDC amount + FX + fee
+
+backend/src/routes/utilities.js
+  GET  /api/v1/utilities/providers?country=UG&amp;type=airtime
+  GET  /api/v1/utilities/products?provider=mtn_ug
+  POST /api/v1/utilities/purchase
+  GET  /api/v1/utilities/history</pre>
+
+<h3>Purchase flow</h3>
+<p>1. User selects country + provider + amount  </p>
+<p>2. Backend quotes USDC cost (FX + margin)  </p>
+<p>3. User confirms; backend checks Tier limit + USDC balance  </p>
+<p>4. Deduct USDC from user (ledger or escrow sub-account)  </p>
+<p>5. Call Reloadly API  </p>
+<p>6. Store receipt; push notification  </p>
+
+<h3>Database (new tables)</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `utility_providers`  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `utility_purchases` (id, user_id, type, provider, amount_fiat, amount_usdc, status, external_ref)  </p>
+
+<h3>Frontend</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; New "Utilities" tab: Airtime | Data | Bills  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Provider logos (MTN, Airtel, UMEME, etc.)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Receipt screen with reference number  </p>
+
+<hr/>
+
+<h2>B8–B10 — Savings &amp; Yield (Phase 2B)</h2>
+
+<h3>Product framing</h3>
+<p><strong>"Digital Dollar Savings"</strong> — not "DeFi yield farming."</p>
+
+<h3>Option A: Stellar native AMM</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; User deposits USDC into pool  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Earns trading fees  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Requires Soroban/AMM integration + legal review  </p>
+
+<h3>Option B: Partner yield API</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Third party holds USDC; Rowan shows balance  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Faster launch; higher counterparty risk  </p>
+
+<h3>Legal</h3>
+<p>Get Ugandan counsel opinion before displaying APY. May require different product license.</p>
+
+<h3>UI</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Savings tab with balance + "Add funds" / "Withdraw"  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Simple APY display if approved  </p>
+
+<hr/>
+
+<h2>B11–B13 — Virtual USD Cards (Phase 2C)</h2>
+
+<h3>Provider candidates</h3>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Provider</th><th>Strength</th></tr>
+<tr><td>Maplerad</td><td>Africa-focused virtual cards</td></tr>
+<tr><td>Bridge</td><td>USDC-native card funding</td></tr>
+</table>
+
+<h3>Requirements</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Tier 2 KYC minimum  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Corporate partnership under Beta Tech Labs  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Card top-up debits USDC wallet  </p>
+
+<h3>Features</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Create virtual card  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; View card number (masked) + CVV (secure reveal)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Top up from USDC  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Transaction list  </p>
+
+<hr/>
+
+<h2>Fee model (indicative)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Utility</th><th>User fee</th><th>Rowan margin</th></tr>
+<tr><td>Airtime</td><td>0–1% USDC</td><td>FX spread 0.5–1%</td></tr>
+<tr><td>Bills</td><td>1–2%</td><td>Provider cost + margin</td></tr>
+<tr><td>Savings</td><td>0% deposit</td><td>Share of yield if applicable</td></tr>
+<tr><td>Virtual card</td><td>$1–2 create</td><td>Interchange share</td></tr>
+</table>
+
+<hr/>
+
+<h2>Differentiation vs Kotani/Pretium</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>They</th><th>Rowan</th></tr>
+<tr><td>Off-ramp then user buys airtime elsewhere</td><td>One-tap airtime from USDC</td></tr>
+<tr><td>No savings</td><td>Digital dollar savings</td></tr>
+<tr><td>No global card</td><td>Virtual USD card (Phase 2C)</td></tr>
+</table>
+
+<hr/>
+
+<p>*End Category B*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 06_PAYMENT_AGGREGATORS.md</p><h1>Category C — Payment Aggregators</h1>
+
+<p><strong>Document:</strong> 06 of 12 | <strong>Items:</strong> C1–C11  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+
+<hr/>
+
+<h2>1. Why aggregators</h2>
+
+<p>Manual P2P traders <strong>do not scale</strong> to 20+ African countries. Aggregators provide:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Single API → many MoMo operators  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Automated settlement  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Compliance infrastructure (partially)  </p>
+
+<p>Rowan uses a <strong>hybrid model</strong>: traders where you have relationships; aggregators everywhere else.</p>
+
+<hr/>
+
+<h2>2. Provider comparison</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Provider</th><th>Best for</th><th>Crypto OK?</th><th>Typical fee</th><th>API type</th></tr>
+<tr><td>**Yellow Pay (Yellow Card)**</td><td>On/off-ramp USDC↔fiat</td><td>Yes</td><td>0.5–1.5%</td><td>REST API</td></tr>
+<tr><td>**Onafriq (MFS Africa)**</td><td>Pan-African MoMo reach</td><td>Hard</td><td>1.5–3%</td><td>REST API</td></tr>
+<tr><td>**Flutterwave**</td><td>Bills, cards, bank NG/KE</td><td>Risky if crypto</td><td>1.5–3%</td><td>REST API</td></tr>
+<tr><td>**Reloadly**</td><td>Airtime/data/bills</td><td>N/A (utilities)</td><td>Per product</td><td>REST API</td></tr>
+<tr><td>**Kotani Pay API**</td><td>Stellar MoMo rails</td><td>Yes</td><td>Negotiated</td><td>REST API</td></tr>
+</table>
+
+<h3>Recommendation</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>Core ramp:</strong> Yellow Pay  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>Utilities:</strong> Reloadly (+ Flutterwave for NG/KE bills)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>Backup MoMo:</strong> Onafriq  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; <strong>Do not pitch Flutterwave as crypto ramp</strong></p>
+
+<hr/>
+
+<h2>3. API vs SDK</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Use case</th><th>Use</th></tr>
+<tr><td>Money movement (deposit, payout)</td><td>**REST API** from backend</td></tr>
+<tr><td>KYC selfie capture</td><td>**SDK** (Smile ID)</td></tr>
+<tr><td>User never sees aggregator brand</td><td>API only</td></tr>
+</table>
+
+<hr/>
+
+<h2>4. Aggregator onboarding requirements (Beta Tech Labs)</h2>
+
+<p>All providers typically require:</p>
+
+<p>1. Certificate of Incorporation (URSB)  </p>
+<p>2. MEMART  </p>
+<p>3. Form 20 / directors  </p>
+<p>4. Corporate TIN  </p>
+<p>5. Corporate bank account  </p>
+<p>6. AML/KYC policy document  </p>
+<p>7. Expected monthly volume per country  </p>
+<p>8. Description of business (see <code>00_EXECUTIVE_OVERVIEW.md</code> §9)  </p>
+
+<p><strong>Timeline:</strong> 2–12 weeks depending on provider and crypto honesty.</p>
+
+<hr/>
+
+<h2>5. C2 — Aggregator abstraction layer</h2>
+
+<h3>Interface design</h3>
+
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">// backend/src/services/payments/providers/PayoutProvider.js
+class PayoutProvider {
+  async sendPayout({ country, amount, currency, phone, reference }) {}
+  async getPayoutStatus(reference) {}
+}
+
+// backend/src/services/payments/providers/DepositProvider.js
+class DepositProvider {
+  async initiateDeposit({ country, amount, currency, phone, reference }) {}
+  async handleWebhook(payload) {}
+}</pre>
+
+<h3>Implementations</h3>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `YellowPayProvider.js`  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `P2PTraderFallbackProvider.js` (existing manual flow)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `OnafriqProvider.js` (Phase 2C)  </p>
+
+<h3>Routing (C9)</h3>
+
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">// config/payment_routes.json
+{
+  "UG": { "offramp": ["yellow_pay", "p2p_trader"], "onramp": ["yellow_pay", "p2p_trader"] },
+  "KE": { "offramp": ["yellow_pay", "p2p_trader"], "onramp": ["yellow_pay"] },
+  "NG": { "offramp": ["yellow_pay"], "onramp": ["yellow_pay"] }
+}</pre>
+
+<hr/>
+
+<h2>6. C1 — Yellow Pay integration steps</h2>
+
+<p>1. Apply at Yellow Card business portal as Beta Tech Labs  </p>
+<p>2. Obtain sandbox API keys  </p>
+<p>3. Implement deposit + collection endpoints  </p>
+<p>4. Test UG or KE corridor  </p>
+<p>5. Production keys after compliance review  </p>
+<p>6. Wire into cashout/buy routes as alternative path  </p>
+
+<hr/>
+
+<h2>7. C5 — Webhook handlers</h2>
+
+<p>New route: <code>POST /api/v1/webhooks/yellowpay</code>  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Verify signature  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Update transaction status  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Credit USDC or mark payout complete  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Idempotency keys required  </p>
+
+<hr/>
+
+<h2>8. C6 — Fallback routing logic</h2>
+
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">User requests off-ramp
+  → Try Yellow Pay (if country configured)
+  → On failure/timeout → offer P2P trader match
+  → Log which rail used for analytics</pre>
+
+<hr/>
+
+<h2>9. Fee economics</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Rail</th><th>Cost to Rowan</th><th>User experience</th></tr>
+<tr><td>P2P trader</td><td>Spread negotiated</td><td>Human trader, flexible amounts</td></tr>
+<tr><td>Yellow Pay</td><td>~1% + spread</td><td>Instant, fixed corridors</td></tr>
+<tr><td>Reloadly utility</td><td>Product cost + 2–5%</td><td>No off-ramp needed</td></tr>
+</table>
+
+<hr/>
+
+<h2>10. Compliance note</h2>
+
+<p><strong>Smile ID / MetaMap does NOT make you AML-compliant alone.</strong> Aggregators will ask for your AML policy (A3) and may audit your KYC flow. Transaction monitoring (A6) must run on your backend continuously.</p>
+
+<hr/>
+
+<p>*End Category C*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 07_P2P_TRADER_UPGRADES.md</p><h1>Category D — P2P Trader Upgrades</h1>
+
+<p><strong>Document:</strong> 07 of 12 | <strong>Items:</strong> D1–D6  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+
+<hr/>
+
+<h2>Context</h2>
+
+<p>P2P traders remain Rowan's <strong>competitive moat</strong> in East Africa:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Verified via admin (`trader_verify_approve`)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Escrow on Stellar  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Audit trail  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Flexible for large/custom amounts  </p>
+
+<p>Aggregators <strong>supplement</strong> traders; they do not replace them in Phase 2.</p>
+
+<hr/>
+
+<h2>D1 — Rwanda Trader Support</h2>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Add RWF to FX engine  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; MTN MoMo Rwanda in payout settings  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Trader onboarding copy for RW  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Fraud limits normalized to UGX equivalent  </p>
+
+<p><strong>Depends on:</strong> E1 country registry, A9  </p>
+
+<hr/>
+
+<h2>D2 — Trader Liquidity Dashboard</h2>
+
+<p><strong>Admin + trader views:</strong></p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Float balance vs limit  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Open requests count  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Completion rate / SLA  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Volume by corridor (UG/KE/TZ/RW)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Earnings (existing `/trader/earnings` — extend UI)  </p>
+
+<hr/>
+
+<h2>D3 — Merchant-Agent Model (Phase 3)</h2>
+
+<p>Recruit retail shops (dukas) as liquidity nodes:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Lock USDC collateral  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Dispense cash/MoMo for commission  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Separate "Merchant App" or trader role  </p>
+
+<hr/>
+
+<h2>D4 — Automated Payout Verification</h2>
+
+<p>Reduce "I sent screenshot" disputes:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Parse MoMo SMS reference where APIs allow  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Trader enters transaction ID → optional auto-verify  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Timeout auto-escalate to dispute  </p>
+
+<hr/>
+
+<h2>D5 — Trader Utility Referral Commission</h2>
+
+<p>Optional: trader earns small fee when referred user buys airtime through Rowan.</p>
+
+<hr/>
+
+<h2>D6 — Dispute Reduction</h2>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Clearer proof-of-payment UI  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Timer warnings before dispute opens  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Chat templates for common issues  </p>
+
+<hr/>
+
+<h2>Existing code (do not rebuild)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Feature</th><th>Location</th></tr>
+<tr><td>Cashout</td><td>`backend/src/routes/cashout.js`</td></tr>
+<tr><td>Buy</td><td>`backend/src/routes/buy.js`</td></tr>
+<tr><td>Matching</td><td>`matchingEngine.js`, `buyMatchingEngine.js`</td></tr>
+<tr><td>Trader ops</td><td>`backend/src/routes/trader.js`</td></tr>
+<tr><td>Verification</td><td>`traderVerificationService.js`</td></tr>
+<tr><td>Manual MoMo policy</td><td>`docs/MANUAL_MOBILE_MONEY_PAYOUT_POLICY.md`</td></tr>
+</table>
+
+<hr/>
+
+<p>*End Category D*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 08_MULTI_COUNTRY.md</p><h1>Category E — Multi-Country Expansion</h1>
+
+<p><strong>Document:</strong> 08 of 12 | <strong>Items:</strong> E1–E6  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+
+<hr/>
+
+<h2>E1 — Country Registry (Critical refactor)</h2>
+
+<h3>Problem</h3>
+<p>Countries hardcoded in:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `rowan-mobile/src/wallet/utils/constants.js`  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `backend/src/services/fx/fxProviders.js`  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `backend/src/services/fraudMonitor.js`  </p>
+
+<h3>Solution</h3>
+<p>New table <code>countries</code>:</p>
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">countries (
+  code CHAR(2) PRIMARY KEY,  -- UG, KE, TZ, RW
+  name TEXT,
+  currency_code CHAR(3),
+  active BOOLEAN,
+  kyc_config JSONB,
+  payment_config JSONB
+)</pre>
+
+<p>New table <code>payment_methods</code>:</p>
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">payment_methods (
+  id, country_code, type, provider, network_code, active
+)</pre>
+
+<p>Load at startup; admin can toggle corridors.</p>
+
+<hr/>
+
+<h2>E2 — Per-Country KYC Rules</h2>
+
+<p>JSON in <code>countries.kyc_config</code>:</p>
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">{
+  "tier1_daily_usd": 50,
+  "tier2_daily_usd": 1000,
+  "smile_id_job_type": "NIN_UG",
+  "required_docs": ["national_id"]
+}</pre>
+
+<hr/>
+
+<h2>E3 — Per-Country Payment Methods</h2>
+
+<p>JSON in <code>countries.payment_config</code>:</p>
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">{
+  "momo_networks": ["mtn", "airtel"],
+  "default_offramp_provider": "yellow_pay",
+  "fallback_provider": "p2p_trader"
+}</pre>
+
+<hr/>
+
+<h2>E4 — FX Rate Formalization</h2>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Document primary FX source per corridor  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Admin override endpoint  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Stale rate alert if &gt;30 min old  </p>
+
+<p>Existing: <code>backend/src/services/fx/fxProviders.js</code></p>
+
+<hr/>
+
+<h2>E5 — Localization (Phase 3)</h2>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Swahili for KE/TZ  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; i18n in `user-web` and `rowan-mobile`  </p>
+
+<hr/>
+
+<h2>E6 — West Africa Expansion Pack</h2>
+
+<p>Checklist per country:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Yellow Pay corridor available  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Smile ID ID type configured  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Local payment methods in registry  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] FX source  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Legal review  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Pilot traders or aggregator-only  </p>
+
+<p>Target: Nigeria, Ghana first in West Africa.</p>
+
+<hr/>
+
+<h2>Country rollout matrix</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Country</th><th>Currency</th><th>Phase</th><th>Rail strategy</th></tr>
+<tr><td>Uganda</td><td>UGX</td><td>Live</td><td>P2P + Yellow Pay</td></tr>
+<tr><td>Kenya</td><td>KES</td><td>Live</td><td>P2P + Yellow Pay</td></tr>
+<tr><td>Tanzania</td><td>TZS</td><td>Live</td><td>P2P + Yellow Pay</td></tr>
+<tr><td>Rwanda</td><td>RWF</td><td>2B</td><td>P2P + Yellow Pay</td></tr>
+<tr><td>Nigeria</td><td>NGN</td><td>2C</td><td>Aggregator-first</td></tr>
+<tr><td>Ghana</td><td>GHS</td><td>2C</td><td>Aggregator-first</td></tr>
+</table>
+
+<hr/>
+
+<p>*End Category E*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 09_CROSS_CHAIN.md</p><h1>Category F — Cross-Chain &amp; CCTP</h1>
+
+<p><strong>Document:</strong> 09 of 12 | <strong>Items:</strong> F1–F4  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+
+<hr/>
+
+<h2>Timing decision: Phase 3 only</h2>
+
+<p><strong>Do not build CCTP in Phase 2A/2B.</strong></p>
+
+<p>Reasons:</p>
+<p>1. Target users need <strong>local spend</strong> (MoMo, airtime), not Ethereum DeFi  </p>
+<p>2. Stellar USDC already optimal for East Africa fees/speed  </p>
+<p>3. Bridge security risk distracts from core product  </p>
+<p>4. Circle CCTP on Stellar is live but user demand unproven for Rowan cohort  </p>
+
+<hr/>
+
+<h2>How CCTP works (reference)</h2>
+
+<p>1. <strong>Burn</strong> USDC on Stellar via CCTP contract  </p>
+<p>2. <strong>Attest</strong> Circle signs burn event  </p>
+<p>3. <strong>Mint</strong> native USDC on destination chain (Base, Arbitrum, etc.)  </p>
+
+<p>No wrapped tokens; 1:1 native USDC both sides.</p>
+
+<hr/>
+
+<h2>F1 — CCTP research + POC</h2>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Read Circle CCTP Stellar docs  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Testnet burn on Stellar → mint on Base  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Document gas relayer requirements  </p>
+
+<hr/>
+
+<h2>F2 — Wormhole or LayerZero SDK</h2>
+
+<p><strong>Do not write custom bridge contracts.</strong></p>
+
+<p>Use SDK that invokes CCTP under the hood:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Unified JS/TS API  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Gas relayer for destination chain  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; User does not need ETH for gas on receive  </p>
+
+<hr/>
+
+<h2>F3 — Multi-chain USDC receive</h2>
+
+<p>User settings: "Receive USDC on: Stellar | Base | Arbitrum"  </p>
+<p>Default remains Stellar for African users.</p>
+
+<hr/>
+
+<h2>F4 — EVM deposit detection</h2>
+
+<p>If accepting Base USDC deposits:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Alchemy/QuickNode webhook  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Credit user Stellar balance after bridge OR hold on EVM ledger  </p>
+
+<p>Reference: <code>docs/ops/STELLAR_STRENGTHEN_TRACKER.md</code> (future plan mention)</p>
+
+<hr/>
+
+<h2>When to revisit</h2>
+
+<p>Trigger Phase 3 cross-chain when:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] 1,000+ MAU on Stellar product  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] User requests for Base/ETH DeFi access documented  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Mainnet Stellar USDC volume stable  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Legal review for multi-chain custody  </p>
+
+<hr/>
+
+<p>*End Category F*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 10_PLATFORM_OPS.md</p><h1>Category G — Platform &amp; Operations</h1>
+
+<p><strong>Document:</strong> 10 of 12 | <strong>Items:</strong> G1–G6  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+
+<hr/>
+
+<h2>G1 — Custom Domains</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Subdomain</th><th>Points to</th></tr>
+<tr><td>api.rowan.app</td><td>Render backend</td></tr>
+<tr><td>admin.rowan.app</td><td>Vercel admin</td></tr>
+<tr><td>app.rowan.app</td><td>Vercel user-web</td></tr>
+</table>
+
+<p>Update:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; `stellar.toml` WEB_AUTH_ENDPOINT  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; CORS origins  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Vercel/Render DNS records  </p>
+
+<hr/>
+
+<h2>G2 — External Uptime Monitoring</h2>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; UptimeRobot or Better Stack  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Monitor: `/health`, admin login, user app  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Alert: email/SMS to on-call  </p>
+
+<hr/>
+
+<h2>G3 — Production Alerting Runbook</h2>
+
+<p>Document:</p>
+<p>1. Who gets paged  </p>
+<p>2. Render restart procedure  </p>
+<p>3. Database connection failure  </p>
+<p>4. Horizon stream disconnect  </p>
+<p>5. Aggregator webhook failure  </p>
+
+<p>Partial: Horizon log level fix already deployed.</p>
+
+<hr/>
+
+<h2>G4 — Partner MoU Templates</h2>
+
+<p>Templates for:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; P2P trader agreement (UG/KE/TZ/RW)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Pilot merchant utility partner  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Data processing with Smile ID  </p>
+
+<p>Draft started in Phase 1 ops work — finalize in 2A.</p>
+
+<hr/>
+
+<h2>G5 — B2B Merchant Accounts (Phase 3)</h2>
+
+<p>Separate onboarding:</p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Business registration docs  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Tier 3 KYC  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Higher limits  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; Bulk payout UI  </p>
+
+<hr/>
+
+<h2>G6 — B2B Bulk Payout API</h2>
+
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">POST /api/v1/b2b/payouts/batch
+{ "items": [{ "phone", "amount", "currency", "reference" }] }</pre>
+
+<p>Requires G5 + C2 aggregator layer.</p>
+
+<hr/>
+
+<p>*End Category G*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 11_DECISION_RECORD.md</p><h1>Rowan — Decision Record</h1>
+
+<p><strong>Document:</strong> 11 of 12  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+
+<hr/>
+
+<h2>Locked decisions</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>#</th><th>Decision</th><th>Rationale</th><th>Date</th></tr>
+<tr><td>1</td><td>B2C first, B2B later</td><td>P2P traders fit consumer flows today</td><td>Jul 2026</td></tr>
+<tr><td>2</td><td>Stellar primary chain through Phase 2</td><td>Low fees, USDC native, existing infra</td><td>Jul 2026</td></tr>
+<tr><td>3</td><td>Hybrid rails: P2P + Yellow Pay</td><td>Traders in EAC; aggregators for scale</td><td>Jul 2026</td></tr>
+<tr><td>4</td><td>Utilities before virtual cards</td><td>Faster build, daily retention</td><td>Jul 2026</td></tr>
+<tr><td>5</td><td>Smile ID over MetaMap for KYC</td><td>Better Africa ID coverage</td><td>Jul 2026</td></tr>
+<tr><td>6</td><td>Reloadly first for airtime/bills</td><td>Lower crypto sensitivity vs Flutterwave</td><td>Jul 2026</td></tr>
+<tr><td>7</td><td>Do not build CCTP in Phase 2</td><td>Focus local spend, not DeFi bridges</td><td>Jul 2026</td></tr>
+<tr><td>8</td><td>Do not build bridge smart contracts</td><td>Use Wormhole/LayerZero SDK in Phase 3</td><td>Jul 2026</td></tr>
+<tr><td>9</td><td>Beta Tech Labs as legal entity</td><td>Product unregistered OK under parent co</td><td>Jul 2026</td></tr>
+<tr><td>10</td><td>API for money; SDK for KYC only</td><td>Clean UX, full backend control</td><td>Jul 2026</td></tr>
+</table>
+
+<hr/>
+
+<h2>Open decisions (choose before implementation)</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>#</th><th>Question</th><th>Options</th><th>Recommendation</th></tr>
+<tr><td>O1</td><td>First utility to ship</td><td>Airtime only vs airtime+bills</td><td>**Airtime first** (simplest)</td></tr>
+<tr><td>O2</td><td>First aggregator corridor</td><td>UG vs KE vs both</td><td>**UG** (home market)</td></tr>
+<tr><td>O3</td><td>Savings yield mechanism</td><td>Stellar AMM vs partner</td><td>**Legal review first**</td></tr>
+<tr><td>O4</td><td>Virtual card provider</td><td>Maplerad vs Bridge</td><td>Decide in 2C after card KYC ready</td></tr>
+<tr><td>O5</td><td>Bank choice</td><td>Stanbic vs Ecobank</td><td>**Stanbic** (fintech track record)</td></tr>
+<tr><td>O6</td><td>Mainnet timing</td><td>After Phase 2A vs 2B</td><td>After 2A utilities stable on testnet</td></tr>
+</table>
+
+<hr/>
+
+<h2>Rejected alternatives</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Alternative</th><th>Why rejected</th></tr>
+<tr><td>Pure P2P pan-Africa</td><td>Ops nightmare at 20+ countries</td></tr>
+<tr><td>Flutterwave as crypto ramp</td><td>Account freeze risk</td></tr>
+<tr><td>Build custom KYC from scratch</td><td>Smile ID faster + compliant</td></tr>
+<tr><td>Transak/Ramp white-label</td><td>Less differentiation in Africa</td></tr>
+<tr><td>Skip utilities, only off-ramp</td><td>Commodity product vs Pretium/Kotani</td></tr>
+</table>
+
+<hr/>
+
+<h2>Compliance clarifications</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Myth</th><th>Reality</th></tr>
+<tr><td>"MetaMap makes us compliant"</td><td>No — need AML policy + monitoring + STR</td></tr>
+<tr><td>"Crypto exchange license needed Day 1"</td><td>Depends on UG regulation; frame as digital wallet + utilities</td></tr>
+<tr><td>"P2P traders replace KYC"</td><td>No — users still need tiered KYC</td></tr>
+<tr><td>"Yellow Pay removes all compliance burden"</td><td>No — you remain responsible for end users</td></tr>
+</table>
+
+<hr/>
+
+<h2>Change log</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Version</th><th>Date</th><th>Changes</th></tr>
+<tr><td>1.0</td><td>24 Jul 2026</td><td>Initial decision record</td></tr>
+</table>
+
+<hr/>
+
+<p>*End Document 11*</p>
+</div>
+<div class="section" style="page-break-before:always"><p style="font-size:10pt;color:#666;font-style:italic">Document source: 12_IMPLEMENTATION_STARTER.md</p><h1>Implementation Starter Guide</h1>
+
+<p><strong>Document:</strong> 12 of 12  </p>
+<p><strong>Version:</strong> 1.0 | <strong>Date:</strong> 24 July 2026  </p>
+
+<hr/>
+
+<h2>Before writing code</h2>
+
+<p>1. Read <code>00_EXECUTIVE_OVERVIEW.md</code>  </p>
+<p>2. Read <code>01_CURRENT_STATE.md</code>  </p>
+<p>3. Skim <code>02_MASTER_BUILD_LIST.md</code>  </p>
+<p>4. Confirm open decisions in <code>11_DECISION_RECORD.md</code> with team  </p>
+
+<hr/>
+
+<h2>Recommended first sprint (choose one track)</h2>
+
+<h3>Track A — Ops/Legal (no code, unblocks everything)</h3>
+
+<p><strong>Duration:</strong> 2–4 weeks  </p>
+<p><strong>Items:</strong> A1, A2, A3, G4  </p>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Week</th><th>Action</th></tr>
+<tr><td>1</td><td>Apply URA TIN if missing; gather URSB docs</td></tr>
+<tr><td>1</td><td>Walk into Stanbic corporate banking with document pack</td></tr>
+<tr><td>2</td><td>Draft AML/CFT policy (use `04_COMPLIANCE_FOUNDATION.md` outline)</td></tr>
+<tr><td>2</td><td>Apply Smile ID + Reloadly sandbox (Beta Tech Labs details)</td></tr>
+<tr><td>3–4</td><td>Finalize trader MoU template; open Yellow Pay application</td></tr>
+</table>
+
+<p><strong>Exit:</strong> Bank account pending/active; AML draft; sandbox API keys.</p>
+
+<hr/>
+
+<h3>Track B — Engineering (parallel if ops running)</h3>
+
+<p><strong>Duration:</strong> 4–6 weeks  </p>
+<p><strong>Items:</strong> E1, A4, B1, B2, B5, B6  </p>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Week</th><th>Action</th></tr>
+<tr><td>1–2</td><td>Country registry tables + migration (E1)</td></tr>
+<tr><td>2</td><td>Tier middleware on routes (A4)</td></tr>
+<tr><td>3</td><td>Reloadly client + utility routes (B2, B6)</td></tr>
+<tr><td>4</td><td>Utility UI in user-web (B5)</td></tr>
+<tr><td>5</td><td>Airtime E2E test on testnet USDC</td></tr>
+<tr><td>6</td><td>QA + pilot with 5 users</td></tr>
+</table>
+
+<p><strong>Exit:</strong> User buys airtime with USDC in staging.</p>
+
+<hr/>
+
+<h3>Track C — Compliance tech</h3>
+
+<p><strong>Duration:</strong> 3–4 weeks  </p>
+<p><strong>Items:</strong> A5, A4, A6  </p>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Week</th><th>Action</th></tr>
+<tr><td>1</td><td>Smile ID sandbox integration</td></tr>
+<tr><td>2</td><td>Wire into existing KYC submission flow</td></tr>
+<tr><td>3</td><td>Tier limits + fraud monitor linkage</td></tr>
+<tr><td>4</td><td>Admin compliance queue UI</td></tr>
+</table>
+
+<hr/>
+
+<h2>Decision matrix: what to start with?</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>If your priority is…</th><th>Start with track</th></tr>
+<tr><td>Unlock Yellow Pay / banks</td><td>**Track A**</td></tr>
+<tr><td>Show investors/users new feature fast</td><td>**Track B**</td></tr>
+<tr><td>Reduce regulatory risk before scale</td><td>**Track C**</td></tr>
+<tr><td>Limited team (2 devs)</td><td>**A week 1, then B week 3**</td></tr>
+</table>
+
+<hr/>
+
+<h2>Sprint 0 checklist (this week)</h2>
+
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Team meeting: confirm Track A vs B vs C  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Assign owner for bank account application (A1)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Assign owner for AML draft (A3)  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Create GitHub project board with all 55 items  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Label items: `phase-2a`, `compliance`, `utilities`, `aggregators`  </p>
+<p style="margin-left:24pt;text-indent:-12pt">&#8226; [ ] Do <strong>not</strong> start CCTP (F1–F4) or virtual cards (B11) yet  </p>
+
+<hr/>
+
+<h2>GitHub project board columns (suggested)</h2>
+
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">Backlog → Phase 2A → In Progress → Review → Done → Phase 2B → Phase 2C → Phase 3</pre>
+
+<hr/>
+
+<h2>Files to create in first engineering sprint</h2>
+
+<pre style="background:#f5f5f5;padding:10pt;font-size:10pt;font-family:Consolas,monospace">backend/src/db/migrations/XXXX_countries_registry.sql
+backend/src/services/countries/countryService.js
+backend/src/services/utilities/reloadlyClient.js
+backend/src/services/utilities/utilityService.js
+backend/src/routes/utilities.js
+user-web/src/features/utilities/</pre>
+
+<hr/>
+
+<h2>What NOT to do first</h2>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;font-size:11pt">
+<tr><th>Avoid</th><th>Why</th></tr>
+<tr><td>Nigeria launch</td><td>Need aggregator + compliance depth</td></tr>
+<tr><td>CCTP / EVM</td><td>Phase 3; distracts from utilities</td></tr>
+<tr><td>Virtual cards</td><td>Needs Tier 2 KYC + card partner</td></tr>
+<tr><td>Replace all P2P with Yellow Pay</td><td>Hybrid; traders still valuable in EAC</td></tr>
+<tr><td>Rewrite Phase 1 backend</td><td>Foundation is done</td></tr>
+</table>
+
+<hr/>
+
+<h2>After first sprint — tell the team</h2>
+
+<p>Reply with:</p>
+<p>1. Which track you chose (A, B, or C)  </p>
+<p>2. Any open decision from <code>11_DECISION_RECORD.md</code>  </p>
+<p>3. Target date for first airtime purchase demo  </p>
+
+<p>We will then write the <strong>detailed technical spec + implementation tasks</strong> for that track only.</p>
+
+<hr/>
+
+<p>*End of roadmap document set. Master index: <code>README.md</code>. Print version: <code>ROWAN_ROADMAP_PRINT.html</code>.*</p>
+</div>
+</body>
+</html>

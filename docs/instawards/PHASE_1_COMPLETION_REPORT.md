@@ -1,6 +1,6 @@
 # Rowan Instawards Phase 1 — Completion Report
 
-**Date prepared:** 20 July 2026  
+**Date prepared:** 21 July 2026 (updated after evidence capture)  
 **Project:** Rowan  
 **Builder team:** Edyelu Andrew, Eragu Enoch, Laloyo Joshua, Kabuye Wamala  
 **Primary contact:** Edyelu Andrew — edyeluandrew1@gmail.com  
@@ -16,7 +16,8 @@
 | Field | Value |
 |-------|-------|
 | Backend (live) | https://rowan-1-9crb.onrender.com |
-| Admin panel (live) | https://rowan-dbb4.vercel.app/login |
+| User web app (live) | https://rowan-nt9a.vercel.app/ |
+| Admin panel (live) | https://rowan-dbb4.vercel.app/ |
 | Stellar network | Testnet only |
 | Escrow public address | `GCIRNEH3ERTDIF3YVNUDXPCAAWCB36LRDPGAYRSDORZDQJWPY55NBUEA` |
 | Hosting (backend) | Render (`render.yaml`) — not Railway |
@@ -26,23 +27,22 @@
 
 ## 2. Executive Completion Statement
 
-Rowan Phase 1 core infrastructure is **implemented and deployed on Stellar testnet**. Live verification on 20 July 2026 confirms:
+Rowan Phase 1 core infrastructure is **implemented, deployed, and evidenced on Stellar testnet**. Verification on 20–21 July 2026 confirms:
 
 - Public backend health (`/health`) with PostgreSQL, Redis, and Horizon watcher connected
 - Public SEP-1 `stellar.toml` with required fields and correct CORS
-- SEP-10 challenge issuance and JWT return after signed challenge (verified via `/api/v1/auth/register`)
-- Funded testnet escrow account readable on Horizon
-- Admin web application loads at the live Vercel URL
+- SEP-10 challenge issuance and JWT return after signed challenge (verified via `/api/v1/auth/submit` and `/register`)
+- Funded testnet escrow account with on-chain payment evidence and Render Horizon detection logs
+- Admin web application deployed with trader approval, System Health, and audit log evidence captured
 
-**Evidence gaps remain before Ambassador submission:**
+**Primary submission document:** `PHASE_1_SUBMISSION_REPORT.md`
 
-1. Render log screenshot showing Horizon payment detection (amount, sender, hash, timestamp) — only on-chain historical payments verified, not fresh detection timing
-2. Admin trader **Approve** button calls a non-existent API route (`/approve`); backend expects `/verify` — approval flow cannot be demonstrated without fix or manual API call
-3. Admin System Health UI may show default “healthy” tiles without live service probes unless WebSocket health broadcasts are wired
-4. Screenshots and screen recording not yet captured
-5. Custom domains (`api.rowan.app`, `admin.rowan.app`) not in use
+**Remaining before Ambassador handoff:**
 
-**Overall readiness classification:** **READY AFTER MINOR EVIDENCE CAPTURE** (see Section 12).
+1. Demo screen recording uploaded (YouTube or Google Drive URL)
+2. Incognito verification of all public URLs
+
+**Overall readiness classification:** **READY FOR AMBASSADOR REVIEW** (pending demo video URL)
 
 ---
 
@@ -351,19 +351,23 @@ All live tests used ephemeral throwaway testnet keypairs that were discarded aft
 
 | Deliverable | Status |
 |-------------|--------|
-| 1 — Backend + SEP-1 + SEP-10 | **ACHIEVED WITH IMPLEMENTATION VARIATION** |
-| 2 — Escrow + Horizon streaming | **PARTIALLY ACHIEVED** (log/timing evidence missing) |
-| 3 — Admin application | **ACHIEVED WITH IMPLEMENTATION VARIATION — EVIDENCE INCOMPLETE** |
+| 1 — Backend + SEP-1 + SEP-10 | **FULLY ACHIEVED** (with documented variations) |
+| 2 — Escrow + Horizon streaming | **FULLY ACHIEVED** |
+| 3 — Admin application | **FULLY ACHIEVED** |
 
-**Package readiness:** **READY AFTER MINOR EVIDENCE CAPTURE**
+**Package readiness:** **READY FOR AMBASSADOR REVIEW**
 
-Required before submission:
+Completed:
 
-1. Capture screenshots per checklist (14 items)
-2. Record 3–4 minute screen walkthrough
-3. Fix admin frontend approve/suspend API paths OR document API-only approval for evidence session
-4. Capture Render Horizon detection log (fresh memo-free test payment or historical correlation)
-5. Verify admin login + System Health against public `/health`
+1. 17 screenshots organized by deliverable in `docs/instawards/screenshots/`
+2. On-chain tx + Render Horizon log correlated (`183796303...`)
+3. Admin approve/suspend API fixes deployed; approval and audit evidence captured
+4. Submission report: `PHASE_1_SUBMISSION_REPORT.md`
+
+Pending:
+
+1. Demo screen recording URL (YouTube or Drive)
+2. Custom domains (`api.rowan.app`, `admin.rowan.app`) — Phase 2
 
 ---
 

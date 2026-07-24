@@ -1,7 +1,7 @@
 # Rowan Phase 1 — Public Evidence Links
 
-**Prepared:** 20 July 2026  
-**Security note:** This file contains **public URLs and public Stellar addresses only**. No secrets, connection strings, passwords, or full JWTs.
+**Prepared:** 21 July 2026  
+**Security note:** Public URLs and public Stellar addresses only. No secrets, connection strings, passwords, or full JWTs.
 
 ---
 
@@ -9,16 +9,29 @@
 
 | Resource | URL |
 |----------|-----|
+| GitHub repository | https://github.com/edyeluandrew/rowan.git |
 | Backend API | https://rowan-1-9crb.onrender.com |
 | Health check (public) | https://rowan-1-9crb.onrender.com/health |
 | stellar.toml (SEP-1) | https://rowan-1-9crb.onrender.com/.well-known/stellar.toml |
 | SEP-10 challenge (GET) | https://rowan-1-9crb.onrender.com/api/v1/auth/challenge?account=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX |
-| SEP-10 login verify (POST) | https://rowan-1-9crb.onrender.com/api/v1/auth/submit |
-| SEP-10 register verify (POST) | https://rowan-1-9crb.onrender.com/api/v1/auth/register |
-| Admin frontend | https://rowan-dbb4.vercel.app/login |
+| SEP-10 login (POST) | https://rowan-1-9crb.onrender.com/api/v1/auth/submit |
+| SEP-10 register (POST) | https://rowan-1-9crb.onrender.com/api/v1/auth/register |
+| User web app | https://rowan-nt9a.vercel.app/ |
+| Admin frontend | https://rowan-dbb4.vercel.app/ |
+| Admin login | https://rowan-dbb4.vercel.app/login |
 | Admin System Health (after login) | https://rowan-dbb4.vercel.app/system-health |
 
 Replace `GXXX...` in the challenge URL with any valid 56-character Stellar public key starting with `G`.
+
+---
+
+## Demo Video
+
+| Resource | URL |
+|----------|-----|
+| Phase 1 screen recording | _[TO BE ADDED — YouTube or Google Drive URL]_ |
+
+Script: `docs/instawards/PHASE_1_SCREEN_RECORDING_SCRIPT.md`
 
 ---
 
@@ -26,12 +39,12 @@ Replace `GXXX...` in the challenge URL with any valid 56-character Stellar publi
 
 | Resource | URL |
 |----------|-----|
-| GitHub repository | https://github.com/edyeluandrew/rowan.git |
 | Backend entry | https://github.com/edyeluandrew/rowan/blob/main/backend/src/server.js |
 | stellar.toml route | https://github.com/edyeluandrew/rowan/blob/main/backend/src/routes/wellKnown.js |
 | SEP-10 auth routes | https://github.com/edyeluandrew/rowan/blob/main/backend/src/routes/auth.js |
 | Horizon watcher | https://github.com/edyeluandrew/rowan/blob/main/backend/src/services/horizonWatcher.js |
 | Admin app | https://github.com/edyeluandrew/rowan/tree/main/admin |
+| User web app | https://github.com/edyeluandrew/rowan/tree/main/user-web |
 | Render deployment config | https://github.com/edyeluandrew/rowan/blob/main/render.yaml |
 
 ---
@@ -47,69 +60,48 @@ Replace `GXXX...` in the challenge URL with any valid 56-character Stellar publi
 
 ---
 
-## Transaction Evidence (Fresh — 20 July 2026, On-Chain + Log Verified)
+## Transaction Evidence (Primary — On-Chain + Log Verified)
 
 | Resource | Value / URL |
 |----------|-------------|
 | Evidence transaction hash | `183796303ae529608943bf4405f643eb31e6340e4ef15798a92340bc488930d7` |
-| Evidence transaction (Stellar Expert) | https://stellar.expert/explorer/testnet/tx/183796303ae529608943bf4405f643eb31e6340e4ef15798a92340bc488930d7 |
-| Payment type | Inbound native XLM to escrow (no memo — safe evidence test) |
+| Explorer link | https://stellar.expert/explorer/testnet/tx/183796303ae529608943bf4405f643eb31e6340e4ef15798a92340bc488930d7 |
+| Payment type | Inbound native XLM to escrow (no memo) |
 | Amount | 0.1 XLM |
-| Sender (public) | `GBEMAXEUIZZCQHDP2CBOLFBAHY6KP5KAOJHH65PI2L2SRE4PJ6VUV4E2` |
-| Escrow (public) | `GCIRNEH3ERTDIF3YVNUDXPCAAWCB36LRDPGAYRSDORZDQJWPY55NBUEA` |
-| Confirmed (on-chain) | ~2026-07-20T17:06:00Z |
-| Backend log (Render) | `[Horizon] ⭐ Payment event: GBEMAX... → GCIRNEH3... (0.1000000 XLM)` + memo-ignore warn with tx hash |
-| Detection latency | **<1 second** (both log lines at 09:06:00 PM local) |
+| Sender | `GBEMAXEUIZZCQHDP2CBOLFBAHY6KP5KAOJHH65PI2L2SRE4PJ6VUV4E2` |
+| Confirmed (on-chain) | 2026-07-20T17:05:58 UTC |
+| Backend log | `[Horizon] ⭐ Payment event: GBEMAX... → GCIRNEH... (0.1000000 XLM)` |
+| Detection latency | <1 second |
 
-Screenshots: `07-test-payment-explorer.png`, `08-horizon-detection-log.png`
-
----
-
-## Transaction Evidence (Historical — On-Chain Only)
-
-| Resource | Value / URL |
-|----------|-------------|
-| Evidence transaction hash | `229785de840c60e8ba7d76e585910707c60dc9d9e4098b8d29263e1a1f15e410` |
-| Evidence transaction (Stellar Expert) | https://stellar.expert/explorer/testnet/tx/229785de840c60e8ba7d76e585910707c60dc9d9e4098b8d29263e1a1f15e410 |
-| Payment type | Inbound native XLM to escrow |
-| Amount | 6.2382206 XLM |
-| Sender (public) | `GCM674LIRDH6JA7XPB3VPVHLNND7M3GQTRCNOO3LQ64DAPI72SOQTNMZ` |
-| Confirmed (on-chain) | 2026-07-04T08:24:48Z |
+**Screenshots:** `screenshots/deliverable-2-escrow-horizon/07-test-payment-explorer.png`, `08-horizon-detection-log.png`
 
 ---
 
-## Evidence Media (Placeholders — To Be Completed)
+## Evidence Screenshots (Local Repository)
 
-| Resource | Status |
-|----------|--------|
-| Evidence screen recording | _[TO BE UPLOADED — link TBD]_ |
-| Screenshot folder | _[TO BE UPLOADED — e.g. Google Drive / GitHub release assets]_ |
+| Deliverable | Folder | Files |
+|-------------|--------|-------|
+| D1 — Backend + SEP-1 + SEP-10 | `docs/instawards/screenshots/deliverable-1-backend-sep1-sep10/` | 01–05 (+ env parts 1–5) |
+| D2 — Escrow + Horizon | `docs/instawards/screenshots/deliverable-2-escrow-horizon/` | 06–08 |
+| D3 — Admin | `docs/instawards/screenshots/deliverable-3-admin/` | 10–14 |
 
-Suggested recording host: unlisted YouTube or Loom. Do not include secrets in recording.
+Index: `docs/instawards/screenshots/README.md`
 
 ---
 
-## Original SOW URLs (Not Currently Active)
-
-Documented for transparency — functional equivalents above are live:
+## Original SOW URLs (Not Active — Equivalents Above)
 
 | Original SOW URL | Current equivalent |
 |------------------|-------------------|
 | https://api.rowan.app | https://rowan-1-9crb.onrender.com |
-| https://api.rowan.app/.well-known/stellar.toml | https://rowan-1-9crb.onrender.com/.well-known/stellar.toml |
 | https://admin.rowan.app | https://rowan-dbb4.vercel.app |
 
 ---
 
-## Quick Verification Commands (No Secrets)
+## Quick Verification (No Secrets)
 
 ```bash
-# Backend health
 curl -s https://rowan-1-9crb.onrender.com/health
-
-# stellar.toml
 curl -s https://rowan-1-9crb.onrender.com/.well-known/stellar.toml
-
-# SEP-10 challenge (replace G-address)
-curl -s "https://rowan-1-9crb.onrender.com/api/v1/auth/challenge?account=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+curl -s "https://rowan-1-9crb.onrender.com/api/v1/auth/challenge?account=GCLFWZD56SRB4HCDN3MPGDFPDUC6DEC3UGVXAV53NQVXDMKXUXFFHIOG"
 ```

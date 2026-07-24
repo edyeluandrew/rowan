@@ -21,11 +21,11 @@ Use this checklist before submitting the Phase 1 completion package. Check items
 - [x] SEP-10 challenge works (live test 20 Jul 2026)
 - [x] Signed challenge returns JWT (via `/api/v1/auth/register`)
 - [x] GitHub source available
-- [ ] Screenshot: backend health (`01-backend-health.png`)
-- [ ] Screenshot: Render env names, values hidden (`02-render-env-names-values-hidden.png`)
-- [ ] Screenshot: stellar.toml in browser (`03-stellar-toml.png`)
-- [ ] Screenshot: SEP-10 GET challenge (`04-sep10-get-challenge.png`)
-- [ ] Screenshot: SEP-10 POST JWT masked (`05-sep10-post-jwt-masked.png`)
+- [x] Screenshot: backend health (`01-backend-health.png`) — saved 21 Jul 2026
+- [x] Screenshot: Render env names, values hidden (`02-render-env-names-values-hidden-part1.png` … `part5.png`) — saved 21 Jul 2026
+- [x] Screenshot: stellar.toml in browser (`03-stellar-toml.png`) — saved 21 Jul 2026
+- [x] Screenshot: SEP-10 GET challenge (`04-sep10-get-challenge.png`) — saved 21 Jul 2026
+- [x] Screenshot: SEP-10 POST JWT masked (`05-sep10-post-jwt-masked.png`) — saved 21 Jul 2026
 
 ---
 
@@ -38,8 +38,9 @@ Use this checklist before submitting the Phase 1 completion package. Check items
 - [x] Payment hash saved in documentation
 - [x] Horizon detection log captured (Render logs)
 - [x] Detection timing recorded (~3s: 16:43:10Z → 16:43:13Z)
-- [x] Screenshot: test payment explorer (`07-test-payment-explorer.png`) — captured
-- [x] Screenshot: Horizon detection log (`08-horizon-detection-log.png`) — captured with ⭐ event + addresses + tx hash
+- [x] Screenshot: escrow account (`06-escrow-stellar-expert.png`) — captured 21 Jul 2026
+- [x] Screenshot: test payment explorer (`07-test-payment-explorer.png`) — saved 21 Jul 2026
+- [x] Screenshot: Horizon detection log (`08-horizon-detection-log.png`) — captured 21 Jul 2026
 
 ### Safe fresh payment test procedure
 
@@ -60,11 +61,11 @@ Use this checklist before submitting the Phase 1 completion package. Check items
 - [x] Approval confirmation dialog shown
 - [x] Partner approved successfully (Active status)
 - [x] Audit log entry created (admin email + trader ID visible)
-- [x] Screenshot: System Health (`10-admin-system-health.png`)
-- [x] Screenshot: test partner pending (`11-test-partner-pending.png`)
-- [x] Screenshot: approval confirmation (`12-partner-approval-confirmation.png`)
-- [x] Screenshot: partner approved (`13-test-partner-approved.png`)
-- [x] Screenshot: audit log (`14-admin-audit-log.png`)
+- [x] Screenshot: System Health (`10-admin-system-health.png`) — saved 21 Jul 2026
+- [x] Screenshot: test partner pending (`11-test-partner-pending.png`) — saved 21 Jul 2026
+- [x] Screenshot: approval confirmation (`12-partner-approval-confirmation.png`) — saved 21 Jul 2026
+- [x] Screenshot: partner approved (`13-test-partner-approved.png`) — saved 21 Jul 2026
+- [x] Screenshot: audit log (`14-admin-audit-log.png`) — saved 21 Jul 2026
 
 ---
 
@@ -73,11 +74,11 @@ Use this checklist before submitting the Phase 1 completion package. Check items
 - [x] Completion report ready (`PHASE_1_COMPLETION_REPORT.md`)
 - [x] Public evidence links doc ready (`PHASE_1_PUBLIC_EVIDENCE_LINKS.md`)
 - [x] Screen recording script ready (`PHASE_1_SCREEN_RECORDING_SCRIPT.md`)
-- [ ] Screenshots captured (0 / 14)
-- [ ] Screen recording uploaded
+- [x] Screenshots captured (17 files in `docs/instawards/screenshots/`)
+- [ ] Screen recording uploaded — _[INSERT YouTube or Google Drive URL]_
 - [ ] Links tested in incognito / private browser
-- [x] No secrets in documentation files (scan performed 20 Jul 2026)
-- [ ] Ambassador can verify without local setup (pending screenshots + recording)
+- [x] No secrets in documentation files (scan performed 20–21 Jul 2026)
+- [x] Ambassador can verify without local setup (screenshots + live URLs complete; demo video pending)
 
 ---
 
