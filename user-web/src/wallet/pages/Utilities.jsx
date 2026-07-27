@@ -6,7 +6,7 @@ import useRates from '../hooks/useRates'
 import useUserCountry from '../hooks/useUserCountry'
 import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
 import BiometricLock from '../../shared/components/BiometricLock'
-import { getUtilityQuote, getUtilityConfig } from '../api/utilities'
+import { getUtilityQuote, getUtilityConfig, getUtilityHistory } from '../api/utilities'
 import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
 import { getNetworksForCountry } from '../utils/country'
 import AmountInput from '../components/cashout/AmountInput'
@@ -19,7 +19,8 @@ export default function Utilities() {
   const navigate = useNavigate()
   const { isLocked } = useBiometricProtection()
   const { country, fiatCurrency } = useUserCountry()
-  const { usdcBalance, hasUsdcTrustline } = useWallet()
+  const { usdcAvailable, usdcBalance, hasUsdcTrustline } = useWallet()
+  const spendableUsdc = usdcAvailable ?? usdcBalance
   const { rates } = useRates(fiatCurrency)
   const [fiatAmount, setFiatAmount] = useState('')
   const [network, setNetwork] = useState('')
@@ -27,10 +28,14 @@ export default function Utilities() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [utilityConfig, setUtilityConfig] = useState(null)
+  const [history, setHistory] = useState([])
 
   useEffect(() => {
     getUtilityConfig()
       .then(setUtilityConfig)
+      .catch(() => {})
+    getUtilityHistory(5)
+      .then((rows) => setHistory(Array.isArray(rows) ? rows : []))
       .catch(() => {})
   }, [])
 
@@ -56,8 +61,8 @@ export default function Utilities() {
     ? (netFiat / usdcToFiatRate) * (1 + feePercent / 100)
     : 0
 
-  const walletMaxFiat = usdcToFiatRate > 0 && usdcBalance != null
-    ? usdcBalance * usdcToFiatRate / (1 + feePercent / 100)
+  const walletMaxFiat = usdcToFiatRate > 0 && spendableUsdc != null
+    ? spendableUsdc * usdcToFiatRate / (1 + feePercent / 100)
     : null
 
   const exceedsWallet = walletMaxFiat != null && netFiat > walletMaxFiat
@@ -147,7 +152,10 @@ export default function Utilities() {
         <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">USDC balance</p>
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-rowan-text text-2xl font-bold tabular-nums">
-            {usdcBalance != null ? Number(usdcBalance).toFixed(2) : '—'} USDC
+            {spendableUsdc != null ? Number(spendableUsdc).toFixed(2) : '—'} USDC
+            {usdcAvailable != null && usdcBalance != null && usdcAvailable < usdcBalance && (
+              <span className="text-rowan-muted text-sm font-normal ml-1">available</span>
+            )}
           </span>
           {walletMaxFiat != null && walletMaxFiat > 0 && (
             <button
@@ -196,7 +204,7 @@ export default function Utilities() {
         <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 flex items-start gap-3">
           <AlertTriangle size={18} className="text-rowan-yellow shrink-0 mt-0.5" />
           <div className="text-rowan-yellow text-sm">
-            {exceedsWallet && <p>Amount exceeds your USDC balance</p>}
+            {exceedsWallet && <p>Amount exceeds your available USDC</p>}
             {belowMin && <p>Minimum airtime is {minFiat.toLocaleString()} {currency}</p>}
             {aboveMax && <p>Maximum airtime is {maxFiat.toLocaleString()} {currency}</p>}
           </div>
@@ -209,6 +217,36 @@ export default function Utilities() {
           Get quote
         </Button>
       </div>
+
+      {history.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-rowan-text text-sm font-semibold mb-3">Recent airtime</h2>
+          <div className="space-y-2">
+            {history.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => navigate(`/wallet/utilities/status/${item.id}`, { state: { quote: item } })}
+                className="w-full bg-rowan-surface border border-rowan-border rounded-xl p-3 text-left"
+              >
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-rowan-text text-sm font-medium">
+                    {Number(item.fiatAmount).toLocaleString()} {item.fiatCurrency}
+                  </span>
+                  <span className={`text-xs font-medium ${
+                    item.status === 'COMPLETED' ? 'text-rowan-green'
+                      : item.status === 'FAILED' ? 'text-rowan-red'
+                        : 'text-rowan-muted'
+                  }`}>
+                    {item.status}
+                  </span>
+                </div>
+                <p className="text-rowan-muted text-xs mt-1 truncate">{item.recipientPhone}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -33,7 +33,15 @@ import { getInProgressTransactions } from '../utils/transactions'
 export default function Home() {
   const navigate = useNavigate()
   const { isLocked } = useBiometricProtection()
-  const { usdcBalance, hasUsdcTrustline, loading: balanceLoading, refresh: refreshBalance, testUsdcProvisioning } = useWallet()
+  const {
+    usdcBalance,
+    usdcAvailable,
+    usdcLocked,
+    hasUsdcTrustline,
+    loading: balanceLoading,
+    refresh: refreshBalance,
+    testUsdcProvisioning,
+  } = useWallet()
   const { country, fiatCurrency, ready: countryReady } = useUserCountry()
   const { hasActiveOrder } = useActiveTransaction()
   const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates(fiatCurrency)
@@ -46,8 +54,9 @@ export default function Home() {
   const recent = transactions.filter((tx) => tx.id !== activeCashout?.id).slice(0, 3)
 
   const usdcToFiatRate = rates?.usdcToFiat
-  const fiatEquivalent = usdcBalance != null && usdcToFiatRate
-    ? usdcToFiat(usdcBalance, usdcToFiatRate)
+  const spendableUsdc = usdcAvailable ?? usdcBalance
+  const fiatEquivalent = spendableUsdc != null && usdcToFiatRate
+    ? usdcToFiat(spendableUsdc, usdcToFiatRate)
     : null
 
   const needsUsdc = !balanceLoading
@@ -83,6 +92,8 @@ export default function Home() {
         fiatAmount={countryReady ? fiatEquivalent : null}
         fiatCurrency={fiatCurrency}
         usdcBalance={usdcBalance}
+        usdcAvailable={usdcAvailable}
+        usdcLocked={usdcLocked}
         loading={balanceLoading || ratesLoading || !countryReady}
         refreshing={balanceLoading}
         onRefresh={() => {

@@ -13,6 +13,8 @@ export default function BalanceCard({
   fiatAmount,
   fiatCurrency,
   usdcBalance,
+  usdcAvailable,
+  usdcLocked,
   loading,
   refreshing,
   onRefresh,
@@ -52,10 +54,15 @@ export default function BalanceCard({
     await setPreference(PREF_HIDDEN, String(next))
   }
 
+  const displayUsdc = usdcAvailable ?? usdcBalance
+  const locked = usdcLocked != null ? Number(usdcLocked) : 0
   const fiatDigits = fiatCurrency === 'KES' ? 2 : 0
-  const usdcLabel = usdcBalance != null
-    ? Number(usdcBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const usdcLabel = displayUsdc != null
+    ? Number(displayUsdc).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '—'
+  const totalUsdcLabel = usdcBalance != null
+    ? Number(usdcBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : null
   const fiatLabel = fiatAmount != null
     ? Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: fiatDigits })
     : '—'
@@ -63,7 +70,7 @@ export default function BalanceCard({
   const primaryValue = unit === 'usdc' ? usdcLabel : fiatLabel
   const secondaryLine = unit === 'usdc'
     ? (fiatAmount != null ? `≈ ${fiatLabel} ${fiatCurrency}` : null)
-    : (usdcBalance != null ? `${usdcLabel} USDC in wallet` : null)
+    : (displayUsdc != null ? `${usdcLabel} USDC available` : null)
 
   const showMasked = hidden && prefsReady
   const selectValue = unit === 'usdc' ? 'usdc' : 'fiat'
@@ -125,6 +132,12 @@ export default function BalanceCard({
           {secondaryLine && (
             <p className="text-rowan-muted text-sm tabular-nums mt-2">
               {showMasked ? '••••' : secondaryLine}
+            </p>
+          )}
+          {!showMasked && locked > 0.0000001 && unit === 'usdc' && (
+            <p className="text-rowan-muted text-xs tabular-nums mt-1">
+              {locked.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC locked in active trades
+              {totalUsdcLabel ? ` · ${totalUsdcLabel} total` : ''}
             </p>
           )}
           {unit === 'fiat' && !showMasked && (
