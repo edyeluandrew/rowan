@@ -4,18 +4,19 @@ import { ChevronLeft, ShieldCheck, AlertTriangle } from 'lucide-react'
 import UtilityQuoteSummary from '../components/utilities/UtilityQuoteSummary'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import Button from '../components/ui/Button'
+import { labelsFor } from '../utils/utilityLabels'
 
 export default function UtilitiesConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
   const { quote, network, phone, mockPurchaseAllowed, utilityType } = location.state || {}
-  const isData = utilityType === 'data' || quote?.type === 'data'
-  const title = isData ? 'Confirm data bundle' : 'Confirm airtime'
+  const labels = labelsFor({ type: utilityType || quote?.type })
+  const title = labels.type === 'data' ? 'Confirm data bundle' : 'Confirm airtime'
 
   const [expired, setExpired] = useState(false)
 
   if (!quote) {
-    navigate('/wallet/utilities/airtime', { replace: true })
+    navigate(labels.utilitiesPath, { replace: true })
     return null
   }
 
@@ -47,7 +48,7 @@ export default function UtilitiesConfirm() {
         />
       </div>
       <p className="text-rowan-muted text-xs mb-4">
-        Send USDC before the timer runs out to complete your airtime purchase.
+        {labels.confirmTimerHint}
       </p>
 
       <UtilityQuoteSummary quote={quote} phone={phone} />
@@ -55,7 +56,7 @@ export default function UtilitiesConfirm() {
       <div className="bg-rowan-surface rounded-xl p-4 mt-4 flex items-start gap-3">
         <ShieldCheck size={20} className="text-rowan-green shrink-0 mt-0.5" />
         <p className="text-rowan-muted text-xs">
-          After payment, airtime is sent directly to the phone number above.
+          {labels.confirmAfterPayment}
           {mockPurchaseAllowed && ' Staging can complete without on-chain payment.'}
         </p>
       </div>
@@ -66,7 +67,7 @@ export default function UtilitiesConfirm() {
             <AlertTriangle size={18} className="text-rowan-yellow" />
             <p className="text-rowan-yellow font-bold text-sm">Quote expired</p>
           </div>
-          <Button onClick={() => navigate('/wallet/utilities', { replace: true })}>
+          <Button onClick={() => navigate(labels.utilitiesPath, { replace: true })}>
             Get new quote
           </Button>
         </div>

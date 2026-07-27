@@ -2,6 +2,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { CheckCircle2, ChevronLeft, XCircle, Hash } from 'lucide-react'
 import Button from '../components/ui/Button'
 import { maskPhoneNumber } from '../utils/crypto'
+import { labelsFor } from '../utils/utilityLabels'
 
 export default function UtilityStatus() {
   const navigate = useNavigate()
@@ -9,9 +10,10 @@ export default function UtilityStatus() {
   const { id } = useParams()
   const { purchase, quote, phone } = location.state || {}
   const data = purchase || quote
+  const labels = labelsFor(data)
 
   if (!data) {
-    navigate('/wallet/utilities', { replace: true })
+    navigate(labels.utilitiesPath, { replace: true })
     return null
   }
 
@@ -28,7 +30,7 @@ export default function UtilityStatus() {
         >
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">Airtime receipt</h1>
+        <h1 className="text-rowan-text text-lg font-bold">{labels.receiptTitle}</h1>
       </div>
 
       <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-6 text-center">
@@ -38,7 +40,7 @@ export default function UtilityStatus() {
           <XCircle size={48} className="text-rowan-red mx-auto mb-4" />
         )}
         <p className="text-rowan-text text-lg font-bold">
-          {completed ? 'Airtime sent!' : failed ? 'Purchase failed' : 'Processing'}
+          {completed ? labels.successTitle : failed ? 'Purchase failed' : 'Processing'}
         </p>
         {phone && (
           <p className="text-rowan-muted text-sm mt-2">
@@ -60,13 +62,13 @@ export default function UtilityStatus() {
           <p className="text-rowan-red text-sm mt-4">{purchase.errorMessage}</p>
         )}
         {data.reloadlyMock && completed && (
-          <p className="text-rowan-muted text-xs mt-3">Sandbox mock — no real airtime sent</p>
+          <p className="text-rowan-muted text-xs mt-3">{labels.mockNote}</p>
         )}
       </div>
 
       <div className="mt-8 space-y-3">
-        <Button onClick={() => navigate('/wallet/utilities')}>
-          Buy more airtime
+        <Button onClick={() => navigate(labels.utilitiesPath)}>
+          {labels.buyMore}
         </Button>
         <button
           type="button"

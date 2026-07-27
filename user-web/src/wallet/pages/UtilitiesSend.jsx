@@ -8,20 +8,22 @@ import CountdownTimer from '../components/ui/CountdownTimer'
 import UtilityQuoteSummary from '../components/utilities/UtilityQuoteSummary'
 import Button from '../components/ui/Button'
 import { getHorizonUrl } from '../../shared/utils/config'
+import { labelsFor, getUtilityType } from '../utils/utilityLabels'
 
 export default function UtilitiesSend() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, phone, mockPurchaseAllowed } = location.state || {}
+  const { quote, phone, mockPurchaseAllowed, utilityType } = location.state || {}
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [quoteExpired, setQuoteExpired] = useState(false)
 
   if (!quote) {
-    navigate('/wallet/utilities', { replace: true })
+    navigate('/wallet/utilities/airtime', { replace: true })
     return null
   }
 
+  const labels = labelsFor({ type: utilityType || getUtilityType(quote) })
   const horizonUrl = getHorizonUrl()
   const useMockPath = mockPurchaseAllowed && quote.reloadlyMock
 
@@ -31,7 +33,7 @@ export default function UtilitiesSend() {
       paymentTxHash,
     })
     navigate(`/wallet/utilities/status/${quote.quoteId || quote.id}`, {
-      state: { purchase: result, quote, phone },
+      state: { purchase: result, quote, phone, utilityType: getUtilityType(quote) },
       replace: true,
     })
   }
@@ -114,7 +116,7 @@ export default function UtilitiesSend() {
           <ShieldCheck size={20} className="text-rowan-green shrink-0 mt-0.5" />
           <p className="text-rowan-muted text-xs">
             Send exactly {Number(quote.usdcAmount).toFixed(4)} USDC with memo{' '}
-            <span className="font-mono text-rowan-text">{quote.memo}</span> to complete airtime delivery.
+            <span className="font-mono text-rowan-text">{quote.memo}</span> {labels.deliveryNote}
           </p>
         </div>
       )}
@@ -129,7 +131,7 @@ export default function UtilitiesSend() {
 
       {quoteExpired && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mt-4">
-          <Button onClick={() => navigate('/wallet/utilities', { replace: true })}>
+          <Button onClick={() => navigate(labels.utilitiesPath, { replace: true })}>
             Get new quote
           </Button>
         </div>
@@ -145,7 +147,7 @@ export default function UtilitiesSend() {
       {!quoteExpired && (
         <div className="mt-8">
           <Button onClick={handlePay} loading={loading}>
-            {useMockPath ? 'Complete test purchase' : 'Send USDC & buy airtime'}
+            {useMockPath ? 'Complete test purchase' : labels.sendButton}
           </Button>
         </div>
       )}

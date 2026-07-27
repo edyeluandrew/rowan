@@ -1,11 +1,14 @@
-import { Smartphone, ArrowLeftRight, Hash, Signal } from 'lucide-react'
+import { Smartphone, ArrowLeftRight, Hash } from 'lucide-react'
 import { NETWORKS } from '../../utils/constants'
 import { maskPhoneNumber } from '../../utils/crypto'
+import { labelsFor } from '../../utils/utilityLabels'
 
 /**
- * Airtime / utility quote breakdown card.
+ * Airtime / data utility quote breakdown card.
  */
 export default function UtilityQuoteSummary({ quote, phone }) {
+  const labels = labelsFor(quote)
+  const TypeIcon = labels.Icon
   const network = NETWORKS[quote.networkCode] || {}
   const currency = quote.fiatCurrency || network.currency || 'UGX'
   const sendUsdc = quote.usdcAmount ?? quote.usdc_amount
@@ -16,7 +19,7 @@ export default function UtilityQuoteSummary({ quote, phone }) {
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-rowan-yellow/20 flex items-center justify-center">
-          <Signal size={20} className="text-rowan-yellow" />
+          <TypeIcon size={20} className="text-rowan-yellow" />
         </div>
         <div>
           <p className="text-rowan-muted text-xs">You send</p>
@@ -35,7 +38,7 @@ export default function UtilityQuoteSummary({ quote, phone }) {
           <Smartphone size={20} className="text-rowan-green" />
         </div>
         <div>
-          <p className="text-rowan-muted text-xs">Airtime credit</p>
+          <p className="text-rowan-muted text-xs">{labels.creditLabel}</p>
           <p className="text-rowan-green text-2xl font-bold tabular-nums">
             {Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
           </p>
@@ -43,6 +46,7 @@ export default function UtilityQuoteSummary({ quote, phone }) {
       </div>
 
       <div className="border-t border-rowan-border mt-4 pt-4 space-y-2">
+        <DetailRow label="Product" value={labels.product} />
         <DetailRow label="Network" value={network.label || quote.networkCode} />
         {quote.operatorName && <DetailRow label="Operator" value={quote.operatorName} />}
         {feeUsdc != null && (
