@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, Signal, AlertTriangle } from 'lucide-react'
+import { Signal, Wifi, AlertTriangle } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import useUserCountry from '../hooks/useUserCountry'
@@ -15,7 +15,32 @@ import PhoneInput from '../components/cashout/PhoneInput'
 import Button from '../components/ui/Button'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 
-export default function Utilities() {
+const UTILITY_META = {
+  airtime: {
+    title: 'Buy airtime',
+    subtitle: 'Pay with USDC — instant top-up',
+    phoneHint: 'Phone number that receives the airtime credit',
+    minLabel: 'Minimum airtime',
+    maxLabel: 'Maximum airtime',
+    historyTitle: 'Recent airtime',
+    cta: 'Get quote',
+    Icon: Signal,
+  },
+  data: {
+    title: 'Buy data',
+    subtitle: 'Mobile data bundles paid with USDC',
+    phoneHint: 'Phone number that receives the data bundle',
+    minLabel: 'Minimum bundle',
+    maxLabel: 'Maximum bundle',
+    historyTitle: 'Recent data',
+    cta: 'Get quote',
+    Icon: Wifi,
+  },
+}
+
+export default function Utilities({ utilityType = 'airtime' }) {
+  const meta = UTILITY_META[utilityType] || UTILITY_META.airtime
+  const TypeIcon = meta.Icon
   const navigate = useNavigate()
   const { isLocked } = useBiometricProtection()
   const { country, fiatCurrency } = useUserCountry()
@@ -35,9 +60,12 @@ export default function Utilities() {
       .then(setUtilityConfig)
       .catch(() => {})
     getUtilityHistory(5)
-      .then((rows) => setHistory(Array.isArray(rows) ? rows : []))
+      .then((rows) => {
+        const list = Array.isArray(rows) ? rows : []
+        setHistory(list.filter((r) => (r.type || r.utility_type || 'airtime') === utilityType))
+      })
       .catch(() => {})
-  }, [])
+  }, [utilityType])
 
   const countryNetworks = useMemo(
     () => Object.keys(getNetworksForCountry(country)),
@@ -97,7 +125,7 @@ export default function Utilities() {
         networkCode: network,
         recipientPhone: fullPhone,
         fiatAmount: Math.round(netFiat),
-        type: 'airtime',
+        type: utilityType,
       })
 
       navigate('/wallet/utilities/confirm', {
@@ -105,6 +133,7 @@ export default function Utilities() {
           quote,
           network,
           phone: fullPhone,
+          utilityType,
           mockPurchaseAllowed: utilityConfig?.mockPurchaseAllowed,
         },
       })
@@ -123,20 +152,8 @@ export default function Utilities() {
   }
 
   return (
-    <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-4">
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={() => navigate(-1)}
-          className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center"
-          aria-label="Back"
-        >
-          <ChevronLeft size={24} />
-        </button>
-        <div>
-          <h1 className="text-rowan-text text-lg font-bold">Buy airtime</h1>
-          <p className="text-rowan-muted text-xs">Pay with USDC — instant top-up</p>
-        </div>
-      </div>
+    <div className="px-4 pb-8">
+      <p className="text-rowan-muted text-xs mb-4">{meta.subtitle}</p>
 
       <UsdcTrustlineSetup compact />
 
@@ -189,9 +206,7 @@ export default function Utilities() {
 
       <div className="mt-6">
         <PhoneInput phone={phone} onPhoneChange={setPhone} network={network} />
-        <p className="text-rowan-muted text-xs mt-2 px-1">
-          Phone number that receives the airtime credit
-        </p>
+        <p className="text-rowan-muted text-xs mt-2 px-1">{meta.phoneHint}</p>
       </div>
 
       {error && (
@@ -205,22 +220,22 @@ export default function Utilities() {
           <AlertTriangle size={18} className="text-rowan-yellow shrink-0 mt-0.5" />
           <div className="text-rowan-yellow text-sm">
             {exceedsWallet && <p>Amount exceeds your available USDC</p>}
-            {belowMin && <p>Minimum airtime is {minFiat.toLocaleString()} {currency}</p>}
-            {aboveMax && <p>Maximum airtime is {maxFiat.toLocaleString()} {currency}</p>}
+            {belowMin && <p>{meta.minLabel} is {minFiat.toLocaleString()} {currency}</p>}
+            {aboveMax && <p>{meta.maxLabel} is {maxFiat.toLocaleString()} {currency}</p>}
           </div>
         </div>
       )}
 
       <div className="mt-8">
         <Button onClick={handleGetQuote} loading={loading} disabled={!canProceed}>
-          <Signal size={18} className="mr-2" />
-          Get quote
+          <TypeIcon size={18} className="mr-2" />
+          {meta.cta}
         </Button>
       </div>
 
       {history.length > 0 && (
         <div className="mt-10">
-          <h2 className="text-rowan-text text-sm font-semibold mb-3">Recent airtime</h2>
+          <h2 className="text-rowan-text text-sm font-semibold mb-3">{meta.historyTitle}</h2>
           <div className="space-y-2">
             {history.map((item) => (
               <button

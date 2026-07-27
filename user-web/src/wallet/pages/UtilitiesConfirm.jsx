@@ -8,18 +8,21 @@ import Button from '../components/ui/Button'
 export default function UtilitiesConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, network, phone, mockPurchaseAllowed } = location.state || {}
+  const { quote, network, phone, mockPurchaseAllowed, utilityType } = location.state || {}
+  const isData = utilityType === 'data' || quote?.type === 'data'
+  const title = isData ? 'Confirm data bundle' : 'Confirm airtime'
+
   const [expired, setExpired] = useState(false)
 
   if (!quote) {
-    navigate('/wallet/utilities', { replace: true })
+    navigate('/wallet/utilities/airtime', { replace: true })
     return null
   }
 
   const handleConfirm = () => {
     if (expired) return
     navigate('/wallet/utilities/send', {
-      state: { quote, network, phone, mockPurchaseAllowed },
+      state: { quote, network, phone, mockPurchaseAllowed, utilityType: utilityType || quote.type },
       replace: true,
     })
   }
@@ -33,7 +36,7 @@ export default function UtilitiesConfirm() {
         >
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">Confirm airtime</h1>
+        <h1 className="text-rowan-text text-lg font-bold">{title}</h1>
       </div>
 
       <div className="flex items-center justify-between mb-1">

@@ -12,6 +12,7 @@ import useUserCountry from '../hooks/useUserCountry'
 import { getPreference, setPreference } from '../utils/storage'
 import { formatAddress } from '../utils/format'
 import { KYC_LEVELS, COPY_FEEDBACK_TIMEOUT_MS, COUNTRY_CODES } from '../utils/constants'
+import { getKycStatus } from '../api/user'
 import { COUNTRY_FIAT } from '../utils/country'
 import CountryPicker from '../components/settings/CountryPicker'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
@@ -20,7 +21,7 @@ import Badge from '../components/ui/Badge'
 export default function Profile() {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
-  const { usdcBalance, hasUsdcTrustline, publicKey } = useWallet()
+  const { usdcBalance, usdcAvailable, usdcLocked, hasUsdcTrustline, publicKey } = useWallet()
   const { stats } = useTransactions()
   const { country, setCountry } = useUserCountry()
   const [showCountryPicker, setShowCountryPicker] = useState(false)
@@ -28,6 +29,13 @@ export default function Profile() {
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [vibrationEnabled, setVibrationEnabled] = useState(true)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [kycStatus, setKycStatus] = useState(null)
+
+  useEffect(() => {
+    getKycStatus()
+      .then(setKycStatus)
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     const loadPrefs = async () => {
@@ -76,8 +84,14 @@ export default function Profile() {
     }
   }
 
-  const kycLevel = user?.kycLevel || 'NONE'
+  const kycLevel = kycStatus?.kyc_level || user?.kycLevel || 'NONE'
   const kycInfo = KYC_LEVELS[kycLevel] || KYC_LEVELS.NONE
+  const limitCurrency = COUNTRY_FIAT[kycStatus?.country_code || country] || 'UGX'
+
+  const formatLimit = (ugx) => {
+    if (ugx == null) return '—'
+    return `${Number(ugx).toLocaleString()} ${limitCurrency}`
+  }
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
@@ -122,12 +136,40 @@ export default function Profile() {
         </button>
       </div>
 
+      {kycStatus?.limits && (
+        <div className="bg-rowan-surface rounded-xl p-4 mb-4">
+          <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Your limits</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-rowan-muted text-[10px]">Per transaction</p>
+              <p className="text-rowan-text text-sm font-semibold tabular-nums">
+                {formatLimit(kycStatus.limits.per_tx_ugx)}
+              </p>
+            </div>
+            <div>
+              <p className="text-rowan-muted text-[10px]">Daily remaining</p>
+              <p className="text-rowan-text text-sm font-semibold tabular-nums">
+                {formatLimit(kycStatus.limits.daily_remaining_ugx)}
+              </p>
+            </div>
+          </div>
+          {kycStatus.tier && (
+            <p className="text-rowan-muted text-xs mt-2">{kycStatus.tier} · {kycLevel}</p>
+          )}
+        </div>
+      )}
+
       {/* USDC wallet */}
       <div className="bg-rowan-surface rounded-xl p-4 mb-4">
         <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">USDC balance</p>
         <p className="text-rowan-yellow text-2xl font-bold tabular-nums">
-          {hasUsdcTrustline ? Number(usdcBalance || 0).toFixed(2) : '—'}
+          {hasUsdcTrustline ? Number(usdcAvailable ?? usdcBalance ?? 0).toFixed(2) : '—'}
         </p>
+        {hasUsdcTrustline && usdcLocked > 0 && (
+          <p className="text-rowan-muted text-xs mt-1 tabular-nums">
+            {Number(usdcLocked).toFixed(2)} USDC locked · {Number(usdcBalance || 0).toFixed(2)} total
+          </p>
+        )}
         {hasUsdcTrustline === false && (
           <p className="text-rowan-muted text-xs mt-1">
             Enable USDC below to receive tokens from P2P buy

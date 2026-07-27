@@ -136,7 +136,7 @@ export default function Home() {
         </button>
         <button
           type="button"
-          onClick={() => navigate('/wallet/utilities')}
+          onClick={() => navigate('/wallet/utilities/airtime')}
           className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
         >
           <Signal size={20} className="text-rowan-gold" />

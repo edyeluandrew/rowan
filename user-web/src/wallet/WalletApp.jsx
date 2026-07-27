@@ -29,6 +29,7 @@ import Cashout from './pages/Cashout';
 import CashoutConfirm from './pages/CashoutConfirm';
 import CashoutSend from './pages/CashoutSend';
 import Utilities from './pages/Utilities';
+import UtilitiesHub from './pages/UtilitiesHub';
 import UtilitiesConfirm from './pages/UtilitiesConfirm';
 import UtilitiesSend from './pages/UtilitiesSend';
 import UtilityStatus from './pages/UtilityStatus';
@@ -79,7 +80,11 @@ export default function WalletApp() {
             <Route path="cashout" element={<Cashout />} />
             <Route path="cashout/confirm" element={<CashoutConfirm />} />
             <Route path="cashout/send" element={<CashoutSend />} />
-            <Route path="utilities" element={<Utilities />} />
+            <Route path="utilities" element={<UtilitiesHub />}>
+              <Route index element={<Navigate to="airtime" replace />} />
+              <Route path="airtime" element={<Utilities utilityType="airtime" />} />
+              <Route path="data" element={<Utilities utilityType="data" />} />
+            </Route>
             <Route path="utilities/confirm" element={<UtilitiesConfirm />} />
             <Route path="utilities/send" element={<UtilitiesSend />} />
             <Route path="utilities/status/:id" element={<UtilityStatus />} />
