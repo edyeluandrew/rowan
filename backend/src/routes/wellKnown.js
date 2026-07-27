@@ -20,6 +20,7 @@ router.get('/stellar.toml', (req, res) => {
   
   // CORS must be * specifically for stellar.toml per SEP-1 spec
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.setHeader('Content-Type', 'text/plain');
   res.setHeader('Cache-Control', 'public, max-age=3600');
 
