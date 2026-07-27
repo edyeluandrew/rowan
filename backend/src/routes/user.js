@@ -31,7 +31,6 @@ import websocket from '../services/websocket.js';
 import { formatShortId } from '../utils/shortId.js';
 import disputeEvidenceService from '../services/disputeEvidenceService.js';
 import storageService from '../services/storageService.js';
-import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 
 const router = Router();
 
