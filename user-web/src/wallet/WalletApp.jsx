@@ -28,6 +28,10 @@ import BuyConfirm from './pages/BuyConfirm'
 import Cashout from './pages/Cashout';
 import CashoutConfirm from './pages/CashoutConfirm';
 import CashoutSend from './pages/CashoutSend';
+import Utilities from './pages/Utilities';
+import UtilitiesConfirm from './pages/UtilitiesConfirm';
+import UtilitiesSend from './pages/UtilitiesSend';
+import UtilityStatus from './pages/UtilityStatus';
 import TransactionStatus from './pages/TransactionStatus';
 import History from './pages/History';
 import TransactionDetail from './pages/TransactionDetail';
@@ -75,6 +79,10 @@ export default function WalletApp() {
             <Route path="cashout" element={<Cashout />} />
             <Route path="cashout/confirm" element={<CashoutConfirm />} />
             <Route path="cashout/send" element={<CashoutSend />} />
+            <Route path="utilities" element={<Utilities />} />
+            <Route path="utilities/confirm" element={<UtilitiesConfirm />} />
+            <Route path="utilities/send" element={<UtilitiesSend />} />
+            <Route path="utilities/status/:id" element={<UtilityStatus />} />
             <Route path="transaction/:id" element={<TransactionStatus />} />
             <Route path="history/:id" element={<TransactionDetail />} />
             <Route path="dispute/:id" element={<DisputeForm />} />

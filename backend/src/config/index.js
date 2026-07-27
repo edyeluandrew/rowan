@@ -190,6 +190,34 @@ const config = {
     provider: process.env.SCREENING_PROVIDER || 'local',
   },
 
+  // Phase 2 B2/B6 — Reloadly utilities (airtime, data, bills)
+  reloadly: {
+    enabled: process.env.RELOADLY_ENABLED === 'true',
+    mockMode: process.env.RELOADLY_MOCK_MODE === 'true'
+      || (!process.env.RELOADLY_CLIENT_ID && (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'),
+    clientId: process.env.RELOADLY_CLIENT_ID || '',
+    clientSecret: process.env.RELOADLY_CLIENT_SECRET || '',
+    authUrl: process.env.RELOADLY_AUTH_URL || 'https://auth.reloadly.com/oauth/token',
+    audience: process.env.RELOADLY_AUDIENCE
+      || ((process.env.STELLAR_NETWORK || 'testnet') === 'mainnet'
+        ? 'https://topups.reloadly.com'
+        : 'https://topups-sandbox.reloadly.com'),
+    baseUrl: process.env.RELOADLY_BASE_URL
+      || ((process.env.STELLAR_NETWORK || 'testnet') === 'mainnet'
+        ? 'https://topups.reloadly.com'
+        : 'https://topups-sandbox.reloadly.com'),
+    tokenCacheSeconds: parseInt(process.env.RELOADLY_TOKEN_CACHE_SECONDS, 10) || 3300,
+  },
+
+  utilities: {
+    feePercent: parseFloat(process.env.UTILITY_FEE_PERCENT) || 1,
+    quoteTtlSeconds: parseInt(process.env.UTILITY_QUOTE_TTL_SECONDS, 10) || 300,
+    minFiatAmount: parseFloat(process.env.UTILITY_MIN_FIAT_AMOUNT) || 1000,
+    maxFiatAmount: parseFloat(process.env.UTILITY_MAX_FIAT_AMOUNT) || 500000,
+    treasuryPublicKey: process.env.UTILITY_USDC_PUBLIC_KEY || process.env.ESCROW_PUBLIC_KEY,
+    allowMockPurchase: process.env.UTILITY_ALLOW_MOCK_PURCHASE === 'true',
+  },
+
   // [PHASE 4] Fraud monitoring thresholds
   fraud: {
     // Concurrent open quotes threshold before blocking

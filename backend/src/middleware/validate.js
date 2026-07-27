@@ -4,7 +4,7 @@ import logger from '../utils/logger.js';
 const STELLAR_ADDRESS_RE = /^G[A-Z2-7]{55}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_HASH_RE = /^[a-f0-9]{64}$/i; // SHA-256 hex
-const MOBILE_NETWORKS = ['MPESA_KE', 'MTN_UG', 'AIRTEL_UG', 'MTN_TZ', 'AIRTEL_TZ'];
+const MOBILE_NETWORKS = ['MPESA_KE', 'MTN_UG', 'AIRTEL_UG', 'MTN_TZ', 'AIRTEL_TZ', 'MTN_RW', 'AIRTEL_RW'];
 
 /**
  * Validate required fields on the request body.

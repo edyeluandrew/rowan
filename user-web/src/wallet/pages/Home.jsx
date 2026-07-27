@@ -4,6 +4,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Clock,
+  Signal,
   Star,
   AlertTriangle,
   Bell,
@@ -94,8 +95,8 @@ export default function Home() {
 
       {activeCashout && <CashoutInProgressBanner transaction={activeCashout} />}
 
-      {/* Primary actions — short labels */}
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      {/* Primary actions */}
+      <div className="mt-4 grid grid-cols-4 gap-2">
         <button
           type="button"
           onClick={() => navigate('/wallet/receive')}
@@ -121,6 +122,14 @@ export default function Home() {
         >
           <ArrowUpFromLine size={20} className="text-rowan-green" />
           <span className="text-rowan-text text-xs font-medium">Sell</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/wallet/utilities')}
+          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
+        >
+          <Signal size={20} className="text-rowan-gold" />
+          <span className="text-rowan-text text-xs font-medium">Airtime</span>
         </button>
       </div>
 

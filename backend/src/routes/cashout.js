@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { authUser, checkUserLimits } from '../middleware/auth.js';
+import { authUser } from '../middleware/auth.js';
+import { enforceKycTransactionLimits } from '../middleware/kycLimits.js';
 import { validate, validateTypes } from '../middleware/validate.js';
 import { cashoutStatusLimiter } from '../middleware/rateLimits.js';
 import quoteEngine from '../services/quoteEngine.js';
@@ -50,7 +51,7 @@ router.post(
   authUser,
   validate(['network', 'phoneHash']),
   validateTypes({ xlmAmount: 'positiveNumber', fiatAmount: 'positiveNumber', network: 'mobileNetwork', phoneHash: 'phoneHash' }),
-  checkUserLimits,
+  enforceKycTransactionLimits('offramp'),
   async (req, res, next) => {
     try {
       const { xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName, payoutSettingId } = req.body;
@@ -114,11 +115,6 @@ router.post(
         }
         fiatEstimate = fiatNum;
         logger.info(`[Cashout] getQuote (fiat): fiatAmount=${fiatNum}, network=${network}`);
-      }
-      const fraudCheck = await fraudMonitor.checkTransaction(req.userId, fiatEstimate, fiatCurrency);
-      if (!fraudCheck.allowed) {
-        logger.warn(`[Cashout] Fraud check failed: ${fraudCheck.reason}`);
-        return res.status(403).json({ error: fraudCheck.reason });
       }
 
       // [AML] Sanctions screening on the payout counterparty (the person whose

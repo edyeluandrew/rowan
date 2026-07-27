@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authUser } from '../middleware/auth.js';
+import { enforceKycTransactionLimits } from '../middleware/kycLimits.js';
 import { validate, validateTypes } from '../middleware/validate.js';
 import expressMatchingService from '../services/expressMatchingService.js';
 
@@ -20,6 +21,7 @@ router.post(
     fiatAmount: 'positiveNumber',
     usdcAmount: 'positiveNumber',
   }),
+  enforceKycTransactionLimits('express'),
   async (req, res, next) => {
     try {
       const side = String(req.body.side || '').toLowerCase();

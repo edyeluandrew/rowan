@@ -16,6 +16,7 @@ import logger from '../utils/logger.js';
 import auditLogService from '../services/auditLogService.js';
 import { sensitiveActionLimiter } from '../middleware/rateLimits.js';
 import config from '../config/index.js';
+import kycTierService from '../services/kyc/kycTierService.js';
 
 const router = Router();
 
@@ -1400,7 +1401,7 @@ router.post('/kyc-submissions/:id/approve', authAdmin, async (req, res, next) =>
     }
 
     const level = sub.requested_level;
-    const tier = config.kycLimits[level] || config.kycLimits.NONE;
+    const tierLimits = kycTierService.resolveLimits({ kyc_level: level }, 'UG');
 
     await client.query(
       `UPDATE kyc_submissions
@@ -1411,7 +1412,7 @@ router.post('/kyc-submissions/:id/approve', authAdmin, async (req, res, next) =>
 
     await client.query(
       `UPDATE users SET kyc_level = $1, daily_limit_ugx = $2, updated_at = NOW() WHERE id = $3`,
-      [level, tier.daily, sub.user_id]
+      [level, tierLimits.dailyUgx, sub.user_id]
     );
 
     await client.query('COMMIT');
@@ -1420,7 +1421,7 @@ router.post('/kyc-submissions/:id/approve', authAdmin, async (req, res, next) =>
       submission_id: sub.id,
       user_id: sub.user_id,
       new_level: level,
-      daily_limit_ugx: tier.daily,
+      daily_limit_ugx: tierLimits.dailyUgx,
       sanctions_screen: screen ? { result: screen.result, score: screen.score } : null,
       sanctions_override: screen?.match && override ? overrideReason : null,
     });
@@ -1432,7 +1433,7 @@ router.post('/kyc-submissions/:id/approve', authAdmin, async (req, res, next) =>
     } catch { /* notification failure must not block approval */ }
 
     logger.info(`[Admin] KYC submission ${sub.id} approved -> ${level} by admin ${req.adminId}`);
-    res.json({ success: true, user_id: sub.user_id, new_level: level, daily_limit_ugx: tier.daily });
+    res.json({ success: true, user_id: sub.user_id, new_level: level, daily_limit_ugx: tierLimits.dailyUgx });
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch { /* ignore */ }
     next(err);

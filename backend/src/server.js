@@ -30,6 +30,7 @@ import ratesRoutes from './routes/rates.js';
 import disputesRoutes from './routes/disputes.js';
 import configRoutes from './routes/config.js';
 import countriesRoutes from './routes/countries.js';
+import utilitiesRoutes from './routes/utilities.js';
 import chatRoutes from './routes/chat.js';
 import tradersRoutes from './routes/traders.js';
 import reviewsRoutes from './routes/reviews.js';
@@ -229,6 +230,7 @@ app.use('/api/v1/buy', buyRoutes);
 app.use('/api/v1/express', expressRoutes);
 app.use('/api/v1/config', configRoutes);
 app.use('/api/v1/countries', countriesRoutes);
+app.use('/api/v1/utilities', utilitiesRoutes);
 app.use('/api/v1/disputes', disputesRoutes);
 app.use('/api/v1/trader/onboarding', traderOnboardingRoutes); // ← SPECIFIC path first
 app.use('/api/v1/trader/payout-settings', payoutSettingsRoutes);

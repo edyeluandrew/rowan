@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { authUser, checkUserLimits } from '../middleware/auth.js';
+import { authUser } from '../middleware/auth.js';
+import { enforceKycTransactionLimits } from '../middleware/kycLimits.js';
 import { validate, validateTypes } from '../middleware/validate.js';
 import { cashoutStatusLimiter } from '../middleware/rateLimits.js';
 import buyQuoteEngine from '../services/buyQuoteEngine.js';
 import buyOrchestrator from '../services/buyOrchestrator.js';
 import buyMatchingEngine from '../services/buyMatchingEngine.js';
-import fraudMonitor from '../services/fraudMonitor.js';
 import payoutSettingsService from '../services/payoutSettingsService.js';
 import quoteEngine from '../services/quoteEngine.js';
 import config from '../config/index.js';
@@ -37,7 +37,7 @@ router.post(
   authUser,
   validate(['network', 'phoneHash', 'fiatAmount']),
   validateTypes({ fiatAmount: 'positiveNumber', network: 'mobileNetwork', phoneHash: 'phoneHash' }),
-  checkUserLimits,
+  enforceKycTransactionLimits('onramp'),
   async (req, res, next) => {
     try {
       const { fiatAmount, network, phoneHash, payoutSettingId } = req.body;
@@ -55,10 +55,6 @@ router.post(
       }
 
       const fiatCurrency = quoteEngine.networkToFiat(network);
-      const fraudCheck = await fraudMonitor.checkTransaction(req.userId, fiatNum, fiatCurrency);
-      if (!fraudCheck.allowed) {
-        return res.status(403).json({ error: fraudCheck.reason });
-      }
 
       const networkLimits = await payoutSettingsService.getActiveBuyNetworkLimits(network, fiatCurrency);
       if (!networkLimits.hasTraders) {

@@ -10,6 +10,9 @@ import auditLogService from '../services/auditLogService.js';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
 import config from '../config/index.js';
+import kycTierService from '../services/kyc/kycTierService.js';
+import { getUserUsdcTrustlineStatus } from '../services/userStellarService.js';
+import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 import { stroopsToUsdc } from '../utils/financial.js';
 import {
   generateTotpSecret,
@@ -153,12 +156,12 @@ const KYC_DOCUMENT_TYPES = ['NATIONAL_ID', 'PASSPORT', 'DRIVERS_LICENSE'];
  */
 router.get('/kyc', authUser, async (req, res, next) => {
   try {
-    const userRes = await db.query(
-      `SELECT kyc_level, daily_limit_ugx FROM users WHERE id = $1`,
-      [req.userId]
-    );
-    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    const { kyc_level, daily_limit_ugx } = userRes.rows[0];
+    const countryCode = req.query.country
+      ? String(req.query.country).trim().toUpperCase()
+      : null;
+
+    const summary = await kycTierService.getUserTierSummary(req.userId, countryCode);
+    if (!summary) return res.status(404).json({ error: 'User not found' });
 
     const subRes = await db.query(
       `SELECT id, requested_level, status, review_notes, created_at, reviewed_at
@@ -170,11 +173,59 @@ router.get('/kyc', authUser, async (req, res, next) => {
     );
 
     res.json({
-      kyc_level,
-      daily_limit_ugx: parseInt(daily_limit_ugx, 10),
-      limits: config.kycLimits[kyc_level] || config.kycLimits.NONE,
-      tiers: config.kycLimits,
+      kyc_level: summary.kyc_level,
+      tier: summary.tier,
+      daily_limit_ugx: summary.limits.daily_ugx,
+      limits: {
+        per_tx_ugx: summary.limits.per_tx_ugx,
+        daily_ugx: summary.limits.daily_ugx,
+        daily_used_ugx: summary.limits.daily_used_ugx,
+        daily_remaining_ugx: summary.limits.daily_remaining_ugx,
+      },
+      products: summary.products,
+      tiers: summary.tiers,
+      country_code: summary.country_code,
       latest_submission: subRes.rows[0] || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/user/wallet/usdc
+ * B1 partial — on-chain USDC balance + locked in active P2P orders.
+ */
+router.get('/wallet/usdc', authUser, async (req, res, next) => {
+  try {
+    const userRes = await db.query(
+      `SELECT stellar_address FROM users WHERE id = $1`,
+      [req.userId]
+    );
+    const stellarAddress = userRes.rows[0]?.stellar_address;
+    const onChain = await getUserUsdcTrustlineStatus(stellarAddress);
+
+    const lockedRes = await db.query(
+      `SELECT COALESCE(SUM(usdc_amount), 0) AS locked_usdc
+       FROM transactions
+       WHERE user_id = $1
+         AND state::text = ANY($2::text[])
+         AND usdc_amount IS NOT NULL`,
+      [req.userId, USER_ACTIVE_ORDER_STATES]
+    );
+    const lockedUsdc = Number(lockedRes.rows[0]?.locked_usdc || 0);
+    const availableUsdc = Math.max(0, onChain.balance - lockedUsdc);
+
+    res.json({
+      stellarAddress,
+      hasTrustline: onChain.hasTrustline,
+      balance: {
+        total: onChain.balance,
+        locked: lockedUsdc,
+        available: availableUsdc,
+      },
+      currency: 'USDC',
+      timestamp: new Date().toISOString(),
     });
   } catch (err) {
     next(err);
