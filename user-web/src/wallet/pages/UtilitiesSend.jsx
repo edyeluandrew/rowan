@@ -19,7 +19,7 @@ export default function UtilitiesSend() {
   const [quoteExpired, setQuoteExpired] = useState(false)
 
   if (!quote) {
-    navigate('/wallet/utilities/airtime', { replace: true })
+    navigate(labels.utilitiesPath || '/wallet/utilities/airtime', { replace: true })
     return null
   }
 

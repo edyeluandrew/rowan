@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, XCircle, Clock, Signal, Wifi } from 'lucide-react'
+import { CheckCircle2, XCircle, Clock, Signal, Wifi, Zap } from 'lucide-react'
 import PaymentMethodPill from '../ui/PaymentMethodPill'
 import { formatCurrency } from '../../utils/p2pFormat'
 import { formatTimeAgo, formatDateTime } from '../../utils/format'
@@ -16,6 +16,9 @@ function StatusIcon({ state }) {
 }
 
 function TypeIcon({ utilityType }) {
+  if (utilityType === 'bill') {
+    return <Zap size={20} className="text-rowan-gold" />
+  }
   if (utilityType === 'data') {
     return <Wifi size={20} className="text-rowan-gold" />
   }

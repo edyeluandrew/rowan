@@ -32,6 +32,7 @@ import Utilities from './pages/Utilities';
 import UtilitiesHub from './pages/UtilitiesHub';
 import UtilitiesConfirm from './pages/UtilitiesConfirm';
 import UtilitiesSend from './pages/UtilitiesSend';
+import UtilitiesBills from './pages/UtilitiesBills';
 import UtilityStatus from './pages/UtilityStatus';
 import TransactionStatus from './pages/TransactionStatus';
 import History from './pages/History';
@@ -84,6 +85,7 @@ export default function WalletApp() {
               <Route index element={<Navigate to="airtime" replace />} />
               <Route path="airtime" element={<Utilities utilityType="airtime" />} />
               <Route path="data" element={<Utilities utilityType="data" />} />
+              <Route path="bills" element={<UtilitiesBills />} />
             </Route>
             <Route path="utilities/confirm" element={<UtilitiesConfirm />} />
             <Route path="utilities/send" element={<UtilitiesSend />} />

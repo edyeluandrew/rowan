@@ -20,6 +20,12 @@ export function getUtilityOperators(country) {
     .then(unwrap)
 }
 
+export function getUtilityBillers(country) {
+  return client
+    .get('/api/v1/utilities/billers', { params: { country } })
+    .then(unwrap)
+}
+
 export function getUtilityBundles(params) {
   return client
     .get('/api/v1/utilities/bundles', { params })

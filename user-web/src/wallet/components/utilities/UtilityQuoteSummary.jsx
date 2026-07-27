@@ -16,6 +16,7 @@ export default function UtilityQuoteSummary({ quote, phone }) {
   const feeUsdc = quote.platformFeeUsdc ?? quote.platform_fee_usdc
   const bundleDescription = quote.bundleDescription || quote.bundle_description
   const isData = labels.type === 'data'
+  const isBill = labels.type === 'bill'
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5">
@@ -50,6 +51,15 @@ export default function UtilityQuoteSummary({ quote, phone }) {
                 {Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
               </p>
             </>
+          ) : isBill && bundleDescription ? (
+            <>
+              <p className="text-rowan-green text-lg font-bold leading-snug mt-0.5">
+                {quote.operatorName || bundleDescription}
+              </p>
+              <p className="text-rowan-muted text-sm tabular-nums mt-1">
+                {Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
+              </p>
+            </>
           ) : (
             <p className="text-rowan-green text-2xl font-bold tabular-nums">
               {Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
@@ -63,12 +73,24 @@ export default function UtilityQuoteSummary({ quote, phone }) {
           <DetailRow label="Data plan" value={bundleDescription} />
         )}
         <DetailRow label="Product" value={labels.product} />
-        <DetailRow label="Network" value={network.label || quote.networkCode} />
-        {quote.operatorName && <DetailRow label="Operator" value={quote.operatorName} />}
+        {!isBill && (
+          <DetailRow label="Network" value={network.label || quote.networkCode} />
+        )}
+        {isBill && bundleDescription && (
+          <DetailRow label="Service" value={bundleDescription} />
+        )}
+        {phone && (
+          <DetailRow
+            label={labels.accountLabel || 'Phone'}
+            value={labels.maskRecipient ? labels.maskRecipient(phone) : maskPhoneNumber(phone)}
+          />
+        )}
+        {(quote.operatorName || quote.billerName) && labels.type === 'bill' && (
+          <DetailRow label="Provider" value={quote.operatorName || quote.billerName} />
+        )}
         {feeUsdc != null && (
           <DetailRow label="Platform fee" value={`${Number(feeUsdc).toFixed(4)} USDC`} />
         )}
-        {phone && <DetailRow label="Phone" value={maskPhoneNumber(phone)} />}
         {quote.reloadlyMock && (
           <DetailRow label="Mode" value="Sandbox mock" />
         )}

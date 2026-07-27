@@ -11,7 +11,11 @@ export default function UtilitiesConfirm() {
   const location = useLocation()
   const { quote, network, phone, mockPurchaseAllowed, utilityType } = location.state || {}
   const labels = labelsFor({ type: utilityType || quote?.type })
-  const title = labels.type === 'data' ? 'Confirm data bundle' : 'Confirm airtime'
+  const title = labels.type === 'bill'
+    ? 'Confirm bill payment'
+    : labels.type === 'data'
+      ? 'Confirm data bundle'
+      : 'Confirm airtime'
 
   const [expired, setExpired] = useState(false)
 

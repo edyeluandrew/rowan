@@ -60,17 +60,19 @@ export default function UtilityStatus() {
         </p>
         {displayPhone && (
           <p className="text-rowan-muted text-sm mt-2">
-            {maskPhoneNumber(displayPhone)}
+            {labels.maskRecipient
+              ? `${labels.accountLabel}: ${labels.maskRecipient(displayPhone)}`
+              : maskPhoneNumber(displayPhone)}
           </p>
         )}
-        {completed && bundleDescription && labels.type === 'data' && (
+        {completed && bundleDescription && (labels.type === 'data' || labels.type === 'bill') && (
           <p className="text-rowan-green text-lg font-bold mt-4 leading-snug px-2">
-            {bundleDescription}
+            {labels.type === 'bill' ? (data.operatorName || bundleDescription) : bundleDescription}
           </p>
         )}
         {completed && fiatAmount != null && (
           <p className={`text-rowan-green font-bold tabular-nums ${
-            bundleDescription && labels.type === 'data' ? 'text-base mt-2' : 'text-2xl mt-4'
+            bundleDescription && (labels.type === 'data' || labels.type === 'bill') ? 'text-base mt-2' : 'text-2xl mt-4'
           }`}>
             {Number(fiatAmount).toLocaleString()} {fiatCurrency}
           </p>

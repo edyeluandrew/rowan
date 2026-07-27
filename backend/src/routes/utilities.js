@@ -4,6 +4,7 @@ import { enforceKycTransactionLimits, requireKycProduct } from '../middleware/ky
 import { validate, validateTypes } from '../middleware/validate.js';
 import utilityService from '../services/utilities/utilityService.js';
 import reloadlyClient from '../services/utilities/reloadlyClient.js';
+import reloadlyUtilityPaymentsClient from '../services/utilities/reloadlyUtilityPaymentsClient.js';
 import config from '../config/index.js';
 
 const router = Router();
@@ -66,31 +67,66 @@ router.get('/bundles', authUser, async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/utilities/billers?country=UG
+ */
+router.get('/billers', authUser, async (req, res, next) => {
+  try {
+    const country = String(req.query.country || 'UG').trim().toUpperCase();
+    const data = await utilityService.listBillers(country);
+    res.json({ status: 'ok', data, timestamp: new Date().toISOString() });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+/**
  * POST /api/v1/utilities/quote
- * Body: { country, networkCode, recipientPhone, fiatAmount, type?, operatorId?, bundleDescription? }
+ * Body (airtime/data): { country, networkCode, recipientPhone, fiatAmount, type?, operatorId?, bundleDescription? }
+ * Body (bill): { country, billerId, subscriberAccount, fiatAmount, type:'bill', billerName?, bundleDescription? }
  */
 router.post(
   '/quote',
   authUser,
   requireKycProduct('airtime'),
-  validate(['country', 'networkCode', 'recipientPhone', 'fiatAmount']),
-  validateTypes({
-    fiatAmount: 'positiveNumber',
-    networkCode: 'mobileNetwork',
-    recipientPhone: 'string',
-  }),
   enforceKycTransactionLimits('airtime'),
   async (req, res, next) => {
     try {
+      const type = String(req.body.type || 'airtime').toLowerCase();
+
+      if (type === 'bill') {
+        const missing = ['country', 'billerId', 'subscriberAccount', 'fiatAmount']
+          .filter((f) => req.body[f] == null || req.body[f] === '');
+        if (missing.length) {
+          return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
+        }
+        const fiat = Number(req.body.fiatAmount);
+        if (!Number.isFinite(fiat) || fiat <= 0) {
+          return res.status(400).json({ error: 'fiatAmount must be a positive number' });
+        }
+      } else {
+        const missing = ['country', 'networkCode', 'recipientPhone', 'fiatAmount']
+          .filter((f) => req.body[f] == null || req.body[f] === '');
+        if (missing.length) {
+          return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
+        }
+        const fiat = Number(req.body.fiatAmount);
+        if (!Number.isFinite(fiat) || fiat <= 0) {
+          return res.status(400).json({ error: 'fiatAmount must be a positive number' });
+        }
+      }
+
       const quote = await utilityService.createQuote({
         userId: req.userId,
         countryCode: req.body.country,
         networkCode: req.body.networkCode,
         recipientPhone: req.body.recipientPhone,
         fiatAmount: req.body.fiatAmount,
-        utilityType: req.body.type || 'airtime',
-        operatorId: req.body.operatorId,
+        utilityType: type,
+        operatorId: req.body.operatorId || req.body.billerId,
         bundleDescription: req.body.bundleDescription,
+        billerName: req.body.billerName,
+        subscriberAccount: req.body.subscriberAccount,
       });
 
       res.json({ status: 'ok', data: quote, timestamp: new Date().toISOString() });
@@ -153,6 +189,7 @@ router.get('/config', (req, res) => {
       minFiatAmount: config.utilities.minFiatAmount,
       maxFiatAmount: config.utilities.maxFiatAmount,
       reloadlyMock: reloadlyClient.reloadlyIsMock(),
+      reloadlyUtilitiesMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
       mockPurchaseAllowed: config.utilities.allowMockPurchase,
     },
     timestamp: new Date().toISOString(),

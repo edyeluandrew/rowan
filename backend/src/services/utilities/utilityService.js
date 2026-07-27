@@ -7,7 +7,9 @@ import db from '../../db/index.js';
 import config from '../../config/index.js';
 import countryService from '../countries/countryService.js';
 import reloadlyClient from './reloadlyClient.js';
+import reloadlyUtilityPaymentsClient from './reloadlyUtilityPaymentsClient.js';
 import { extractBundlesFromOperator } from './utilityBundles.js';
+import { normalizeBillersResponse } from './utilityBillers.js';
 import utilityPricing from './utilityPricing.js';
 import utilityUsdcService from './utilityUsdcService.js';
 import logger from '../../utils/logger.js';
@@ -26,6 +28,62 @@ function normalizePhone(phone, countryCode) {
     digits = prefix.replace(/^\+/, '') + digits;
   }
   return digits;
+}
+
+function normalizeSubscriberAccount(account) {
+  return String(account || '').trim().replace(/\s+/g, '');
+}
+
+async function insertUtilityQuote({
+  userId,
+  utilityType,
+  code,
+  networkCode,
+  operatorId,
+  operatorName,
+  recipientValue,
+  pricing,
+  bundleLabel,
+}) {
+  const memo = buildMemo();
+  const expiresAt = new Date(Date.now() + config.utilities.quoteTtlSeconds * 1000);
+  const treasuryPublicKey = utilityUsdcService.getUtilityTreasuryPublicKey();
+
+  const result = await db.query(
+    `INSERT INTO utility_purchases
+       (user_id, utility_type, country_code, network_code, operator_id, operator_name,
+        recipient_phone, fiat_amount, fiat_currency, usdc_amount, platform_fee_usdc,
+        fx_rate, status, memo, expires_at, bundle_description)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'QUOTED', $13, $14, $15)
+     RETURNING *`,
+    [
+      userId,
+      utilityType,
+      code,
+      networkCode,
+      operatorId ? String(operatorId) : null,
+      operatorName,
+      recipientValue,
+      pricing.fiatAmount,
+      pricing.fiatCurrency,
+      pricing.totalUsdc,
+      pricing.platformFeeUsdc,
+      pricing.fxRate,
+      memo,
+      expiresAt,
+      bundleLabel,
+    ]
+  );
+
+  const reloadlyMock = utilityType === 'bill'
+    ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
+    : reloadlyClient.reloadlyIsMock();
+
+  return formatPurchase(result.rows[0], {
+    treasuryPublicKey,
+    pricing,
+    reloadlyMock,
+  });
 }
 
 export async function listProviders(countryCode, type = 'airtime') {
@@ -130,25 +188,91 @@ export async function listDataBundles({ countryCode, networkCode, recipientPhone
   };
 }
 
+export async function listBillers(countryCode) {
+  const code = String(countryCode || 'UG').trim().toUpperCase();
+  if (!countryService.isActiveCountry(code)) {
+    const err = new Error(`Unsupported country: ${code}`);
+    err.status = 400;
+    throw err;
+  }
+
+  const raw = await reloadlyUtilityPaymentsClient.getBillers({ countryISOCode: code });
+  const billers = normalizeBillersResponse(raw);
+  return {
+    billers,
+    countryCode: code,
+    reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+  };
+}
+
 export async function createQuote({
   userId,
   countryCode,
   networkCode,
   recipientPhone,
   fiatAmount,
-  utilityType = 'airtime',
+  utilityType: requestedType = 'airtime',
   operatorId,
   bundleDescription,
+  billerName,
+  subscriberAccount,
 }) {
   const code = String(countryCode || 'UG').trim().toUpperCase();
-  const network = String(networkCode || '').trim().toUpperCase();
-  const phone = normalizePhone(recipientPhone, code);
+  const utilityType = String(requestedType || 'airtime').toLowerCase();
 
   if (!countryService.isActiveCountry(code)) {
     const err = new Error(`Unsupported country: ${code}`);
     err.status = 400;
     throw err;
   }
+
+  if (utilityType === 'bill') {
+    const account = normalizeSubscriberAccount(subscriberAccount || recipientPhone);
+    if (!operatorId) {
+      const err = new Error('billerId is required');
+      err.status = 400;
+      throw err;
+    }
+    if (!account || account.length < 4) {
+      const err = new Error('Valid meter or account number is required');
+      err.status = 400;
+      throw err;
+    }
+
+    const currency = countryService.getCurrencyForCountry(code);
+    const fiat = Number(fiatAmount);
+    if (fiat < config.utilities.minFiatAmount || fiat > config.utilities.maxFiatAmount) {
+      const err = new Error(
+        `Amount must be between ${config.utilities.minFiatAmount} and ${config.utilities.maxFiatAmount} ${currency}`
+      );
+      err.status = 400;
+      throw err;
+    }
+
+    const pricing = await utilityPricing.quoteUtilityPurchase({
+      fiatAmount: fiat,
+      fiatCurrency: currency,
+    });
+
+    const resolvedBillerName = billerName || bundleDescription || `Biller ${operatorId}`;
+    const billLabel = bundleDescription
+      || `${resolvedBillerName}`.trim().slice(0, 500);
+
+    return insertUtilityQuote({
+      userId,
+      utilityType: 'bill',
+      code,
+      networkCode: 'BILL',
+      operatorId,
+      operatorName: resolvedBillerName,
+      recipientValue: account,
+      pricing,
+      bundleLabel: billLabel,
+    });
+  }
+
+  const network = String(networkCode || '').trim().toUpperCase();
+  const phone = normalizePhone(recipientPhone, code);
   if (!countryService.isValidNetworkForCountry(code, network)) {
     const err = new Error(`Network ${network} is not valid for ${code}`);
     err.status = 400;
@@ -190,42 +314,18 @@ export async function createQuote({
     }
   }
 
-  const memo = buildMemo();
-  const expiresAt = new Date(Date.now() + config.utilities.quoteTtlSeconds * 1000);
-  const treasuryPublicKey = utilityUsdcService.getUtilityTreasuryPublicKey();
   const bundleLabel = bundleDescription ? String(bundleDescription).trim().slice(0, 500) : null;
 
-  const result = await db.query(
-    `INSERT INTO utility_purchases
-       (user_id, utility_type, country_code, network_code, operator_id, operator_name,
-        recipient_phone, fiat_amount, fiat_currency, usdc_amount, platform_fee_usdc,
-        fx_rate, status, memo, expires_at, bundle_description)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'QUOTED', $13, $14, $15)
-     RETURNING *`,
-    [
-      userId,
-      utilityType,
-      code,
-      network,
-      resolvedOperatorId ? String(resolvedOperatorId) : null,
-      operatorName,
-      phone,
-      pricing.fiatAmount,
-      pricing.fiatCurrency,
-      pricing.totalUsdc,
-      pricing.platformFeeUsdc,
-      pricing.fxRate,
-      memo,
-      expiresAt,
-      bundleLabel,
-    ]
-  );
-
-  const row = result.rows[0];
-  return formatPurchase(row, {
-    treasuryPublicKey,
+  return insertUtilityQuote({
+    userId,
+    utilityType,
+    code,
+    networkCode: network,
+    operatorId: resolvedOperatorId,
+    operatorName,
+    recipientValue: phone,
     pricing,
-    reloadlyMock: reloadlyClient.reloadlyIsMock(),
+    bundleLabel,
   });
 }
 
@@ -296,39 +396,65 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
   );
 
   let reloadlyResult;
-  let operatorId = purchase.operator_id;
+  let externalRef;
 
-  if (!operatorId) {
-    const detected = await reloadlyClient.autoDetectOperator(
-      purchase.country_code,
-      purchase.recipient_phone
-    );
-    operatorId = detected?.operatorId;
+  if (purchase.utility_type === 'bill') {
+    if (!purchase.operator_id) {
+      await failPurchase(quoteId, 'Biller not configured on quote');
+      const err = new Error('Biller not configured on quote');
+      err.status = 422;
+      throw err;
+    }
+    try {
+      reloadlyResult = await reloadlyUtilityPaymentsClient.payBill({
+        billerId: purchase.operator_id,
+        subscriberAccountNumber: purchase.recipient_phone,
+        amount: Number(purchase.fiat_amount),
+        useLocalAmount: true,
+        referenceId: purchase.id,
+      });
+    } catch (err) {
+      await failPurchase(quoteId, err.message);
+      throw err;
+    }
+    externalRef = reloadlyResult.referenceId
+      || reloadlyResult.id
+      || reloadlyResult.transactionId;
+  } else {
+    let operatorId = purchase.operator_id;
+
+    if (!operatorId) {
+      const detected = await reloadlyClient.autoDetectOperator(
+        purchase.country_code,
+        purchase.recipient_phone
+      );
+      operatorId = detected?.operatorId;
+    }
+
+    if (!operatorId) {
+      await failPurchase(quoteId, 'Could not resolve mobile operator for this number');
+      const err = new Error('Could not resolve mobile operator');
+      err.status = 422;
+      throw err;
+    }
+
+    try {
+      reloadlyResult = await reloadlyClient.sendAirtimeTopup({
+        operatorId,
+        amount: Number(purchase.fiat_amount),
+        countryCode: purchase.country_code,
+        phoneNumber: purchase.recipient_phone,
+        customIdentifier: purchase.id,
+      });
+    } catch (err) {
+      await failPurchase(quoteId, err.message);
+      throw err;
+    }
+
+    externalRef = reloadlyResult.transactionId
+      || reloadlyResult.operatorTransactionId
+      || reloadlyResult.customIdentifier;
   }
-
-  if (!operatorId) {
-    await failPurchase(quoteId, 'Could not resolve mobile operator for this number');
-    const err = new Error('Could not resolve mobile operator');
-    err.status = 422;
-    throw err;
-  }
-
-  try {
-    reloadlyResult = await reloadlyClient.sendAirtimeTopup({
-      operatorId,
-      amount: Number(purchase.fiat_amount),
-      countryCode: purchase.country_code,
-      phoneNumber: purchase.recipient_phone,
-      customIdentifier: purchase.id,
-    });
-  } catch (err) {
-    await failPurchase(quoteId, err.message);
-    throw err;
-  }
-
-  const externalRef = reloadlyResult.transactionId
-    || reloadlyResult.operatorTransactionId
-    || reloadlyResult.customIdentifier;
 
   const completed = await db.query(
     `UPDATE utility_purchases
@@ -340,10 +466,14 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
          updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
-    [quoteId, String(operatorId), externalRef, JSON.stringify(reloadlyResult)]
+    [quoteId, purchase.utility_type === 'bill' ? purchase.operator_id : String(purchase.operator_id || ''), externalRef, JSON.stringify(reloadlyResult)]
   );
 
-  return formatPurchase(completed.rows[0], { reloadlyMock: reloadlyClient.reloadlyIsMock() });
+  return formatPurchase(completed.rows[0], {
+    reloadlyMock: purchase.utility_type === 'bill'
+      ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
+      : reloadlyClient.reloadlyIsMock(),
+  });
 }
 
 async function failPurchase(id, message) {
@@ -404,6 +534,7 @@ export default {
   listProviders,
   listOperators,
   listDataBundles,
+  listBillers,
   createQuote,
   completePurchase,
   getPurchaseHistory,
