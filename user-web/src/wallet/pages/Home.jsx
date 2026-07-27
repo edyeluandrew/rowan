@@ -24,7 +24,7 @@ import RateDisplay from '../components/wallet/RateDisplay'
 import CashoutInProgressBanner from '../components/cashout/CashoutInProgressBanner'
 import ConnectionDot from '../components/ui/ConnectionDot'
 import NotificationBadge from '../components/ui/NotificationBadge'
-import TransactionCard from '../components/transactions/TransactionCard'
+import HistoryItemCard from '../components/history/HistoryItemCard'
 import { CURRENT_NETWORK, TESTNET_AUTO_USDC_AMOUNT } from '../utils/constants'
 import { usdcToFiat } from '../utils/fiat'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
@@ -236,13 +236,13 @@ export default function Home() {
             <Star size={32} className="text-rowan-muted mx-auto mb-3" />
             <p className="text-rowan-muted text-sm">No transactions yet</p>
             <p className="text-rowan-muted text-xs mt-1">
-              Receive, buy, or sell to get started
+              Receive, buy, sell, or buy airtime to get started
             </p>
           </div>
         ) : (
           <div className="space-y-2">
             {recent.map((tx) => (
-              <TransactionCard key={tx.id} transaction={tx} />
+              <HistoryItemCard key={`${tx.kind || 'p2p'}-${tx.id}`} transaction={tx} />
             ))}
           </div>
         )}
