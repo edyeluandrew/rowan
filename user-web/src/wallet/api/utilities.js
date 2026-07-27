@@ -20,6 +20,12 @@ export function getUtilityOperators(country) {
     .then(unwrap)
 }
 
+export function getUtilityBundles(params) {
+  return client
+    .get('/api/v1/utilities/bundles', { params })
+    .then(unwrap)
+}
+
 export function getUtilityQuote(body) {
   return client.post('/api/v1/utilities/quote', body).then((res) => {
     const q = unwrap(res)

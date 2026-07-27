@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Signal, Wifi, AlertTriangle } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
@@ -6,18 +6,23 @@ import useRates from '../hooks/useRates'
 import useUserCountry from '../hooks/useUserCountry'
 import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
 import BiometricLock from '../../shared/components/BiometricLock'
-import { getUtilityQuote, getUtilityConfig, getUtilityHistory } from '../api/utilities'
+import {
+  getUtilityQuote,
+  getUtilityConfig,
+  getUtilityHistory,
+  getUtilityBundles,
+} from '../api/utilities'
 import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
 import { getNetworksForCountry } from '../utils/country'
 import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
+import DataBundlePicker from '../components/utilities/DataBundlePicker'
 import Button from '../components/ui/Button'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 
 const UTILITY_META = {
   airtime: {
-    title: 'Buy airtime',
     subtitle: 'Pay with USDC — instant top-up',
     phoneHint: 'Phone number that receives the airtime credit',
     minLabel: 'Minimum airtime',
@@ -27,8 +32,7 @@ const UTILITY_META = {
     Icon: Signal,
   },
   data: {
-    title: 'Buy data',
-    subtitle: 'Mobile data bundles paid with USDC',
+    subtitle: 'Pick a data plan — pay with USDC',
     phoneHint: 'Phone number that receives the data bundle',
     minLabel: 'Minimum bundle',
     maxLabel: 'Maximum bundle',
@@ -38,8 +42,20 @@ const UTILITY_META = {
   },
 }
 
+function buildFullPhone(phone, network, country) {
+  const networkConfig = NETWORKS[network]
+  const derivedCountryCode = networkConfig?.country || country
+  const dialCode = COUNTRY_CODES[derivedCountryCode]?.code || '+256'
+  const cleanPhone = phone.replace(/\D/g, '')
+  if (cleanPhone.startsWith('256') || cleanPhone.startsWith('254') || cleanPhone.startsWith('255')) {
+    return cleanPhone
+  }
+  return `${dialCode.replace(/\D/g, '')}${cleanPhone.replace(/^0/, '')}`
+}
+
 export default function Utilities({ utilityType = 'airtime' }) {
   const meta = UTILITY_META[utilityType] || UTILITY_META.airtime
+  const isData = utilityType === 'data'
   const TypeIcon = meta.Icon
   const navigate = useNavigate()
   const { isLocked } = useBiometricProtection()
@@ -50,6 +66,11 @@ export default function Utilities({ utilityType = 'airtime' }) {
   const [fiatAmount, setFiatAmount] = useState('')
   const [network, setNetwork] = useState('')
   const [phone, setPhone] = useState('')
+  const [selectedBundle, setSelectedBundle] = useState(null)
+  const [bundles, setBundles] = useState([])
+  const [bundleOperatorName, setBundleOperatorName] = useState(null)
+  const [bundlesLoading, setBundlesLoading] = useState(false)
+  const [bundlesError, setBundlesError] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [utilityConfig, setUtilityConfig] = useState(null)
@@ -78,12 +99,20 @@ export default function Utilities({ utilityType = 'airtime' }) {
     }
   }, [countryNetworks, network])
 
-  const netFiat = parseFloat(fiatAmount) || 0
   const currency = network ? NETWORKS[network]?.currency : fiatCurrency
   const usdcToFiatRate = rates?.usdcToFiat || 0
   const feePercent = utilityConfig?.feePercent ?? 1
   const minFiat = utilityConfig?.minFiatAmount ?? 1000
   const maxFiat = utilityConfig?.maxFiatAmount ?? 500000
+
+  const phoneValid = phone.replace(/\D/g, '').length >= 9
+  const fullPhone = phoneValid && network
+    ? buildFullPhone(phone, network, country)
+    : null
+
+  const netFiat = isData
+    ? (selectedBundle?.fiatAmount ?? 0)
+    : (parseFloat(fiatAmount) || 0)
 
   const usdcEstimate = usdcToFiatRate > 0 && netFiat > 0
     ? (netFiat / usdcToFiatRate) * (1 + feePercent / 100)
@@ -94,16 +123,57 @@ export default function Utilities({ utilityType = 'airtime' }) {
     : null
 
   const exceedsWallet = walletMaxFiat != null && netFiat > walletMaxFiat
-  const belowMin = netFiat > 0 && netFiat < minFiat
-  const aboveMax = netFiat > maxFiat
+  const belowMin = !isData && netFiat > 0 && netFiat < minFiat
+  const aboveMax = !isData && netFiat > maxFiat
 
-  const canProceed =
-    netFiat >= minFiat &&
-    netFiat <= maxFiat &&
-    hasUsdcTrustline !== false &&
-    !exceedsWallet &&
-    network &&
-    phone.replace(/\D/g, '').length >= 9
+  const loadBundles = useCallback(async () => {
+    if (!isData || !network || !fullPhone) return
+    setBundlesLoading(true)
+    setBundlesError(null)
+    setSelectedBundle(null)
+    try {
+      const networkConfig = NETWORKS[network]
+      const derivedCountryCode = networkConfig?.country || country
+      const catalog = await getUtilityBundles({
+        country: derivedCountryCode,
+        networkCode: network,
+        recipientPhone: fullPhone,
+      })
+      setBundles(catalog.bundles || [])
+      setBundleOperatorName(catalog.operatorName || null)
+    } catch (err) {
+      setBundles([])
+      setBundleOperatorName(null)
+      const data = err.response?.data
+      setBundlesError(data?.error || err.message)
+    } finally {
+      setBundlesLoading(false)
+    }
+  }, [isData, network, fullPhone, country])
+
+  useEffect(() => {
+    if (!isData) return
+    if (!phoneValid || !network) {
+      setBundles([])
+      setSelectedBundle(null)
+      setBundlesError(null)
+      return
+    }
+    loadBundles()
+  }, [isData, phoneValid, network, fullPhone, loadBundles])
+
+  const canProceed = isData
+    ? !!selectedBundle
+      && hasUsdcTrustline !== false
+      && !exceedsWallet
+      && network
+      && phoneValid
+    : netFiat >= minFiat
+      && netFiat <= maxFiat
+      && hasUsdcTrustline !== false
+      && !exceedsWallet
+      && network
+      && phoneValid
 
   if (isLocked) return <BiometricLock />
 
@@ -114,11 +184,6 @@ export default function Utilities({ utilityType = 'airtime' }) {
     try {
       const networkConfig = NETWORKS[network]
       const derivedCountryCode = networkConfig?.country || country
-      const dialCode = COUNTRY_CODES[derivedCountryCode]?.code || '+256'
-      const cleanPhone = phone.replace(/\D/g, '')
-      const fullPhone = cleanPhone.startsWith('256') || cleanPhone.startsWith('254')
-        ? cleanPhone
-        : `${dialCode.replace(/\D/g, '')}${cleanPhone.replace(/^0/, '')}`
 
       const quote = await getUtilityQuote({
         country: derivedCountryCode,
@@ -126,6 +191,10 @@ export default function Utilities({ utilityType = 'airtime' }) {
         recipientPhone: fullPhone,
         fiatAmount: Math.round(netFiat),
         type: utilityType,
+        ...(isData && selectedBundle ? {
+          operatorId: selectedBundle.operatorId,
+          bundleDescription: selectedBundle.description,
+        } : {}),
       })
 
       navigate('/wallet/utilities/confirm', {
@@ -160,7 +229,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
       {utilityConfig?.reloadlyMock && (
         <div className="bg-rowan-mint border border-rowan-green/30 rounded-xl p-3 mb-4">
           <p className="text-rowan-text text-xs">
-            Staging mode — airtime uses mock Reloadly until API keys are added.
+            Staging mode — utilities use mock Reloadly until API keys are added.
           </p>
         </div>
       )}
@@ -174,7 +243,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
               <span className="text-rowan-muted text-sm font-normal ml-1">available</span>
             )}
           </span>
-          {walletMaxFiat != null && walletMaxFiat > 0 && (
+          {!isData && walletMaxFiat != null && walletMaxFiat > 0 && (
             <button
               type="button"
               onClick={handleMax}
@@ -186,21 +255,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
         </div>
       </div>
 
-      <AmountInput
-        fiatAmount={fiatAmount}
-        onFiatAmountChange={setFiatAmount}
-        currency={currency}
-        cryptoEstimate={usdcEstimate}
-        cryptoLabel="USDC"
-        platformFeeFiat={netFiat * (feePercent / 100)}
-        maxFiat={Math.min(maxFiat, walletMaxFiat ?? maxFiat)}
-      />
-
-      <p className="text-rowan-muted text-xs mt-2 px-1">
-        Min {minFiat.toLocaleString()} · Max {maxFiat.toLocaleString()} {currency}
-      </p>
-
-      <div className="mt-6">
+      <div className="mt-2">
         <NetworkSelector selected={network} onSelect={setNetwork} country={country} />
       </div>
 
@@ -208,6 +263,54 @@ export default function Utilities({ utilityType = 'airtime' }) {
         <PhoneInput phone={phone} onPhoneChange={setPhone} network={network} />
         <p className="text-rowan-muted text-xs mt-2 px-1">{meta.phoneHint}</p>
       </div>
+
+      {isData ? (
+        <div className="mt-6">
+          <p className="text-rowan-muted text-xs uppercase tracking-wider mb-3 px-1">
+            Choose a data plan
+          </p>
+          {bundlesError && (
+            <div className="mb-3 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-3">
+              <p className="text-rowan-yellow text-sm">{bundlesError}</p>
+              <button
+                type="button"
+                onClick={loadBundles}
+                className="text-rowan-yellow text-xs underline mt-2 min-h-11"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          <DataBundlePicker
+            bundles={bundles}
+            selected={selectedBundle}
+            onSelect={setSelectedBundle}
+            loading={bundlesLoading}
+            currency={currency}
+            operatorName={bundleOperatorName}
+          />
+          {selectedBundle && usdcEstimate > 0 && (
+            <p className="text-rowan-muted text-xs mt-3 px-1 tabular-nums">
+              ≈ {usdcEstimate.toFixed(4)} USDC including {feePercent}% fee
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
+          <AmountInput
+            fiatAmount={fiatAmount}
+            onFiatAmountChange={setFiatAmount}
+            currency={currency}
+            cryptoEstimate={usdcEstimate}
+            cryptoLabel="USDC"
+            platformFeeFiat={netFiat * (feePercent / 100)}
+            maxFiat={Math.min(maxFiat, walletMaxFiat ?? maxFiat)}
+          />
+          <p className="text-rowan-muted text-xs mt-2 px-1">
+            Min {minFiat.toLocaleString()} · Max {maxFiat.toLocaleString()} {currency}
+          </p>
+        </>
+      )}
 
       {error && (
         <div className="mt-4 bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4">
@@ -245,10 +348,11 @@ export default function Utilities({ utilityType = 'airtime' }) {
                 className="w-full bg-rowan-surface border border-rowan-border rounded-xl p-3 text-left"
               >
                 <div className="flex justify-between items-center gap-2">
-                  <span className="text-rowan-text text-sm font-medium">
-                    {Number(item.fiatAmount).toLocaleString()} {item.fiatCurrency}
+                  <span className="text-rowan-text text-sm font-medium truncate">
+                    {item.bundleDescription || item.bundle_description
+                      || `${Number(item.fiatAmount).toLocaleString()} ${item.fiatCurrency}`}
                   </span>
-                  <span className={`text-xs font-medium ${
+                  <span className={`text-xs font-medium shrink-0 ${
                     item.status === 'COMPLETED' ? 'text-rowan-green'
                       : item.status === 'FAILED' ? 'text-rowan-red'
                         : 'text-rowan-muted'
@@ -256,7 +360,11 @@ export default function Utilities({ utilityType = 'airtime' }) {
                     {item.status}
                   </span>
                 </div>
-                <p className="text-rowan-muted text-xs mt-1 truncate">{item.recipientPhone}</p>
+                <p className="text-rowan-muted text-xs mt-1 truncate">
+                  {item.bundleDescription || item.bundle_description
+                    ? `${Number(item.fiatAmount).toLocaleString()} ${item.fiatCurrency} · ${item.recipientPhone}`
+                    : item.recipientPhone}
+                </p>
               </button>
             ))}
           </div>

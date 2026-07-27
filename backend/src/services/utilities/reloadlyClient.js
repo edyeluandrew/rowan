@@ -97,6 +97,27 @@ function mockResponse(path, options) {
       fx: { rate: 3750, currencyCode: 'UGX' },
     };
   }
+  if (path.match(/\/operators\/\d+$/)) {
+    return {
+      operatorId: 123,
+      id: 123,
+      name: 'MTN Uganda Data',
+      data: true,
+      bundle: true,
+      denominationType: 'FIXED',
+      supportsLocalAmounts: true,
+      destinationCurrencyCode: 'UGX',
+      localFixedAmounts: [1000, 2000, 3000, 5000, 10000],
+      localFixedAmountsDescriptions: {
+        '1000': '150MB — 24 hours',
+        '2000': '350MB — 3 days',
+        '3000': '500MB — 7 days',
+        '5000': '1GB — 7 days',
+        '10000': '2.5GB — 30 days',
+      },
+      country: { isoName: 'UG', name: 'Uganda' },
+    };
+  }
   if (path.includes('/operators/countries')) {
     return [
       { id: 123, name: 'MTN Uganda', country: { isoName: 'UG' } },
@@ -125,6 +146,14 @@ export async function getAccountBalance() {
 export async function getOperatorsByCountry(isoCountryCode) {
   const code = String(isoCountryCode || 'UG').toUpperCase();
   return reloadlyRequest(`/operators/countries/${code}`);
+}
+
+export async function getOperatorById(operatorId) {
+  const id = Number(operatorId);
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error('Invalid operator id');
+  }
+  return reloadlyRequest(`/operators/${id}`, { method: 'GET' });
 }
 
 export async function autoDetectOperator(countryCode, phoneNumber) {
@@ -169,6 +198,7 @@ export default {
   getAccessToken,
   getAccountBalance,
   getOperatorsByCountry,
+  getOperatorById,
   autoDetectOperator,
   sendAirtimeTopup,
   reloadlyIsMock,

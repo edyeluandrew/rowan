@@ -14,6 +14,8 @@ export default function UtilityQuoteSummary({ quote, phone }) {
   const sendUsdc = quote.usdcAmount ?? quote.usdc_amount
   const fiatAmount = quote.fiatAmount ?? quote.fiat_amount
   const feeUsdc = quote.platformFeeUsdc ?? quote.platform_fee_usdc
+  const bundleDescription = quote.bundleDescription || quote.bundle_description
+  const isData = labels.type === 'data'
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5">
@@ -37,15 +39,29 @@ export default function UtilityQuoteSummary({ quote, phone }) {
         <div className="w-10 h-10 rounded-full bg-rowan-green/20 flex items-center justify-center">
           <Smartphone size={20} className="text-rowan-green" />
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-rowan-muted text-xs">{labels.creditLabel}</p>
-          <p className="text-rowan-green text-2xl font-bold tabular-nums">
-            {Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
-          </p>
+          {isData && bundleDescription ? (
+            <>
+              <p className="text-rowan-green text-lg font-bold leading-snug mt-0.5">
+                {bundleDescription}
+              </p>
+              <p className="text-rowan-muted text-sm tabular-nums mt-1">
+                {Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
+              </p>
+            </>
+          ) : (
+            <p className="text-rowan-green text-2xl font-bold tabular-nums">
+              {Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
+            </p>
+          )}
         </div>
       </div>
 
       <div className="border-t border-rowan-border mt-4 pt-4 space-y-2">
+        {isData && bundleDescription && (
+          <DetailRow label="Data plan" value={bundleDescription} />
+        )}
         <DetailRow label="Product" value={labels.product} />
         <DetailRow label="Network" value={network.label || quote.networkCode} />
         {quote.operatorName && <DetailRow label="Operator" value={quote.operatorName} />}

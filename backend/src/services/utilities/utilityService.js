@@ -7,6 +7,7 @@ import db from '../../db/index.js';
 import config from '../../config/index.js';
 import countryService from '../countries/countryService.js';
 import reloadlyClient from './reloadlyClient.js';
+import { extractBundlesFromOperator } from './utilityBundles.js';
 import utilityPricing from './utilityPricing.js';
 import utilityUsdcService from './utilityUsdcService.js';
 import logger from '../../utils/logger.js';
@@ -51,6 +52,84 @@ export async function listOperators(countryCode) {
   return Array.isArray(operators) ? operators : operators?.content || [];
 }
 
+export async function listDataBundles({ countryCode, networkCode, recipientPhone }) {
+  const code = String(countryCode || 'UG').trim().toUpperCase();
+  const network = String(networkCode || '').trim().toUpperCase();
+  const phone = normalizePhone(recipientPhone, code);
+
+  if (!countryService.isActiveCountry(code)) {
+    const err = new Error(`Unsupported country: ${code}`);
+    err.status = 400;
+    throw err;
+  }
+  if (!countryService.isValidNetworkForCountry(code, network)) {
+    const err = new Error(`Network ${network} is not valid for ${code}`);
+    err.status = 400;
+    throw err;
+  }
+  if (!phone || phone.length < 9) {
+    const err = new Error('Valid recipient phone is required');
+    err.status = 400;
+    throw err;
+  }
+
+  let detected;
+  try {
+    detected = await reloadlyClient.autoDetectOperator(code, phone);
+  } catch (err) {
+    logger.warn('[UtilityService] auto-detect for bundles failed', { error: err.message });
+    const wrap = new Error('Could not detect operator for this phone number');
+    wrap.status = 422;
+    throw wrap;
+  }
+
+  const operatorId = detected?.operatorId ?? detected?.id;
+  if (!operatorId) {
+    const err = new Error('Could not detect operator for this phone number');
+    err.status = 422;
+    throw err;
+  }
+
+  const operator = await reloadlyClient.getOperatorById(operatorId);
+  const currency = countryService.getCurrencyForCountry(code);
+  let catalog = extractBundlesFromOperator(operator, currency);
+
+  if (!catalog.bundles.length) {
+    try {
+      const allOps = await reloadlyClient.getOperatorsByCountry(code);
+      const ops = Array.isArray(allOps) ? allOps : allOps?.content || [];
+      const method = countryService.getPaymentMethods(code).find((m) => m.networkCode === network);
+      const networkToken = (method?.label || network).split(/[\s_]/)[0].toLowerCase();
+      const dataOp = ops.find(
+        (o) => o.data && String(o.name || '').toLowerCase().includes(networkToken)
+      );
+      if (dataOp) {
+        const dataOperatorId = dataOp.operatorId ?? dataOp.id;
+        const dataOperator = await reloadlyClient.getOperatorById(dataOperatorId);
+        catalog = extractBundlesFromOperator(dataOperator, currency);
+      }
+    } catch (err) {
+      logger.warn('[UtilityService] data operator fallback failed', { error: err.message });
+    }
+  }
+
+  if (!catalog.bundles.length) {
+    const err = new Error(
+      'No fixed data bundles available for this number. Try airtime or another network.'
+    );
+    err.status = 422;
+    throw err;
+  }
+
+  return {
+    ...catalog,
+    countryCode: code,
+    networkCode: network,
+    recipientPhone: phone,
+    reloadlyMock: reloadlyClient.reloadlyIsMock(),
+  };
+}
+
 export async function createQuote({
   userId,
   countryCode,
@@ -59,6 +138,7 @@ export async function createQuote({
   fiatAmount,
   utilityType = 'airtime',
   operatorId,
+  bundleDescription,
 }) {
   const code = String(countryCode || 'UG').trim().toUpperCase();
   const network = String(networkCode || '').trim().toUpperCase();
@@ -92,11 +172,19 @@ export async function createQuote({
 
   let resolvedOperatorId = operatorId;
   let operatorName = null;
+  if (resolvedOperatorId) {
+    try {
+      const op = await reloadlyClient.getOperatorById(resolvedOperatorId);
+      operatorName = op?.name || null;
+    } catch (err) {
+      logger.warn('[UtilityService] operator lookup failed', { error: err.message });
+    }
+  }
   if (!resolvedOperatorId) {
     try {
       const detected = await reloadlyClient.autoDetectOperator(code, phone);
       resolvedOperatorId = detected?.operatorId;
-      operatorName = detected?.name || null;
+      operatorName = detected?.name || operatorName;
     } catch (err) {
       logger.warn('[UtilityService] auto-detect operator failed', { error: err.message });
     }
@@ -105,13 +193,14 @@ export async function createQuote({
   const memo = buildMemo();
   const expiresAt = new Date(Date.now() + config.utilities.quoteTtlSeconds * 1000);
   const treasuryPublicKey = utilityUsdcService.getUtilityTreasuryPublicKey();
+  const bundleLabel = bundleDescription ? String(bundleDescription).trim().slice(0, 500) : null;
 
   const result = await db.query(
     `INSERT INTO utility_purchases
        (user_id, utility_type, country_code, network_code, operator_id, operator_name,
         recipient_phone, fiat_amount, fiat_currency, usdc_amount, platform_fee_usdc,
-        fx_rate, status, memo, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'QUOTED', $13, $14)
+        fx_rate, status, memo, expires_at, bundle_description)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'QUOTED', $13, $14, $15)
      RETURNING *`,
     [
       userId,
@@ -128,6 +217,7 @@ export async function createQuote({
       pricing.fxRate,
       memo,
       expiresAt,
+      bundleLabel,
     ]
   );
 
@@ -269,7 +359,8 @@ export async function getPurchaseHistory(userId, limit = 20) {
   const result = await db.query(
     `SELECT id, utility_type, country_code, network_code, recipient_phone,
             fiat_amount, fiat_currency, usdc_amount, status, external_ref,
-            memo, completed_at, created_at, error_message
+            memo, completed_at, created_at, error_message, bundle_description,
+            operator_name, payment_tx_hash
      FROM utility_purchases
      WHERE user_id = $1
      ORDER BY created_at DESC
@@ -302,6 +393,7 @@ function formatPurchase(row, extra = {}) {
     completedAt: row.completed_at,
     createdAt: row.created_at,
     errorMessage: row.error_message,
+    bundleDescription: row.bundle_description || null,
     reloadlyMock: extra.reloadlyMock ?? reloadlyClient.reloadlyIsMock(),
     pricing: extra.pricing,
     alreadyCompleted: extra.alreadyCompleted || false,
@@ -311,6 +403,7 @@ function formatPurchase(row, extra = {}) {
 export default {
   listProviders,
   listOperators,
+  listDataBundles,
   createQuote,
   completePurchase,
   getPurchaseHistory,

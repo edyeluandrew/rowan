@@ -28,7 +28,9 @@ export default function UtilityHistoryCard({ transaction: tx }) {
   const when = tx.completedAt || tx.completed_at || tx.createdAt || tx.created_at
   const usdc = Number(tx.usdcAmount ?? tx.usdc_amount ?? 0)
   const fiat = Number(tx.fiatAmount ?? tx.fiat_amount ?? 0)
-  const label = tx.utilityLabel || tx.utility_label
+  const bundleDesc = tx.bundleDescription || tx.bundle_description
+  const label = bundleDesc
+    || tx.utilityLabel || tx.utility_label
     || (tx.utilityType === 'data' || tx.utility_type === 'data' ? 'Data bundle' : 'Airtime')
 
   return (

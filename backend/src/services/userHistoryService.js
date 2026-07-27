@@ -47,7 +47,8 @@ function mapP2pRow(row) {
 }
 
 function mapUtilityRow(row) {
-  const typeLabel = row.utility_type === 'data' ? 'Data bundle'
+  const typeLabel = row.utility_type === 'data'
+    ? (row.bundle_description || 'Data bundle')
     : row.utility_type === 'bill' ? 'Bill pay'
       : 'Airtime';
   return {
@@ -57,6 +58,7 @@ function mapUtilityRow(row) {
     state: row.status,
     utility_type: row.utility_type,
     utility_label: typeLabel,
+    bundle_description: row.bundle_description || null,
     usdc_amount: Number(row.usdc_amount),
     fiat_amount: Number(row.fiat_amount),
     currency: row.fiat_currency,
@@ -147,7 +149,7 @@ export async function getUnifiedTransactionHistory({
       `SELECT
          up.id, up.utility_type, up.status, up.country_code, up.network_code,
          up.operator_name, up.recipient_phone, up.fiat_amount, up.fiat_currency,
-         up.usdc_amount, up.payment_tx_hash, up.external_ref,
+         up.usdc_amount, up.payment_tx_hash, up.external_ref, up.bundle_description,
          up.created_at, up.completed_at
        FROM utility_purchases up
        WHERE ${conditions.join(' AND ')}

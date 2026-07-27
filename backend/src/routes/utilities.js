@@ -42,8 +42,32 @@ router.get('/operators', authUser, async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/utilities/bundles?country=UG&networkCode=MTN_UG&recipientPhone=256...
+ * Reloadly fixed data bundles for a phone number.
+ */
+router.get('/bundles', authUser, async (req, res, next) => {
+  try {
+    const country = String(req.query.country || 'UG').trim().toUpperCase();
+    const networkCode = String(req.query.networkCode || '').trim().toUpperCase();
+    const recipientPhone = String(req.query.recipientPhone || '').trim();
+    if (!networkCode || !recipientPhone) {
+      return res.status(400).json({ error: 'networkCode and recipientPhone are required' });
+    }
+    const data = await utilityService.listDataBundles({
+      countryCode: country,
+      networkCode,
+      recipientPhone,
+    });
+    res.json({ status: 'ok', data, timestamp: new Date().toISOString() });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+/**
  * POST /api/v1/utilities/quote
- * Body: { country, networkCode, recipientPhone, fiatAmount, type?, operatorId? }
+ * Body: { country, networkCode, recipientPhone, fiatAmount, type?, operatorId?, bundleDescription? }
  */
 router.post(
   '/quote',
@@ -66,6 +90,7 @@ router.post(
         fiatAmount: req.body.fiatAmount,
         utilityType: req.body.type || 'airtime',
         operatorId: req.body.operatorId,
+        bundleDescription: req.body.bundleDescription,
       });
 
       res.json({ status: 'ok', data: quote, timestamp: new Date().toISOString() });
