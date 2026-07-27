@@ -1,11 +1,13 @@
 import { COUNTRY_CODES, NETWORKS } from './constants'
 
-export const SUPPORTED_COUNTRIES = ['UG', 'KE', 'TZ']
+/** Static fallback when API is unavailable (kept in sync with migration 042). */
+export const SUPPORTED_COUNTRIES = ['UG', 'KE', 'TZ', 'RW']
 
 export const COUNTRY_FIAT = {
   UG: 'UGX',
   KE: 'KES',
   TZ: 'TZS',
+  RW: 'RWF',
 }
 
 /** Fiat code → country code (first match). */

@@ -78,15 +78,8 @@ ALTER TABLE transactions ADD COLUMN IF NOT EXISTS dispute_id UUID REFERENCES dis
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS release_error TEXT;
 
 -- ─── 3. Indexes for the new live states ─────────────────────
-
-CREATE INDEX IF NOT EXISTS idx_transactions_fiat_payout_submitted
-  ON transactions (state) WHERE state = 'FIAT_PAYOUT_SUBMITTED';
-
-CREATE INDEX IF NOT EXISTS idx_transactions_user_confirmation_pending
-  ON transactions (state) WHERE state = 'USER_CONFIRMATION_PENDING';
-
-CREATE INDEX IF NOT EXISTS idx_transactions_dispute_id
-  ON transactions (dispute_id) WHERE dispute_id IS NOT NULL;
+-- Moved to 043_tx_state_partial_indexes.sql — PostgreSQL cannot use newly
+-- added enum values in the same transaction as ALTER TYPE ... ADD VALUE.
 
 -- ─── 4. Column documentation (manual payout + reference model) ──
 

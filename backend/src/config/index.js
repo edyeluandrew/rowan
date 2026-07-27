@@ -102,6 +102,7 @@ const config = {
     UGX: parseFloat(process.env.USDC_RATE_UGX) || 3750,
     KES: parseFloat(process.env.USDC_RATE_KES) || 153,
     TZS: parseFloat(process.env.USDC_RATE_TZS) || 2650,
+    RWF: parseFloat(process.env.USDC_RATE_RWF) || 1300,
   },
 
   // [PHASE 2H-4] Live fiat FX provider (USDC≈USD reference rates)
@@ -124,6 +125,7 @@ const config = {
       UGX: parseFloat(process.env.USDC_RATE_UGX) || 3750,
       KES: parseFloat(process.env.USDC_RATE_KES) || 153,
       TZS: parseFloat(process.env.USDC_RATE_TZS) || 2650,
+      RWF: parseFloat(process.env.USDC_RATE_RWF) || 1300,
     },
   },
 

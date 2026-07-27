@@ -38,6 +38,20 @@ export const NETWORKS = {
     color: 'text-rowan-red',
     bg: 'bg-rowan-red/20',
   },
+  MTN_RW: {
+    label: 'MTN MoMo',
+    currency: 'RWF',
+    country: 'RW',
+    color: 'text-rowan-gold',
+    bg: 'bg-rowan-gold/20',
+  },
+  AIRTEL_RW: {
+    label: 'Airtel Money',
+    currency: 'RWF',
+    country: 'RW',
+    color: 'text-rowan-red',
+    bg: 'bg-rowan-red/20',
+  },
 }
 
 export const TX_STATES = {
@@ -66,6 +80,7 @@ export const COUNTRY_CODES = {
   UG: { code: '+256', label: 'UG +256', flag: '🇺🇬', name: 'Uganda' },
   KE: { code: '+254', label: 'KE +254', flag: '🇰🇪', name: 'Kenya' },
   TZ: { code: '+255', label: 'TZ +255', flag: '🇹🇿', name: 'Tanzania' },
+  RW: { code: '+250', label: 'RW +250', flag: '🇷🇼', name: 'Rwanda' },
 }
 
 export const MIN_XLM_AMOUNT = 1

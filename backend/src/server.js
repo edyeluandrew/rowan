@@ -29,6 +29,7 @@ import userRoutes from './routes/user.js';
 import ratesRoutes from './routes/rates.js';
 import disputesRoutes from './routes/disputes.js';
 import configRoutes from './routes/config.js';
+import countriesRoutes from './routes/countries.js';
 import chatRoutes from './routes/chat.js';
 import tradersRoutes from './routes/traders.js';
 import reviewsRoutes from './routes/reviews.js';
@@ -39,6 +40,7 @@ import websocket from './services/websocket.js';
 import horizonWatcher from './services/horizonWatcher.js';
 import ensureMarketMakerOffers from './services/offerMonitor.js';
 import './services/jobQueue.js'; // self-initializing (registers cron jobs)
+import countryService from './services/countries/countryService.js';
 import logger from './utils/logger.js';
 
 const app = express();
@@ -226,6 +228,7 @@ app.use('/api/v1/cashout', cashoutRoutes);
 app.use('/api/v1/buy', buyRoutes);
 app.use('/api/v1/express', expressRoutes);
 app.use('/api/v1/config', configRoutes);
+app.use('/api/v1/countries', countriesRoutes);
 app.use('/api/v1/disputes', disputesRoutes);
 app.use('/api/v1/trader/onboarding', traderOnboardingRoutes); // ← SPECIFIC path first
 app.use('/api/v1/trader/payout-settings', payoutSettingsRoutes);
@@ -400,6 +403,9 @@ async function start() {
 
     // Run database migrations
     await runMigrations();
+
+    // Phase 2 E1: load country registry cache (UG, KE, TZ, RW)
+    await countryService.loadCache();
 
     // Bootstrap: seed admin + ensure USDC trustline + ensure storage bucket
     await seedAdminAccount();

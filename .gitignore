@@ -15,6 +15,7 @@ pnpm-debug.log
 # .env files are secret — NEVER commit
 # .env.example files ARE committed for reference
 **/.env
+**/.env.staging
 **/.env.local
 **/.env.*.local
 
