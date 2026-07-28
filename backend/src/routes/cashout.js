@@ -17,6 +17,7 @@ import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 import storageService from '../services/storageService.js';
 import paymentRouter from '../services/payments/paymentRouter.js';
 import { PAYMENT_SIDES } from '../services/payments/paymentConstants.js';
+import { formatShortId } from '../utils/shortId.js';
 
 /** Wait briefly for Horizon watcher + escrow to create the transaction row. */
 async function resolveTransactionIdForQuote(quoteId, maxWaitMs = 20000) {

@@ -13,7 +13,7 @@ import {
 export default function CashoutConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, network, phone, requestedFiat, traderName, selectedAd } = location.state || {}
+  const { quote, network, phone, requestedFiat, traderName, selectedAd, kotaniDirect } = location.state || {}
   const [expired, setExpired] = useState(false)
   const [checkingActive, setCheckingActive] = useState(false)
   const [activeError, setActiveError] = useState(null)
@@ -62,7 +62,7 @@ export default function CashoutConfirm() {
         <button onClick={() => navigate(-1)} className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center">
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">Confirm Quote</h1>
+        <h1 className="text-rowan-text text-lg font-bold">{kotaniDirect ? 'Confirm Kotani quote' : 'Confirm Quote'}</h1>
       </div>
 
       {chosenTrader && (
@@ -91,7 +91,9 @@ export default function CashoutConfirm() {
         />
       </div>
       <p className="text-rowan-muted text-xs mb-4">
-        This timer is only for sending USDC from your wallet. After that, we match a trader and send mobile money separately.
+        {kotaniDirect
+          ? 'Send USDC within this window. Kotani Pay will send mobile money automatically — no trader involved.'
+          : 'This timer is only for sending USDC from your wallet. After that, we match a trader and send mobile money separately.'}
       </p>
 
       <QuoteSummary quote={quote} phone={phone} requestedFiat={requestedFiat} />

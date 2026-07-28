@@ -161,14 +161,20 @@ router.get('/kyc', authUser, async (req, res, next) => {
     const summary = await kycTierService.getUserTierSummary(req.userId, countryCode);
     if (!summary) return res.status(404).json({ error: 'User not found' });
 
-    const subRes = await db.query(
-      `SELECT id, requested_level, status, review_notes, created_at, reviewed_at
+      const subRes = await db.query(
+        `SELECT id, requested_level, status, review_notes, created_at, reviewed_at
          FROM kyc_submissions
         WHERE user_id = $1
         ORDER BY created_at DESC
         LIMIT 1`,
-      [req.userId]
-    );
+        [req.userId]
+      ).catch((err) => {
+        if (err.code === '42P01') {
+          logger.warn('[User] kyc_submissions table missing — returning without latest_submission');
+          return { rows: [] };
+        }
+        throw err;
+      });
 
     res.json({
       kyc_level: summary.kyc_level,
