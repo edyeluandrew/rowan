@@ -390,6 +390,8 @@ export default function TransactionStatus() {
       {refreshing ? 'Refreshing…' : 'Refresh status'}
     </button>
   )
+
+  const terminalMessage = () => {
     if (!transaction) return ''
     switch (transaction.state) {
       case 'COMPLETE':

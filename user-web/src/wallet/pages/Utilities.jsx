@@ -12,6 +12,7 @@ import {
   getUtilityHistory,
   getUtilityBundles,
   getUtilityLimits,
+  getUtilityOperators,
 } from '../api/utilities'
 import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
 import { getNetworksForCountry, getDialCodeForCountry } from '../utils/country'
@@ -52,6 +53,61 @@ function buildFullPhone(phone, network, country) {
     return cleanPhone
   }
   return `${dialCode.replace(/\D/g, '')}${cleanPhone.replace(/^0/, '')}`
+}
+
+/** Fallback when staging has not deployed GET /utilities/limits yet. */
+function limitsFromReloadlyOperators(operators, networkCode, currency) {
+  const list = Array.isArray(operators) ? operators : []
+  const token = (NETWORKS[networkCode]?.label || networkCode).split(/[\s_]/)[0].toLowerCase()
+  const op = list.find((o) => String(o.name || '').toLowerCase().includes(token))
+    || list.find((o) => !o.data && !o.bundle)
+    || list[0]
+  if (!op) return null
+
+  const denominationType = String(op.denominationType || 'RANGE').toUpperCase()
+  const fiatCurrency = op.destinationCurrencyCode || op.fx?.currencyCode || currency
+
+  if (denominationType === 'FIXED') {
+    const amounts = (op.localFixedAmounts?.length ? op.localFixedAmounts : op.fixedAmounts || [])
+      .map(Number)
+      .filter((n) => n > 0)
+      .sort((a, b) => a - b)
+    if (!amounts.length) return null
+    return {
+      denominationType: 'FIXED',
+      fiatCurrency,
+      minFiatAmount: amounts[0],
+      maxFiatAmount: amounts[amounts.length - 1],
+      allowedAmounts: amounts,
+      suggestedAmounts: op.suggestedAmounts || [],
+      operatorName: op.name,
+      source: 'operators-fallback',
+    }
+  }
+
+  let minFiatAmount = null
+  let maxFiatAmount = null
+  if (op.supportsLocalAmounts !== false && op.localMinAmount != null && op.localMaxAmount != null) {
+    minFiatAmount = Number(op.localMinAmount)
+    maxFiatAmount = Number(op.localMaxAmount)
+  } else if (op.minAmount != null && op.maxAmount != null && op.fx?.rate) {
+    minFiatAmount = Number(op.minAmount) * Number(op.fx.rate)
+    maxFiatAmount = Number(op.maxAmount) * Number(op.fx.rate)
+  } else {
+    minFiatAmount = op.minAmount != null ? Number(op.minAmount) : null
+    maxFiatAmount = op.maxAmount != null ? Number(op.maxAmount) : null
+  }
+
+  return {
+    denominationType: 'RANGE',
+    fiatCurrency,
+    minFiatAmount,
+    maxFiatAmount,
+    allowedAmounts: [],
+    suggestedAmounts: op.suggestedAmounts || [],
+    operatorName: op.name,
+    source: 'operators-fallback',
+  }
 }
 
 export default function Utilities({ utilityType = 'airtime' }) {
@@ -194,12 +250,28 @@ export default function Utilities({ utilityType = 'airtime' }) {
       })
       setOperatorLimits(limits)
     } catch (err) {
+      const status = err.response?.status
+      if (status === 404) {
+        try {
+          const networkConfig = NETWORKS[network]
+          const derivedCountryCode = networkConfig?.country || country
+          const operators = await getUtilityOperators(derivedCountryCode)
+          const fallback = limitsFromReloadlyOperators(operators, network, currency)
+          if (fallback) {
+            setOperatorLimits(fallback)
+            setLimitsError(null)
+            return
+          }
+        } catch {
+          /* use error below */
+        }
+      }
       setOperatorLimits(null)
       setLimitsError(err.response?.data?.error || err.message)
     } finally {
       setLimitsLoading(false)
     }
-  }, [isData, network, fullPhone, country])
+  }, [isData, network, fullPhone, country, currency])
 
   useEffect(() => {
     if (isData) return
