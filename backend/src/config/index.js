@@ -103,6 +103,8 @@ const config = {
     KES: parseFloat(process.env.USDC_RATE_KES) || 153,
     TZS: parseFloat(process.env.USDC_RATE_TZS) || 2650,
     RWF: parseFloat(process.env.USDC_RATE_RWF) || 1300,
+    NGN: parseFloat(process.env.USDC_RATE_NGN) || 1550,
+    GHS: parseFloat(process.env.USDC_RATE_GHS) || 15.5,
   },
 
   // [PHASE 2H-4] Live fiat FX provider (USDC≈USD reference rates)
@@ -126,6 +128,8 @@ const config = {
       KES: parseFloat(process.env.USDC_RATE_KES) || 153,
       TZS: parseFloat(process.env.USDC_RATE_TZS) || 2650,
       RWF: parseFloat(process.env.USDC_RATE_RWF) || 1300,
+      NGN: parseFloat(process.env.USDC_RATE_NGN) || 1550,
+      GHS: parseFloat(process.env.USDC_RATE_GHS) || 15.5,
     },
   },
 
@@ -216,6 +220,46 @@ const config = {
     maxFiatAmount: parseFloat(process.env.UTILITY_MAX_FIAT_AMOUNT) || 500000,
     treasuryPublicKey: process.env.UTILITY_USDC_PUBLIC_KEY || process.env.ESCROW_PUBLIC_KEY,
     allowMockPurchase: process.env.UTILITY_ALLOW_MOCK_PURCHASE === 'true',
+  },
+
+  // Phase 2 C1/C9 — Yellow Card / Yellow Pay (automated MoMo on/off-ramp)
+  yellowPay: {
+    enabled: process.env.YELLOW_PAY_ENABLED !== 'false',
+    mockMode: process.env.YELLOW_PAY_MOCK_MODE === 'true'
+      || (!process.env.YELLOW_PAY_CLIENT_ID && !process.env.YELLOW_PAY_API_KEY
+        && (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'),
+    clientId: process.env.YELLOW_PAY_CLIENT_ID || '',
+    clientSecret: process.env.YELLOW_PAY_CLIENT_SECRET || '',
+    apiKey: process.env.YELLOW_PAY_API_KEY || '',
+    baseUrl: process.env.YELLOW_PAY_BASE_URL
+      || ((process.env.STELLAR_NETWORK || 'testnet') === 'mainnet'
+        ? 'https://api.yellowcard.io'
+        : 'https://sandbox-api.yellowcard.io'),
+    webhookSecret: process.env.YELLOW_PAY_WEBHOOK_SECRET || '',
+    sandboxCorridors: (process.env.YELLOW_PAY_CORRIDORS || 'UG,KE,TZ,RW,NG,GH')
+      .split(',')
+      .map((c) => c.trim().toUpperCase())
+      .filter(Boolean),
+    /** Rowan treasury Stellar address — USDC released here after Yellow Pay offramp confirmation */
+    settlementStellarAddress: process.env.YELLOW_PAY_SETTLEMENT_STELLAR || '',
+  },
+
+  // Phase 2 — Kotani Pay (Stellar-native MoMo — primary automated rail)
+  kotaniPay: {
+    enabled: process.env.KOTANI_PAY_ENABLED !== 'false',
+    mockMode: process.env.KOTANI_PAY_MOCK_MODE === 'true'
+      || (!process.env.KOTANI_PAY_JWT && !process.env.KOTANI_PAY_API_KEY
+        && (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'),
+    baseUrl: process.env.KOTANI_PAY_BASE_URL || 'https://sandbox-api.kotanipay.io',
+    jwt: process.env.KOTANI_PAY_JWT || '',
+    apiKey: process.env.KOTANI_PAY_API_KEY || '',
+    webhookSecret: process.env.KOTANI_PAY_WEBHOOK_SECRET || '',
+    callbackUrl: process.env.KOTANI_PAY_CALLBACK_URL || '',
+    senderStellarAddress: process.env.KOTANI_PAY_SENDER_STELLAR || process.env.ESCROW_PUBLIC_KEY || '',
+    sandboxCorridors: (process.env.KOTANI_PAY_CORRIDORS || 'UG,KE,TZ,RW,NG,GH')
+      .split(',')
+      .map((c) => c.trim().toUpperCase())
+      .filter(Boolean),
   },
 
   // [PHASE 4] Fraud monitoring thresholds

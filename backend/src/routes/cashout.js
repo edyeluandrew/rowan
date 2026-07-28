@@ -15,7 +15,8 @@ import redis from '../db/redis.js';
 import logger from '../utils/logger.js';
 import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 import storageService from '../services/storageService.js';
-import { formatShortId } from '../utils/shortId.js';
+import paymentRouter from '../services/payments/paymentRouter.js';
+import { PAYMENT_SIDES } from '../services/payments/paymentConstants.js';
 
 /** Wait briefly for Horizon watcher + escrow to create the transaction row. */
 async function resolveTransactionIdForQuote(quoteId, maxWaitMs = 20000) {
@@ -148,11 +149,21 @@ router.post(
         }
       }
 
+      const countryCode = paymentRouter.networkToCountryCode(network);
+      const paymentPlan = countryCode
+        ? paymentRouter.resolvePaymentPlan({ countryCode, side: PAYMENT_SIDES.OFFRAMP })
+        : null;
+
       const networkLimits = await payoutSettingsService.getActiveNetworkLimits(network, fiatCurrency);
-      if (!networkLimits.hasTraders) {
+      const yellowAvailable = paymentPlan?.hasAutomatedRail;
+      if (!networkLimits.hasTraders && !yellowAvailable) {
         return res.status(503).json({
           error: 'No verified traders are available for this network right now. Try another network or try again later.',
           code: 'NO_TRADERS_FOR_NETWORK',
+          paymentPlan: paymentPlan ? {
+            countryCode: paymentPlan.countryCode,
+            unavailable: paymentPlan.unavailable,
+          } : null,
         });
       }
       if (networkLimits.maxFiat != null && fiatEstimate > networkLimits.maxFiat) {
@@ -258,6 +269,13 @@ router.post(
         fxWarning: quote.fx_warning || null,
         fiatRateSource: quote.fiat_rate_source || null,
         payoutSettingId: quote.preferred_payout_setting_id || null,
+        paymentPlan: paymentPlan ? {
+          countryCode: paymentPlan.countryCode,
+          primary: paymentPlan.primary,
+          fallbackChain: paymentPlan.fallbackChain,
+          hasAutomatedRail: paymentPlan.hasAutomatedRail,
+          hasP2pFallback: paymentPlan.hasP2pFallback,
+        } : null,
       });
     } catch (err) {
       next(err);

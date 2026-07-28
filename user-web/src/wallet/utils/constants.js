@@ -52,6 +52,41 @@ export const NETWORKS = {
     color: 'text-rowan-red',
     bg: 'bg-rowan-red/20',
   },
+  MTN_NG: {
+    label: 'MTN MoMo',
+    currency: 'NGN',
+    country: 'NG',
+    color: 'text-rowan-gold',
+    bg: 'bg-rowan-gold/20',
+  },
+  AIRTEL_NG: {
+    label: 'Airtel Money',
+    currency: 'NGN',
+    country: 'NG',
+    color: 'text-rowan-red',
+    bg: 'bg-rowan-red/20',
+  },
+  MTN_GH: {
+    label: 'MTN MoMo',
+    currency: 'GHS',
+    country: 'GH',
+    color: 'text-rowan-gold',
+    bg: 'bg-rowan-gold/20',
+  },
+  AIRTELTIGO_GH: {
+    label: 'AirtelTigo Money',
+    currency: 'GHS',
+    country: 'GH',
+    color: 'text-rowan-blue',
+    bg: 'bg-rowan-blue/20',
+  },
+  VODAFONE_GH: {
+    label: 'Vodafone Cash',
+    currency: 'GHS',
+    country: 'GH',
+    color: 'text-rowan-red',
+    bg: 'bg-rowan-red/20',
+  },
 }
 
 export const TX_STATES = {
@@ -81,6 +116,8 @@ export const COUNTRY_CODES = {
   KE: { code: '+254', label: 'KE +254', flag: '🇰🇪', name: 'Kenya' },
   TZ: { code: '+255', label: 'TZ +255', flag: '🇹🇿', name: 'Tanzania' },
   RW: { code: '+250', label: 'RW +250', flag: '🇷🇼', name: 'Rwanda' },
+  NG: { code: '+234', label: 'NG +234', flag: '🇳🇬', name: 'Nigeria' },
+  GH: { code: '+233', label: 'GH +233', flag: '🇬🇭', name: 'Ghana' },
 }
 
 export const MIN_XLM_AMOUNT = 1

@@ -1,13 +1,15 @@
 import { COUNTRY_CODES, NETWORKS } from './constants'
 
 /** Static fallback when API is unavailable (kept in sync with migration 042). */
-export const SUPPORTED_COUNTRIES = ['UG', 'KE', 'TZ', 'RW']
+export const SUPPORTED_COUNTRIES = ['UG', 'KE', 'TZ', 'RW', 'NG', 'GH']
 
 export const COUNTRY_FIAT = {
   UG: 'UGX',
   KE: 'KES',
   TZ: 'TZS',
   RW: 'RWF',
+  NG: 'NGN',
+  GH: 'GHS',
 }
 
 /** Fiat code → country code (first match). */
@@ -39,6 +41,8 @@ export const COUNTRY_UTILITY_LIMITS = {
   KE: { min: 100, max: 50000 },
   TZ: { min: 1000, max: 500000 },
   RW: { min: 500, max: 500000 },
+  NG: { min: 500, max: 500000 },
+  GH: { min: 10, max: 5000 },
 }
 
 export function getUtilityLimitsForCountry(country) {

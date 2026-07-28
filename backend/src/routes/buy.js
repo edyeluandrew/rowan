@@ -15,7 +15,8 @@ import { getVerifiedTraderMomo } from '../services/traderMomoService.js';
 import logger from '../utils/logger.js';
 import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 import storageService from '../services/storageService.js';
-import { formatShortId } from '../utils/shortId.js';
+import paymentRouter from '../services/payments/paymentRouter.js';
+import { PAYMENT_SIDES } from '../services/payments/paymentConstants.js';
 
 const router = Router();
 
@@ -56,11 +57,21 @@ router.post(
 
       const fiatCurrency = quoteEngine.networkToFiat(network);
 
+      const countryCode = paymentRouter.networkToCountryCode(network);
+      const paymentPlan = countryCode
+        ? paymentRouter.resolvePaymentPlan({ countryCode, side: PAYMENT_SIDES.ONRAMP })
+        : null;
+
       const networkLimits = await payoutSettingsService.getActiveBuyNetworkLimits(network, fiatCurrency);
-      if (!networkLimits.hasTraders) {
+      const yellowAvailable = paymentPlan?.hasAutomatedRail;
+      if (!networkLimits.hasTraders && !yellowAvailable) {
         return res.status(503).json({
           error: 'No traders selling USDC on this network right now.',
           code: 'NO_BUY_TRADERS',
+          paymentPlan: paymentPlan ? {
+            countryCode: paymentPlan.countryCode,
+            unavailable: paymentPlan.unavailable,
+          } : null,
         });
       }
       if (networkLimits.maxFiat != null && fiatNum > networkLimits.maxFiat) {
@@ -92,6 +103,13 @@ router.post(
         traderName: quote.expressTraderName || null,
         orderSide: 'BUY',
         express: !payoutSettingId,
+        paymentPlan: paymentPlan ? {
+          countryCode: paymentPlan.countryCode,
+          primary: paymentPlan.primary,
+          fallbackChain: paymentPlan.fallbackChain,
+          hasAutomatedRail: paymentPlan.hasAutomatedRail,
+          hasP2pFallback: paymentPlan.hasP2pFallback,
+        } : null,
       });
     } catch (err) {
       if (err.statusCode) return res.status(err.statusCode).json({ error: err.message, code: err.code });

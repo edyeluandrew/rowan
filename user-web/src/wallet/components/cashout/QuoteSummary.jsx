@@ -21,6 +21,11 @@ export default function QuoteSummary({ quote, phone, requestedFiat }) {
     ? `1 USDC = ${quote.fiatCurrency} ${quote.userRate ? Number(quote.userRate).toLocaleString('en-US', { maximumFractionDigits: 2 }) : 'N/A'}`
     : `1 XLM = ${quote.fiatCurrency} ${quote.userRate ? Number(quote.userRate).toLocaleString('en-US', { maximumFractionDigits: 2 }) : 'N/A'}`
 
+  const paymentPlan = quote.paymentPlan
+  const payoutMethod = paymentPlan?.primary?.automated
+    ? `${paymentPlan.primary.label}${paymentPlan.primary.mock ? ' (sandbox)' : ''}`
+    : paymentPlan?.fallbackChain?.[0]?.label || null
+
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5">
       <div className="flex items-center gap-3">
@@ -55,6 +60,7 @@ export default function QuoteSummary({ quote, phone, requestedFiat }) {
         <DetailRow label="Rate" value={rateLabel} />
         <DetailRow label="Platform fee" value={`${quote.platformFee ? Number(quote.platformFee).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '0'} ${currency}`} />
         <DetailRow label="Network" value={network.label || quote.network} />
+        {payoutMethod && <DetailRow label="Payout via" value={payoutMethod} />}
         <DetailRow label="Estimated delivery" value={ESTIMATED_DELIVERY} />
         {phone && <DetailRow label="Phone" value={maskPhoneNumber(phone)} />}
       </div>

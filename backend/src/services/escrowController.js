@@ -9,7 +9,7 @@ import config from '../config/index.js';
 import db from '../db/index.js';
 import redis from '../db/redis.js';
 import quoteEngine from './quoteEngine.js';
-import matchingEngine from './matchingEngine.js';
+import paymentExecutor from './payments/paymentExecutor.js';
 import payoutSettingsService from './payoutSettingsService.js';
 import fraudMonitor from './fraudMonitor.js';
 import stateMachine from './transactionStateMachine.js';
@@ -274,12 +274,12 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     // 6. Match trader while still ESCROW_LOCKED — matchTrader atomically transitions
     //    to TRADER_MATCHED only when a trader + payout setting are assigned.
     //    Do NOT pre-transition with trader_id=null (causes UI stall / rematch loops).
-    logger.info(`[Escrow] Matching trader for tx ${transaction.id} (state: ESCROW_LOCKED)`);
+    logger.info(`[Escrow] Settling offramp for tx ${transaction.id} (state: ESCROW_LOCKED)`);
     try {
-      await matchingEngine.matchTrader(transaction.id);
-      logger.info(`[Escrow] matchTrader finished for tx ${transaction.id}`);
+      await paymentExecutor.settleOfframpPayout(transaction.id);
+      logger.info(`[Escrow] settleOfframpPayout finished for tx ${transaction.id}`);
     } catch (matchingErr) {
-      logger.error(`[Escrow] matchTrader error for tx ${transaction.id}: ${matchingErr?.message}`);
+      logger.error(`[Escrow] settleOfframpPayout error for tx ${transaction.id}: ${matchingErr?.message}`);
       throw matchingErr;
     }
   } catch (err) {
@@ -428,10 +428,10 @@ async function handleUsdcCashoutDeposit({ memo, amount, sourceAccount, txHash })
   logger.info(`[Escrow] USDC cash-out tx ${transaction.id} created — ${traderUsdc} USDC locked`);
 
   try {
-    await matchingEngine.matchTrader(transaction.id);
-    logger.info(`[Escrow] matchTrader finished for USDC tx ${transaction.id}`);
+    await paymentExecutor.settleOfframpPayout(transaction.id);
+    logger.info(`[Escrow] settleOfframpPayout finished for USDC tx ${transaction.id}`);
   } catch (matchingErr) {
-    logger.error(`[Escrow] matchTrader error for USDC tx ${transaction.id}: ${matchingErr?.message}`);
+    logger.error(`[Escrow] settleOfframpPayout error for USDC tx ${transaction.id}: ${matchingErr?.message}`);
     try {
       const refundHash = await refundUsdc(userStellarAddress, amount, 'Matching failed');
       await stateMachine.transition(transaction.id, 'ESCROW_LOCKED', 'REFUNDED', {
@@ -808,6 +808,224 @@ async function releaseToTrader(transactionId) {
     // [PHASE 4] Use config-driven cleanup delay
     setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
   }
+}
+
+/**
+ * Send USDC from Rowan escrow to Kotani (or other aggregator) escrow address.
+ * Called immediately after offramp API returns escrowAddress.
+ */
+async function sendUsdcToAggregatorEscrow({
+  transactionId,
+  destinationAddress,
+  usdcAmount,
+  aggregatorRef,
+}) {
+  const lockKey = `lock:aggregator-settle:${transactionId}`;
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', config.platform.redisLockTtlReleaseSeconds, 'NX');
+  if (!lockAcquired) {
+    logger.warn(`[Escrow] Aggregator settle lock held for tx ${transactionId}`);
+    return null;
+  }
+
+  try {
+    const txCheck = await db.query(
+      `SELECT id, state, aggregator_settlement_tx, usdc_amount FROM transactions WHERE id = $1`,
+      [transactionId]
+    );
+    const row = txCheck.rows[0];
+    if (!row || row.state !== 'ESCROW_LOCKED') {
+      throw new Error(`Transaction ${transactionId} not in ESCROW_LOCKED for aggregator settlement`);
+    }
+    if (row.aggregator_settlement_tx) {
+      return row.aggregator_settlement_tx;
+    }
+
+    const usdcDecimal = Number(usdcAmount ?? row.usdc_amount);
+    if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+      throw new Error(`Invalid USDC amount for aggregator settlement: ${usdcAmount}`);
+    }
+
+    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+    const stellarTx = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: destinationAddress,
+          asset: USDC_ASSET,
+          amount: usdcDecimal.toFixed(7),
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    stellarTx.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(stellarTx);
+
+    await db.query(
+      `UPDATE transactions SET aggregator_settlement_tx = $1, updated_at = NOW() WHERE id = $2`,
+      [result.hash, transactionId]
+    );
+
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'aggregator_escrow_settlement',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      new_value: { aggregator_settlement_tx: result.hash, destination: destinationAddress },
+      metadata: { aggregator_ref: aggregatorRef, usdc_amount: usdcDecimal },
+    });
+
+    logger.info(`[Escrow] Sent ${usdcDecimal} USDC to aggregator escrow for tx ${transactionId}: ${result.hash}`);
+    return result.hash;
+  } finally {
+    setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
+  }
+}
+
+/**
+ * Complete aggregator offramp after user confirms — USDC already sent to aggregator.
+ */
+async function completeAggregatorOfframp(transactionId) {
+  const txResult = await db.query(
+    `SELECT id, state, payout_provider, aggregator_settlement_tx, stellar_release_tx
+     FROM transactions
+     WHERE id = $1 AND payout_provider IN ('kotani_pay', 'yellow_pay')
+       AND state IN ('USER_CONFIRMATION_PENDING', 'DISPUTE_RELEASE_PENDING', 'RELEASE_BLOCKED', 'FIAT_PAYOUT_SUBMITTED')`,
+    [transactionId]
+  );
+  const transaction = txResult.rows[0];
+  if (!transaction) {
+    throw new Error('Aggregator transaction not found or wrong state');
+  }
+
+  if (transaction.stellar_release_tx) {
+    return transaction.stellar_release_tx;
+  }
+
+  const settlementHash = transaction.aggregator_settlement_tx;
+  const appealExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const fromState = transaction.state === 'FIAT_PAYOUT_SUBMITTED' ? 'FIAT_PAYOUT_SUBMITTED' : transaction.state;
+
+  if (fromState === 'FIAT_PAYOUT_SUBMITTED') {
+    await stateMachine.transition(transactionId, 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING');
+  }
+
+  const fresh = await db.query(`SELECT state FROM transactions WHERE id = $1`, [transactionId]);
+  const currentState = fresh.rows[0]?.state || 'USER_CONFIRMATION_PENDING';
+
+  await stateMachine.transition(transactionId, currentState, 'COMPLETE', {
+    stellar_release_tx: settlementHash || null,
+    appeal_expires_at: appealExpiresAt,
+  });
+
+  return settlementHash;
+}
+
+/**
+ * Release USDC to Yellow Pay settlement wallet after user confirms automated offramp.
+ * Requires YELLOW_PAY_SETTLEMENT_STELLAR in env.
+ */
+async function releaseToSettlement(transactionId) {
+  const settlementAddress = config.yellowPay?.settlementStellarAddress;
+  if (!settlementAddress) {
+    throw new Error('Yellow Pay settlement Stellar address not configured (YELLOW_PAY_SETTLEMENT_STELLAR)');
+  }
+
+  const lockKey = `lock:release:${transactionId}`;
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', config.platform.redisLockTtlReleaseSeconds, 'NX');
+  if (!lockAcquired) {
+    logger.warn(`[Escrow] Settlement release lock held for tx ${transactionId}`);
+    return null;
+  }
+
+  try {
+    const txResult = await db.query(
+      `SELECT * FROM transactions
+       WHERE id = $1
+         AND payout_provider = 'yellow_pay'
+         AND state IN ('USER_CONFIRMATION_PENDING', 'DISPUTE_RELEASE_PENDING', 'RELEASE_BLOCKED')`,
+      [transactionId]
+    );
+    const transaction = txResult.rows[0];
+    if (!transaction) {
+      throw new Error('Yellow Pay transaction not found or wrong state');
+    }
+
+    if (transaction.stellar_release_tx) {
+      return transaction.stellar_release_tx;
+    }
+
+    const usdcDecimal = Number(transaction.usdc_amount);
+    if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+      throw new Error(`Invalid USDC amount for settlement release: ${transaction.usdc_amount}`);
+    }
+
+    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+    const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: settlementAddress,
+          asset: USDC_ASSET,
+          amount: usdcDecimal.toFixed(7),
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    tx.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(tx);
+
+    const appealExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await stateMachine.transition(transactionId, transaction.state, 'COMPLETE', {
+      stellar_release_tx: result.hash,
+      appeal_expires_at: appealExpiresAt,
+    });
+
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'escrow_release_settlement',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      new_value: { state: 'COMPLETE', stellar_release_tx: result.hash },
+      metadata: {
+        payout_provider: 'yellow_pay',
+        aggregator_ref: transaction.aggregator_ref,
+        settlement_address: settlementAddress,
+        usdc_amount: transaction.usdc_amount,
+      },
+    });
+
+    logger.info(`[Escrow] Released ${transaction.usdc_amount} USDC to Yellow settlement — tx: ${result.hash}`);
+    return result.hash;
+  } finally {
+    setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
+  }
+}
+
+/**
+ * Release escrow after user confirms receipt — aggregator or P2P trader.
+ */
+async function releaseAfterUserConfirmation(transactionId) {
+  const txResult = await db.query(
+    `SELECT payout_provider, aggregator_settlement_tx FROM transactions WHERE id = $1`,
+    [transactionId]
+  );
+  const payoutProvider = txResult.rows[0]?.payout_provider;
+  if (payoutProvider === 'kotani_pay') {
+    return completeAggregatorOfframp(transactionId);
+  }
+  if (payoutProvider === 'yellow_pay') {
+    if (txResult.rows[0]?.aggregator_settlement_tx) {
+      return completeAggregatorOfframp(transactionId);
+    }
+    return releaseToSettlement(transactionId);
+  }
+  return releaseToTrader(transactionId);
 }
 
 /**
@@ -1835,6 +2053,9 @@ export default {
   syncBuyUsdcLock,
   swapXlmToUsdc,
   releaseToTrader,
+  sendUsdcToAggregatorEscrow,
+  releaseToSettlement,
+  releaseAfterUserConfirmation,
   releaseToUser,
   retryReleaseBlocked,
   refundXlm,

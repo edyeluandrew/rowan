@@ -1097,7 +1097,7 @@ router.post('/transactions/:id/confirm-receipt', authUser, sensitiveActionLimite
 
     // Attempt USDC release (releaseToTrader handles state transition to COMPLETE)
     try {
-      const releaseTxHash = await escrowController.releaseToTrader(transactionId);
+      const releaseTxHash = await escrowController.releaseAfterUserConfirmation(transactionId);
 
       if (!releaseTxHash) {
         const fresh = await db.query(

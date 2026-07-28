@@ -120,6 +120,10 @@ function getCountryOptionsForClient() {
       label: m.label,
       provider: m.provider,
     })),
+    paymentConfig: {
+      offramp: c.paymentConfig?.offramp || [],
+      onramp: c.paymentConfig?.onramp || [],
+    },
   }));
 }
 

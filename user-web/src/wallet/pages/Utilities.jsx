@@ -47,7 +47,7 @@ function buildFullPhone(phone, network, country) {
   const derivedCountryCode = networkConfig?.country || country
   const dialCode = getDialCodeForCountry(derivedCountryCode)
   const cleanPhone = phone.replace(/\D/g, '')
-  if (cleanPhone.startsWith('256') || cleanPhone.startsWith('254') || cleanPhone.startsWith('255') || cleanPhone.startsWith('250')) {
+  if (cleanPhone.startsWith('256') || cleanPhone.startsWith('254') || cleanPhone.startsWith('255') || cleanPhone.startsWith('250') || cleanPhone.startsWith('234') || cleanPhone.startsWith('233')) {
     return cleanPhone
   }
   return `${dialCode.replace(/\D/g, '')}${cleanPhone.replace(/^0/, '')}`
