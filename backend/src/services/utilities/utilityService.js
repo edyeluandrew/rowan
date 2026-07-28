@@ -538,11 +538,11 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
 
   const completed = await db.query(
     `UPDATE utility_purchases
-     SET status = $5,
+     SET status = $5::utility_purchase_status,
          operator_id = COALESCE(operator_id, $2),
          external_ref = $3,
          receipt = $4,
-         completed_at = CASE WHEN $5 = 'COMPLETED' THEN NOW() ELSE completed_at END,
+         completed_at = CASE WHEN $5::text = 'COMPLETED' THEN NOW() ELSE completed_at END,
          updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
@@ -627,9 +627,9 @@ export async function refreshBillDelivery({ userId, purchaseId }) {
 
   const updated = await db.query(
     `UPDATE utility_purchases
-     SET status = $2,
+     SET status = $2::utility_purchase_status,
          receipt = $3,
-         completed_at = CASE WHEN $2 = 'COMPLETED' THEN COALESCE(completed_at, NOW()) ELSE completed_at END,
+         completed_at = CASE WHEN $2::text = 'COMPLETED' THEN COALESCE(completed_at, NOW()) ELSE completed_at END,
          updated_at = NOW()
      WHERE id = $1
      RETURNING *`,

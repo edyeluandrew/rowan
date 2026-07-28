@@ -13,11 +13,8 @@ const TOKEN_KEY = 'reloadly:utilities:access_token';
 function utilitiesConfig() {
   const isMainnet = (process.env.STELLAR_NETWORK || 'testnet') === 'mainnet';
   const utilitiesMockExplicit = process.env.RELOADLY_UTILITIES_MOCK_MODE === 'true';
-  const utilitiesLive = process.env.RELOADLY_UTILITIES_LIVE === 'true';
   return {
-    mockMode: utilitiesMockExplicit
-      || config.reloadly.mockMode
-      || (!isMainnet && !utilitiesLive),
+    mockMode: utilitiesMockExplicit || config.reloadly.mockMode,
     clientId: config.reloadly.clientId,
     clientSecret: config.reloadly.clientSecret,
     authUrl: config.reloadly.authUrl,

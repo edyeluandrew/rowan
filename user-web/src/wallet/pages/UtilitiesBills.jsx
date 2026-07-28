@@ -189,7 +189,7 @@ export default function UtilitiesBills() {
       {(utilityConfig?.reloadlyUtilitiesMock ?? utilityConfig?.reloadlyMock) && (
         <div className="bg-rowan-mint border border-rowan-green/30 rounded-xl p-3 mb-4">
           <p className="text-rowan-text text-xs">
-            Utility bills use Reloadly sandbox mock on testnet. Set RELOADLY_UTILITIES_LIVE=true on Render for real Umeme.
+            Utility bills use Reloadly Utility Payments sandbox. Fund your Reloadly Utilities wallet for live Umeme settlement.
           </p>
         </div>
       )}
