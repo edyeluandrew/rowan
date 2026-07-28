@@ -51,6 +51,12 @@ export function completeUtilityPurchase({ quoteId, paymentTxHash }) {
     .then(unwrap)
 }
 
+export function getUtilityBillDelivery(purchaseId) {
+  return client
+    .get(`/api/v1/utilities/purchase/${purchaseId}/delivery`)
+    .then(unwrap)
+}
+
 export function getUtilityHistory(limit = 20) {
   return client
     .get('/api/v1/utilities/history', { params: { limit } })

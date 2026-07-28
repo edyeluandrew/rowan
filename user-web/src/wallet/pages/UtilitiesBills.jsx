@@ -16,7 +16,14 @@ import AmountInput from '../components/cashout/AmountInput'
 import BillerPicker from '../components/utilities/BillerPicker'
 import Button from '../components/ui/Button'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
-import { estimatePrepaidUnits, isPrepaidElectricityBiller } from '../utils/utilityElectricity'
+
+function isPrepaidElectricityBiller(biller) {
+  if (!biller) return false
+  return (
+    String(biller.type || '').toUpperCase() === 'ELECTRICITY_BILL_PAYMENT'
+    && String(biller.serviceType || '').toUpperCase() === 'PREPAID'
+  )
+}
 
 export default function UtilitiesBills() {
   const navigate = useNavigate()
@@ -67,9 +74,6 @@ export default function UtilitiesBills() {
   const maxFiat = selectedBiller?.maxAmount ?? utilityConfig?.maxFiatAmount ?? 500000
 
   const netFiat = parseFloat(fiatAmount) || 0
-  const prepaidEstimate = selectedBiller && netFiat > 0
-    ? estimatePrepaidUnits({ country, fiatAmount: netFiat, biller: selectedBiller })
-    : null
   const usdcEstimate = usdcToFiatRate > 0 && netFiat > 0
     ? (netFiat / usdcToFiatRate) * (1 + feePercent / 100)
     : 0
@@ -201,13 +205,10 @@ export default function UtilitiesBills() {
           <p className="text-rowan-muted text-xs mt-2 px-1">
             Min {minFiat.toLocaleString()} · Max {maxFiat.toLocaleString()} {currency}
           </p>
-          {prepaidEstimate && isPrepaidElectricityBiller(selectedBiller) && (
-            <div className="mt-3 bg-rowan-mint border border-rowan-green/30 rounded-xl p-3">
-              <p className="text-rowan-text text-sm font-medium">
-                You receive {prepaidEstimate.summary}
-              </p>
-              <p className="text-rowan-muted text-xs mt-1">
-                Estimate only — final units depend on Umeme tariff. Token sent to your meter via SMS.
+          {isPrepaidElectricityBiller(selectedBiller) && netFiat > 0 && (
+            <div className="mt-3 bg-rowan-surface border border-rowan-border rounded-xl p-3">
+              <p className="text-rowan-muted text-xs">
+                Electricity units and Yaka token are confirmed by Reloadly / Umeme after payment — shown on your receipt.
               </p>
             </div>
           )}

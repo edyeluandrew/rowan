@@ -64,7 +64,13 @@ export function extractElectricityDelivery(reloadlyPayload) {
     unitLabel,
     unitsDisplay: info1 || (units != null ? `${units} ${unitLabel}` : null),
     billerReferenceId: billDetails?.billerReferenceId || null,
+    source: 'reloadly',
   };
+}
+
+export function getReloadlyTransactionId(receipt) {
+  if (!receipt) return null;
+  return receipt.id ?? receipt.transaction?.id ?? null;
 }
 
 export default {

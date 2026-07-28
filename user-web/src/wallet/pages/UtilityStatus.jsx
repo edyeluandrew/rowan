@@ -1,21 +1,54 @@
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
-import { CheckCircle2, ChevronLeft, XCircle, Hash, Clock, ExternalLink } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, XCircle, Hash, Clock, ExternalLink, Loader2 } from 'lucide-react'
 import Button from '../components/ui/Button'
 import { maskPhoneNumber } from '../utils/crypto'
-import { labelsFor } from '../utils/utilityLabels'
+import { labelsFor, getUtilityType } from '../utils/utilityLabels'
 import { CURRENT_NETWORK } from '../utils/constants'
+import { getUtilityBillDelivery } from '../api/utilities'
 
 function resolveStatus(purchase, data) {
   return purchase?.status || data?.status || data?.state || null
+}
+
+function isPrepaidBillPayment(data) {
+  if (!data || getUtilityType(data) !== 'bill') return false
+  return (
+    String(data.serviceType || '').toUpperCase() === 'PREPAID'
+    || /prepaid/i.test(data.bundleDescription || data.bundle_description || '')
+  )
 }
 
 export default function UtilityStatus() {
   const navigate = useNavigate()
   const location = useLocation()
   const { id } = useParams()
-  const { purchase, quote, phone: phoneFromState } = location.state || {}
+  const { purchase: initialPurchase, quote, phone: phoneFromState } = location.state || {}
+  const [purchase, setPurchase] = useState(initialPurchase || null)
+  const [deliveryLoading, setDeliveryLoading] = useState(false)
   const data = purchase || quote
   const labels = labelsFor(data)
+
+  useEffect(() => {
+    if (!id || !isPrepaidBillPayment(data)) return
+    const hasReloadlyUnits = purchase?.electricityUnitsSource === 'reloadly' && purchase?.electricityUnits
+    const status = resolveStatus(purchase, data)
+    if (hasReloadlyUnits && status === 'COMPLETED') return
+
+    let cancelled = false
+    setDeliveryLoading(true)
+
+    getUtilityBillDelivery(id)
+      .then((result) => {
+        if (!cancelled && result) setPurchase(result)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setDeliveryLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [id, data?.type, data?.serviceType, purchase?.electricityUnits, purchase?.electricityUnitsSource])
 
   if (!data) {
     navigate(labels.utilitiesPath, { replace: true })
@@ -25,6 +58,7 @@ export default function UtilityStatus() {
   const status = resolveStatus(purchase, data)
   const completed = status === 'COMPLETED'
   const failed = status === 'FAILED' || status === 'EXPIRED'
+  const processing = !completed && !failed
   const externalRef = purchase?.externalRef || data.externalRef || data.external_ref
   const displayPhone = phoneFromState || data.recipientPhone || data.recipient_phone
   const fiatAmount = data.fiatAmount ?? data.fiat_amount
@@ -33,9 +67,8 @@ export default function UtilityStatus() {
   const paymentTxHash = purchase?.paymentTxHash || data.paymentTxHash || data.payment_tx_hash
   const electricityToken = purchase?.electricityToken || data.electricityToken
   const electricityUnits = purchase?.electricityUnits || data.electricityUnits
-  const isPrepaidBill = labels.type === 'bill' && (
-    electricityUnits || electricityToken || /prepaid/i.test(bundleDescription || '')
-  )
+  const unitsFromReloadly = (purchase?.electricityUnitsSource || data.electricityUnitsSource) === 'reloadly'
+  const isPrepaidBill = isPrepaidBillPayment(data)
   const explorerUrl = paymentTxHash
     ? `${CURRENT_NETWORK.explorerUrl}/tx/${paymentTxHash}`
     : null
@@ -82,19 +115,31 @@ export default function UtilityStatus() {
             {Number(fiatAmount).toLocaleString()} {fiatCurrency}
           </p>
         )}
-        {completed && isPrepaidBill && electricityUnits && (
-          <p className="text-rowan-green text-lg font-bold mt-3 tabular-nums">
-            {electricityUnits}
+        {isPrepaidBill && deliveryLoading && !electricityUnits && (
+          <div className="flex items-center justify-center gap-2 mt-4 text-rowan-muted text-sm">
+            <Loader2 size={16} className="animate-spin" />
+            Fetching units from Umeme via Reloadly…
+          </div>
+        )}
+        {isPrepaidBill && unitsFromReloadly && electricityUnits && (
+          <div className="mt-4">
+            <p className="text-rowan-green text-xl font-bold tabular-nums">{electricityUnits}</p>
+            <p className="text-rowan-muted text-xs mt-1">Confirmed by Reloadly / Umeme</p>
+          </div>
+        )}
+        {isPrepaidBill && processing && !electricityUnits && !deliveryLoading && (
+          <p className="text-rowan-muted text-xs mt-4 px-2">
+            Units and Yaka token will appear here once Reloadly confirms with Umeme (usually within a minute).
           </p>
         )}
-        {completed && isPrepaidBill && electricityToken && (
+        {isPrepaidBill && electricityToken && (
           <div className="mt-4 bg-rowan-bg border border-rowan-border rounded-xl p-3 text-left">
             <p className="text-rowan-muted text-xs uppercase tracking-wider mb-1">Yaka token</p>
             <p className="text-rowan-text text-sm font-mono font-semibold break-all leading-relaxed">
               {electricityToken}
             </p>
             <p className="text-rowan-muted text-xs mt-2">
-              Enter this token on your meter keypad. Umeme also sends it by SMS.
+              From Reloadly / Umeme — enter on your meter keypad. Umeme also sends by SMS.
             </p>
           </div>
         )}

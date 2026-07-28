@@ -272,8 +272,12 @@ export async function waitForBillSettlement(initialResponse, { maxAttempts = 6, 
   if (!txId) return latest;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const status = String(latest?.status || latest?.transaction?.status || '').toUpperCase();
-    if (status === 'SUCCESSFUL' || status === 'FAILED') break;
+    const status = String(
+      latest?.transaction?.status || latest?.status || ''
+    ).toUpperCase();
+    const hasPin = latest?.transaction?.billDetails?.pinDetails
+      || latest?.billDetails?.pinDetails;
+    if (status === 'SUCCESSFUL' || status === 'FAILED' || hasPin) break;
     await new Promise((r) => setTimeout(r, delayMs));
     try {
       latest = await getTransaction(txId);

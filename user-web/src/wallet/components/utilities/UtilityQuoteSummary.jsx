@@ -21,12 +21,7 @@ export default function UtilityQuoteSummary({ quote, phone }) {
     String(quote.serviceType || '').toUpperCase() === 'PREPAID'
     || /prepaid/i.test(bundleDescription || '')
   )
-  const electricityEstimate = quote.electricityEstimate
-  const unitsDisplay = quote.electricityUnits
-    || electricityEstimate?.summary
-    || (electricityEstimate?.units != null
-      ? `~${electricityEstimate.units} ${electricityEstimate.unitLabel || 'units'} (est.)`
-      : null)
+  const unitsFromReloadly = quote.electricityUnitsSource === 'reloadly' && quote.electricityUnits
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5">
@@ -66,17 +61,19 @@ export default function UtilityQuoteSummary({ quote, phone }) {
               <p className="text-rowan-green text-lg font-bold leading-snug mt-0.5">
                 {quote.operatorName || bundleDescription}
               </p>
-              {isPrepaidBill && unitsDisplay && (
+              {unitsFromReloadly && (
                 <p className="text-rowan-green text-base font-semibold mt-1 tabular-nums">
-                  {unitsDisplay}
-                  {!quote.electricityUnits && (
-                    <span className="text-rowan-muted text-xs font-normal ml-1">est.</span>
-                  )}
+                  {quote.electricityUnits}
                 </p>
               )}
               <p className="text-rowan-muted text-sm tabular-nums mt-1">
                 {Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
               </p>
+              {isPrepaidBill && !unitsFromReloadly && (
+                <p className="text-rowan-muted text-xs mt-2 leading-snug">
+                  Units & Yaka token from Reloadly / Umeme appear on your receipt after payment.
+                </p>
+              )}
             </>
           ) : (
             <p className="text-rowan-green text-2xl font-bold tabular-nums">
@@ -97,11 +94,8 @@ export default function UtilityQuoteSummary({ quote, phone }) {
         {isBill && bundleDescription && (
           <DetailRow label="Service" value={bundleDescription} />
         )}
-        {isPrepaidBill && unitsDisplay && (
-          <DetailRow
-            label="Electricity"
-            value={unitsDisplay + (quote.electricityUnits ? '' : ' (estimate)')}
-          />
+        {unitsFromReloadly && (
+          <DetailRow label="Electricity (Reloadly)" value={quote.electricityUnits} />
         )}
         {phone && (
           <DetailRow

@@ -166,6 +166,23 @@ router.post(
 );
 
 /**
+ * GET /api/v1/utilities/purchase/:id/delivery
+ * Poll Reloadly for prepaid electricity units + Yaka token (bill payments only).
+ */
+router.get('/purchase/:id/delivery', authUser, async (req, res, next) => {
+  try {
+    const data = await utilityService.refreshBillDelivery({
+      userId: req.userId,
+      purchaseId: req.params.id,
+    });
+    res.json({ status: 'ok', data, timestamp: new Date().toISOString() });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/utilities/history
  */
 router.get('/history', authUser, async (req, res, next) => {

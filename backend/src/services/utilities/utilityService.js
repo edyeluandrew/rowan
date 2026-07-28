@@ -10,7 +10,7 @@ import reloadlyClient from './reloadlyClient.js';
 import reloadlyUtilityPaymentsClient from './reloadlyUtilityPaymentsClient.js';
 import { extractBundlesFromOperator } from './utilityBundles.js';
 import { normalizeBillersResponse } from './utilityBillers.js';
-import { estimatePrepaidElectricity, extractElectricityDelivery } from './utilityElectricity.js';
+import { extractElectricityDelivery, getReloadlyTransactionId } from './utilityElectricity.js';
 import utilityPricing from './utilityPricing.js';
 import utilityUsdcService from './utilityUsdcService.js';
 import logger from '../../utils/logger.js';
@@ -277,13 +277,6 @@ export async function createQuote({
     const billLabel = bundleDescription
       || `${resolvedBillerName}`.trim().slice(0, 500);
 
-    const electricityEstimate = estimatePrepaidElectricity({
-      countryCode: code,
-      fiatAmount: fiat,
-      serviceType: billerServiceType,
-      billerType: billerType || 'ELECTRICITY_BILL_PAYMENT',
-    });
-
     const quote = await insertUtilityQuote({
       userId,
       utilityType: 'bill',
@@ -300,7 +293,6 @@ export async function createQuote({
       ...quote,
       serviceType: billerServiceType || null,
       billerType: billerType || null,
-      electricityEstimate,
     };
   }
 
@@ -446,7 +438,10 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
         useLocalAmount: true,
         referenceId: buildBillReferenceId(purchase.id),
       });
-      reloadlyResult = await reloadlyUtilityPaymentsClient.waitForBillSettlement(reloadlyResult);
+      reloadlyResult = await reloadlyUtilityPaymentsClient.waitForBillSettlement(reloadlyResult, {
+        maxAttempts: 10,
+        delayMs: 3000,
+      });
     } catch (err) {
       const reason = friendlyBillPayError(err);
       await failPurchase(quoteId, reason);
@@ -543,6 +538,76 @@ async function failPurchase(id, message) {
   );
 }
 
+export async function refreshBillDelivery({ userId, purchaseId }) {
+  const purchaseRes = await db.query(
+    `SELECT * FROM utility_purchases WHERE id = $1 AND user_id = $2`,
+    [purchaseId, userId]
+  );
+  const purchase = purchaseRes.rows[0];
+  if (!purchase) {
+    const err = new Error('Purchase not found');
+    err.status = 404;
+    throw err;
+  }
+  if (purchase.utility_type !== 'bill') {
+    return formatPurchase(purchase);
+  }
+
+  let receipt = null;
+  try {
+    receipt = typeof purchase.receipt === 'string' ? JSON.parse(purchase.receipt) : purchase.receipt;
+  } catch {
+    receipt = null;
+  }
+
+  const txId = getReloadlyTransactionId(receipt);
+  if (!txId) {
+    return formatPurchase(purchase, {
+      reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+    });
+  }
+
+  let reloadlyResult;
+  try {
+    reloadlyResult = await reloadlyUtilityPaymentsClient.waitForBillSettlement(
+      { id: txId, ...receipt },
+      { maxAttempts: 8, delayMs: 2500 }
+    );
+  } catch (err) {
+    logger.warn('[UtilityService] refreshBillDelivery poll failed', {
+      purchaseId,
+      error: err.message,
+    });
+    return formatPurchase(purchase, {
+      reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+    });
+  }
+
+  const finalStatus = String(
+    reloadlyResult?.transaction?.status || reloadlyResult?.status || ''
+  ).toUpperCase();
+  const purchaseStatus = finalStatus === 'SUCCESSFUL'
+    ? 'COMPLETED'
+    : finalStatus === 'FAILED'
+      ? 'FAILED'
+      : purchase.status;
+
+  const updated = await db.query(
+    `UPDATE utility_purchases
+     SET status = $2,
+         receipt = $3,
+         completed_at = CASE WHEN $2 = 'COMPLETED' THEN COALESCE(completed_at, NOW()) ELSE completed_at END,
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [purchaseId, purchaseStatus, JSON.stringify(reloadlyResult)]
+  );
+
+  return formatPurchase(updated.rows[0], {
+    reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+  });
+}
+
 export async function getPurchaseHistory(userId, limit = 20) {
   const result = await db.query(
     `SELECT id, utility_type, country_code, network_code, recipient_phone,
@@ -599,6 +664,7 @@ function formatPurchase(row, extra = {}) {
     electricityEstimate: extra.electricityEstimate || null,
     electricityToken: electricityDelivery?.token || null,
     electricityUnits: electricityDelivery?.unitsDisplay || electricityDelivery?.units || null,
+    electricityUnitsSource: electricityDelivery?.source || null,
   };
 }
 
@@ -609,5 +675,6 @@ export default {
   listBillers,
   createQuote,
   completePurchase,
+  refreshBillDelivery,
   getPurchaseHistory,
 };
