@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { Clock, ChevronRight } from 'lucide-react'
 import { STATE_SUBTITLES } from '../../utils/constants'
 import { formatFiatAmount } from '../../utils/fiat'
+import { getSellProgressSubtitle } from '../../utils/p2pFormat'
 
 /**
  * Home banner for an active cash-out (funds in escrow / MoMo pending).
@@ -10,12 +11,9 @@ export default function CashoutInProgressBanner({ transaction }) {
   const navigate = useNavigate()
   if (!transaction) return null
 
-  let subtitle = STATE_SUBTITLES[transaction.state] || 'Cash out in progress'
-  if (transaction.state === 'TRADER_MATCHED') {
-    subtitle = transaction.matchedAt
-      ? 'Trader accepted — waiting for mobile money'
-      : 'A trader is reviewing your request'
-  }
+  let subtitle = getSellProgressSubtitle(transaction)
+    || STATE_SUBTITLES[transaction.state]
+    || 'Cash out in progress'
   const fiatLabel = formatFiatAmount(
     transaction.fiatAmount,
     transaction.fiatCurrency || transaction.currency || 'UGX',
