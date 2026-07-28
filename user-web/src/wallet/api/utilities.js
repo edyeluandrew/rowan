@@ -26,6 +26,12 @@ export function getUtilityBillers(country) {
     .then(unwrap)
 }
 
+export function getUtilityDataAvailability(country) {
+  return client
+    .get('/api/v1/utilities/data-availability', { params: { country } })
+    .then(unwrap)
+}
+
 export function getUtilityLimits(params) {
   return client
     .get('/api/v1/utilities/limits', { params })

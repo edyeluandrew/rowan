@@ -205,6 +205,34 @@ async function loadCountryOperators(countryCode) {
   return normalizeOperatorsList(raw);
 }
 
+/** Corridors where Reloadly sandbox exposes data/bundle operators (account-specific). */
+export async function getDataAvailability(countryCode) {
+  const code = String(countryCode || 'UG').trim().toUpperCase();
+  const ops = await loadCountryOperators(code);
+  const dataOps = ops.filter((o) => o.data || o.bundle);
+  return {
+    countryCode: code,
+    available: dataOps.length > 0,
+    operators: dataOps.map((o) => o.name).filter(Boolean),
+    reloadlyMock: reloadlyClient.reloadlyIsMock(),
+  };
+}
+
+function dataUnavailableMessage(countryCode, dataOps, carrierName) {
+  if (!dataOps.length) {
+    const hints = { KE: 'Kenya', TZ: 'Tanzania', RW: 'Rwanda' };
+    const label = hints[countryCode] || countryCode;
+    return (
+      `Reloadly sandbox has no data bundle products for ${label} (${countryCode}). `
+      + 'Try Uganda (UG) or Nigeria (NG) for data plan tests, or use Airtime here.'
+    );
+  }
+  return (
+    `No data plans from Reloadly for ${carrierName || 'this carrier'} on this number. `
+    + 'Confirm the phone matches the selected network, or try airtime.'
+  );
+}
+
 export async function resolveOperatorForPhone({
   countryCode,
   networkCode,
@@ -281,6 +309,16 @@ export async function getTopupLimits({
   const currency = countryService.getCurrencyForCountry(code);
 
   if (utilityType === 'data') {
+    const ops = await loadCountryOperators(code);
+    const dataOps = ops.filter((o) => o.data || o.bundle);
+    if (!dataOps.length) {
+      const err = new Error(dataUnavailableMessage(code, dataOps));
+      err.status = 422;
+      err.code = 'NO_DATA_PRODUCTS_IN_COUNTRY';
+      err.details = { countryCode: code, corridorsWithData: ['UG', 'NG', 'GH'] };
+      throw err;
+    }
+
     const { operator, limits, source } = await resolveOperatorForPhone({
       countryCode: code,
       networkCode: network,
@@ -290,11 +328,13 @@ export async function getTopupLimits({
     const catalog = extractBundlesFromOperator(operator, currency);
     if (!catalog.bundles.length) {
       const carrier = limits.operatorName || operator?.name || 'this carrier';
-      const err = new Error(
-        `No data plans from Reloadly for ${carrier} on this number. `
-        + 'Confirm the phone matches the selected network, or try airtime.'
-      );
+      const err = new Error(dataUnavailableMessage(code, dataOps, carrier));
       err.status = 422;
+      err.code = dataOps.length ? 'NO_BUNDLES_FOR_NUMBER' : 'NO_DATA_PRODUCTS_IN_COUNTRY';
+      err.details = {
+        countryCode: code,
+        corridorsWithData: dataOps.length ? [code] : ['UG', 'NG', 'GH'],
+      };
       throw err;
     }
     return {
@@ -347,5 +387,6 @@ export default {
   resolveOperatorForPhone,
   getTopupLimits,
   listNormalizedOperators,
+  getDataAvailability,
   operatorMatchesNetwork,
 };

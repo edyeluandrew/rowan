@@ -24,6 +24,21 @@ router.get('/providers', authUser, async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/utilities/data-availability?country=KE
+ * Whether Reloadly exposes data/bundle operators for this country.
+ */
+router.get('/data-availability', authUser, async (req, res, next) => {
+  try {
+    const country = String(req.query.country || 'UG').trim().toUpperCase();
+    const data = await utilityService.getReloadlyDataAvailability(country);
+    res.json({ status: 'ok', data, timestamp: new Date().toISOString() });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/utilities/limits?country=UG&networkCode=MTN_UG&recipientPhone=256...&type=airtime|data
  * Reloadly operator min/max or data plan catalog for the given phone + network.
  */
@@ -89,7 +104,13 @@ router.get('/bundles', authUser, async (req, res, next) => {
     });
     res.json({ status: 'ok', data, timestamp: new Date().toISOString() });
   } catch (err) {
-    if (err.status) return res.status(err.status).json({ error: err.message });
+    if (err.status) {
+      return res.status(err.status).json({
+        error: err.message,
+        code: err.code,
+        details: err.details,
+      });
+    }
     next(err);
   }
 });

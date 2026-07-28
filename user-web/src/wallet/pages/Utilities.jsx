@@ -13,6 +13,7 @@ import {
   getUtilityBundles,
   getUtilityLimits,
   getUtilityOperators,
+  getUtilityDataAvailability,
 } from '../api/utilities'
 import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
 import { getNetworksForCountry, getDialCodeForCountry } from '../utils/country'
@@ -81,6 +82,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
   const [operatorLimits, setOperatorLimits] = useState(null)
   const [limitsLoading, setLimitsLoading] = useState(false)
   const [limitsError, setLimitsError] = useState(null)
+  const [dataAvailability, setDataAvailability] = useState(null)
 
   useEffect(() => {
     getUtilityConfig()
@@ -93,6 +95,16 @@ export default function Utilities({ utilityType = 'airtime' }) {
       })
       .catch(() => {})
   }, [utilityType])
+
+  useEffect(() => {
+    if (!isData) {
+      setDataAvailability(null)
+      return
+    }
+    getUtilityDataAvailability(country)
+      .then(setDataAvailability)
+      .catch(() => setDataAvailability(null))
+  }, [isData, country])
 
   const countryNetworks = useMemo(
     () => Object.keys(getNetworksForCountry(country)),
@@ -146,6 +158,14 @@ export default function Utilities({ utilityType = 'airtime' }) {
 
   const loadBundles = useCallback(async () => {
     if (!isData || !network || !fullPhone) return
+    if (dataAvailability && !dataAvailability.available) {
+      setBundles([])
+      setBundlesError(
+        `Reloadly sandbox has no data bundle products for ${country} yet. `
+        + 'Try Uganda (UG) or Nigeria (NG), or use Airtime for this country.'
+      )
+      return
+    }
     setBundlesLoading(true)
     setBundlesError(null)
     setSelectedBundle(null)
@@ -163,11 +183,14 @@ export default function Utilities({ utilityType = 'airtime' }) {
       setBundles([])
       setBundleOperatorName(null)
       const data = err.response?.data
-      setBundlesError(data?.error || err.message)
+      const hint = data?.details?.corridorsWithData?.length
+        ? ` Try ${data.details.corridorsWithData.join(', ')} for data tests.`
+        : ''
+      setBundlesError((data?.error || err.message) + hint)
     } finally {
       setBundlesLoading(false)
     }
-  }, [isData, network, fullPhone, country])
+  }, [isData, network, fullPhone, country, dataAvailability])
 
   useEffect(() => {
     if (!isData) return
@@ -301,6 +324,14 @@ export default function Utilities({ utilityType = 'airtime' }) {
         <div className="bg-rowan-mint border border-rowan-green/30 rounded-xl p-3 mb-4">
           <p className="text-rowan-text text-xs">
             Staging mode — utilities use mock Reloadly until API keys are added.
+          </p>
+        </div>
+      )}
+
+      {isData && dataAvailability && !dataAvailability.available && (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-3 mb-4">
+          <p className="text-rowan-yellow text-sm">
+            Reloadly sandbox has no data plans for {country}. Use Airtime here, or switch country to UG / NG / GH for data bundle tests.
           </p>
         </div>
       )}

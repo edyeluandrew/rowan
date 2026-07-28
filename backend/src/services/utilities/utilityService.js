@@ -12,6 +12,7 @@ import { extractBundlesFromOperator } from './utilityBundles.js';
 import {
   assertFiatAmountAllowed,
   getTopupLimits,
+  getDataAvailability,
   listNormalizedOperators,
   resolveOperatorForPhone,
 } from './reloadlyOperatorCatalog.js';
@@ -137,6 +138,16 @@ export async function listProviders(countryCode, type = 'airtime') {
 export async function listOperators(countryCode) {
   const code = String(countryCode || 'UG').trim().toUpperCase();
   return listNormalizedOperators(code);
+}
+
+export async function getReloadlyDataAvailability(countryCode) {
+  const code = String(countryCode || 'UG').trim().toUpperCase();
+  if (!countryService.isActiveCountry(code)) {
+    const err = new Error(`Unsupported country: ${code}`);
+    err.status = 400;
+    throw err;
+  }
+  return getDataAvailability(code);
 }
 
 export async function getReloadlyTopupLimits({
@@ -692,6 +703,7 @@ export default {
   listProviders,
   listOperators,
   getReloadlyTopupLimits,
+  getReloadlyDataAvailability,
   listDataBundles,
   listBillers,
   lookupBillAccount,
