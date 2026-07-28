@@ -18,10 +18,14 @@ Rowan uses Kotani as the **primary automated MoMo rail** when sandbox/production
 
 You need at minimum:
 
-| Credential | Env var |
-|------------|---------|
-| JWT or API key | `KOTANI_PAY_JWT` or `KOTANI_PAY_API_KEY` |
-| Rowan escrow public key (sender) | `KOTANI_PAY_SENDER_STELLAR` → same as `ESCROW_PUBLIC_KEY` on testnet |
+| Kotani portal value | Where in portal | Rowan env var |
+|---------------------|-----------------|---------------|
+| **Key** | API Keys → Generate New Key | `KOTANI_PAY_API_KEY` |
+| **Secret** (optional secure key pair) | Same screen if using secure generation | *Not used by Rowan — store in vault* |
+| **Webhook secret** | Settings → Webhooks → Generate secret | `KOTANI_PAY_WEBHOOK_SECRET` |
+| Rowan escrow public key (sender) | Your Stellar config | `KOTANI_PAY_SENDER_STELLAR` → same as `ESCROW_PUBLIC_KEY` on testnet |
+
+Use **either** `KOTANI_PAY_JWT` (short-lived portal session) **or** `KOTANI_PAY_API_KEY` (long-lived). Do **not** put the API key **Secret** into `KOTANI_PAY_WEBHOOK_SECRET` — they are different credentials.
 
 ---
 
@@ -30,7 +34,8 @@ You need at minimum:
 ```env
 KOTANI_PAY_ENABLED=true
 KOTANI_PAY_BASE_URL=https://sandbox-api.kotanipay.io
-KOTANI_PAY_JWT=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+KOTANI_PAY_API_KEY=<Key from API Keys page>
+KOTANI_PAY_WEBHOOK_SECRET=<secret from Settings → Webhooks>
 KOTANI_PAY_SENDER_STELLAR=G...   # Rowan escrow public key
 KOTANI_PAY_CALLBACK_URL=https://rowan-backend-staging.onrender.com/api/v1/webhooks/kotani
 KOTANI_PAY_CORRIDORS=UG,KE,TZ,RW,NG,GH
@@ -43,6 +48,14 @@ Restart backend after saving.
 ## Step 3 — Add to Render staging
 
 In **rowan-backend-staging** → Environment, add the same vars (use staging URL for callback).
+
+Or sync from local `.env.staging` (requires Render API key):
+
+```bash
+set RENDER_API_KEY=rnd_...
+set RENDER_SERVICE_ID=srv_...
+node backend/scripts/sync-kotani-render-env.mjs
+```
 
 Redeploy and verify:
 
@@ -83,6 +96,14 @@ https://rowan-backend-staging.onrender.com/api/v1/webhooks/kotani
 ```
 
 Use the same URL as `KOTANI_PAY_CALLBACK_URL` when creating offramps.
+
+Generate a **webhook signing secret** in the portal. Rowan verifies `X-Kotani-Signature` with HMAC-SHA256 over `JSON.stringify({ event, data })` per [Kotani webhook docs](https://documentation.kotanipay.com/v3/essentials/webhooks).
+
+Test verification locally:
+
+```bash
+node backend/scripts/test-kotani-webhook-signature.mjs
+```
 
 ---
 
@@ -129,5 +150,5 @@ Start with a **small USDC amount** (e.g. 1–2 USDC).
 |-------|------|
 | Provider client | `backend/src/services/payments/providers/kotaniPayProvider.js` |
 | Settlement executor | `backend/src/services/payments/paymentExecutor.js` |
-| Webhook | `backend/src/services/payments/webhooks/kotani.js` |
+| Webhook | `backend/src/routes/webhooks/kotani.js` |
 | Router | `backend/src/services/payments/paymentRouter.js` |

@@ -4,6 +4,7 @@
  * Docs: https://docs.kotanipay.com/reference/endpoints-1
  */
 
+import crypto from 'crypto';
 import config from '../../../config/index.js';
 import logger from '../../../utils/logger.js';
 
@@ -201,11 +202,55 @@ export async function initiateDeposit(_params) {
   throw new Error('Kotani onramp not wired yet — use P2P buy flow for now');
 }
 
-export function verifyWebhookSignature(_payload, _signature) {
+/**
+ * Kotani signed webhooks: HMAC-SHA256 over JSON.stringify({ event, data }).
+ * @see https://documentation.kotanipay.com/v3/essentials/webhooks
+ */
+export function verifyWebhookSignature(payload, headerSignature) {
   const cfg = kotaniConfig();
   if (kotaniPayIsMock() || !cfg.webhookSecret) return true;
-  // TODO: confirm Kotani callback signature scheme from portal
+
+  const signature = String(headerSignature || '').trim();
+  if (!signature) return false;
+  if (!payload || typeof payload !== 'object') return false;
+
+  // Signed envelope mode (webhook secret configured in Kotani portal).
+  if (payload.event && payload.data) {
+    const { signature: _bodySignature, ...payloadWithoutSignature } = payload;
+    const computed = `sha256=${crypto
+      .createHmac('sha256', cfg.webhookSecret)
+      .update(JSON.stringify(payloadWithoutSignature))
+      .digest('hex')}`;
+
+    try {
+      return crypto.timingSafeEqual(
+        Buffer.from(computed),
+        Buffer.from(signature),
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  // Direct callbackUrl posts have no signature headers when no webhook secret is set.
   return false;
+}
+
+/** Normalize signed envelope vs legacy direct callback body. */
+export function normalizeWebhookPayload(body) {
+  const event = body || {};
+  if (event.event && event.data) {
+    return {
+      signed: true,
+      eventType: event.event,
+      payload: event.data,
+    };
+  }
+  return {
+    signed: false,
+    eventType: event.event || event.type || 'callback',
+    payload: event,
+  };
 }
 
 export default {
@@ -218,4 +263,5 @@ export default {
   getPayoutStatus,
   initiateDeposit,
   verifyWebhookSignature,
+  normalizeWebhookPayload,
 };

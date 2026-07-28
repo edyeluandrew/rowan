@@ -8,16 +8,14 @@ const router = Router();
 
 const SUCCESS_STATUSES = new Set(['SUCCESS', 'SUCCESSFUL', 'COMPLETED', 'PROCESSED', 'COMPLETE']);
 
-function extractReference(event) {
-  return event.referenceId
-    || event.reference_id
-    || event.data?.referenceId
-    || event.data?.reference_id
+function extractReferenceFromPayload(payload) {
+  return payload?.referenceId
+    || payload?.reference_id
     || null;
 }
 
-function isSuccessEvent(event) {
-  const status = String(event.status || event.data?.status || '').toUpperCase();
+function isSuccessPayload(payload) {
+  const status = String(payload?.status || '').toUpperCase();
   return SUCCESS_STATUSES.has(status);
 }
 
@@ -33,11 +31,16 @@ router.post('/kotani', async (req, res) => {
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
-  const event = req.body || {};
-  const referenceId = extractReference(event);
-  const eventType = event.event || event.type || 'callback';
+  const normalized = kotaniPayProvider.normalizeWebhookPayload(req.body);
+  const { eventType, payload } = normalized;
+  const referenceId = extractReferenceFromPayload(payload);
 
-  logger.info('[KotaniWebhook] received', { eventType, referenceId, status: event.status });
+  logger.info('[KotaniWebhook] received', {
+    eventType,
+    referenceId,
+    status: payload?.status,
+    signed: normalized.signed,
+  });
 
   if (!referenceId) {
     return res.json({ status: 'ok', received: true, note: 'no reference' });
@@ -54,7 +57,7 @@ router.post('/kotani', async (req, res) => {
       return res.json({ status: 'ok', received: true, referenceId, matched: false });
     }
 
-    if (isSuccessEvent(event) && tx.state === 'FIAT_PAYOUT_SUBMITTED') {
+    if (isSuccessPayload(payload) && tx.state === 'FIAT_PAYOUT_SUBMITTED') {
       await notificationService.notifyUser(tx.user_id, 'aggregator_payout_delivered', {
         transactionId: tx.id,
         provider: 'kotani_pay',
