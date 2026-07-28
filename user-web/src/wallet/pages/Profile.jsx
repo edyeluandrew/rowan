@@ -23,7 +23,7 @@ export default function Profile() {
   const { user, logout } = useAuth()
   const { usdcBalance, usdcAvailable, usdcLocked, hasUsdcTrustline, publicKey } = useWallet()
   const { stats } = useTransactions()
-  const { country, setCountry } = useUserCountry()
+  const { country, fiatCurrency, setCountry } = useUserCountry()
   const [showCountryPicker, setShowCountryPicker] = useState(false)
   const [copied, setCopied] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(true)
@@ -86,7 +86,7 @@ export default function Profile() {
 
   const kycLevel = kycStatus?.kyc_level || user?.kycLevel || 'NONE'
   const kycInfo = KYC_LEVELS[kycLevel] || KYC_LEVELS.NONE
-  const limitCurrency = COUNTRY_FIAT[kycStatus?.country_code || country] || 'UGX'
+  const limitCurrency = COUNTRY_FIAT[kycStatus?.country_code || country] || fiatCurrency
 
   const formatLimit = (ugx) => {
     if (ugx == null) return '—'

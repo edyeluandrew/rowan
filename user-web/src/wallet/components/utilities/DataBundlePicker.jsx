@@ -5,7 +5,7 @@ export default function DataBundlePicker({
   selected,
   onSelect,
   loading,
-  currency = 'UGX',
+  currency,
   operatorName,
 }) {
   if (loading) {

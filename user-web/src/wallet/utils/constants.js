@@ -168,7 +168,10 @@ export const ALERT_DIRECTIONS = {
   BELOW: { label: 'Drops below', symbol: '<' },
 }
 
-export const ALERT_CURRENCIES = ['XLM/UGX', 'XLM/KES', 'XLM/TZS', 'USDC/UGX']
+export const ALERT_CURRENCIES = [
+  'XLM/UGX', 'XLM/KES', 'XLM/TZS', 'XLM/RWF',
+  'USDC/UGX', 'USDC/KES', 'USDC/TZS', 'USDC/RWF',
+]
 
 export const MAX_ACTIVE_ALERTS = 10
 

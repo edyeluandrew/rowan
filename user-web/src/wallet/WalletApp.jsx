@@ -6,6 +6,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { SocketProvider } from './context/SocketContext';
 import { NotificationsProvider } from './context/NotificationsContext';
+import { UserCountryProvider } from './context/UserCountryContext';
 import usePushNotifications from './hooks/usePushNotifications';
 
 import AppShell from './components/layout/AppShell';
@@ -58,6 +59,7 @@ export default function WalletApp() {
   return (
     <SocketProvider>
       <NotificationsProvider>
+        <UserCountryProvider>
         <PushNotificationInit />
         <Routes>
             {/* Tab routes with bottom nav */}
@@ -102,6 +104,7 @@ export default function WalletApp() {
             {/* Catch-all within wallet */}
             <Route path="*" element={<Navigate to="home" replace />} />
           </Routes>
+        </UserCountryProvider>
       </NotificationsProvider>
     </SocketProvider>
   );

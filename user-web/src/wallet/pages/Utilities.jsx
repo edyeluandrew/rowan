@@ -13,7 +13,7 @@ import {
   getUtilityBundles,
 } from '../api/utilities'
 import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
-import { getNetworksForCountry } from '../utils/country'
+import { getNetworksForCountry, getDialCodeForCountry, getUtilityLimitsForCountry } from '../utils/country'
 import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
@@ -45,9 +45,9 @@ const UTILITY_META = {
 function buildFullPhone(phone, network, country) {
   const networkConfig = NETWORKS[network]
   const derivedCountryCode = networkConfig?.country || country
-  const dialCode = COUNTRY_CODES[derivedCountryCode]?.code || '+256'
+  const dialCode = getDialCodeForCountry(derivedCountryCode)
   const cleanPhone = phone.replace(/\D/g, '')
-  if (cleanPhone.startsWith('256') || cleanPhone.startsWith('254') || cleanPhone.startsWith('255')) {
+  if (cleanPhone.startsWith('256') || cleanPhone.startsWith('254') || cleanPhone.startsWith('255') || cleanPhone.startsWith('250')) {
     return cleanPhone
   }
   return `${dialCode.replace(/\D/g, '')}${cleanPhone.replace(/^0/, '')}`
@@ -94,10 +94,18 @@ export default function Utilities({ utilityType = 'airtime' }) {
   )
 
   useEffect(() => {
-    if (!network && countryNetworks.length > 0) {
-      setNetwork(countryNetworks[0])
+    if (countryNetworks.length > 0) {
+      setNetwork((prev) => (countryNetworks.includes(prev) ? prev : countryNetworks[0]))
+    } else {
+      setNetwork('')
     }
-  }, [countryNetworks, network])
+  }, [country, countryNetworks])
+
+  useEffect(() => {
+    setSelectedBundle(null)
+    setBundles([])
+    setBundleOperatorName(null)
+  }, [country])
 
   const currency = network ? NETWORKS[network]?.currency : fiatCurrency
   const usdcToFiatRate = rates?.usdcToFiat || 0

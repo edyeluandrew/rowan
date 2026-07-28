@@ -24,6 +24,33 @@ export function getFiatForCountry(country) {
   return COUNTRY_FIAT[country] || 'UGX'
 }
 
+/** Pick first non-empty fiat code, else derive from country, else UGX. */
+export function resolveFiatCurrency(...candidates) {
+  const found = candidates.find((c) => c && String(c).trim())
+  if (found) return found
+  const country = candidates.find((c) => isSupportedCountry(c))
+  if (country) return getFiatForCountry(country)
+  return 'UGX'
+}
+
+/** Default utility amount bounds when API config is missing (local currency). */
+export const COUNTRY_UTILITY_LIMITS = {
+  UG: { min: 1000, max: 500000 },
+  KE: { min: 100, max: 50000 },
+  TZ: { min: 1000, max: 500000 },
+  RW: { min: 500, max: 500000 },
+}
+
+export function getUtilityLimitsForCountry(country) {
+  return COUNTRY_UTILITY_LIMITS[country] || COUNTRY_UTILITY_LIMITS.UG
+}
+
+export function getElectricityTokenLabel(country) {
+  if (country === 'UG') return 'Yaka token'
+  if (country === 'KE') return 'Electricity token'
+  return 'Prepaid token'
+}
+
 export function getDialCodeForCountry(country) {
   return COUNTRY_CODES[country]?.code || '+256'
 }

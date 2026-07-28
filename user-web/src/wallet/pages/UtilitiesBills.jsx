@@ -4,6 +4,7 @@ import { Zap, AlertTriangle, Loader2 } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import useUserCountry from '../hooks/useUserCountry'
+import { getUtilityLimitsForCountry } from '../utils/country'
 import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
 import BiometricLock from '../../shared/components/BiometricLock'
 import {
@@ -73,8 +74,9 @@ export default function UtilitiesBills() {
   const currency = selectedBiller?.currency || fiatCurrency
   const usdcToFiatRate = rates?.usdcToFiat || 0
   const feePercent = utilityConfig?.feePercent ?? 1
-  const minFiat = selectedBiller?.minAmount ?? utilityConfig?.minFiatAmount ?? 1000
-  const maxFiat = selectedBiller?.maxAmount ?? utilityConfig?.maxFiatAmount ?? 500000
+  const countryLimits = getUtilityLimitsForCountry(country)
+  const minFiat = selectedBiller?.minAmount ?? utilityConfig?.minFiatAmount ?? countryLimits.min
+  const maxFiat = selectedBiller?.maxAmount ?? utilityConfig?.maxFiatAmount ?? countryLimits.max
 
   const netFiat = parseFloat(fiatAmount) || 0
 
@@ -189,7 +191,7 @@ export default function UtilitiesBills() {
       {(utilityConfig?.reloadlyUtilitiesMock ?? utilityConfig?.reloadlyMock) && (
         <div className="bg-rowan-mint border border-rowan-green/30 rounded-xl p-3 mb-4">
           <p className="text-rowan-text text-xs">
-            Utility bills use Reloadly Utility Payments sandbox. Fund your Reloadly Utilities wallet for live Umeme settlement.
+            Utility bills use Reloadly Utility Payments sandbox. Fund your Reloadly Utilities wallet for live settlement.
           </p>
         </div>
       )}

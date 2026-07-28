@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import BottomSheet from '../ui/BottomSheet'
 import Button from '../ui/Button'
@@ -7,11 +7,15 @@ import { ALERT_DIRECTIONS, ALERT_CURRENCIES } from '../../utils/constants'
 /**
  * Bottom sheet form to create a new rate alert.
  */
-export default function CreateAlertSheet({ open, onClose, onCreate, creating }) {
-  const [pair, setPair] = useState(ALERT_CURRENCIES[0])
+export default function CreateAlertSheet({ open, onClose, onCreate, creating, defaultPair }) {
+  const [pair, setPair] = useState(defaultPair || ALERT_CURRENCIES[0])
   const [direction, setDirection] = useState('ABOVE')
   const [targetRate, setTargetRate] = useState('')
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (defaultPair) setPair(defaultPair)
+  }, [defaultPair, open])
 
   const handleCreate = async () => {
     setError(null)

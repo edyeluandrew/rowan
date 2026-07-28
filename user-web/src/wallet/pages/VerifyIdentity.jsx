@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, RefreshCw, ShieldCheck, Clock, XCircle, Upload, Check, Loader2 } from 'lucide-react'
 import { getKycStatus, submitKyc, uploadKycDocument } from '../api/user'
+import useUserCountry from '../hooks/useUserCountry'
+import { formatFiatAmount } from '../utils/fiat'
 import Input from '../components/ui/Input'
 import Button from '../components/ui/Button'
 
@@ -77,13 +79,15 @@ const DOCUMENT_TYPES = [
 
 const LEVEL_ORDER = ['NONE', 'BASIC', 'VERIFIED']
 
-function formatUgx(n) {
-  if (n == null) return '—'
-  return `${Number(n).toLocaleString()} UGX`
-}
-
 export default function VerifyIdentity() {
   const navigate = useNavigate()
+  const { fiatCurrency } = useUserCountry()
+
+  const formatLimit = (n) => {
+    if (n == null) return '—'
+    return formatFiatAmount(n, fiatCurrency, { compact: true })
+  }
+
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -187,11 +191,11 @@ export default function VerifyIdentity() {
               </div>
               <div className="text-right">
                 <p className="text-rowan-muted text-xs">Daily limit</p>
-                <p className="text-rowan-text text-sm font-semibold tabular-nums">{formatUgx(status.limits?.daily)}</p>
+                <p className="text-rowan-text text-sm font-semibold tabular-nums">{formatLimit(status.limits?.daily)}</p>
               </div>
             </div>
             <p className="text-rowan-muted text-xs mt-2">
-              Per transaction: {formatUgx(status.limits?.perTx)}
+              Per transaction: {formatLimit(status.limits?.perTx)}
             </p>
           </div>
 
@@ -203,7 +207,7 @@ export default function VerifyIdentity() {
                 {LEVEL_ORDER.map((lvl) => (
                   <div key={lvl} className={`flex items-center justify-between text-sm ${lvl === currentLevel ? 'text-rowan-yellow' : 'text-rowan-muted'}`}>
                     <span className="font-medium">{lvl}{lvl === currentLevel ? ' · you' : ''}</span>
-                    <span className="tabular-nums">{formatUgx(status.tiers[lvl]?.daily)} / day</span>
+                    <span className="tabular-nums">{formatLimit(status.tiers[lvl]?.daily)} / day</span>
                   </div>
                 ))}
               </div>

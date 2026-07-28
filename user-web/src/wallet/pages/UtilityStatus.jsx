@@ -5,6 +5,8 @@ import Button from '../components/ui/Button'
 import { maskPhoneNumber } from '../utils/crypto'
 import { labelsFor, getUtilityType } from '../utils/utilityLabels'
 import { CURRENT_NETWORK } from '../utils/constants'
+import { resolveFiatCurrency, getElectricityTokenLabel } from '../utils/country'
+import useUserCountry from '../hooks/useUserCountry'
 import { getUtilityBillDelivery } from '../api/utilities'
 
 function resolveStatus(purchase, data) {
@@ -26,6 +28,7 @@ export default function UtilityStatus() {
   const { purchase: initialPurchase, quote, phone: phoneFromState, billLookup } = location.state || {}
   const [purchase, setPurchase] = useState(initialPurchase || null)
   const [deliveryLoading, setDeliveryLoading] = useState(false)
+  const { country: userCountry } = useUserCountry()
   const data = purchase || quote
   const labels = labelsFor(data)
 
@@ -62,7 +65,10 @@ export default function UtilityStatus() {
   const externalRef = purchase?.externalRef || data.externalRef || data.external_ref
   const displayPhone = phoneFromState || data.recipientPhone || data.recipient_phone
   const fiatAmount = data.fiatAmount ?? data.fiat_amount
-  const fiatCurrency = data.fiatCurrency || data.currency || 'UGX'
+  const billCountry = data.countryCode || data.country_code || userCountry
+  const fiatCurrency = resolveFiatCurrency(data.fiatCurrency, data.currency, data.fiat_currency, billCountry)
+  const operatorName = data.operatorName || data.operator_name
+  const tokenLabel = getElectricityTokenLabel(billCountry)
   const bundleDescription = data.bundleDescription || data.bundle_description
   const paymentTxHash = purchase?.paymentTxHash || data.paymentTxHash || data.payment_tx_hash
   const electricityToken = purchase?.electricityToken || data.electricityToken
@@ -122,28 +128,28 @@ export default function UtilityStatus() {
         {isPrepaidBill && deliveryLoading && !electricityUnits && (
           <div className="flex items-center justify-center gap-2 mt-4 text-rowan-muted text-sm">
             <Loader2 size={16} className="animate-spin" />
-            Fetching units from Umeme via Reloadly…
+            Fetching units from {operatorName || 'provider'} via Reloadly…
           </div>
         )}
         {isPrepaidBill && unitsFromReloadly && electricityUnits && (
           <div className="mt-4">
             <p className="text-rowan-green text-xl font-bold tabular-nums">{electricityUnits}</p>
-            <p className="text-rowan-muted text-xs mt-1">Confirmed by Reloadly / Umeme</p>
+            <p className="text-rowan-muted text-xs mt-1">Confirmed by Reloadly{operatorName ? ` / ${operatorName}` : ''}</p>
           </div>
         )}
         {isPrepaidBill && processing && !electricityUnits && !deliveryLoading && (
           <p className="text-rowan-muted text-xs mt-4 px-2">
-            Units and Yaka token will appear here once Reloadly confirms with Umeme (usually within a minute).
+            Units and {tokenLabel.toLowerCase()} will appear here once Reloadly confirms with the provider (usually within a minute).
           </p>
         )}
         {isPrepaidBill && electricityToken && (
           <div className="mt-4 bg-rowan-bg border border-rowan-border rounded-xl p-3 text-left">
-            <p className="text-rowan-muted text-xs uppercase tracking-wider mb-1">Yaka token</p>
+            <p className="text-rowan-muted text-xs uppercase tracking-wider mb-1">{tokenLabel}</p>
             <p className="text-rowan-text text-sm font-mono font-semibold break-all leading-relaxed">
               {electricityToken}
             </p>
             <p className="text-rowan-muted text-xs mt-2">
-              From Reloadly / Umeme — enter on your meter keypad. Umeme also sends by SMS.
+              From Reloadly{operatorName ? ` / ${operatorName}` : ''} — enter on your meter keypad. Your provider may also send by SMS.
             </p>
           </div>
         )}
@@ -160,7 +166,7 @@ export default function UtilityStatus() {
         )}
         {data.billSettlementFallback && completed && (
           <p className="text-rowan-yellow text-xs mt-3 px-2">
-            Umeme sandbox was unavailable — receipt shows simulated units/token for testnet. Fund Reloadly Utilities wallet for live settlement.
+            Provider sandbox was unavailable — receipt shows simulated units/token for testnet. Fund Reloadly Utilities wallet for live settlement.
           </p>
         )}
         {data.reloadlyMock && completed && (

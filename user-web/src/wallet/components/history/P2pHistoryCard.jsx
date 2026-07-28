@@ -6,6 +6,7 @@ import PaymentMethodPill from '../ui/PaymentMethodPill'
 import { formatCurrency, getTraderDisplayName, formatShortId } from '../../utils/p2pFormat'
 import { formatTimeAgo, formatDateTime } from '../../utils/format'
 import { isBuyOrder } from '../../utils/transactions'
+import { resolveFiatCurrency } from '../../utils/country'
 
 function StatusIcon({ state, wasDisputed }) {
   if (wasDisputed || state === 'DISPUTE_OPENED') {
@@ -30,7 +31,7 @@ function formatDuration(mins) {
 
 export default function P2pHistoryCard({ transaction: tx }) {
   const navigate = useNavigate()
-  const currency = tx.currency || tx.fiatCurrency || 'UGX'
+  const currency = resolveFiatCurrency(tx.fiatCurrency, tx.currency, tx.countryCode, tx.country_code)
   const rate = Number(tx.lockedRate || tx.rate || 0)
   const when = tx.completedAt || tx.createdAt
   const duration = formatDuration(tx.durationMinutes)

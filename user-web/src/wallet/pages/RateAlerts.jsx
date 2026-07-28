@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Plus, Bell, AlertTriangle, Clock } from 'lucide-react'
 import useRateAlerts from '../hooks/useRateAlerts'
 import useRates from '../hooks/useRates'
+import useUserCountry from '../hooks/useUserCountry'
 import RateAlertCard from '../components/alerts/RateAlertCard'
 import CreateAlertSheet from '../components/alerts/CreateAlertSheet'
 import Button from '../components/ui/Button'
@@ -13,8 +14,10 @@ import Button from '../components/ui/Button'
 export default function RateAlerts() {
   const navigate = useNavigate()
   const { alerts, loading, error, creating, create, remove, toggle, fetch } = useRateAlerts()
-  const { allRates } = useRates()
+  const { fiatCurrency } = useUserCountry()
+  const { allRates } = useRates(fiatCurrency)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const defaultAlertPair = `USDC/${fiatCurrency}`
 
   /** Map pair like "XLM/UGX" to a display rate from allRates */
   const getCurrentRate = (pair) => {
@@ -128,6 +131,7 @@ export default function RateAlerts() {
         onClose={() => setSheetOpen(false)}
         onCreate={create}
         creating={creating}
+        defaultPair={defaultAlertPair}
       />
     </div>
   )

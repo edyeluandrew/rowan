@@ -3,7 +3,7 @@ import { CheckCircle2, XCircle, Clock, Signal, Wifi, Zap } from 'lucide-react'
 import PaymentMethodPill from '../ui/PaymentMethodPill'
 import { formatCurrency } from '../../utils/p2pFormat'
 import { formatTimeAgo, formatDateTime } from '../../utils/format'
-import { maskPhoneNumber } from '../../utils/crypto'
+import { resolveFiatCurrency } from '../../utils/country'
 
 function StatusIcon({ state }) {
   if (state === 'COMPLETED') {
@@ -27,7 +27,7 @@ function TypeIcon({ utilityType }) {
 
 export default function UtilityHistoryCard({ transaction: tx }) {
   const navigate = useNavigate()
-  const currency = tx.currency || tx.fiatCurrency || 'UGX'
+  const currency = resolveFiatCurrency(tx.fiatCurrency, tx.currency, tx.countryCode, tx.country_code)
   const when = tx.completedAt || tx.completed_at || tx.createdAt || tx.created_at
   const usdc = Number(tx.usdcAmount ?? tx.usdc_amount ?? 0)
   const fiat = Number(tx.fiatAmount ?? tx.fiat_amount ?? 0)

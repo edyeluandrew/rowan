@@ -1,8 +1,18 @@
+import { resolveFiatCurrency } from './country'
+
 /**
  * Normalize wallet transaction DTOs from API (snake_case) to UI shape (camelCase).
  */
 export function normalizeWalletTransaction(tx) {
   if (!tx || typeof tx !== 'object') return null
+
+  const fiat = resolveFiatCurrency(
+    tx.fiatCurrency,
+    tx.fiat_currency,
+    tx.currency,
+    tx.countryCode,
+    tx.country_code
+  )
 
   return {
     id: tx.id,
@@ -10,7 +20,7 @@ export function normalizeWalletTransaction(tx) {
     network: tx.network ?? tx.payment_method ?? tx.paymentMethod,
     xlmAmount: tx.xlmAmount ?? tx.xlm_amount ?? 0,
     fiatAmount: tx.fiatAmount ?? tx.fiat_amount ?? 0,
-    currency: tx.currency ?? tx.fiat_currency ?? 'UGX',
+    currency: fiat,
     createdAt: tx.createdAt ?? tx.created_at,
     usdcAmount: tx.usdcAmount ?? tx.usdc_amount,
     stellarDepositTx: tx.stellarDepositTx ?? tx.stellar_deposit_tx,
@@ -18,7 +28,7 @@ export function normalizeWalletTransaction(tx) {
     completedAt: tx.completedAt ?? tx.completed_at,
     failedAt: tx.failedAt ?? tx.failed_at,
     hasDispute: tx.hasDispute ?? !!tx.dispute_id,
-    fiatCurrency: tx.fiatCurrency ?? tx.fiat_currency ?? 'UGX',
+    fiatCurrency: fiat,
     quoteConfirmedAt: tx.quoteConfirmedAt ?? tx.quote_confirmed_at,
     escrowLockedAt: tx.escrowLockedAt ?? tx.escrow_locked_at,
     traderMatchedAt: tx.traderMatchedAt ?? tx.trader_matched_at,

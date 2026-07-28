@@ -2,6 +2,7 @@ import { Smartphone, ArrowLeftRight, Hash } from 'lucide-react'
 import { NETWORKS } from '../../utils/constants'
 import { maskPhoneNumber } from '../../utils/crypto'
 import { labelsFor } from '../../utils/utilityLabels'
+import { resolveFiatCurrency } from '../../utils/country'
 
 /**
  * Airtime / data utility quote breakdown card.
@@ -10,7 +11,7 @@ export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
   const labels = labelsFor(quote)
   const TypeIcon = labels.Icon
   const network = NETWORKS[quote.networkCode] || {}
-  const currency = quote.fiatCurrency || network.currency || 'UGX'
+  const currency = resolveFiatCurrency(quote.fiatCurrency, network.currency, quote.countryCode, quote.country_code)
   const sendUsdc = quote.usdcAmount ?? quote.usdc_amount
   const fiatAmount = quote.fiatAmount ?? quote.fiat_amount
   const feeUsdc = quote.platformFeeUsdc ?? quote.platform_fee_usdc
@@ -76,7 +77,7 @@ export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
               </p>
               {isPrepaidBill && !unitsFromReloadly && (
                 <p className="text-rowan-muted text-xs mt-2 leading-snug">
-                  Units & Yaka token from Reloadly / Umeme appear on your receipt after payment.
+                  Units & prepaid token from Reloadly appear on your receipt after payment.
                 </p>
               )}
             </>
@@ -121,7 +122,7 @@ export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
           <DetailRow label="Mode" value="Sandbox mock" />
         )}
         {quote.billSettlementFallback && (
-          <DetailRow label="Note" value="Umeme sandbox unavailable — testnet simulated receipt" />
+          <DetailRow label="Note" value="Provider sandbox unavailable — testnet simulated receipt" />
         )}
       </div>
 

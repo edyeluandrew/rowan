@@ -1,6 +1,6 @@
 import { Star, Smartphone, ArrowLeftRight, Hash } from 'lucide-react'
 import { NETWORKS, ESTIMATED_DELIVERY } from '../../utils/constants'
-import { maskPhoneNumber } from '../../utils/crypto'
+import { resolveFiatCurrency } from '../../utils/country'
 
 function isUsdcQuote(quote) {
   return quote?.depositAsset === 'USDC' || (quote?.usdcAmount != null && Number(quote.usdcAmount) > 0)
@@ -12,7 +12,7 @@ function isUsdcQuote(quote) {
 export default function QuoteSummary({ quote, phone, requestedFiat }) {
   const network = NETWORKS[quote.network] || {}
   const displayFiat = requestedFiat ?? quote.requestedFiatAmount ?? quote.fiatAmount
-  const currency = quote.fiatCurrency || network.currency || 'UGX'
+  const currency = resolveFiatCurrency(quote.fiatCurrency, network.currency, quote.countryCode, quote.country_code)
   const usdcQuote = isUsdcQuote(quote)
   const sendAmount = usdcQuote ? quote.usdcAmount : quote.xlmAmount
   const sendLabel = usdcQuote ? 'USDC' : 'XLM'

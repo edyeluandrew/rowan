@@ -4,6 +4,7 @@ import { ChevronLeft, ShieldCheck, ThumbsUp, ThumbsDown, RefreshCw, MoreVertical
 import { getTraderProfile, getTraderAd } from '../api/traders'
 import { blockTrader, unblockTrader } from '../api/user'
 import useRates from '../hooks/useRates'
+import useUserCountry from '../hooks/useUserCountry'
 import {
   formatCurrency,
   formatPercent,
@@ -23,7 +24,8 @@ export default function TraderProfile() {
   const preselectedAd = location.state?.ad
   const marketplaceMode = location.state?.mode === 'buy' ? 'buy' : 'sell'
   const isBuyMode = marketplaceMode === 'buy'
-  const { allRates, rates } = useRates()
+  const { fiatCurrency } = useUserCountry()
+  const { allRates, rates } = useRates(fiatCurrency)
   const usdcToFiat = rates?.usdcToFiat
 
   const [profile, setProfile] = useState(null)
