@@ -31,6 +31,10 @@ function normalizePhone(phone, countryCode) {
   return digits;
 }
 
+function normalizeSubscriberAccount(account) {
+  return String(account || '').trim().replace(/\s+/g, '');
+}
+
 function buildBillReferenceId(purchaseId) {
   const compact = String(purchaseId || '').replace(/-/g, '').slice(0, 16);
   return `ROWAN-${compact}`;
