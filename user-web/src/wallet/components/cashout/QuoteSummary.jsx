@@ -1,5 +1,6 @@
 import { Star, Smartphone, ArrowLeftRight, Hash } from 'lucide-react'
 import { NETWORKS, ESTIMATED_DELIVERY } from '../../utils/constants'
+import { maskPhoneNumber } from '../../utils/crypto'
 import { resolveFiatCurrency } from '../../utils/country'
 
 function isUsdcQuote(quote) {

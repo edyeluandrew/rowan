@@ -3,6 +3,7 @@ import { CheckCircle2, XCircle, Clock, Signal, Wifi, Zap } from 'lucide-react'
 import PaymentMethodPill from '../ui/PaymentMethodPill'
 import { formatCurrency } from '../../utils/p2pFormat'
 import { formatTimeAgo, formatDateTime } from '../../utils/format'
+import { maskPhoneNumber } from '../../utils/crypto'
 import { resolveFiatCurrency } from '../../utils/country'
 
 function StatusIcon({ state }) {
