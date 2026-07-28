@@ -18,6 +18,7 @@ import AmountInput from '../components/cashout/AmountInput'
 import BillerPicker from '../components/utilities/BillerPicker'
 import Button from '../components/ui/Button'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
+import { billSandboxUnavailableHint } from '../utils/utilityLabels'
 
 function isPrepaidElectricityBiller(biller) {
   if (!biller) return false
@@ -192,6 +193,14 @@ export default function UtilitiesBills() {
         <div className="bg-rowan-mint border border-rowan-green/30 rounded-xl p-3 mb-4">
           <p className="text-rowan-text text-xs">
             Utility bills use Reloadly Utility Payments sandbox. Fund your Reloadly Utilities wallet for live settlement.
+          </p>
+        </div>
+      )}
+
+      {utilityConfig?.utilitiesStagingFallback && !utilityConfig?.reloadlyUtilitiesMock && (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-3 mb-4">
+          <p className="text-rowan-yellow text-xs leading-relaxed">
+            {billSandboxUnavailableHint(country)}
           </p>
         </div>
       )}

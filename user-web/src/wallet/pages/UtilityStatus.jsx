@@ -3,7 +3,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { CheckCircle2, ChevronLeft, XCircle, Hash, Clock, ExternalLink, Loader2 } from 'lucide-react'
 import Button from '../components/ui/Button'
 import { maskPhoneNumber } from '../utils/crypto'
-import { labelsFor, getUtilityType } from '../utils/utilityLabels'
+import { labelsFor, getUtilityType, billSandboxFallbackNote } from '../utils/utilityLabels'
 import { CURRENT_NETWORK } from '../utils/constants'
 import { resolveFiatCurrency, getElectricityTokenLabel } from '../utils/country'
 import useUserCountry from '../hooks/useUserCountry'
@@ -165,8 +165,11 @@ export default function UtilityStatus() {
           </p>
         )}
         {data.billSettlementFallback && completed && (
-          <p className="text-rowan-yellow text-xs mt-3 px-2">
-            Provider sandbox was unavailable — receipt shows simulated units/token for testnet. Fund Reloadly Utilities wallet for live settlement.
+          <p className="text-rowan-yellow text-xs mt-3 px-2 leading-relaxed">
+            {billSandboxFallbackNote({
+              operatorName,
+              countryCode: billCountry,
+            })}
           </p>
         )}
         {data.reloadlyMock && completed && (

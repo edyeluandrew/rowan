@@ -474,6 +474,7 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
         amount: Number(purchase.fiat_amount),
         useLocalAmount: true,
         referenceId: buildBillReferenceId(purchase.id),
+        countryCode: purchase.country_code,
       });
       reloadlyResult = billPay.result;
       billSettlementFallback = billPay.usedStagingFallback;

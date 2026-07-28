@@ -151,10 +151,27 @@ const MOCK_BILLERS = [
   },
 ];
 
+function mockCustomerLabel(countryCode) {
+  const code = String(countryCode || '').toUpperCase();
+  if (code === 'KE') return 'MOCK KENYA POWER CUSTOMER';
+  if (code === 'UG') return 'MOCK UMEME CUSTOMER';
+  if (code === 'TZ') return 'MOCK TANESCO CUSTOMER';
+  if (code === 'RW') return 'MOCK REG CUSTOMER';
+  return 'MOCK UTILITY CUSTOMER';
+}
+
+function mockUnitsForAmount(amount, countryCode) {
+  const value = Number(amount) || 0;
+  const divisor = String(countryCode || '').toUpperCase() === 'KE' ? 750 : 800;
+  return value > 0 ? Math.round((value / divisor) * 10) / 10 : 0;
+}
+
 function buildMockBillPayResult(payload) {
   const mockId = Math.floor(Math.random() * 1e6);
   const amount = Number(payload.amount) || 10000;
-  const units = Math.round((amount / 800) * 10) / 10;
+  const countryCode = payload.countryCode || payload.countryISOCode || 'UG';
+  const units = mockUnitsForAmount(amount, countryCode);
+  const customerName = mockCustomerLabel(countryCode);
   const account = String(payload.subscriberAccountNumber || '');
   const referenceId = payload.referenceId || `BILL-${Date.now()}`;
   const processing = {
@@ -180,7 +197,7 @@ function buildMockBillPayResult(payload) {
         billerReferenceId: `MOCK-${mockId}`,
         subscriberDetails: {
           accountNumber: account,
-          customerName: 'MOCK UMEME CUSTOMER',
+          customerName,
         },
         pinDetails: {
           token: '2737-6032-5315-7183-0856',
@@ -229,11 +246,12 @@ function mockResponse(path, options) {
   }
   if (path.startsWith('/accounts/validate') && options.method === 'POST') {
     const payload = JSON.parse(options.body || '{}');
+    const countryCode = payload.countryCode || 'UG';
     const amount = Number(payload.amount) || 0;
-    const units = amount > 0 ? Math.round((amount / 800) * 10) / 10 : null;
+    const units = mockUnitsForAmount(amount, countryCode);
     return {
       valid: true,
-      customerName: 'MOCK UMEME CUSTOMER',
+      customerName: mockCustomerLabel(countryCode),
       accountNumber: String(payload.subscriberAccountNumber || ''),
       unitsDisplay: units != null ? `${units} kWh` : null,
       source: 'reloadly',
@@ -315,6 +333,7 @@ export async function payBillForPurchase(params) {
     amount: Number(params.amount),
     useLocalAmount: params.useLocalAmount !== false,
     referenceId: params.referenceId ? String(params.referenceId).slice(0, 40) : undefined,
+    countryCode: params.countryCode ? String(params.countryCode).toUpperCase() : undefined,
   };
 
   if (isMock()) {

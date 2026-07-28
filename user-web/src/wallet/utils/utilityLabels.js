@@ -77,3 +77,21 @@ export function getUtilityLabels(type = 'airtime') {
 export function labelsFor(source) {
   return getUtilityLabels(getUtilityType(source))
 }
+
+/** User-facing note when Reloadly sandbox biller is down but USDC already settled (testnet). */
+export function billSandboxFallbackNote({ operatorName, countryCode } = {}) {
+  const provider = operatorName
+    || (countryCode === 'KE' ? 'Kenya Electricity'
+      : countryCode === 'UG' ? 'Umeme'
+        : countryCode === 'TZ' ? 'TANESCO'
+          : countryCode === 'RW' ? 'REG'
+            : 'this utility provider')
+  return `Reloadly sandbox for ${provider} is temporarily unavailable. Your USDC payment was received — units and token below are simulated so testnet flow can continue. Re-test when Reloadly fixes the sandbox biller.`
+}
+
+export function billSandboxUnavailableHint(countryCode) {
+  if (countryCode === 'KE' || countryCode === 'UG') {
+    return 'Kenya & Uganda electricity sandboxes on Reloadly are often down. USDC payment still works; receipt may show simulated units/token until Reloadly restores the biller.'
+  }
+  return 'Some Reloadly sandbox billers are unavailable. USDC payment still works; receipt may show simulated units/token when the provider is down.'
+}
