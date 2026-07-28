@@ -43,6 +43,9 @@ function buildBillReferenceId(purchaseId) {
 function friendlyBillPayError(err) {
   const msg = err?.body?.message || err?.message || 'Bill payment failed';
   const code = err?.body?.errorCode || err?.code;
+  if (/insufficient.?balance/i.test(msg) || code === 'INSUFFICIENT_BALANCE') {
+    return 'Reloadly Utilities wallet balance is too low. Fund it in the Reloadly dashboard (Utilities wallet, not Top-ups), then retry.';
+  }
   if (/retrieve\/update resources/i.test(msg)) {
     return 'The utility provider (e.g. Umeme) is temporarily unavailable. If USDC was already sent, save your memo and contact support — we will retry or refund.';
   }
@@ -455,6 +458,7 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
 
   let reloadlyResult;
   let externalRef;
+  let billSettlementFallback = false;
 
   if (purchase.utility_type === 'bill') {
     if (!purchase.operator_id) {
@@ -464,17 +468,18 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
       throw err;
     }
     try {
-      reloadlyResult = await reloadlyUtilityPaymentsClient.payBill({
+      const billPay = await reloadlyUtilityPaymentsClient.payBillForPurchase({
         billerId: purchase.operator_id,
         subscriberAccountNumber: purchase.recipient_phone,
         amount: Number(purchase.fiat_amount),
         useLocalAmount: true,
         referenceId: buildBillReferenceId(purchase.id),
       });
-      reloadlyResult = await reloadlyUtilityPaymentsClient.waitForBillSettlement(reloadlyResult, {
-        maxAttempts: 10,
-        delayMs: 3000,
-      });
+      reloadlyResult = billPay.result;
+      billSettlementFallback = billPay.usedStagingFallback;
+      if (billPay.fallbackReason) {
+        reloadlyResult._fallbackReason = billPay.fallbackReason;
+      }
     } catch (err) {
       const reason = friendlyBillPayError(err);
       await failPurchase(quoteId, reason);
@@ -559,6 +564,7 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
     reloadlyMock: purchase.utility_type === 'bill'
       ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
       : reloadlyClient.reloadlyIsMock(),
+    billSettlementFallback: purchase.utility_type === 'bill' ? billSettlementFallback : false,
   });
 }
 
@@ -694,6 +700,7 @@ function formatPurchase(row, extra = {}) {
     pricing: extra.pricing,
     alreadyCompleted: extra.alreadyCompleted || false,
     serviceType: extra.serviceType || null,
+    billSettlementFallback: extra.billSettlementFallback || false,
     electricityEstimate: extra.electricityEstimate || null,
     subscriberName: electricityDelivery?.customerName || extra.subscriberName || null,
     electricityToken: electricityDelivery?.token || null,

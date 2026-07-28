@@ -158,6 +158,11 @@ export default function UtilityStatus() {
             {purchase?.errorMessage || data.errorMessage || data.error_message}
           </p>
         )}
+        {data.billSettlementFallback && completed && (
+          <p className="text-rowan-yellow text-xs mt-3 px-2">
+            Umeme sandbox was unavailable — receipt shows simulated units/token for testnet. Fund Reloadly Utilities wallet for live settlement.
+          </p>
+        )}
         {data.reloadlyMock && completed && (
           <p className="text-rowan-muted text-xs mt-3">{labels.mockNote}</p>
         )}

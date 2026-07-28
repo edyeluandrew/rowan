@@ -120,6 +120,9 @@ export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
         {quote.reloadlyMock && (
           <DetailRow label="Mode" value="Sandbox mock" />
         )}
+        {quote.billSettlementFallback && (
+          <DetailRow label="Note" value="Umeme sandbox unavailable — testnet simulated receipt" />
+        )}
       </div>
 
       <div className="flex items-center gap-1 mt-3">

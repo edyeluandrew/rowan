@@ -151,6 +151,65 @@ const MOCK_BILLERS = [
   },
 ];
 
+function buildMockBillPayResult(payload) {
+  const mockId = Math.floor(Math.random() * 1e6);
+  const amount = Number(payload.amount) || 10000;
+  const units = Math.round((amount / 800) * 10) / 10;
+  const account = String(payload.subscriberAccountNumber || '');
+  const referenceId = payload.referenceId || `BILL-${Date.now()}`;
+  const processing = {
+    id: mockId,
+    status: 'PROCESSING',
+    referenceId,
+    code: 'PAYMENT_PROCESSING_IN_PROGRESS',
+    message: 'Mock bill payment processing',
+    submittedAt: new Date().toISOString(),
+  };
+  const settled = {
+    id: mockId,
+    status: 'SUCCESSFUL',
+    code: 'PAYMENT_PROCESSED_SUCCESSFULLY',
+    message: 'Mock bill payment successful',
+    transaction: {
+      id: mockId,
+      status: 'SUCCESSFUL',
+      referenceId,
+      billDetails: {
+        type: 'ELECTRICITY_BILL_PAYMENT',
+        serviceType: 'PREPAID',
+        billerReferenceId: `MOCK-${mockId}`,
+        subscriberDetails: {
+          accountNumber: account,
+          customerName: 'MOCK UMEME CUSTOMER',
+        },
+        pinDetails: {
+          token: '2737-6032-5315-7183-0856',
+          info1: `${units} kWh`,
+        },
+      },
+    },
+    _stagingFallback: true,
+  };
+  return { ...processing, _mockFinal: settled };
+}
+
+function isProviderUnavailableError(err) {
+  const msg = String(err?.body?.message || err?.message || '');
+  const code = String(err?.body?.errorCode || err?.code || '');
+  if (/insufficient.?balance/i.test(msg) || code === 'INSUFFICIENT_BALANCE') return false;
+  return /retrieve\/update resources/i.test(msg)
+    || code === 'BILL_DETAILS_UNAVAILABLE'
+    || code === 'QUERY_BILL_DETAILS_FAILED'
+    || code === 'BILLER_NOT_SUPPORTED'
+    || code === 'PAYMENT_PROCESSING_FAILED'
+    || code === 'UNABLE_TO_PROCESS_REQUEST';
+}
+
+function stagingBillFallbackEnabled() {
+  return (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'
+    && process.env.RELOADLY_UTILITIES_STAGING_FALLBACK !== 'false';
+}
+
 function mockResponse(path, options) {
   if (path.includes('/accounts/balance')) {
     return { balance: 500, currencyCode: 'USD', currencyName: 'US Dollar' };
@@ -166,42 +225,7 @@ function mockResponse(path, options) {
   }
   if (path === '/pay' && options.method === 'POST') {
     const payload = JSON.parse(options.body || '{}');
-    const mockId = Math.floor(Math.random() * 1e6);
-    const amount = Number(payload.amount) || 10000;
-    const units = Math.round((amount / 800) * 10) / 10;
-    const account = String(payload.subscriberAccountNumber || '');
-    return {
-      id: mockId,
-      status: 'PROCESSING',
-      referenceId: payload.referenceId || `BILL-${Date.now()}`,
-      code: 'PAYMENT_PROCESSING_IN_PROGRESS',
-      message: 'Mock bill payment processing',
-      submittedAt: new Date().toISOString(),
-      _mockFinal: {
-        id: mockId,
-        status: 'SUCCESSFUL',
-        code: 'PAYMENT_PROCESSED_SUCCESSFULLY',
-        message: 'Mock bill payment successful',
-        transaction: {
-          id: mockId,
-          status: 'SUCCESSFUL',
-          referenceId: payload.referenceId,
-          billDetails: {
-            type: 'ELECTRICITY_BILL_PAYMENT',
-            serviceType: 'PREPAID',
-            billerReferenceId: `MOCK-${mockId}`,
-            subscriberDetails: {
-              accountNumber: account,
-              customerName: 'MOCK UMEME CUSTOMER',
-            },
-            pinDetails: {
-              token: '2737-6032-5315-7183-0856',
-              info1: `${units} kWh`,
-            },
-          },
-        },
-      },
-    };
+    return buildMockBillPayResult(payload);
   }
   if (path.startsWith('/accounts/validate') && options.method === 'POST') {
     const payload = JSON.parse(options.body || '{}');
@@ -280,6 +304,54 @@ export async function getBillers({ countryISOCode, type, serviceType, page = 1, 
   return utilitiesRequest(`/billers${qs ? `?${qs}` : ''}`, { method: 'GET' });
 }
 
+export async function getAccountBalance() {
+  return utilitiesRequest('/accounts/balance', { method: 'GET' });
+}
+
+export async function payBillForPurchase(params) {
+  const payload = {
+    billerId: Number(params.billerId),
+    subscriberAccountNumber: String(params.subscriberAccountNumber),
+    amount: Number(params.amount),
+    useLocalAmount: params.useLocalAmount !== false,
+    referenceId: params.referenceId ? String(params.referenceId).slice(0, 40) : undefined,
+  };
+
+  if (isMock()) {
+    const mock = buildMockBillPayResult(payload);
+    return {
+      result: mock._mockFinal || mock,
+      usedStagingFallback: false,
+      reloadlyMock: true,
+    };
+  }
+
+  try {
+    const initial = await payBill(params);
+    const result = await waitForBillSettlement(initial, {
+      maxAttempts: 10,
+      delayMs: 3000,
+    });
+    return { result, usedStagingFallback: false, reloadlyMock: false };
+  } catch (err) {
+    if (!stagingBillFallbackEnabled() || !isProviderUnavailableError(err)) {
+      throw err;
+    }
+    logger.warn('[ReloadlyUtilities] testnet staging fallback after provider error', {
+      error: err.message,
+      code: err.code,
+      billerId: params.billerId,
+    });
+    const mock = buildMockBillPayResult(payload);
+    return {
+      result: mock._mockFinal || mock,
+      usedStagingFallback: true,
+      reloadlyMock: false,
+      fallbackReason: err.message,
+    };
+  }
+}
+
 export async function payBill({
   billerId,
   subscriberAccountNumber,
@@ -343,7 +415,9 @@ export function reloadlyUtilitiesIsMock() {
 export default {
   getBillers,
   lookupBillAccount,
+  getAccountBalance,
   payBill,
+  payBillForPurchase,
   getTransaction,
   waitForBillSettlement,
   reloadlyUtilitiesIsMock,

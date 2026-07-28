@@ -235,6 +235,8 @@ router.get('/config', (req, res) => {
       maxFiatAmount: config.utilities.maxFiatAmount,
       reloadlyMock: reloadlyClient.reloadlyIsMock(),
       reloadlyUtilitiesMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+      utilitiesStagingFallback: (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'
+        && process.env.RELOADLY_UTILITIES_STAGING_FALLBACK !== 'false',
       mockPurchaseAllowed: config.utilities.allowMockPurchase,
     },
     timestamp: new Date().toISOString(),
