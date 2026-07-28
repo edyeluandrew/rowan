@@ -12,8 +12,9 @@ const TOKEN_KEY = 'reloadly:utilities:access_token';
 
 function utilitiesConfig() {
   const isMainnet = (process.env.STELLAR_NETWORK || 'testnet') === 'mainnet';
+  const utilitiesMockExplicit = process.env.RELOADLY_UTILITIES_MOCK_MODE === 'true';
   return {
-    mockMode: config.reloadly.mockMode,
+    mockMode: utilitiesMockExplicit || config.reloadly.mockMode,
     clientId: config.reloadly.clientId,
     clientSecret: config.reloadly.clientSecret,
     authUrl: config.reloadly.authUrl,
@@ -40,8 +41,11 @@ async function fetchJson(url, options = {}) {
     body = { raw: text };
   }
   if (!res.ok) {
-    const err = new Error(body?.message || body?.error || `Reloadly utilities HTTP ${res.status}`);
-    err.status = res.status;
+    const code = body?.errorCode || body?.code;
+    const detail = body?.message || body?.error || body?.errorMessage;
+    const err = new Error(detail || `Reloadly utilities HTTP ${res.status}`);
+    err.status = res.status >= 500 ? 502 : 400;
+    err.code = code;
     err.body = body;
     throw err;
   }
@@ -162,13 +166,57 @@ function mockResponse(path, options) {
   }
   if (path === '/pay' && options.method === 'POST') {
     const payload = JSON.parse(options.body || '{}');
+    const mockId = Math.floor(Math.random() * 1e6);
+    const amount = Number(payload.amount) || 10000;
+    const units = Math.round((amount / 800) * 10) / 10;
     return {
-      id: Math.floor(Math.random() * 1e6),
-      status: 'SUCCESSFUL',
+      id: mockId,
+      status: 'PROCESSING',
       referenceId: payload.referenceId || `BILL-${Date.now()}`,
-      code: 'PAYMENT_SUCCESSFUL',
-      message: 'Mock bill payment successful',
+      code: 'PAYMENT_PROCESSING_IN_PROGRESS',
+      message: 'Mock bill payment processing',
       submittedAt: new Date().toISOString(),
+      _mockFinal: {
+        id: mockId,
+        status: 'SUCCESSFUL',
+        code: 'PAYMENT_PROCESSED_SUCCESSFULLY',
+        message: 'Mock bill payment successful',
+        transaction: {
+          id: mockId,
+          status: 'SUCCESSFUL',
+          referenceId: payload.referenceId,
+          billDetails: {
+            type: 'ELECTRICITY_BILL_PAYMENT',
+            serviceType: 'PREPAID',
+            billerReferenceId: `MOCK-${mockId}`,
+            pinDetails: {
+              token: '2737-6032-5315-7183-0856',
+              info1: `${units} kWh`,
+            },
+          },
+        },
+      },
+    };
+  }
+  if (path.startsWith('/transactions/') && options.method === 'GET') {
+    const mockId = path.split('/').pop();
+    const units = 12.5;
+    return {
+      code: 'PAYMENT_PROCESSED_SUCCESSFULLY',
+      message: 'Mock bill payment successful',
+      transaction: {
+        id: Number(mockId) || 1,
+        status: 'SUCCESSFUL',
+        billDetails: {
+          type: 'ELECTRICITY_BILL_PAYMENT',
+          serviceType: 'PREPAID',
+          billerReferenceId: `MOCK-${mockId}`,
+          pinDetails: {
+            token: '2737-6032-5315-7183-0856',
+            info1: `${units} kWh`,
+          },
+        },
+      },
     };
   }
   return {};
@@ -191,17 +239,50 @@ export async function payBill({
   amount,
   useLocalAmount = true,
   referenceId,
+  additionalInfo,
 }) {
+  const payload = {
+    billerId: Number(billerId),
+    subscriberAccountNumber: String(subscriberAccountNumber),
+    amount: Number(amount),
+    useLocalAmount,
+    referenceId: referenceId ? String(referenceId).slice(0, 40) : undefined,
+  };
+  if (additionalInfo && Object.keys(additionalInfo).length) {
+    payload.additionalInfo = additionalInfo;
+  }
   return utilitiesRequest('/pay', {
     method: 'POST',
-    body: JSON.stringify({
-      billerId: Number(billerId),
-      subscriberAccountNumber: String(subscriberAccountNumber),
-      amount: Number(amount),
-      useLocalAmount,
-      referenceId,
-    }),
+    body: JSON.stringify(payload),
   });
+}
+
+export async function getTransaction(transactionId) {
+  return utilitiesRequest(`/transactions/${transactionId}`, { method: 'GET' });
+}
+
+/** Poll Reloadly until SUCCESSFUL/FAILED or timeout (prepaid token + units). */
+export async function waitForBillSettlement(initialResponse, { maxAttempts = 6, delayMs = 2000 } = {}) {
+  if (isMock()) {
+    return initialResponse._mockFinal || initialResponse;
+  }
+
+  let latest = initialResponse;
+  const txId = initialResponse?.id;
+  if (!txId) return latest;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const status = String(latest?.status || latest?.transaction?.status || '').toUpperCase();
+    if (status === 'SUCCESSFUL' || status === 'FAILED') break;
+    await new Promise((r) => setTimeout(r, delayMs));
+    try {
+      latest = await getTransaction(txId);
+    } catch (err) {
+      logger.warn('[ReloadlyUtilities] transaction poll failed', { txId, error: err.message });
+      break;
+    }
+  }
+  return latest;
 }
 
 export function reloadlyUtilitiesIsMock() {
@@ -211,5 +292,7 @@ export function reloadlyUtilitiesIsMock() {
 export default {
   getBillers,
   payBill,
+  getTransaction,
+  waitForBillSettlement,
   reloadlyUtilitiesIsMock,
 };

@@ -31,6 +31,11 @@ export default function UtilityStatus() {
   const fiatCurrency = data.fiatCurrency || data.currency || 'UGX'
   const bundleDescription = data.bundleDescription || data.bundle_description
   const paymentTxHash = purchase?.paymentTxHash || data.paymentTxHash || data.payment_tx_hash
+  const electricityToken = purchase?.electricityToken || data.electricityToken
+  const electricityUnits = purchase?.electricityUnits || data.electricityUnits
+  const isPrepaidBill = labels.type === 'bill' && (
+    electricityUnits || electricityToken || /prepaid/i.test(bundleDescription || '')
+  )
   const explorerUrl = paymentTxHash
     ? `${CURRENT_NETWORK.explorerUrl}/tx/${paymentTxHash}`
     : null
@@ -76,6 +81,22 @@ export default function UtilityStatus() {
           }`}>
             {Number(fiatAmount).toLocaleString()} {fiatCurrency}
           </p>
+        )}
+        {completed && isPrepaidBill && electricityUnits && (
+          <p className="text-rowan-green text-lg font-bold mt-3 tabular-nums">
+            {electricityUnits}
+          </p>
+        )}
+        {completed && isPrepaidBill && electricityToken && (
+          <div className="mt-4 bg-rowan-bg border border-rowan-border rounded-xl p-3 text-left">
+            <p className="text-rowan-muted text-xs uppercase tracking-wider mb-1">Yaka token</p>
+            <p className="text-rowan-text text-sm font-mono font-semibold break-all leading-relaxed">
+              {electricityToken}
+            </p>
+            <p className="text-rowan-muted text-xs mt-2">
+              Enter this token on your meter keypad. Umeme also sends it by SMS.
+            </p>
+          </div>
         )}
         {externalRef && (
           <div className="flex items-center justify-center gap-1 mt-4 text-rowan-muted text-xs">

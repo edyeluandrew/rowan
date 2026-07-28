@@ -127,6 +127,8 @@ router.post(
         bundleDescription: req.body.bundleDescription,
         billerName: req.body.billerName,
         subscriberAccount: req.body.subscriberAccount,
+        billerServiceType: req.body.billerServiceType || req.body.serviceType,
+        billerType: req.body.billerType,
       });
 
       res.json({ status: 'ok', data: quote, timestamp: new Date().toISOString() });

@@ -10,6 +10,7 @@ import reloadlyClient from './reloadlyClient.js';
 import reloadlyUtilityPaymentsClient from './reloadlyUtilityPaymentsClient.js';
 import { extractBundlesFromOperator } from './utilityBundles.js';
 import { normalizeBillersResponse } from './utilityBillers.js';
+import { estimatePrepaidElectricity, extractElectricityDelivery } from './utilityElectricity.js';
 import utilityPricing from './utilityPricing.js';
 import utilityUsdcService from './utilityUsdcService.js';
 import logger from '../../utils/logger.js';
@@ -30,8 +31,24 @@ function normalizePhone(phone, countryCode) {
   return digits;
 }
 
-function normalizeSubscriberAccount(account) {
-  return String(account || '').trim().replace(/\s+/g, '');
+function buildBillReferenceId(purchaseId) {
+  const compact = String(purchaseId || '').replace(/-/g, '').slice(0, 16);
+  return `ROWAN-${compact}`;
+}
+
+function friendlyBillPayError(err) {
+  const msg = err?.body?.message || err?.message || 'Bill payment failed';
+  const code = err?.body?.errorCode || err?.code;
+  if (/retrieve\/update resources/i.test(msg)) {
+    return 'The utility provider (e.g. Umeme) is temporarily unavailable. If USDC was already sent, save your memo and contact support — we will retry or refund.';
+  }
+  if (code === 'INVALID_SUBSCRIBER_ACCOUNT_NUMBER') {
+    return 'Invalid meter or account number for this provider. Check the number and try again.';
+  }
+  if (code === 'BILLER_NOT_SUPPORTED' || code === 'BILLER_NOT_FOUND') {
+    return 'This bill provider is not available right now. Try another provider or contact support.';
+  }
+  return msg;
 }
 
 async function insertUtilityQuote({
@@ -216,6 +233,8 @@ export async function createQuote({
   bundleDescription,
   billerName,
   subscriberAccount,
+  billerServiceType,
+  billerType,
 }) {
   const code = String(countryCode || 'UG').trim().toUpperCase();
   const utilityType = String(requestedType || 'airtime').toLowerCase();
@@ -258,7 +277,14 @@ export async function createQuote({
     const billLabel = bundleDescription
       || `${resolvedBillerName}`.trim().slice(0, 500);
 
-    return insertUtilityQuote({
+    const electricityEstimate = estimatePrepaidElectricity({
+      countryCode: code,
+      fiatAmount: fiat,
+      serviceType: billerServiceType,
+      billerType: billerType || 'ELECTRICITY_BILL_PAYMENT',
+    });
+
+    const quote = await insertUtilityQuote({
       userId,
       utilityType: 'bill',
       code,
@@ -269,6 +295,13 @@ export async function createQuote({
       pricing,
       bundleLabel: billLabel,
     });
+
+    return {
+      ...quote,
+      serviceType: billerServiceType || null,
+      billerType: billerType || null,
+      electricityEstimate,
+    };
   }
 
   const network = String(networkCode || '').trim().toUpperCase();
@@ -411,13 +444,19 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
         subscriberAccountNumber: purchase.recipient_phone,
         amount: Number(purchase.fiat_amount),
         useLocalAmount: true,
-        referenceId: purchase.id,
+        referenceId: buildBillReferenceId(purchase.id),
       });
+      reloadlyResult = await reloadlyUtilityPaymentsClient.waitForBillSettlement(reloadlyResult);
     } catch (err) {
-      await failPurchase(quoteId, err.message);
-      throw err;
+      const reason = friendlyBillPayError(err);
+      await failPurchase(quoteId, reason);
+      const wrap = new Error(reason);
+      wrap.status = err.status || 502;
+      wrap.code = err.code;
+      throw wrap;
     }
     externalRef = reloadlyResult.referenceId
+      || reloadlyResult.transaction?.referenceId
       || reloadlyResult.id
       || reloadlyResult.transactionId;
   } else {
@@ -456,17 +495,36 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
       || reloadlyResult.customIdentifier;
   }
 
+  const finalStatus = purchase.utility_type === 'bill'
+    ? String(
+      reloadlyResult?.transaction?.status
+      || reloadlyResult?.status
+      || 'COMPLETED'
+    ).toUpperCase()
+    : 'COMPLETED';
+  const purchaseStatus = finalStatus === 'FAILED'
+    ? 'FAILED'
+    : finalStatus === 'PROCESSING'
+      ? 'PROCESSING'
+      : 'COMPLETED';
+
   const completed = await db.query(
     `UPDATE utility_purchases
-     SET status = 'COMPLETED',
+     SET status = $5,
          operator_id = COALESCE(operator_id, $2),
          external_ref = $3,
          receipt = $4,
-         completed_at = NOW(),
+         completed_at = CASE WHEN $5 = 'COMPLETED' THEN NOW() ELSE completed_at END,
          updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
-    [quoteId, purchase.utility_type === 'bill' ? purchase.operator_id : String(purchase.operator_id || ''), externalRef, JSON.stringify(reloadlyResult)]
+    [
+      quoteId,
+      purchase.utility_type === 'bill' ? purchase.operator_id : String(purchase.operator_id || ''),
+      externalRef,
+      JSON.stringify(reloadlyResult),
+      purchaseStatus,
+    ]
   );
 
   return formatPurchase(completed.rows[0], {
@@ -501,6 +559,16 @@ export async function getPurchaseHistory(userId, limit = 20) {
 }
 
 function formatPurchase(row, extra = {}) {
+  let receipt = null;
+  if (row.receipt) {
+    try {
+      receipt = typeof row.receipt === 'string' ? JSON.parse(row.receipt) : row.receipt;
+    } catch {
+      receipt = null;
+    }
+  }
+  const electricityDelivery = extractElectricityDelivery(receipt);
+
   return {
     id: row.id,
     type: row.utility_type,
@@ -527,6 +595,10 @@ function formatPurchase(row, extra = {}) {
     reloadlyMock: extra.reloadlyMock ?? reloadlyClient.reloadlyIsMock(),
     pricing: extra.pricing,
     alreadyCompleted: extra.alreadyCompleted || false,
+    serviceType: extra.serviceType || null,
+    electricityEstimate: extra.electricityEstimate || null,
+    electricityToken: electricityDelivery?.token || null,
+    electricityUnits: electricityDelivery?.unitsDisplay || electricityDelivery?.units || null,
   };
 }
 

@@ -17,6 +17,16 @@ export default function UtilityQuoteSummary({ quote, phone }) {
   const bundleDescription = quote.bundleDescription || quote.bundle_description
   const isData = labels.type === 'data'
   const isBill = labels.type === 'bill'
+  const isPrepaidBill = isBill && (
+    String(quote.serviceType || '').toUpperCase() === 'PREPAID'
+    || /prepaid/i.test(bundleDescription || '')
+  )
+  const electricityEstimate = quote.electricityEstimate
+  const unitsDisplay = quote.electricityUnits
+    || electricityEstimate?.summary
+    || (electricityEstimate?.units != null
+      ? `~${electricityEstimate.units} ${electricityEstimate.unitLabel || 'units'} (est.)`
+      : null)
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5">
@@ -56,6 +66,14 @@ export default function UtilityQuoteSummary({ quote, phone }) {
               <p className="text-rowan-green text-lg font-bold leading-snug mt-0.5">
                 {quote.operatorName || bundleDescription}
               </p>
+              {isPrepaidBill && unitsDisplay && (
+                <p className="text-rowan-green text-base font-semibold mt-1 tabular-nums">
+                  {unitsDisplay}
+                  {!quote.electricityUnits && (
+                    <span className="text-rowan-muted text-xs font-normal ml-1">est.</span>
+                  )}
+                </p>
+              )}
               <p className="text-rowan-muted text-sm tabular-nums mt-1">
                 {Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
               </p>
@@ -78,6 +96,12 @@ export default function UtilityQuoteSummary({ quote, phone }) {
         )}
         {isBill && bundleDescription && (
           <DetailRow label="Service" value={bundleDescription} />
+        )}
+        {isPrepaidBill && unitsDisplay && (
+          <DetailRow
+            label="Electricity"
+            value={unitsDisplay + (quote.electricityUnits ? '' : ' (estimate)')}
+          />
         )}
         {phone && (
           <DetailRow
