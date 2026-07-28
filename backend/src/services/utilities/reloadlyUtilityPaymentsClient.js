@@ -13,8 +13,11 @@ const TOKEN_KEY = 'reloadly:utilities:access_token';
 function utilitiesConfig() {
   const isMainnet = (process.env.STELLAR_NETWORK || 'testnet') === 'mainnet';
   const utilitiesMockExplicit = process.env.RELOADLY_UTILITIES_MOCK_MODE === 'true';
+  const utilitiesLive = process.env.RELOADLY_UTILITIES_LIVE === 'true';
   return {
-    mockMode: utilitiesMockExplicit || config.reloadly.mockMode,
+    mockMode: utilitiesMockExplicit
+      || config.reloadly.mockMode
+      || (!isMainnet && !utilitiesLive),
     clientId: config.reloadly.clientId,
     clientSecret: config.reloadly.clientSecret,
     authUrl: config.reloadly.authUrl,
@@ -169,6 +172,7 @@ function mockResponse(path, options) {
     const mockId = Math.floor(Math.random() * 1e6);
     const amount = Number(payload.amount) || 10000;
     const units = Math.round((amount / 800) * 10) / 10;
+    const account = String(payload.subscriberAccountNumber || '');
     return {
       id: mockId,
       status: 'PROCESSING',
@@ -189,6 +193,10 @@ function mockResponse(path, options) {
             type: 'ELECTRICITY_BILL_PAYMENT',
             serviceType: 'PREPAID',
             billerReferenceId: `MOCK-${mockId}`,
+            subscriberDetails: {
+              accountNumber: account,
+              customerName: 'MOCK UMEME CUSTOMER',
+            },
             pinDetails: {
               token: '2737-6032-5315-7183-0856',
               info1: `${units} kWh`,
@@ -196,6 +204,18 @@ function mockResponse(path, options) {
           },
         },
       },
+    };
+  }
+  if (path.startsWith('/accounts/validate') && options.method === 'POST') {
+    const payload = JSON.parse(options.body || '{}');
+    const amount = Number(payload.amount) || 0;
+    const units = amount > 0 ? Math.round((amount / 800) * 10) / 10 : null;
+    return {
+      valid: true,
+      customerName: 'MOCK UMEME CUSTOMER',
+      accountNumber: String(payload.subscriberAccountNumber || ''),
+      unitsDisplay: units != null ? `${units} kWh` : null,
+      source: 'reloadly',
     };
   }
   if (path.startsWith('/transactions/') && options.method === 'GET') {
@@ -211,6 +231,10 @@ function mockResponse(path, options) {
           type: 'ELECTRICITY_BILL_PAYMENT',
           serviceType: 'PREPAID',
           billerReferenceId: `MOCK-${mockId}`,
+          subscriberDetails: {
+            accountNumber: '04123456789',
+            customerName: 'MOCK UMEME CUSTOMER',
+          },
           pinDetails: {
             token: '2737-6032-5315-7183-0856',
             info1: `${units} kWh`,
@@ -220,6 +244,32 @@ function mockResponse(path, options) {
     };
   }
   return {};
+}
+
+export async function lookupBillAccount({ billerId, subscriberAccountNumber, amount, useLocalAmount = true }) {
+  if (isMock()) {
+    const fiat = Number(amount) || 0;
+    const units = fiat > 0 ? Math.round((fiat / 800) * 10) / 10 : null;
+    return {
+      valid: true,
+      customerName: 'MOCK UMEME CUSTOMER',
+      accountNumber: String(subscriberAccountNumber),
+      unitsDisplay: units != null ? `${units} kWh` : null,
+      source: 'reloadly',
+      reloadlyMock: true,
+    };
+  }
+
+  // Reloadly Utility Payments has no documented pre-payment account lookup.
+  // Name and kWh are returned on GET /transactions/{id} after pay settles.
+  return {
+    valid: null,
+    customerName: null,
+    unitsDisplay: null,
+    source: null,
+    reloadlyMock: false,
+    message: 'Reloadly confirms account name and electricity units after payment. They will appear on your receipt.',
+  };
 }
 
 export async function getBillers({ countryISOCode, type, serviceType, page = 1, size = 200 } = {}) {
@@ -295,6 +345,7 @@ export function reloadlyUtilitiesIsMock() {
 
 export default {
   getBillers,
+  lookupBillAccount,
   payBill,
   getTransaction,
   waitForBillSettlement,

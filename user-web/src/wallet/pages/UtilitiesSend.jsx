@@ -13,7 +13,7 @@ import { labelsFor, getUtilityType } from '../utils/utilityLabels'
 export default function UtilitiesSend() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, phone, mockPurchaseAllowed, utilityType } = location.state || {}
+  const { quote, phone, mockPurchaseAllowed, utilityType, billLookup } = location.state || {}
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [quoteExpired, setQuoteExpired] = useState(false)
@@ -33,7 +33,7 @@ export default function UtilitiesSend() {
       paymentTxHash,
     })
     navigate(`/wallet/utilities/status/${quote.quoteId || quote.id}`, {
-      state: { purchase: result, quote, phone, utilityType: getUtilityType(quote) },
+      state: { purchase: result, quote, phone, utilityType: getUtilityType(quote), billLookup },
       replace: true,
     })
   }
@@ -109,7 +109,7 @@ export default function UtilitiesSend() {
         />
       </div>
 
-      <UtilityQuoteSummary quote={quote} phone={phone} />
+      <UtilityQuoteSummary quote={quote} phone={phone} billLookup={billLookup} />
 
       {!useMockPath && (
         <div className="bg-rowan-surface rounded-xl p-4 mt-4 flex items-start gap-3">

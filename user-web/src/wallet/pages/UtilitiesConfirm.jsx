@@ -9,7 +9,7 @@ import { labelsFor } from '../utils/utilityLabels'
 export default function UtilitiesConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, network, phone, mockPurchaseAllowed, utilityType } = location.state || {}
+  const { quote, network, phone, mockPurchaseAllowed, utilityType, billLookup } = location.state || {}
   const labels = labelsFor({ type: utilityType || quote?.type })
   const title = labels.type === 'bill'
     ? 'Confirm bill payment'
@@ -27,7 +27,7 @@ export default function UtilitiesConfirm() {
   const handleConfirm = () => {
     if (expired) return
     navigate('/wallet/utilities/send', {
-      state: { quote, network, phone, mockPurchaseAllowed, utilityType: utilityType || quote.type },
+      state: { quote, network, phone, mockPurchaseAllowed, utilityType: utilityType || quote.type, billLookup },
       replace: true,
     })
   }
@@ -55,7 +55,7 @@ export default function UtilitiesConfirm() {
         {labels.confirmTimerHint}
       </p>
 
-      <UtilityQuoteSummary quote={quote} phone={phone} />
+      <UtilityQuoteSummary quote={quote} phone={phone} billLookup={billLookup} />
 
       <div className="bg-rowan-surface rounded-xl p-4 mt-4 flex items-start gap-3">
         <ShieldCheck size={20} className="text-rowan-green shrink-0 mt-0.5" />

@@ -51,6 +51,14 @@ export function completeUtilityPurchase({ quoteId, paymentTxHash }) {
     .then(unwrap)
 }
 
+export function getUtilityBillLookup({ billerId, subscriberAccount, fiatAmount, serviceType }) {
+  return client
+    .get('/api/v1/utilities/bill-lookup', {
+      params: { billerId, subscriberAccount, fiatAmount, serviceType },
+    })
+    .then(unwrap)
+}
+
 export function getUtilityBillDelivery(purchaseId) {
   return client
     .get(`/api/v1/utilities/purchase/${purchaseId}/delivery`)

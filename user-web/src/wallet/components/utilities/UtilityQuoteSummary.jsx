@@ -6,7 +6,7 @@ import { labelsFor } from '../../utils/utilityLabels'
 /**
  * Airtime / data utility quote breakdown card.
  */
-export default function UtilityQuoteSummary({ quote, phone }) {
+export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
   const labels = labelsFor(quote)
   const TypeIcon = labels.Icon
   const network = NETWORKS[quote.networkCode] || {}
@@ -21,7 +21,9 @@ export default function UtilityQuoteSummary({ quote, phone }) {
     String(quote.serviceType || '').toUpperCase() === 'PREPAID'
     || /prepaid/i.test(bundleDescription || '')
   )
-  const unitsFromReloadly = quote.electricityUnitsSource === 'reloadly' && quote.electricityUnits
+  const subscriberName = quote.subscriberName || billLookup?.customerName
+  const unitsDisplay = quote.electricityUnits || billLookup?.unitsDisplay
+  const unitsFromReloadly = unitsDisplay && (quote.electricityUnitsSource || billLookup?.source) === 'reloadly'
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5">
@@ -63,8 +65,11 @@ export default function UtilityQuoteSummary({ quote, phone }) {
               </p>
               {unitsFromReloadly && (
                 <p className="text-rowan-green text-base font-semibold mt-1 tabular-nums">
-                  {quote.electricityUnits}
+                  {unitsDisplay}
                 </p>
+              )}
+              {subscriberName && (
+                <p className="text-rowan-text text-sm mt-1 font-medium">{subscriberName}</p>
               )}
               <p className="text-rowan-muted text-sm tabular-nums mt-1">
                 {Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
@@ -95,7 +100,10 @@ export default function UtilityQuoteSummary({ quote, phone }) {
           <DetailRow label="Service" value={bundleDescription} />
         )}
         {unitsFromReloadly && (
-          <DetailRow label="Electricity (Reloadly)" value={quote.electricityUnits} />
+          <DetailRow label="Electricity (Reloadly)" value={unitsDisplay} />
+        )}
+        {subscriberName && (
+          <DetailRow label="Account holder" value={subscriberName} />
         )}
         {phone && (
           <DetailRow

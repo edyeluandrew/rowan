@@ -1,53 +1,23 @@
 /**
- * Prepaid electricity estimates and Reloadly receipt parsing.
+ * Parse Reloadly utility bill transaction payloads (units, token, customer name).
  */
 
-/** Approximate local-currency cost per kWh/unit (indicative — actual tariff varies). */
-const UNIT_RATES = {
-  UG: { currency: 'UGX', perUnit: 800, label: 'units' },
-  KE: { currency: 'KES', perUnit: 25, label: 'kWh' },
-  TZ: { currency: 'TZS', perUnit: 300, label: 'units' },
-};
-
-export function isPrepaidElectricity(biller) {
-  if (!biller) return false;
-  const type = String(biller.type || '').toUpperCase();
-  const service = String(biller.serviceType || '').toUpperCase();
-  return type === 'ELECTRICITY_BILL_PAYMENT' && service === 'PREPAID';
-}
-
-export function estimatePrepaidElectricity({ countryCode, fiatAmount, serviceType, billerType }) {
-  const service = String(serviceType || '').toUpperCase();
-  const type = String(billerType || 'ELECTRICITY_BILL_PAYMENT').toUpperCase();
-  if (service !== 'PREPAID' || type !== 'ELECTRICITY_BILL_PAYMENT') {
-    return null;
-  }
-
-  const code = String(countryCode || 'UG').trim().toUpperCase();
-  const rate = UNIT_RATES[code];
-  const amount = Number(fiatAmount);
-  if (!rate || !Number.isFinite(amount) || amount <= 0) return null;
-
-  const units = amount / rate.perUnit;
-  return {
-    units: Math.round(units * 10) / 10,
-    unitLabel: rate.label,
-    currency: rate.currency,
-    ratePerUnit: rate.perUnit,
-    isEstimate: true,
-    summary: `~${(Math.round(units * 10) / 10).toLocaleString('en-US')} ${rate.label} (est.)`,
-  };
-}
-
-export function extractElectricityDelivery(reloadlyPayload) {
+export function extractBillDelivery(reloadlyPayload) {
   if (!reloadlyPayload) return null;
 
   const tx = reloadlyPayload.transaction || reloadlyPayload;
   const billDetails = tx.billDetails || reloadlyPayload.billDetails;
-  const pinDetails = billDetails?.pinDetails;
-  if (!pinDetails) return null;
+  if (!billDetails) return null;
 
-  const info1 = pinDetails.info1 || pinDetails.info2 || null;
+  const subscriber = billDetails.subscriberDetails || {};
+  const customerName = subscriber.customerName
+    || subscriber.name
+    || subscriber.subscriberName
+    || billDetails.customerName
+    || null;
+
+  const pinDetails = billDetails.pinDetails || null;
+  const info1 = pinDetails?.info1 || pinDetails?.info2 || null;
   let units = null;
   let unitLabel = 'units';
   if (info1) {
@@ -58,14 +28,22 @@ export function extractElectricityDelivery(reloadlyPayload) {
     }
   }
 
+  if (!customerName && !pinDetails) return null;
+
   return {
-    token: pinDetails.token || null,
+    customerName,
+    token: pinDetails?.token || null,
     units,
     unitLabel,
     unitsDisplay: info1 || (units != null ? `${units} ${unitLabel}` : null),
-    billerReferenceId: billDetails?.billerReferenceId || null,
+    billerReferenceId: billDetails.billerReferenceId || null,
     source: 'reloadly',
   };
+}
+
+/** @deprecated use extractBillDelivery */
+export function extractElectricityDelivery(reloadlyPayload) {
+  return extractBillDelivery(reloadlyPayload);
 }
 
 export function getReloadlyTransactionId(receipt) {
@@ -74,7 +52,7 @@ export function getReloadlyTransactionId(receipt) {
 }
 
 export default {
-  isPrepaidElectricity,
-  estimatePrepaidElectricity,
+  extractBillDelivery,
   extractElectricityDelivery,
+  getReloadlyTransactionId,
 };

@@ -67,6 +67,32 @@ router.get('/bundles', authUser, async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/utilities/bill-lookup?billerId=&subscriberAccount=&fiatAmount=
+ * Pre-payment account check — only returns name/units in Reloadly sandbox mock.
+ * Live Reloadly confirms name + kWh on GET /transactions/{id} after payment.
+ */
+router.get('/bill-lookup', authUser, async (req, res, next) => {
+  try {
+    const billerId = req.query.billerId;
+    const subscriberAccount = String(req.query.subscriberAccount || '').trim();
+    const fiatAmount = Number(req.query.fiatAmount);
+    if (!billerId || !subscriberAccount) {
+      return res.status(400).json({ error: 'billerId and subscriberAccount are required' });
+    }
+    const data = await utilityService.lookupBillAccount({
+      billerId,
+      subscriberAccount,
+      fiatAmount: Number.isFinite(fiatAmount) ? fiatAmount : 0,
+      billerServiceType: req.query.serviceType,
+    });
+    res.json({ status: 'ok', data, timestamp: new Date().toISOString() });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/utilities/billers?country=UG
  */
 router.get('/billers', authUser, async (req, res, next) => {

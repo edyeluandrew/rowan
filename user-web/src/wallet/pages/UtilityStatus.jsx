@@ -23,7 +23,7 @@ export default function UtilityStatus() {
   const navigate = useNavigate()
   const location = useLocation()
   const { id } = useParams()
-  const { purchase: initialPurchase, quote, phone: phoneFromState } = location.state || {}
+  const { purchase: initialPurchase, quote, phone: phoneFromState, billLookup } = location.state || {}
   const [purchase, setPurchase] = useState(initialPurchase || null)
   const [deliveryLoading, setDeliveryLoading] = useState(false)
   const data = purchase || quote
@@ -67,6 +67,7 @@ export default function UtilityStatus() {
   const paymentTxHash = purchase?.paymentTxHash || data.paymentTxHash || data.payment_tx_hash
   const electricityToken = purchase?.electricityToken || data.electricityToken
   const electricityUnits = purchase?.electricityUnits || data.electricityUnits
+  const subscriberName = purchase?.subscriberName || data.subscriberName || billLookup?.customerName
   const unitsFromReloadly = (purchase?.electricityUnitsSource || data.electricityUnitsSource) === 'reloadly'
   const isPrepaidBill = isPrepaidBillPayment(data)
   const explorerUrl = paymentTxHash
@@ -102,6 +103,9 @@ export default function UtilityStatus() {
               ? `${labels.accountLabel}: ${labels.maskRecipient(displayPhone)}`
               : maskPhoneNumber(displayPhone)}
           </p>
+        )}
+        {subscriberName && (
+          <p className="text-rowan-text text-sm font-medium mt-2">{subscriberName}</p>
         )}
         {completed && bundleDescription && (labels.type === 'data' || labels.type === 'bill') && (
           <p className="text-rowan-green text-lg font-bold mt-4 leading-snug px-2">

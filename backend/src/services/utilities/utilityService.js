@@ -10,7 +10,7 @@ import reloadlyClient from './reloadlyClient.js';
 import reloadlyUtilityPaymentsClient from './reloadlyUtilityPaymentsClient.js';
 import { extractBundlesFromOperator } from './utilityBundles.js';
 import { normalizeBillersResponse } from './utilityBillers.js';
-import { extractElectricityDelivery, getReloadlyTransactionId } from './utilityElectricity.js';
+import { extractBillDelivery, getReloadlyTransactionId } from './utilityElectricity.js';
 import utilityPricing from './utilityPricing.js';
 import utilityUsdcService from './utilityUsdcService.js';
 import logger from '../../utils/logger.js';
@@ -223,6 +223,35 @@ export async function listBillers(countryCode) {
     billers,
     countryCode: code,
     reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+  };
+}
+
+export async function lookupBillAccount({
+  billerId,
+  subscriberAccount,
+  fiatAmount,
+  billerServiceType,
+}) {
+  const account = normalizeSubscriberAccount(subscriberAccount);
+  if (!billerId || !account || account.length < 4) {
+    const err = new Error('billerId and subscriberAccount are required');
+    err.status = 400;
+    throw err;
+  }
+
+  const result = await reloadlyUtilityPaymentsClient.lookupBillAccount({
+    billerId,
+    subscriberAccountNumber: account,
+    amount: Number(fiatAmount) || 0,
+    useLocalAmount: true,
+  });
+
+  return {
+    ...result,
+    billerId: String(billerId),
+    subscriberAccount: account,
+    serviceType: billerServiceType || null,
+    reloadlyUtilitiesMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
   };
 }
 
@@ -636,7 +665,7 @@ function formatPurchase(row, extra = {}) {
       receipt = null;
     }
   }
-  const electricityDelivery = extractElectricityDelivery(receipt);
+  const electricityDelivery = extractBillDelivery(receipt);
 
   return {
     id: row.id,
@@ -666,6 +695,7 @@ function formatPurchase(row, extra = {}) {
     alreadyCompleted: extra.alreadyCompleted || false,
     serviceType: extra.serviceType || null,
     electricityEstimate: extra.electricityEstimate || null,
+    subscriberName: electricityDelivery?.customerName || extra.subscriberName || null,
     electricityToken: electricityDelivery?.token || null,
     electricityUnits: electricityDelivery?.unitsDisplay || electricityDelivery?.units || null,
     electricityUnitsSource: electricityDelivery?.source || null,
@@ -677,6 +707,7 @@ export default {
   listOperators,
   listDataBundles,
   listBillers,
+  lookupBillAccount,
   createQuote,
   completePurchase,
   refreshBillDelivery,

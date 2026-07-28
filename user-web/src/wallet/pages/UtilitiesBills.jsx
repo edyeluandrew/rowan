@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Zap, AlertTriangle } from 'lucide-react'
+import { Zap, AlertTriangle, Loader2 } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import useUserCountry from '../hooks/useUserCountry'
@@ -11,6 +11,7 @@ import {
   getUtilityConfig,
   getUtilityHistory,
   getUtilityBillers,
+  getUtilityBillLookup,
 } from '../api/utilities'
 import AmountInput from '../components/cashout/AmountInput'
 import BillerPicker from '../components/utilities/BillerPicker'
@@ -43,6 +44,8 @@ export default function UtilitiesBills() {
   const [error, setError] = useState(null)
   const [utilityConfig, setUtilityConfig] = useState(null)
   const [history, setHistory] = useState([])
+  const [billLookup, setBillLookup] = useState(null)
+  const [billLookupLoading, setBillLookupLoading] = useState(false)
 
   useEffect(() => {
     getUtilityConfig().then(setUtilityConfig).catch(() => {})
@@ -74,6 +77,40 @@ export default function UtilitiesBills() {
   const maxFiat = selectedBiller?.maxAmount ?? utilityConfig?.maxFiatAmount ?? 500000
 
   const netFiat = parseFloat(fiatAmount) || 0
+
+  useEffect(() => {
+    const cleanAccount = accountNumber.replace(/\s+/g, '')
+    if (!selectedBiller || cleanAccount.length < 4 || netFiat < minFiat) {
+      setBillLookup(null)
+      return undefined
+    }
+
+    let cancelled = false
+    const timer = setTimeout(() => {
+      setBillLookupLoading(true)
+      getUtilityBillLookup({
+        billerId: selectedBiller.id,
+        subscriberAccount: cleanAccount,
+        fiatAmount: Math.round(netFiat),
+        serviceType: selectedBiller.serviceType,
+      })
+        .then((data) => {
+          if (!cancelled) setBillLookup(data)
+        })
+        .catch(() => {
+          if (!cancelled) setBillLookup(null)
+        })
+        .finally(() => {
+          if (!cancelled) setBillLookupLoading(false)
+        })
+    }, 500)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [selectedBiller, accountNumber, netFiat, minFiat])
+
   const usdcEstimate = usdcToFiatRate > 0 && netFiat > 0
     ? (netFiat / usdcToFiatRate) * (1 + feePercent / 100)
     : 0
@@ -121,10 +158,16 @@ export default function UtilitiesBills() {
 
       navigate('/wallet/utilities/confirm', {
         state: {
-          quote,
+          quote: {
+            ...quote,
+            subscriberName: billLookup?.customerName || null,
+            electricityUnits: billLookup?.unitsDisplay || null,
+            electricityUnitsSource: billLookup?.source || null,
+          },
           phone: cleanAccount,
           utilityType: 'bill',
           mockPurchaseAllowed: utilityConfig?.mockPurchaseAllowed,
+          billLookup,
         },
       })
     } catch (err) {
@@ -146,7 +189,7 @@ export default function UtilitiesBills() {
       {(utilityConfig?.reloadlyUtilitiesMock ?? utilityConfig?.reloadlyMock) && (
         <div className="bg-rowan-mint border border-rowan-green/30 rounded-xl p-3 mb-4">
           <p className="text-rowan-text text-xs">
-            Bill pay uses Reloadly Utility Payments (sandbox until live keys are verified).
+            Utility bills use Reloadly sandbox mock on testnet. Set RELOADLY_UTILITIES_LIVE=true on Render for real Umeme.
           </p>
         </div>
       )}
@@ -206,10 +249,30 @@ export default function UtilitiesBills() {
             Min {minFiat.toLocaleString()} · Max {maxFiat.toLocaleString()} {currency}
           </p>
           {isPrepaidElectricityBiller(selectedBiller) && netFiat > 0 && (
-            <div className="mt-3 bg-rowan-surface border border-rowan-border rounded-xl p-3">
-              <p className="text-rowan-muted text-xs">
-                Electricity units and Yaka token are confirmed by Reloadly / Umeme after payment — shown on your receipt.
-              </p>
+            <div className="mt-3 bg-rowan-surface border border-rowan-border rounded-xl p-3 space-y-2">
+              {billLookupLoading && (
+                <div className="flex items-center gap-2 text-rowan-muted text-xs">
+                  <Loader2 size={14} className="animate-spin" />
+                  Checking meter with Reloadly…
+                </div>
+              )}
+              {!billLookupLoading && billLookup?.customerName && (
+                <p className="text-rowan-text text-sm">
+                  <span className="text-rowan-muted">Registered name: </span>
+                  <span className="font-semibold">{billLookup.customerName}</span>
+                </p>
+              )}
+              {!billLookupLoading && billLookup?.unitsDisplay && billLookup?.source === 'reloadly' && (
+                <p className="text-rowan-green text-sm font-semibold tabular-nums">
+                  {billLookup.unitsDisplay}
+                  <span className="text-rowan-muted text-xs font-normal ml-1">via Reloadly</span>
+                </p>
+              )}
+              {!billLookupLoading && !billLookup?.customerName && !billLookup?.unitsDisplay && (
+                <p className="text-rowan-muted text-xs">
+                  {billLookup?.message || 'Account name and units are confirmed by Reloadly after payment.'}
+                </p>
+              )}
             </div>
           )}
         </div>
