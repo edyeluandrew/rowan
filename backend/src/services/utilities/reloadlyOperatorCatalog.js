@@ -17,10 +17,68 @@ function networkToken(countryCode, networkCode) {
   return (method?.label || networkCode || '').split(/[\s_]/)[0].toLowerCase();
 }
 
-export function operatorMatchesNetwork(operator, token) {
-  if (!token) return true;
+/** Reloadly operator names rarely match Rowan network labels (e.g. Safaricom vs M-Pesa). */
+const NETWORK_RELOADLY_ALIASES = {
+  MPESA_KE: ['safaricom', 'mpesa'],
+  MPESA: ['safaricom', 'mpesa'],
+  MTN_UG: ['mtn'],
+  AIRTEL_UG: ['airtel'],
+  MTN_TZ: ['mtn', 'tigo'],
+  AIRTEL_TZ: ['airtel', 'tigo'],
+  TIGO_TZ: ['tigo'],
+  MTN_RW: ['mtn'],
+  AIRTEL_RW: ['airtel'],
+  MTN_NG: ['mtn'],
+  AIRTEL_NG: ['airtel'],
+  MTN_GH: ['mtn'],
+  AIRTELTIGO_GH: ['airtel', 'tigo'],
+  VODAFONE_GH: ['vodafone'],
+};
+
+function networkSearchTokens(countryCode, networkCode) {
+  const code = String(networkCode || '').toUpperCase();
+  if (NETWORK_RELOADLY_ALIASES[code]) return NETWORK_RELOADLY_ALIASES[code];
+  const token = networkToken(countryCode, networkCode);
+  return token ? [token] : [];
+}
+
+export function operatorMatchesNetwork(operator, tokens) {
+  const list = (Array.isArray(tokens) ? tokens : [tokens]).filter(Boolean);
+  if (!list.length) return true;
   const name = String(operator?.name || '').toLowerCase();
-  return name.includes(token) || token.includes(name.split(/\s+/)[0]);
+  return list.some((t) => name.includes(String(t).toLowerCase()));
+}
+
+function carrierRootName(operator) {
+  return String(operator?.name || '').toLowerCase().split(/\s+/)[0];
+}
+
+async function findDataOperatorForPhone(countryCode, detectedOperator, allOps) {
+  const currency = countryService.getCurrencyForCountry(countryCode);
+  const dataOps = allOps.filter((o) => o.data || o.bundle);
+  const root = carrierRootName(detectedOperator);
+
+  if (root) {
+    const match = dataOps.find((o) => String(o.name || '').toLowerCase().includes(root));
+    if (match) {
+      const id = operatorIdOf(match);
+      if (id) return reloadlyClient.getOperatorById(id);
+    }
+  }
+
+  const selfCatalog = extractBundlesFromOperator(detectedOperator, currency);
+  if (selfCatalog.bundles.length) return detectedOperator;
+
+  for (const word of String(detectedOperator?.name || '').toLowerCase().split(/\s+/)) {
+    if (word.length < 3) continue;
+    const match = dataOps.find((o) => String(o.name || '').toLowerCase().includes(word));
+    if (match) {
+      const id = operatorIdOf(match);
+      if (id) return reloadlyClient.getOperatorById(id);
+    }
+  }
+
+  return null;
 }
 
 export function normalizeOperatorsList(raw) {
@@ -155,8 +213,10 @@ export async function resolveOperatorForPhone({
 }) {
   const code = String(countryCode || 'UG').trim().toUpperCase();
   const network = String(networkCode || '').trim().toUpperCase();
-  const token = networkToken(code, network);
+  const searchTokens = networkSearchTokens(code, network);
   const preferData = utilityType === 'data';
+  const currency = countryService.getCurrencyForCountry(code);
+  const ops = await loadCountryOperators(code);
 
   let detected = null;
   try {
@@ -168,26 +228,30 @@ export async function resolveOperatorForPhone({
   const detectedId = operatorIdOf(detected);
   if (detectedId) {
     try {
-      const full = await reloadlyClient.getOperatorById(detectedId);
-      const limits = extractOperatorLimits(full, countryService.getCurrencyForCountry(code));
-      const networkOk = !network || operatorMatchesNetwork(full, token);
-      const typeOk = !preferData || limits.data || full?.data || full?.bundle;
-      if (networkOk && typeOk) {
-        return { operator: full, limits, source: 'auto-detect' };
+      const detectedFull = await reloadlyClient.getOperatorById(detectedId);
+
+      if (preferData) {
+        const dataOperator = await findDataOperatorForPhone(code, detectedFull, ops);
+        if (dataOperator) {
+          const limits = extractOperatorLimits(dataOperator, currency);
+          return { operator: dataOperator, limits, source: 'auto-detect-data' };
+        }
+      } else {
+        const limits = extractOperatorLimits(detectedFull, currency);
+        return { operator: detectedFull, limits, source: 'auto-detect' };
       }
     } catch {
       /* fall through */
     }
   }
 
-  const ops = await loadCountryOperators(code);
-  const candidates = ops.filter((o) => operatorMatchesNetwork(o, token));
+  const candidates = ops.filter((o) => operatorMatchesNetwork(o, searchTokens));
 
   const pick = (list) => {
     if (preferData) {
       return list.find((o) => o.data || o.bundle) || list[0];
     }
-    return list.find((o) => !o.data || o.bundle === false) || list[0];
+    return list.find((o) => !o.data && !o.bundle) || list.find((o) => !(o.data && o.bundle)) || list[0];
   };
 
   let chosen = pick(candidates.length ? candidates : ops);
@@ -201,7 +265,7 @@ export async function resolveOperatorForPhone({
   const operator = operatorId
     ? await reloadlyClient.getOperatorById(operatorId)
     : chosen;
-  const limits = extractOperatorLimits(operator, countryService.getCurrencyForCountry(code));
+  const limits = extractOperatorLimits(operator, currency);
 
   return { operator, limits, source: 'country-catalog' };
 }
@@ -225,8 +289,10 @@ export async function getTopupLimits({
     });
     const catalog = extractBundlesFromOperator(operator, currency);
     if (!catalog.bundles.length) {
+      const carrier = limits.operatorName || operator?.name || 'this carrier';
       const err = new Error(
-        'No fixed data bundles available for this number. Try airtime or another network.'
+        `No data plans from Reloadly for ${carrier} on this number. `
+        + 'Confirm the phone matches the selected network, or try airtime.'
       );
       err.status = 422;
       throw err;
