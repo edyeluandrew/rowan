@@ -24,6 +24,34 @@ router.get('/providers', authUser, async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/utilities/limits?country=UG&networkCode=MTN_UG&recipientPhone=256...&type=airtime|data
+ * Reloadly operator min/max or data plan catalog for the given phone + network.
+ */
+router.get('/limits', authUser, async (req, res, next) => {
+  try {
+    const country = String(req.query.country || 'UG').trim().toUpperCase();
+    const networkCode = String(req.query.networkCode || '').trim().toUpperCase();
+    const recipientPhone = String(req.query.recipientPhone || '').trim();
+    const utilityType = String(req.query.type || 'airtime').toLowerCase();
+
+    if (!networkCode || !recipientPhone) {
+      return res.status(400).json({ error: 'networkCode and recipientPhone are required' });
+    }
+
+    const data = await utilityService.getReloadlyTopupLimits({
+      countryCode: country,
+      networkCode,
+      recipientPhone,
+      utilityType,
+    });
+    res.json({ status: 'ok', data, timestamp: new Date().toISOString() });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/utilities/operators?country=UG
  * Reloadly operator list (cached client-side recommended).
  */
@@ -231,8 +259,8 @@ router.get('/config', (req, res) => {
     data: {
       feePercent: config.utilities.feePercent,
       quoteTtlSeconds: config.utilities.quoteTtlSeconds,
-      minFiatAmount: config.utilities.minFiatAmount,
-      maxFiatAmount: config.utilities.maxFiatAmount,
+      /** Airtime/data limits come from Reloadly per operator — use GET /utilities/limits */
+      limitsSource: 'reloadly',
       reloadlyMock: reloadlyClient.reloadlyIsMock(),
       reloadlyUtilitiesMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
       utilitiesStagingFallback: (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'

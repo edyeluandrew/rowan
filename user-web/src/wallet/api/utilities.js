@@ -26,6 +26,12 @@ export function getUtilityBillers(country) {
     .then(unwrap)
 }
 
+export function getUtilityLimits(params) {
+  return client
+    .get('/api/v1/utilities/limits', { params })
+    .then(unwrap)
+}
+
 export function getUtilityBundles(params) {
   return client
     .get('/api/v1/utilities/bundles', { params })

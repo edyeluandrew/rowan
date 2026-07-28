@@ -9,6 +9,12 @@ import countryService from '../countries/countryService.js';
 import reloadlyClient from './reloadlyClient.js';
 import reloadlyUtilityPaymentsClient from './reloadlyUtilityPaymentsClient.js';
 import { extractBundlesFromOperator } from './utilityBundles.js';
+import {
+  assertFiatAmountAllowed,
+  getTopupLimits,
+  listNormalizedOperators,
+  resolveOperatorForPhone,
+} from './reloadlyOperatorCatalog.js';
 import { normalizeBillersResponse } from './utilityBillers.js';
 import { extractBillDelivery, getReloadlyTransactionId } from './utilityElectricity.js';
 import utilityPricing from './utilityPricing.js';
@@ -130,11 +136,15 @@ export async function listProviders(countryCode, type = 'airtime') {
 
 export async function listOperators(countryCode) {
   const code = String(countryCode || 'UG').trim().toUpperCase();
-  const operators = await reloadlyClient.getOperatorsByCountry(code);
-  return Array.isArray(operators) ? operators : operators?.content || [];
+  return listNormalizedOperators(code);
 }
 
-export async function listDataBundles({ countryCode, networkCode, recipientPhone }) {
+export async function getReloadlyTopupLimits({
+  countryCode,
+  networkCode,
+  recipientPhone,
+  utilityType = 'airtime',
+}) {
   const code = String(countryCode || 'UG').trim().toUpperCase();
   const network = String(networkCode || '').trim().toUpperCase();
   const phone = normalizePhone(recipientPhone, code);
@@ -155,60 +165,32 @@ export async function listDataBundles({ countryCode, networkCode, recipientPhone
     throw err;
   }
 
-  let detected;
-  try {
-    detected = await reloadlyClient.autoDetectOperator(code, phone);
-  } catch (err) {
-    logger.warn('[UtilityService] auto-detect for bundles failed', { error: err.message });
-    const wrap = new Error('Could not detect operator for this phone number');
-    wrap.status = 422;
-    throw wrap;
-  }
-
-  const operatorId = detected?.operatorId ?? detected?.id;
-  if (!operatorId) {
-    const err = new Error('Could not detect operator for this phone number');
-    err.status = 422;
-    throw err;
-  }
-
-  const operator = await reloadlyClient.getOperatorById(operatorId);
-  const currency = countryService.getCurrencyForCountry(code);
-  let catalog = extractBundlesFromOperator(operator, currency);
-
-  if (!catalog.bundles.length) {
-    try {
-      const allOps = await reloadlyClient.getOperatorsByCountry(code);
-      const ops = Array.isArray(allOps) ? allOps : allOps?.content || [];
-      const method = countryService.getPaymentMethods(code).find((m) => m.networkCode === network);
-      const networkToken = (method?.label || network).split(/[\s_]/)[0].toLowerCase();
-      const dataOp = ops.find(
-        (o) => o.data && String(o.name || '').toLowerCase().includes(networkToken)
-      );
-      if (dataOp) {
-        const dataOperatorId = dataOp.operatorId ?? dataOp.id;
-        const dataOperator = await reloadlyClient.getOperatorById(dataOperatorId);
-        catalog = extractBundlesFromOperator(dataOperator, currency);
-      }
-    } catch (err) {
-      logger.warn('[UtilityService] data operator fallback failed', { error: err.message });
-    }
-  }
-
-  if (!catalog.bundles.length) {
-    const err = new Error(
-      'No fixed data bundles available for this number. Try airtime or another network.'
-    );
-    err.status = 422;
-    throw err;
-  }
-
-  return {
-    ...catalog,
+  return getTopupLimits({
     countryCode: code,
     networkCode: network,
     recipientPhone: phone,
-    reloadlyMock: reloadlyClient.reloadlyIsMock(),
+    utilityType,
+  });
+}
+
+export async function listDataBundles({ countryCode, networkCode, recipientPhone }) {
+  const limits = await getReloadlyTopupLimits({
+    countryCode,
+    networkCode,
+    recipientPhone,
+    utilityType: 'data',
+  });
+
+  return {
+    operatorId: limits.operatorId,
+    operatorName: limits.operatorName,
+    denominationType: limits.denominationType,
+    fiatCurrency: limits.fiatCurrency,
+    bundles: limits.bundles,
+    countryCode: limits.countryCode,
+    networkCode: limits.networkCode,
+    recipientPhone: normalizePhone(recipientPhone, limits.countryCode),
+    reloadlyMock: limits.reloadlyMock,
   };
 }
 
@@ -342,38 +324,34 @@ export async function createQuote({
 
   const currency = countryService.getCurrencyForCountry(code);
   const fiat = Number(fiatAmount);
-  if (fiat < config.utilities.minFiatAmount || fiat > config.utilities.maxFiatAmount) {
-    const err = new Error(
-      `Amount must be between ${config.utilities.minFiatAmount} and ${config.utilities.maxFiatAmount} ${currency}`
-    );
-    err.status = 400;
-    throw err;
+
+  const { operator, limits } = await resolveOperatorForPhone({
+    countryCode: code,
+    networkCode: network,
+    recipientPhone: phone,
+    utilityType,
+  });
+
+  let bundleCatalog = null;
+  if (utilityType === 'data') {
+    bundleCatalog = extractBundlesFromOperator(operator, currency);
   }
+
+  assertFiatAmountAllowed({
+    fiatAmount: fiat,
+    utilityType,
+    limits,
+    bundles: bundleCatalog?.bundles,
+    fiatCurrency: currency,
+  });
 
   const pricing = await utilityPricing.quoteUtilityPurchase({
     fiatAmount: fiat,
     fiatCurrency: currency,
   });
 
-  let resolvedOperatorId = operatorId;
-  let operatorName = null;
-  if (resolvedOperatorId) {
-    try {
-      const op = await reloadlyClient.getOperatorById(resolvedOperatorId);
-      operatorName = op?.name || null;
-    } catch (err) {
-      logger.warn('[UtilityService] operator lookup failed', { error: err.message });
-    }
-  }
-  if (!resolvedOperatorId) {
-    try {
-      const detected = await reloadlyClient.autoDetectOperator(code, phone);
-      resolvedOperatorId = detected?.operatorId;
-      operatorName = detected?.name || operatorName;
-    } catch (err) {
-      logger.warn('[UtilityService] auto-detect operator failed', { error: err.message });
-    }
-  }
+  const resolvedOperatorId = operatorId || limits.operatorId;
+  const operatorName = limits.operatorName || operator?.name || null;
 
   const bundleLabel = bundleDescription ? String(bundleDescription).trim().slice(0, 500) : null;
 
@@ -713,6 +691,7 @@ function formatPurchase(row, extra = {}) {
 export default {
   listProviders,
   listOperators,
+  getReloadlyTopupLimits,
   listDataBundles,
   listBillers,
   lookupBillAccount,

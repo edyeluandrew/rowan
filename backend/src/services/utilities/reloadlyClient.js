@@ -92,9 +92,13 @@ function mockResponse(path, options) {
       name: 'Mock Operator',
       country: { isoName: 'UG', name: 'Uganda' },
       denominationType: 'RANGE',
-      minAmount: 1000,
-      maxAmount: 100000,
+      supportsLocalAmounts: true,
+      minAmount: 0.27,
+      maxAmount: 27,
+      localMinAmount: 1000,
+      localMaxAmount: 100000,
       fx: { rate: 3750, currencyCode: 'UGX' },
+      destinationCurrencyCode: 'UGX',
     };
   }
   if (path.match(/\/operators\/\d+$/)) {

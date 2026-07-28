@@ -11,9 +11,10 @@ import {
   getUtilityConfig,
   getUtilityHistory,
   getUtilityBundles,
+  getUtilityLimits,
 } from '../api/utilities'
 import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
-import { getNetworksForCountry, getDialCodeForCountry, getUtilityLimitsForCountry } from '../utils/country'
+import { getNetworksForCountry, getDialCodeForCountry } from '../utils/country'
 import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
@@ -75,6 +76,9 @@ export default function Utilities({ utilityType = 'airtime' }) {
   const [error, setError] = useState(null)
   const [utilityConfig, setUtilityConfig] = useState(null)
   const [history, setHistory] = useState([])
+  const [operatorLimits, setOperatorLimits] = useState(null)
+  const [limitsLoading, setLimitsLoading] = useState(false)
+  const [limitsError, setLimitsError] = useState(null)
 
   useEffect(() => {
     getUtilityConfig()
@@ -110,8 +114,12 @@ export default function Utilities({ utilityType = 'airtime' }) {
   const currency = network ? NETWORKS[network]?.currency : fiatCurrency
   const usdcToFiatRate = rates?.usdcToFiat || 0
   const feePercent = utilityConfig?.feePercent ?? 1
-  const minFiat = utilityConfig?.minFiatAmount ?? 1000
-  const maxFiat = utilityConfig?.maxFiatAmount ?? 500000
+  const minFiat = operatorLimits?.minFiatAmount ?? null
+  const maxFiat = operatorLimits?.maxFiatAmount ?? null
+  const fixedAmounts = operatorLimits?.denominationType === 'FIXED'
+    ? (operatorLimits?.allowedAmounts || [])
+    : []
+  const suggestedAmounts = operatorLimits?.suggestedAmounts || []
 
   const phoneValid = phone.replace(/\D/g, '').length >= 9
   const fullPhone = phoneValid && network
@@ -131,8 +139,8 @@ export default function Utilities({ utilityType = 'airtime' }) {
     : null
 
   const exceedsWallet = walletMaxFiat != null && netFiat > walletMaxFiat
-  const belowMin = !isData && netFiat > 0 && netFiat < minFiat
-  const aboveMax = !isData && netFiat > maxFiat
+  const belowMin = !isData && netFiat > 0 && minFiat != null && netFiat < minFiat
+  const aboveMax = !isData && maxFiat != null && netFiat > maxFiat
 
   const loadBundles = useCallback(async () => {
     if (!isData || !network || !fullPhone) return
@@ -170,18 +178,55 @@ export default function Utilities({ utilityType = 'airtime' }) {
     loadBundles()
   }, [isData, phoneValid, network, fullPhone, loadBundles])
 
+  const loadOperatorLimits = useCallback(async () => {
+    if (isData || !network || !fullPhone) return
+    setLimitsLoading(true)
+    setLimitsError(null)
+    setOperatorLimits(null)
+    try {
+      const networkConfig = NETWORKS[network]
+      const derivedCountryCode = networkConfig?.country || country
+      const limits = await getUtilityLimits({
+        country: derivedCountryCode,
+        networkCode: network,
+        recipientPhone: fullPhone,
+        type: 'airtime',
+      })
+      setOperatorLimits(limits)
+    } catch (err) {
+      setOperatorLimits(null)
+      setLimitsError(err.response?.data?.error || err.message)
+    } finally {
+      setLimitsLoading(false)
+    }
+  }, [isData, network, fullPhone, country])
+
+  useEffect(() => {
+    if (isData) return
+    if (!phoneValid || !network) {
+      setOperatorLimits(null)
+      setLimitsError(null)
+      return
+    }
+    loadOperatorLimits()
+  }, [isData, phoneValid, network, fullPhone, loadOperatorLimits])
+
   const canProceed = isData
     ? !!selectedBundle
       && hasUsdcTrustline !== false
       && !exceedsWallet
       && network
       && phoneValid
-    : netFiat >= minFiat
+    : netFiat > 0
+      && minFiat != null
+      && maxFiat != null
+      && netFiat >= minFiat
       && netFiat <= maxFiat
       && hasUsdcTrustline !== false
       && !exceedsWallet
       && network
       && phoneValid
+      && !limitsLoading
 
   if (isLocked) return <BiometricLock />
 
@@ -305,6 +350,44 @@ export default function Utilities({ utilityType = 'airtime' }) {
         </div>
       ) : (
         <>
+          {limitsLoading && (
+            <p className="text-rowan-muted text-xs mt-4 px-1">Loading limits from Reloadly…</p>
+          )}
+          {limitsError && (
+            <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-3">
+              <p className="text-rowan-yellow text-sm">{limitsError}</p>
+              <button
+                type="button"
+                onClick={loadOperatorLimits}
+                className="text-rowan-yellow text-xs underline mt-2 min-h-11"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {operatorLimits?.operatorName && !limitsLoading && (
+            <p className="text-rowan-muted text-xs mt-4 px-1">
+              Limits for {operatorLimits.operatorName}
+            </p>
+          )}
+          {(fixedAmounts.length > 0 || suggestedAmounts.length > 0) && (
+            <div className="mt-3 flex flex-wrap gap-2 px-1">
+              {(fixedAmounts.length ? fixedAmounts : suggestedAmounts).map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  onClick={() => setFiatAmount(String(amount))}
+                  className={`text-xs font-medium rounded-full px-3 py-2 border min-h-11 ${
+                    Number(fiatAmount) === amount
+                      ? 'border-rowan-yellow bg-rowan-yellow/10 text-rowan-yellow'
+                      : 'border-rowan-border text-rowan-muted'
+                  }`}
+                >
+                  {Number(amount).toLocaleString()} {currency}
+                </button>
+              ))}
+            </div>
+          )}
           <AmountInput
             fiatAmount={fiatAmount}
             onFiatAmountChange={setFiatAmount}
@@ -312,11 +395,14 @@ export default function Utilities({ utilityType = 'airtime' }) {
             cryptoEstimate={usdcEstimate}
             cryptoLabel="USDC"
             platformFeeFiat={netFiat * (feePercent / 100)}
-            maxFiat={Math.min(maxFiat, walletMaxFiat ?? maxFiat)}
+            maxFiat={Math.min(maxFiat ?? Infinity, walletMaxFiat ?? maxFiat ?? Infinity)}
           />
-          <p className="text-rowan-muted text-xs mt-2 px-1">
-            Min {minFiat.toLocaleString()} · Max {maxFiat.toLocaleString()} {currency}
-          </p>
+          {minFiat != null && maxFiat != null && (
+            <p className="text-rowan-muted text-xs mt-2 px-1">
+              Min {Math.ceil(minFiat).toLocaleString()} · Max {Math.floor(maxFiat).toLocaleString()} {currency}
+              {utilityConfig?.limitsSource === 'reloadly' ? ' (from Reloadly)' : ''}
+            </p>
+          )}
         </>
       )}
 
