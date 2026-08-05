@@ -64,7 +64,7 @@ export function formatUsdcRateLine(currency, ratePerUsdc) {
   return `1 USDC ≈ ${currency} ${formatted}`
 }
 
-/** Context-aware sell progress copy (P2P vs Kotani/automated rail). */
+/** Context-aware sell progress copy (P2P vs automated rail). */
 export function getSellProgressSubtitle(tx) {
   if (!tx) return null
   const state = tx.state
@@ -73,9 +73,8 @@ export function getSellProgressSubtitle(tx) {
   const manualP2p = !!(tx.preferredPayoutSettingId ?? tx.preferred_payout_setting_id)
 
   if (state === 'ESCROW_LOCKED' && !traderId) {
-    if (payoutProvider === 'kotani_pay') return 'Kotani Pay is sending your mobile money'
     if (payoutProvider === 'yellow_pay') return 'Automated payout in progress'
-    if (!manualP2p) return 'Processing automated payout — no trader needed'
+    if (!manualP2p) return 'Finding a trader for your cash out'
     return 'Finding a trader for your cash out'
   }
   if (state === 'TRADER_MATCHED') {
@@ -86,7 +85,7 @@ export function getSellProgressSubtitle(tx) {
   return null
 }
 
-/** Sell order waiting on Kotani/automated rail (not P2P trader match). */
+/** Sell order waiting on automated rail (not P2P trader match). */
 export function isAutomatedPayoutPending(tx) {
   if (!tx) return false
   const orderSide = String(tx.orderSide ?? tx.order_side ?? 'SELL').toUpperCase()

@@ -12,7 +12,7 @@
 | 1 | B2C first, B2B later | P2P traders fit consumer flows today | Jul 2026 |
 | 2 | Stellar primary chain through Phase 2 | Low fees, USDC native, existing infra | Jul 2026 |
 | 3 | Hybrid rails: P2P + Yellow Pay | Traders in EAC; aggregators for scale | Jul 2026 |
-| 3a | **Uganda-only launch + P2P first** | Regulatory surface; Kotani/Pretium paused; re-open corridors later | Aug 2026 |
+| 3a | **Uganda-only launch + P2P first** | Regulatory surface; aggregators out of product path | Aug 2026 |
 | 4 | Utilities before virtual cards | Faster build, daily retention | Jul 2026 |
 | 5 | Smile ID over MetaMap for KYC | Better Africa ID coverage | Jul 2026 |
 | 6 | Reloadly first for airtime/bills | Lower crypto sensitivity vs Flutterwave | Jul 2026 |

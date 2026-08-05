@@ -811,7 +811,7 @@ async function releaseToTrader(transactionId) {
 }
 
 /**
- * Send USDC from Rowan escrow to Kotani (or other aggregator) escrow address.
+ * Send USDC from Rowan escrow to an aggregator escrow address.
  * Called immediately after offramp API returns escrowAddress.
  */
 async function sendUsdcToAggregatorEscrow({
@@ -1016,6 +1016,7 @@ async function releaseAfterUserConfirmation(transactionId) {
     [transactionId]
   );
   const payoutProvider = txResult.rows[0]?.payout_provider;
+  // Legacy aggregator rows (yellow_pay; historic kotani_pay) complete via escrow release helpers.
   if (payoutProvider === 'kotani_pay') {
     return completeAggregatorOfframp(transactionId);
   }

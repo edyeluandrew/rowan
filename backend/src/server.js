@@ -32,7 +32,6 @@ import configRoutes from './routes/config.js';
 import countriesRoutes from './routes/countries.js';
 import paymentsRoutes from './routes/payments.js';
 import yellowPayWebhookRoutes from './routes/webhooks/yellowpay.js';
-import kotaniWebhookRoutes from './routes/webhooks/kotani.js';
 import utilitiesRoutes from './routes/utilities.js';
 import chatRoutes from './routes/chat.js';
 import tradersRoutes from './routes/traders.js';
@@ -235,7 +234,6 @@ app.use('/api/v1/config', configRoutes);
 app.use('/api/v1/countries', countriesRoutes);
 app.use('/api/v1/payments', paymentsRoutes);
 app.use('/api/v1/webhooks', yellowPayWebhookRoutes);
-app.use('/api/v1/webhooks', kotaniWebhookRoutes);
 app.use('/api/v1/utilities', utilitiesRoutes);
 app.use('/api/v1/disputes', disputesRoutes);
 app.use('/api/v1/trader/onboarding', traderOnboardingRoutes); // ← SPECIFIC path first

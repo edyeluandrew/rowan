@@ -1,6 +1,5 @@
 /** Registered payment rail providers (C2). */
 export const PAYMENT_PROVIDERS = {
-  KOTANI_PAY: 'kotani_pay',
   YELLOW_PAY: 'yellow_pay',
   P2P_TRADER: 'p2p_trader',
 };

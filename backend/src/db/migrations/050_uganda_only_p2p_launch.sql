@@ -1,5 +1,4 @@
 -- Uganda-only launch: deactivate other corridors; P2P is the only live fiat rail.
--- Aggregators (Kotani/Yellow/Pretium) stay code-ready but are not in the UG route chain.
 
 UPDATE countries
 SET active = false,

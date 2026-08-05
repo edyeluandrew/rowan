@@ -244,24 +244,6 @@ const config = {
     settlementStellarAddress: process.env.YELLOW_PAY_SETTLEMENT_STELLAR || '',
   },
 
-  // Phase 2 — Kotani Pay (Stellar-native MoMo — primary automated rail)
-  kotaniPay: {
-    enabled: process.env.KOTANI_PAY_ENABLED !== 'false',
-    mockMode: process.env.KOTANI_PAY_MOCK_MODE === 'true'
-      || (!process.env.KOTANI_PAY_JWT && !process.env.KOTANI_PAY_API_KEY
-        && (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'),
-    baseUrl: process.env.KOTANI_PAY_BASE_URL || 'https://sandbox-api.kotanipay.io',
-    jwt: process.env.KOTANI_PAY_JWT || '',
-    apiKey: process.env.KOTANI_PAY_API_KEY || '',
-    webhookSecret: process.env.KOTANI_PAY_WEBHOOK_SECRET || '',
-    callbackUrl: process.env.KOTANI_PAY_CALLBACK_URL || '',
-    senderStellarAddress: process.env.KOTANI_PAY_SENDER_STELLAR || process.env.ESCROW_PUBLIC_KEY || '',
-    sandboxCorridors: (process.env.KOTANI_PAY_CORRIDORS || 'UG')
-      .split(',')
-      .map((c) => c.trim().toUpperCase())
-      .filter(Boolean),
-  },
-
   // [PHASE 4] Fraud monitoring thresholds
   fraud: {
     // Concurrent open quotes threshold before blocking

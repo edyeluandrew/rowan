@@ -30,7 +30,6 @@ export default function Cashout() {
     network: presetNetwork,
     prefillFiat,
     expressMatch,
-    kotaniDirect,
   } = location.state || {}
   const { isLocked } = useBiometricProtection()
   const { country, fiatCurrency: userFiat } = useUserCountry()
@@ -181,10 +180,9 @@ export default function Cashout() {
           phone: fullPhone,
           recipientName: recipientName.trim(),
           requestedFiat: Math.round(netFiat),
-          selectedAd: kotaniDirect ? undefined : selectedAd,
-          traderName: kotaniDirect ? undefined : (presetTraderName || selectedAd?.traderName),
-          payoutSettingId: kotaniDirect ? undefined : payoutSettingId,
-          kotaniDirect,
+          selectedAd,
+          traderName: presetTraderName || selectedAd?.traderName,
+          payoutSettingId,
         },
       })
     } catch (err) {
@@ -211,21 +209,12 @@ export default function Cashout() {
         <button onClick={() => navigate(-1)} className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center">
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">{kotaniDirect ? 'Kotani sell' : 'Sell'}</h1>
+        <h1 className="text-rowan-text text-lg font-bold">Sell</h1>
       </div>
 
       <UsdcTrustlineSetup compact />
 
-      {kotaniDirect && (
-        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4">
-          <p className="text-rowan-text text-sm font-medium">Automated payout via Kotani Pay</p>
-          <p className="text-rowan-muted text-xs mt-1">
-            Sandbox test — no P2P trader. MoMo is sent by Kotani after you deposit USDC.
-          </p>
-        </div>
-      )}
-
-      {!kotaniDirect && (selectedAd || presetTraderName) && (
+      {(selectedAd || presetTraderName) && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4 flex items-start gap-3">
           <UserCheck size={18} className="text-rowan-yellow shrink-0 mt-0.5" />
           <p className="text-rowan-text text-sm font-medium">
@@ -234,13 +223,13 @@ export default function Cashout() {
         </div>
       )}
 
-      {!kotaniDirect && !selectedAd && !presetTraderName && (
+      {!selectedAd && !presetTraderName && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm font-medium">Express sell</p>
         </div>
       )}
 
-      {!kotaniDirect && expressMatch && (selectedAd || presetTraderName) && (
+      {expressMatch && (selectedAd || presetTraderName) && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm font-medium">Express match</p>
         </div>

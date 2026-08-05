@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   Bell,
   RefreshCw,
-  Zap,
 } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
@@ -144,17 +143,6 @@ export default function Home() {
           <span className="text-rowan-text text-xs font-medium">Airtime</span>
         </button>
       </div>
-
-      <button
-        type="button"
-        disabled={hasActiveOrder}
-        onClick={() => navigate('/wallet/cashout', { state: { kotaniDirect: true } })}
-        className="mt-2 w-full bg-rowan-yellow/10 border border-rowan-yellow/40 rounded-xl px-4 py-3 min-h-11 flex items-center justify-center gap-2 disabled:opacity-50"
-      >
-        <Zap size={18} className="text-rowan-yellow shrink-0" />
-        <span className="text-rowan-text text-sm font-semibold">Kotani</span>
-        <span className="text-rowan-muted text-xs font-normal">sandbox test · no trader</span>
-      </button>
 
       {autoFundingTestnet && testUsdcProvisioning === 'loading' && (
         <div className="mt-4 bg-rowan-mint border border-rowan-green/30 rounded-xl p-4 flex items-center gap-3">
