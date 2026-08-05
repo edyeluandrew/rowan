@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { authUser, checkUserLimits } from '../middleware/auth.js';
+import { authUser } from '../middleware/auth.js';
+import { enforceKycTransactionLimits } from '../middleware/kycLimits.js';
 import { validate, validateTypes } from '../middleware/validate.js';
 import { cashoutStatusLimiter } from '../middleware/rateLimits.js';
 import quoteEngine from '../services/quoteEngine.js';
@@ -14,6 +15,9 @@ import redis from '../db/redis.js';
 import logger from '../utils/logger.js';
 import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 import storageService from '../services/storageService.js';
+import paymentRouter from '../services/payments/paymentRouter.js';
+import { PAYMENT_SIDES } from '../services/payments/paymentConstants.js';
+import countryService from '../services/countries/countryService.js';
 import { formatShortId } from '../utils/shortId.js';
 
 /** Wait briefly for Horizon watcher + escrow to create the transaction row. */
@@ -50,7 +54,7 @@ router.post(
   authUser,
   validate(['network', 'phoneHash']),
   validateTypes({ xlmAmount: 'positiveNumber', fiatAmount: 'positiveNumber', network: 'mobileNetwork', phoneHash: 'phoneHash' }),
-  checkUserLimits,
+  enforceKycTransactionLimits('offramp'),
   async (req, res, next) => {
     try {
       const { xlmAmount, fiatAmount, network, phoneHash, payoutPhone, payoutName, payoutSettingId } = req.body;
@@ -115,11 +119,6 @@ router.post(
         fiatEstimate = fiatNum;
         logger.info(`[Cashout] getQuote (fiat): fiatAmount=${fiatNum}, network=${network}`);
       }
-      const fraudCheck = await fraudMonitor.checkTransaction(req.userId, fiatEstimate, fiatCurrency);
-      if (!fraudCheck.allowed) {
-        logger.warn(`[Cashout] Fraud check failed: ${fraudCheck.reason}`);
-        return res.status(403).json({ error: fraudCheck.reason });
-      }
 
       // [AML] Sanctions screening on the payout counterparty (the person whose
       // mobile-money account receives the fiat). A hit hard-blocks the cash-out.
@@ -152,11 +151,35 @@ router.post(
         }
       }
 
+      const countryCode = paymentRouter.networkToCountryCode(network);
+      if (!countryCode || !countryService.isActiveCountry(countryCode)) {
+        return res.status(400).json({
+          error: 'Cash-out is only available in Uganda for now. Other countries are coming soon.',
+          code: 'COUNTRY_NOT_AVAILABLE',
+          supportedCountries: countryService.getActiveCountries().map((c) => c.code),
+        });
+      }
+      if (!countryService.isValidNetworkForCountry(countryCode, network)) {
+        return res.status(400).json({
+          error: `Network ${network} is not available for ${countryCode}.`,
+          code: 'NETWORK_NOT_AVAILABLE',
+        });
+      }
+      const paymentPlan = paymentRouter.resolvePaymentPlan({
+        countryCode,
+        side: PAYMENT_SIDES.OFFRAMP,
+      });
+
       const networkLimits = await payoutSettingsService.getActiveNetworkLimits(network, fiatCurrency);
-      if (!networkLimits.hasTraders) {
+      const yellowAvailable = paymentPlan?.hasAutomatedRail;
+      if (!networkLimits.hasTraders && !yellowAvailable) {
         return res.status(503).json({
           error: 'No verified traders are available for this network right now. Try another network or try again later.',
           code: 'NO_TRADERS_FOR_NETWORK',
+          paymentPlan: paymentPlan ? {
+            countryCode: paymentPlan.countryCode,
+            unavailable: paymentPlan.unavailable,
+          } : null,
         });
       }
       if (networkLimits.maxFiat != null && fiatEstimate > networkLimits.maxFiat) {
@@ -262,6 +285,13 @@ router.post(
         fxWarning: quote.fx_warning || null,
         fiatRateSource: quote.fiat_rate_source || null,
         payoutSettingId: quote.preferred_payout_setting_id || null,
+        paymentPlan: paymentPlan ? {
+          countryCode: paymentPlan.countryCode,
+          primary: paymentPlan.primary,
+          fallbackChain: paymentPlan.fallbackChain,
+          hasAutomatedRail: paymentPlan.hasAutomatedRail,
+          hasP2pFallback: paymentPlan.hasP2pFallback,
+        } : null,
       });
     } catch (err) {
       next(err);

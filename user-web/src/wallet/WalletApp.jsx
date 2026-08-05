@@ -6,6 +6,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { SocketProvider } from './context/SocketContext';
 import { NotificationsProvider } from './context/NotificationsContext';
+import { UserCountryProvider } from './context/UserCountryContext';
 import usePushNotifications from './hooks/usePushNotifications';
 
 import AppShell from './components/layout/AppShell';
@@ -28,6 +29,12 @@ import BuyConfirm from './pages/BuyConfirm'
 import Cashout from './pages/Cashout';
 import CashoutConfirm from './pages/CashoutConfirm';
 import CashoutSend from './pages/CashoutSend';
+import Utilities from './pages/Utilities';
+import UtilitiesHub from './pages/UtilitiesHub';
+import UtilitiesConfirm from './pages/UtilitiesConfirm';
+import UtilitiesSend from './pages/UtilitiesSend';
+import UtilitiesBills from './pages/UtilitiesBills';
+import UtilityStatus from './pages/UtilityStatus';
 import TransactionStatus from './pages/TransactionStatus';
 import History from './pages/History';
 import TransactionDetail from './pages/TransactionDetail';
@@ -52,6 +59,7 @@ export default function WalletApp() {
   return (
     <SocketProvider>
       <NotificationsProvider>
+        <UserCountryProvider>
         <PushNotificationInit />
         <Routes>
             {/* Tab routes with bottom nav */}
@@ -75,6 +83,15 @@ export default function WalletApp() {
             <Route path="cashout" element={<Cashout />} />
             <Route path="cashout/confirm" element={<CashoutConfirm />} />
             <Route path="cashout/send" element={<CashoutSend />} />
+            <Route path="utilities" element={<UtilitiesHub />}>
+              <Route index element={<Navigate to="airtime" replace />} />
+              <Route path="airtime" element={<Utilities utilityType="airtime" />} />
+              <Route path="data" element={<Utilities utilityType="data" />} />
+              <Route path="bills" element={<UtilitiesBills />} />
+            </Route>
+            <Route path="utilities/confirm" element={<UtilitiesConfirm />} />
+            <Route path="utilities/send" element={<UtilitiesSend />} />
+            <Route path="utilities/status/:id" element={<UtilityStatus />} />
             <Route path="transaction/:id" element={<TransactionStatus />} />
             <Route path="history/:id" element={<TransactionDetail />} />
             <Route path="dispute/:id" element={<DisputeForm />} />
@@ -87,6 +104,7 @@ export default function WalletApp() {
             {/* Catch-all within wallet */}
             <Route path="*" element={<Navigate to="home" replace />} />
           </Routes>
+        </UserCountryProvider>
       </NotificationsProvider>
     </SocketProvider>
   );

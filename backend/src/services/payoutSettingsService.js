@@ -4,6 +4,7 @@
  */
 
 import db from '../db/index.js';
+import countryService from './countries/countryService.js';
 import logger from '../utils/logger.js';
 
 const MOBILE_NETWORK_ALIASES = {
@@ -89,6 +90,24 @@ class PayoutSettingsService {
 
     if (!country || !network || !currency || min_amount === undefined || max_amount === undefined) {
       const err = new Error('Missing required fields: country, network, currency, min_amount, max_amount');
+      err.status = 400;
+      throw err;
+    }
+
+    const countryCode = String(country).trim().toUpperCase();
+    if (!countryService.isActiveCountry(countryCode)) {
+      const err = new Error(`Unsupported country: ${countryCode}`);
+      err.status = 400;
+      throw err;
+    }
+    if (!countryService.isValidNetworkForCountry(countryCode, network)) {
+      const err = new Error(`Network ${network} is not valid for ${countryCode}`);
+      err.status = 400;
+      throw err;
+    }
+    const expectedCurrency = countryService.getCurrencyForCountry(countryCode);
+    if (expectedCurrency && String(currency).trim().toUpperCase() !== expectedCurrency) {
+      const err = new Error(`Currency must be ${expectedCurrency} for ${countryCode}`);
       err.status = 400;
       throw err;
     }

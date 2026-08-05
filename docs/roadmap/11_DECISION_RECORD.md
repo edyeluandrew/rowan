@@ -12,6 +12,7 @@
 | 1 | B2C first, B2B later | P2P traders fit consumer flows today | Jul 2026 |
 | 2 | Stellar primary chain through Phase 2 | Low fees, USDC native, existing infra | Jul 2026 |
 | 3 | Hybrid rails: P2P + Yellow Pay | Traders in EAC; aggregators for scale | Jul 2026 |
+| 3a | **Uganda-only launch + P2P first** | Regulatory surface; aggregators out of product path | Aug 2026 |
 | 4 | Utilities before virtual cards | Faster build, daily retention | Jul 2026 |
 | 5 | Smile ID over MetaMap for KYC | Better Africa ID coverage | Jul 2026 |
 | 6 | Reloadly first for airtime/bills | Lower crypto sensitivity vs Flutterwave | Jul 2026 |
@@ -27,7 +28,7 @@
 | # | Question | Options | Recommendation |
 |---|----------|---------|----------------|
 | O1 | First utility to ship | Airtime only vs airtime+bills | **Airtime first** (simplest) |
-| O2 | First aggregator corridor | UG vs KE vs both | **UG** (home market) |
+| O2 | First aggregator corridor | UG vs KE vs both | **UG only (locked Aug 2026)** — P2P first |
 | O3 | Savings yield mechanism | Stellar AMM vs partner | **Legal review first** |
 | O4 | Virtual card provider | Maplerad vs Bridge | Decide in 2C after card KYC ready |
 | O5 | Bank choice | Stanbic vs Ecobank | **Stanbic** (fintech track record) |
@@ -62,7 +63,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0 | 24 Jul 2026 | Initial decision record |
+| 1.1 | 5 Aug 2026 | Locked Uganda-only launch + P2P-first rails |
 
 ---
 

@@ -1,7 +1,8 @@
 import Queue from 'bull';
 import config from '../config/index.js';
 import db from '../db/index.js';
-import redis from '../db/redis.js';
+import Redis from 'ioredis';
+import redis, { buildBullRedisOptions } from '../db/redis.js';
 import websocket from '../services/websocket.js';
 import notificationService from '../services/notificationService.js';
 import stateMachine from './transactionStateMachine.js';
@@ -11,29 +12,49 @@ import logger from '../utils/logger.js';
 /**
  * Bull job queues for async/deferred tasks.
  * Backed by Render Key Value (Redis-compatible Valkey).
- * Migrated from Upstash to avoid request quota limits.
+ *
+ * Share one client + one subscriber across all queues. Each queue still needs
+ * its own bclient (blocking). That keeps sockets ~11 instead of ~27, which
+ * fits free Render Key Value limits and avoids Connected→closed thrashing that
+ * blocked boot (listen never ran → "No open ports detected").
  */
 
-// Parse Redis URL into an options object so Bull's internal ioredis client
-// gets maxRetriesPerRequest: null (prevents crash on transient disconnects).
-function parseRedisOpts(url) {
-  const parsed = new URL(url);
-  return {
-    host: parsed.hostname,
-    port: parseInt(parsed.port, 10) || 6379,
-    password: parsed.password || undefined,
-    username: parsed.username !== 'default' ? parsed.username : undefined,
-    tls: url.startsWith('rediss://') ? {} : undefined,
-    maxRetriesPerRequest: null,
-    enableOfflineQueue: true,
-    retryStrategy(times) {
-      return Math.min(times * 500, 15000);
-    },
-  };
+const bullRedisOpts = buildBullRedisOptions(config.redisUrl);
+let sharedBullClient = null;
+let sharedBullSubscriber = null;
+
+function bullCreateClient(type) {
+  switch (type) {
+    case 'client':
+      if (!sharedBullClient) {
+        sharedBullClient = new Redis(bullRedisOpts);
+        sharedBullClient.on('error', (err) => {
+          if (!/ECONNRESET|EPIPE|Connection is closed/i.test(err.message || '')) {
+            logger.warn('[Redis:bull-client]', err.message);
+          }
+        });
+      }
+      return sharedBullClient;
+    case 'subscriber':
+      if (!sharedBullSubscriber) {
+        sharedBullSubscriber = new Redis(bullRedisOpts);
+        sharedBullSubscriber.on('error', (err) => {
+          if (!/ECONNRESET|EPIPE|Connection is closed/i.test(err.message || '')) {
+            logger.warn('[Redis:bull-sub]', err.message);
+          }
+        });
+      }
+      return sharedBullSubscriber;
+    case 'bclient':
+      // Blocking clients cannot be shared across queues
+      return new Redis(bullRedisOpts);
+    default:
+      return new Redis(bullRedisOpts);
+  }
 }
 
 const defaultOpts = {
-  redis: parseRedisOpts(config.redisUrl),
+  createClient: bullCreateClient,
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },

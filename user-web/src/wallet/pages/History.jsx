@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react'
 import useP2pHistory from '../hooks/useP2pHistory'
-import P2pHistoryCard from '../components/history/P2pHistoryCard'
+import HistoryItemCard from '../components/history/HistoryItemCard'
 import HistorySkeleton from '../components/history/HistorySkeleton'
 import Button from '../components/ui/Button'
 
@@ -12,6 +12,12 @@ const STATUS_FILTERS = [
   { id: 'cancelled', label: 'Cancelled' },
   { id: 'refunded', label: 'Refunded' },
   { id: 'disputed', label: 'Disputed' },
+]
+
+const CATEGORY_FILTERS = [
+  { id: 'all', label: 'All activity' },
+  { id: 'p2p', label: 'P2P trades' },
+  { id: 'utilities', label: 'Utilities' },
 ]
 
 const RANGE_FILTERS = [
@@ -26,6 +32,9 @@ export default function History() {
   const navigate = useNavigate()
   const location = useLocation()
   const initialStatus = VALID_STATUS.has(location.state?.status) ? location.state.status : 'all'
+  const initialCategory = ['all', 'p2p', 'utilities'].includes(location.state?.category)
+    ? location.state.category
+    : 'all'
   const {
     transactions,
     loading,
@@ -36,11 +45,12 @@ export default function History() {
     loadMore,
     refresh,
     updateFilters,
-  } = useP2pHistory({ status: initialStatus, range: 'all' })
-  const [filtersOpen, setFiltersOpen] = useState(initialStatus !== 'all')
+  } = useP2pHistory({ status: initialStatus, range: 'all', category: initialCategory })
+  const [filtersOpen, setFiltersOpen] = useState(initialStatus !== 'all' || initialCategory !== 'all')
 
   const setStatus = (status) => updateFilters({ ...filters, status })
   const setRange = (range) => updateFilters({ ...filters, range })
+  const setCategory = (category) => updateFilters({ ...filters, category })
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
@@ -58,6 +68,25 @@ export default function History() {
 
       {filtersOpen && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 space-y-4">
+          <div>
+            <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Type</p>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORY_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setCategory(f.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium min-h-9 ${
+                    (filters.category || 'all') === f.id
+                      ? 'bg-rowan-yellow text-rowan-bg'
+                      : 'bg-rowan-bg text-rowan-muted border border-rowan-border'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Status</p>
             <div className="flex flex-wrap gap-2">
@@ -107,7 +136,7 @@ export default function History() {
         </div>
       )}
 
-      {!filtersOpen && (filters.status !== 'all' || filters.range !== 'all') && (
+      {!filtersOpen && (filters.status !== 'all' || filters.range !== 'all' || filters.category !== 'all') && (
         <button
           type="button"
           onClick={() => setFiltersOpen(true)}
@@ -144,7 +173,7 @@ export default function History() {
       {transactions.length > 0 && (
         <div className="space-y-2">
           {transactions.map((tx) => (
-            <P2pHistoryCard key={tx.id} transaction={tx} />
+            <HistoryItemCard key={`${tx.kind || 'p2p'}-${tx.id}`} transaction={tx} />
           ))}
           {hasMore && (
             <Button

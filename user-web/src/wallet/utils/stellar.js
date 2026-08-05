@@ -274,6 +274,14 @@ export async function fundTestUsdcWallet({
   const provision = await provisionUsdcWallet({ secretKey, publicKey, horizonUrl })
   const balances = await loadAccountBalances(publicKey, horizonUrl)
 
+  if (provision.skipped === 'account_not_funded' || balances.xlm < MIN_XLM_FOR_TRUSTLINE) {
+    throw new Error('Wallet needs testnet XLM first. Go to Receive → "Set up network fees".')
+  }
+
+  if (!balances.hasUsdcTrustline) {
+    throw new Error('USDC trustline not ready yet. Wait a moment or tap Retry USDC setup.')
+  }
+
   if (balances.usdc >= TESTNET_MIN_USDC_FOR_SKIP) {
     return {
       ...provision,

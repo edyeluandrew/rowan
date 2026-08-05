@@ -45,6 +45,10 @@ export function uploadKycDocument(file, slot) {
   }).then((res) => res.data)
 }
 
+export function getUsdcWallet() {
+  return client.get('/api/v1/user/wallet/usdc').then((res) => res.data)
+}
+
 export function getActiveTransaction() {
   return client.get('/api/v1/user/transactions/active').then((res) => res.data)
 }

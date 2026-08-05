@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { authUser, checkUserLimits } from '../middleware/auth.js';
+import { authUser } from '../middleware/auth.js';
+import { enforceKycTransactionLimits } from '../middleware/kycLimits.js';
 import { validate, validateTypes } from '../middleware/validate.js';
 import { cashoutStatusLimiter } from '../middleware/rateLimits.js';
 import buyQuoteEngine from '../services/buyQuoteEngine.js';
 import buyOrchestrator from '../services/buyOrchestrator.js';
 import buyMatchingEngine from '../services/buyMatchingEngine.js';
-import fraudMonitor from '../services/fraudMonitor.js';
 import payoutSettingsService from '../services/payoutSettingsService.js';
 import quoteEngine from '../services/quoteEngine.js';
 import config from '../config/index.js';
@@ -15,6 +15,9 @@ import { getVerifiedTraderMomo } from '../services/traderMomoService.js';
 import logger from '../utils/logger.js';
 import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 import storageService from '../services/storageService.js';
+import paymentRouter from '../services/payments/paymentRouter.js';
+import { PAYMENT_SIDES } from '../services/payments/paymentConstants.js';
+import countryService from '../services/countries/countryService.js';
 import { formatShortId } from '../utils/shortId.js';
 
 const router = Router();
@@ -37,7 +40,7 @@ router.post(
   authUser,
   validate(['network', 'phoneHash', 'fiatAmount']),
   validateTypes({ fiatAmount: 'positiveNumber', network: 'mobileNetwork', phoneHash: 'phoneHash' }),
-  checkUserLimits,
+  enforceKycTransactionLimits('onramp'),
   async (req, res, next) => {
     try {
       const { fiatAmount, network, phoneHash, payoutSettingId } = req.body;
@@ -55,16 +58,36 @@ router.post(
       }
 
       const fiatCurrency = quoteEngine.networkToFiat(network);
-      const fraudCheck = await fraudMonitor.checkTransaction(req.userId, fiatNum, fiatCurrency);
-      if (!fraudCheck.allowed) {
-        return res.status(403).json({ error: fraudCheck.reason });
+
+      const countryCode = paymentRouter.networkToCountryCode(network);
+      if (!countryCode || !countryService.isActiveCountry(countryCode)) {
+        return res.status(400).json({
+          error: 'Buy is only available in Uganda for now. Other countries are coming soon.',
+          code: 'COUNTRY_NOT_AVAILABLE',
+          supportedCountries: countryService.getActiveCountries().map((c) => c.code),
+        });
       }
+      if (!countryService.isValidNetworkForCountry(countryCode, network)) {
+        return res.status(400).json({
+          error: `Network ${network} is not available for ${countryCode}.`,
+          code: 'NETWORK_NOT_AVAILABLE',
+        });
+      }
+      const paymentPlan = paymentRouter.resolvePaymentPlan({
+        countryCode,
+        side: PAYMENT_SIDES.ONRAMP,
+      });
 
       const networkLimits = await payoutSettingsService.getActiveBuyNetworkLimits(network, fiatCurrency);
-      if (!networkLimits.hasTraders) {
+      const yellowAvailable = paymentPlan?.hasAutomatedRail;
+      if (!networkLimits.hasTraders && !yellowAvailable) {
         return res.status(503).json({
           error: 'No traders selling USDC on this network right now.',
           code: 'NO_BUY_TRADERS',
+          paymentPlan: paymentPlan ? {
+            countryCode: paymentPlan.countryCode,
+            unavailable: paymentPlan.unavailable,
+          } : null,
         });
       }
       if (networkLimits.maxFiat != null && fiatNum > networkLimits.maxFiat) {
@@ -96,6 +119,13 @@ router.post(
         traderName: quote.expressTraderName || null,
         orderSide: 'BUY',
         express: !payoutSettingId,
+        paymentPlan: paymentPlan ? {
+          countryCode: paymentPlan.countryCode,
+          primary: paymentPlan.primary,
+          fallbackChain: paymentPlan.fallbackChain,
+          hasAutomatedRail: paymentPlan.hasAutomatedRail,
+          hasP2pFallback: paymentPlan.hasP2pFallback,
+        } : null,
       });
     } catch (err) {
       if (err.statusCode) return res.status(err.statusCode).json({ error: err.message, code: err.code });

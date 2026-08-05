@@ -38,6 +38,55 @@ export const NETWORKS = {
     color: 'text-rowan-red',
     bg: 'bg-rowan-red/20',
   },
+  MTN_RW: {
+    label: 'MTN MoMo',
+    currency: 'RWF',
+    country: 'RW',
+    color: 'text-rowan-gold',
+    bg: 'bg-rowan-gold/20',
+  },
+  AIRTEL_RW: {
+    label: 'Airtel Money',
+    currency: 'RWF',
+    country: 'RW',
+    color: 'text-rowan-red',
+    bg: 'bg-rowan-red/20',
+  },
+  MTN_NG: {
+    label: 'MTN MoMo',
+    currency: 'NGN',
+    country: 'NG',
+    color: 'text-rowan-gold',
+    bg: 'bg-rowan-gold/20',
+  },
+  AIRTEL_NG: {
+    label: 'Airtel Money',
+    currency: 'NGN',
+    country: 'NG',
+    color: 'text-rowan-red',
+    bg: 'bg-rowan-red/20',
+  },
+  MTN_GH: {
+    label: 'MTN MoMo',
+    currency: 'GHS',
+    country: 'GH',
+    color: 'text-rowan-gold',
+    bg: 'bg-rowan-gold/20',
+  },
+  AIRTELTIGO_GH: {
+    label: 'AirtelTigo Money',
+    currency: 'GHS',
+    country: 'GH',
+    color: 'text-rowan-blue',
+    bg: 'bg-rowan-blue/20',
+  },
+  VODAFONE_GH: {
+    label: 'Vodafone Cash',
+    currency: 'GHS',
+    country: 'GH',
+    color: 'text-rowan-red',
+    bg: 'bg-rowan-red/20',
+  },
 }
 
 export const TX_STATES = {
@@ -66,6 +115,9 @@ export const COUNTRY_CODES = {
   UG: { code: '+256', label: 'UG +256', flag: '🇺🇬', name: 'Uganda' },
   KE: { code: '+254', label: 'KE +254', flag: '🇰🇪', name: 'Kenya' },
   TZ: { code: '+255', label: 'TZ +255', flag: '🇹🇿', name: 'Tanzania' },
+  RW: { code: '+250', label: 'RW +250', flag: '🇷🇼', name: 'Rwanda' },
+  NG: { code: '+234', label: 'NG +234', flag: '🇳🇬', name: 'Nigeria' },
+  GH: { code: '+233', label: 'GH +233', flag: '🇬🇭', name: 'Ghana' },
 }
 
 export const MIN_XLM_AMOUNT = 1
@@ -153,7 +205,10 @@ export const ALERT_DIRECTIONS = {
   BELOW: { label: 'Drops below', symbol: '<' },
 }
 
-export const ALERT_CURRENCIES = ['XLM/UGX', 'XLM/KES', 'XLM/TZS', 'USDC/UGX']
+export const ALERT_CURRENCIES = [
+  'XLM/UGX', 'XLM/KES', 'XLM/TZS', 'XLM/RWF',
+  'USDC/UGX', 'USDC/KES', 'USDC/TZS', 'USDC/RWF',
+]
 
 export const MAX_ACTIVE_ALERTS = 10
 

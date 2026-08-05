@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
-import { getHistory } from '../api/user'
+import { getHistory, getTransactionHistory } from '../api/user'
 import { useSocketContext } from '../context/SocketContext'
-import { normalizeWalletHistoryResponse } from '../utils/transactions'
+import { normalizeP2pHistoryResponse, normalizeWalletHistoryStats } from '../utils/transactions'
 
 const HISTORY_REFRESH_EVENTS = [
   'transaction_complete',
@@ -31,8 +31,11 @@ export default function useTransactions() {
     setLoading(true)
     setError(null)
     try {
-      const data = await getHistory({ page: pageNum, limit: 20 })
-      const { transactions: list, stats: nextStats } = normalizeWalletHistoryResponse(data)
+      const [historyData, statsData] = await Promise.all([
+        getTransactionHistory({ page: pageNum, limit: 20, category: 'all' }),
+        pageNum === 1 ? getHistory({ limit: 1 }) : Promise.resolve(null),
+      ])
+      const { transactions: list } = normalizeP2pHistoryResponse(historyData)
 
       if (append) {
         setTransactions((prev) => [...prev, ...list])
@@ -40,14 +43,11 @@ export default function useTransactions() {
         setTransactions(list)
       }
 
-      setStats((prev) => {
-        const merged = nextStats || prev
-        if (merged && pageNum === 1 && list.length > 0 && merged.total < list.length) {
-          return { ...merged, total: list.length }
-        }
-        return merged
-      })
-      setHasMore(list.length === 20)
+      if (statsData?.stats) {
+        setStats(normalizeWalletHistoryStats(statsData.stats))
+      }
+
+      setHasMore(list.length === 20 && pageNum < (historyData.pages || 1))
       setPage(pageNum)
     } catch (err) {
       setError(err.message)

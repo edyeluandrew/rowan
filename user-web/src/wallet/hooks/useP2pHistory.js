@@ -35,6 +35,9 @@ export default function useP2pHistory(initialFilters = {}) {
       if (activeFilters.range && activeFilters.range !== 'all') {
         params.range = activeFilters.range
       }
+      if (activeFilters.category && activeFilters.category !== 'all') {
+        params.category = activeFilters.category
+      }
       const data = normalizeP2pHistoryResponse(await getTransactionHistory(params))
       setTransactions((prev) => (append ? [...prev, ...data.transactions] : data.transactions))
       setTotal(data.total)

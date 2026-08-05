@@ -1,8 +1,18 @@
+import { resolveFiatCurrency } from './country'
+
 /**
  * Normalize wallet transaction DTOs from API (snake_case) to UI shape (camelCase).
  */
 export function normalizeWalletTransaction(tx) {
   if (!tx || typeof tx !== 'object') return null
+
+  const fiat = resolveFiatCurrency(
+    tx.fiatCurrency,
+    tx.fiat_currency,
+    tx.currency,
+    tx.countryCode,
+    tx.country_code
+  )
 
   return {
     id: tx.id,
@@ -10,7 +20,7 @@ export function normalizeWalletTransaction(tx) {
     network: tx.network ?? tx.payment_method ?? tx.paymentMethod,
     xlmAmount: tx.xlmAmount ?? tx.xlm_amount ?? 0,
     fiatAmount: tx.fiatAmount ?? tx.fiat_amount ?? 0,
-    currency: tx.currency ?? tx.fiat_currency ?? 'UGX',
+    currency: fiat,
     createdAt: tx.createdAt ?? tx.created_at,
     usdcAmount: tx.usdcAmount ?? tx.usdc_amount,
     stellarDepositTx: tx.stellarDepositTx ?? tx.stellar_deposit_tx,
@@ -18,7 +28,7 @@ export function normalizeWalletTransaction(tx) {
     completedAt: tx.completedAt ?? tx.completed_at,
     failedAt: tx.failedAt ?? tx.failed_at,
     hasDispute: tx.hasDispute ?? !!tx.dispute_id,
-    fiatCurrency: tx.fiatCurrency ?? tx.fiat_currency ?? 'UGX',
+    fiatCurrency: fiat,
     quoteConfirmedAt: tx.quoteConfirmedAt ?? tx.quote_confirmed_at,
     escrowLockedAt: tx.escrowLockedAt ?? tx.escrow_locked_at,
     traderMatchedAt: tx.traderMatchedAt ?? tx.trader_matched_at,
@@ -131,11 +141,36 @@ export function getInProgressTransactions(transactions) {
 
 export function normalizeP2pHistoryItem(tx) {
   if (!tx || typeof tx !== 'object') return null
-  return normalizeWalletTransaction({
-    ...tx,
-    fiat_currency: tx.currency ?? tx.fiat_currency,
-    trader_name: tx.trader_name,
-  })
+  if (tx.kind === 'utility') {
+    return {
+      kind: 'utility',
+      id: tx.id,
+      shortId: tx.short_id,
+      state: tx.state,
+      status: tx.state,
+      utilityType: tx.utility_type,
+      utilityLabel: tx.utility_label,
+      bundleDescription: tx.bundle_description,
+      usdcAmount: tx.usdc_amount,
+      fiatAmount: tx.fiat_amount,
+      currency: tx.currency ?? tx.fiat_currency,
+      network: tx.network,
+      recipientPhone: tx.recipient_phone,
+      operatorName: tx.operator_name,
+      paymentTxHash: tx.payment_tx_hash,
+      externalRef: tx.external_ref,
+      createdAt: tx.created_at,
+      completedAt: tx.completed_at,
+    }
+  }
+  return {
+    kind: 'p2p',
+    ...normalizeWalletTransaction({
+      ...tx,
+      fiat_currency: tx.currency ?? tx.fiat_currency,
+      trader_name: tx.trader_name,
+    }),
+  }
 }
 
 export function normalizeP2pHistoryResponse(data) {

@@ -1,10 +1,13 @@
 /** Supported display / rate fiat currencies */
-export const FIAT_CURRENCIES = ['UGX', 'KES', 'TZS']
+export const FIAT_CURRENCIES = ['UGX', 'KES', 'TZS', 'RWF', 'NGN', 'GHS']
 
 export const FIAT_OPTIONS = [
   { code: 'UGX', label: 'Uganda', flag: '🇺🇬' },
   { code: 'KES', label: 'Kenya', flag: '🇰🇪' },
   { code: 'TZS', label: 'Tanzania', flag: '🇹🇿' },
+  { code: 'RWF', label: 'Rwanda', flag: '🇷🇼' },
+  { code: 'NGN', label: 'Nigeria', flag: '🇳🇬' },
+  { code: 'GHS', label: 'Ghana', flag: '🇬🇭' },
 ]
 
 export function xlmToFiat(xlmBalance, xlmRate) {

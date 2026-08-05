@@ -4,6 +4,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Clock,
+  Signal,
   Star,
   AlertTriangle,
   Bell,
@@ -23,7 +24,7 @@ import RateDisplay from '../components/wallet/RateDisplay'
 import CashoutInProgressBanner from '../components/cashout/CashoutInProgressBanner'
 import ConnectionDot from '../components/ui/ConnectionDot'
 import NotificationBadge from '../components/ui/NotificationBadge'
-import TransactionCard from '../components/transactions/TransactionCard'
+import HistoryItemCard from '../components/history/HistoryItemCard'
 import { CURRENT_NETWORK, TESTNET_AUTO_USDC_AMOUNT } from '../utils/constants'
 import { usdcToFiat } from '../utils/fiat'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
@@ -32,7 +33,15 @@ import { getInProgressTransactions } from '../utils/transactions'
 export default function Home() {
   const navigate = useNavigate()
   const { isLocked } = useBiometricProtection()
-  const { usdcBalance, hasUsdcTrustline, loading: balanceLoading, refresh: refreshBalance, testUsdcProvisioning } = useWallet()
+  const {
+    usdcBalance,
+    usdcAvailable,
+    usdcLocked,
+    hasUsdcTrustline,
+    loading: balanceLoading,
+    refresh: refreshBalance,
+    testUsdcProvisioning,
+  } = useWallet()
   const { country, fiatCurrency, ready: countryReady } = useUserCountry()
   const { hasActiveOrder } = useActiveTransaction()
   const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates(fiatCurrency)
@@ -45,8 +54,9 @@ export default function Home() {
   const recent = transactions.filter((tx) => tx.id !== activeCashout?.id).slice(0, 3)
 
   const usdcToFiatRate = rates?.usdcToFiat
-  const fiatEquivalent = usdcBalance != null && usdcToFiatRate
-    ? usdcToFiat(usdcBalance, usdcToFiatRate)
+  const spendableUsdc = usdcAvailable ?? usdcBalance
+  const fiatEquivalent = spendableUsdc != null && usdcToFiatRate
+    ? usdcToFiat(spendableUsdc, usdcToFiatRate)
     : null
 
   const needsUsdc = !balanceLoading
@@ -82,6 +92,8 @@ export default function Home() {
         fiatAmount={countryReady ? fiatEquivalent : null}
         fiatCurrency={fiatCurrency}
         usdcBalance={usdcBalance}
+        usdcAvailable={usdcAvailable}
+        usdcLocked={usdcLocked}
         loading={balanceLoading || ratesLoading || !countryReady}
         refreshing={balanceLoading}
         onRefresh={() => {
@@ -94,8 +106,8 @@ export default function Home() {
 
       {activeCashout && <CashoutInProgressBanner transaction={activeCashout} />}
 
-      {/* Primary actions — short labels */}
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      {/* Primary actions */}
+      <div className="mt-4 grid grid-cols-4 gap-2">
         <button
           type="button"
           onClick={() => navigate('/wallet/receive')}
@@ -121,6 +133,14 @@ export default function Home() {
         >
           <ArrowUpFromLine size={20} className="text-rowan-green" />
           <span className="text-rowan-text text-xs font-medium">Sell</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/wallet/utilities/airtime')}
+          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
+        >
+          <Signal size={20} className="text-rowan-gold" />
+          <span className="text-rowan-text text-xs font-medium">Airtime</span>
         </button>
       </div>
 
@@ -216,13 +236,13 @@ export default function Home() {
             <Star size={32} className="text-rowan-muted mx-auto mb-3" />
             <p className="text-rowan-muted text-sm">No transactions yet</p>
             <p className="text-rowan-muted text-xs mt-1">
-              Receive, buy, or sell to get started
+              Receive, buy, sell, or buy airtime to get started
             </p>
           </div>
         ) : (
           <div className="space-y-2">
             {recent.map((tx) => (
-              <TransactionCard key={tx.id} transaction={tx} />
+              <HistoryItemCard key={`${tx.kind || 'p2p'}-${tx.id}`} transaction={tx} />
             ))}
           </div>
         )}

@@ -3,6 +3,7 @@ import config from '../config/index.js';
 import { USDC_ASSET } from '../config/stellar.js';
 import logger from '../utils/logger.js';
 import payoutSettingsService from '../services/payoutSettingsService.js';
+import { KYC_PRODUCTS } from '../services/kyc/kycTierService.js';
 
 const router = Router();
 
@@ -93,6 +94,7 @@ router.get('/cashout-limits', async (req, res, next) => {
       })(),
       // [PHASE 4] KYC-tiered limits (for transparency and admin display)
       kycLimits: config.kycLimits,
+      kycProducts: KYC_PRODUCTS,
       // [PHASE 4] Amount mismatch tolerance for deposit verification
       xlmAmountMismatchTolerance: config.platform.xlmAmountMismatchTolerance,
     };

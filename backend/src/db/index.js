@@ -6,7 +6,11 @@ const { Pool } = pg;
 
 // [P3 FIX] Reduced pool size — Supabase free tier allows ~60 connections total
 // SSL is required for Supabase (even in development) — detect from connection string
-const needsSsl = config.databaseUrl?.includes('supabase.com') || config.databaseUrl?.includes('supabase.co') || config.nodeEnv === 'production';
+const needsSsl =
+  config.databaseUrl?.includes('supabase.com') ||
+  config.databaseUrl?.includes('supabase.co') ||
+  config.databaseUrl?.includes('neon.tech') ||
+  config.nodeEnv === 'production';
 
 const pool = new Pool({
   connectionString: config.databaseUrl,

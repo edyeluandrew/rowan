@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace, Lock } from 'lucide-react'
+import { ChevronLeft, PartyPopper, RotateCcw, RefreshCw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace, Lock } from 'lucide-react'
 import { getTransactionStatus, confirmReceipt, openDispute, cancelOrder } from '../api/cashout'
 import { submitBuyPayment } from '../api/buy'
 import PaymentDetailsCard from '../components/chat/PaymentDetailsCard'
@@ -20,7 +20,16 @@ import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
 import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder } from '../utils/transactions'
 import { STATE_SUBTITLES } from '../utils/constants'
-import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine } from '../utils/p2pFormat'
+import {
+  formatCurrency,
+  getStatusLabel,
+  getNetworkLabel,
+  getTraderDisplayName,
+  formatLockedRateLine,
+  formatUsdcRateLine,
+  getSellProgressSubtitle,
+  isAutomatedPayoutPending,
+} from '../utils/p2pFormat'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
 const POLL_INTERVAL = 3000 // Poll every 3 seconds while waiting
@@ -61,10 +70,12 @@ export default function TransactionStatus() {
   const [buyPaymentRef, setBuyPaymentRef] = useState('')
   const [submittingBuyPayment, setSubmittingBuyPayment] = useState(false)
   const [buyPaymentError, setBuyPaymentError] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
   const INITIAL_WAIT_MS = 3000 // Escrow + swap can take several seconds on testnet
   const retryCountRef = useRef(0)
+  const fetchStatusRef = useRef(null)
 
   // Prefer real transaction id from state; URL may temporarily hold quoteId while escrow processes.
   const statusId = passedTransactionId || id
@@ -99,6 +110,7 @@ export default function TransactionStatus() {
           setTransaction(tx)
           setIsWaiting(false)
           setLoading(false)
+          setError(null)
           setRetryCount(0)
           retryCountRef.current = 0
 
@@ -132,6 +144,8 @@ export default function TransactionStatus() {
         }
       }
     }
+
+    fetchStatusRef.current = fetchStatus
 
     initialWaitTimer = setTimeout(() => {
       if (!cancelled) fetchStatus()
@@ -345,9 +359,37 @@ export default function TransactionStatus() {
 
   const RATE_LOCK_STATES = ['ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING']
   const showRateLock = transaction && RATE_LOCK_STATES.includes(transaction.state)
+  const fiatCcy = transaction?.fiatCurrency || transaction?.currency || 'UGX'
   const lockedRateLine = transaction?.lockedRate
-    ? formatLockedRateLine(transaction.fiatCurrency || transaction.currency || 'UGX', transaction.lockedRate)
+    ? (transaction.usdcAmount > 0 && !transaction.xlmAmount
+        ? formatUsdcRateLine(fiatCcy, transaction.lockedRate)
+        : formatLockedRateLine(fiatCcy, transaction.lockedRate))
     : null
+  const progressSubtitle = transaction ? getSellProgressSubtitle(transaction) : null
+  const showAutomatedRefresh = Boolean(transaction && isAutomatedPayoutPending(transaction))
+
+  const handleManualRefresh = async () => {
+    if (refreshing || !fetchStatusRef.current) return
+    setRefreshing(true)
+    setError(null)
+    try {
+      await fetchStatusRef.current()
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const refreshStatusButton = (className = '') => (
+    <button
+      type="button"
+      onClick={handleManualRefresh}
+      disabled={refreshing}
+      className={`inline-flex items-center justify-center gap-2 text-rowan-yellow text-xs font-medium border border-rowan-yellow/40 rounded-full px-4 py-2 min-h-9 disabled:opacity-50 ${className}`}
+    >
+      <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+      {refreshing ? 'Refreshing…' : 'Refresh status'}
+    </button>
+  )
 
   const terminalMessage = () => {
     if (!transaction) return ''
@@ -421,6 +463,9 @@ export default function TransactionStatus() {
           <p className="text-rowan-muted text-xs mt-2">
             This usually takes 10-60 seconds
           </p>
+          <div className="mt-4 flex justify-center">
+            {refreshStatusButton()}
+          </div>
         </div>
       </div>
     )
@@ -438,12 +483,15 @@ export default function TransactionStatus() {
         <div className="bg-rowan-surface rounded-xl p-6 text-center">
           <XCircle size={32} className="text-rowan-red mx-auto mb-3" />
           <p className="text-rowan-red text-sm">{error}</p>
-          <button
-            onClick={() => navigate('/wallet/home', { replace: true })}
-            className="text-rowan-yellow text-sm underline mt-4"
-          >
-            Go Home
-          </button>
+          <div className="mt-4 flex flex-col items-center gap-3">
+            {refreshStatusButton()}
+            <button
+              onClick={() => navigate('/wallet/home', { replace: true })}
+              className="text-rowan-yellow text-sm underline"
+            >
+              Go Home
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -476,12 +524,22 @@ export default function TransactionStatus() {
       {transaction && !isTerminal && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 mb-4 text-center">
           <p className="text-rowan-text text-sm font-semibold">{getStatusLabel(transaction.state)}</p>
-          {STATE_SUBTITLES[transaction.state] && (
-            <p className="text-rowan-muted text-xs mt-1">{STATE_SUBTITLES[transaction.state]}</p>
+          {(progressSubtitle || STATE_SUBTITLES[transaction.state]) && (
+            <p className="text-rowan-muted text-xs mt-1">
+              {progressSubtitle || STATE_SUBTITLES[transaction.state]}
+            </p>
           )}
           <div className="mt-2 flex justify-center">
             <OrderShortId transactionId={activeTxId} />
           </div>
+          {showAutomatedRefresh && (
+            <div className="mt-3 flex flex-col items-center gap-1">
+              {refreshStatusButton()}
+              <p className="text-rowan-muted text-[11px]">
+                Tap if payout status has not updated yet
+              </p>
+            </div>
+          )}
         </div>
       )}
 

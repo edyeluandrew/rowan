@@ -2,17 +2,20 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { loadAccountBalances, provisionUsdcWallet, fundTestUsdcWallet } from '../utils/stellar'
 import { getSecure } from '../utils/storage'
+import { getUsdcWallet } from '../api/user'
 import { CURRENT_NETWORK, TESTNET_MIN_USDC_FOR_SKIP } from '../utils/constants'
 import { getHorizonUrl } from '../../shared/utils/config'
 
 /**
  * Hook to load and refresh the user's Stellar wallet balances from Horizon.
- * Auto-provisions USDC trustline and testnet starter USDC for legacy wallets.
+ * When authenticated, also loads available/locked USDC from the backend (B1).
  */
 export default function useWallet() {
-  const { keypair } = useAuth()
+  const { keypair, isAuthenticated } = useAuth()
   const [balance, setBalance] = useState(null)
   const [usdcBalance, setUsdcBalance] = useState(null)
+  const [usdcAvailable, setUsdcAvailable] = useState(null)
+  const [usdcLocked, setUsdcLocked] = useState(null)
   const [hasUsdcTrustline, setHasUsdcTrustline] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -31,12 +34,33 @@ export default function useWallet() {
       setBalance(balances.xlm)
       setUsdcBalance(balances.usdc)
       setHasUsdcTrustline(balances.hasUsdcTrustline)
+
+      if (isAuthenticated) {
+        try {
+          const wallet = await getUsdcWallet()
+          const total = wallet?.balance?.total ?? balances.usdc
+          const locked = wallet?.balance?.locked ?? 0
+          const available = wallet?.balance?.available ?? Math.max(0, total - locked)
+          setUsdcBalance(total)
+          setUsdcLocked(locked)
+          setUsdcAvailable(available)
+          if (wallet?.hasTrustline != null) {
+            setHasUsdcTrustline(wallet.hasTrustline)
+          }
+        } catch {
+          setUsdcLocked(0)
+          setUsdcAvailable(balances.usdc)
+        }
+      } else {
+        setUsdcLocked(0)
+        setUsdcAvailable(balances.usdc)
+      }
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [horizonUrl, keypair?.publicKey])
+  }, [horizonUrl, isAuthenticated, keypair?.publicKey])
 
   useEffect(() => {
     fetchBalance()
@@ -72,7 +96,7 @@ export default function useWallet() {
 
   useEffect(() => {
     if (!CURRENT_NETWORK.isTest || !keypair?.publicKey || loading) return
-    if (hasUsdcTrustline === false) return
+    if (hasUsdcTrustline !== true) return
     if (usdcBalance != null && usdcBalance >= TESTNET_MIN_USDC_FOR_SKIP) return
     if (testUsdcAttempted.current === keypair.publicKey) return
 
@@ -105,9 +129,13 @@ export default function useWallet() {
     return () => { cancelled = true }
   }, [fetchBalance, hasUsdcTrustline, horizonUrl, keypair?.publicKey, loading, usdcBalance])
 
+  const spendableUsdc = usdcAvailable ?? usdcBalance
+
   return {
     balance,
     usdcBalance,
+    usdcAvailable: spendableUsdc,
+    usdcLocked,
     hasUsdcTrustline,
     loading,
     error,

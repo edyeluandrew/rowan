@@ -1,0 +1,84 @@
+import client from './client'
+
+function unwrap(res) {
+  return res.data?.data ?? res.data
+}
+
+export function getUtilityConfig() {
+  return client.get('/api/v1/utilities/config').then(unwrap)
+}
+
+export function getUtilityProviders(country, type = 'airtime') {
+  return client
+    .get('/api/v1/utilities/providers', { params: { country, type } })
+    .then(unwrap)
+}
+
+export function getUtilityOperators(country) {
+  return client
+    .get('/api/v1/utilities/operators', { params: { country } })
+    .then(unwrap)
+}
+
+export function getUtilityBillers(country) {
+  return client
+    .get('/api/v1/utilities/billers', { params: { country } })
+    .then(unwrap)
+}
+
+export function getUtilityDataAvailability(country) {
+  return client
+    .get('/api/v1/utilities/data-availability', { params: { country } })
+    .then(unwrap)
+}
+
+export function getUtilityLimits(params) {
+  return client
+    .get('/api/v1/utilities/limits', { params })
+    .then(unwrap)
+}
+
+export function getUtilityBundles(params) {
+  return client
+    .get('/api/v1/utilities/bundles', { params })
+    .then(unwrap)
+}
+
+export function getUtilityQuote(body) {
+  return client.post('/api/v1/utilities/quote', body).then((res) => {
+    const q = unwrap(res)
+    return {
+      ...q,
+      quoteId: q.id,
+    }
+  })
+}
+
+export function completeUtilityPurchase({ quoteId, paymentTxHash }) {
+  return client
+    .post('/api/v1/utilities/purchase', {
+      quoteId,
+      ...(paymentTxHash ? { paymentTxHash } : {}),
+    })
+    .then(unwrap)
+}
+
+export function getUtilityBillLookup({ billerId, subscriberAccount, fiatAmount, serviceType }) {
+  return client
+    .get('/api/v1/utilities/bill-lookup', {
+      params: { billerId, subscriberAccount, fiatAmount, serviceType },
+    })
+    .then(unwrap)
+}
+
+export function getUtilityBillDelivery(purchaseId) {
+  return client
+    .get(`/api/v1/utilities/purchase/${purchaseId}/delivery`)
+    .then(unwrap)
+}
+
+export function getUtilityHistory(limit = 20) {
+  return client
+    .get('/api/v1/utilities/history', { params: { limit } })
+    .then(unwrap)
+}

@@ -11,7 +11,7 @@ import client from '../api/client'
 import { hashPhoneNumber } from '../utils/crypto'
 import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
 import { estimateMaxNetFiatFromUsdc } from '../utils/fiat'
-import { getNetworksForCountry } from '../utils/country'
+import { getNetworksForCountry, getDialCodeForCountry } from '../utils/country'
 import useUserCountry from '../hooks/useUserCountry'
 import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
@@ -63,6 +63,15 @@ export default function Cashout() {
   useEffect(() => {
     if (adNetwork) setNetwork(adNetwork)
   }, [adNetwork])
+
+  useEffect(() => {
+    if (adNetwork) return
+    if (countryNetworks.length > 0) {
+      setNetwork((prev) => (countryNetworks.includes(prev) ? prev : countryNetworks[0]))
+    } else {
+      setNetwork('')
+    }
+  }, [country, countryNetworks, adNetwork])
 
   useEffect(() => {
     if (!activeLoading && activeTransaction?.id) {
@@ -151,11 +160,10 @@ export default function Cashout() {
     setError(null)
     try {
       const networkConfig = NETWORKS[network]
-      const derivedCountryCode = networkConfig
-        ? COUNTRY_CODES[networkConfig.country]?.code || '+256'
-        : '+256'
+      const derivedCountryCode = networkConfig?.country || country
+      const dialCode = getDialCodeForCountry(derivedCountryCode).replace(/\D/g, '')
       const cleanPhone = phone.replace(/\D/g, '')
-      const fullPhone = `${derivedCountryCode}${cleanPhone}`
+      const fullPhone = `${dialCode}${cleanPhone.replace(/^0/, '')}`
       const phoneHash = await hashPhoneNumber(fullPhone)
       const quote = await getQuote({
         fiatAmount: Math.round(netFiat),
@@ -236,7 +244,7 @@ export default function Cashout() {
                 ? Math.floor(walletMaxNetFiat).toLocaleString()
                 : '—'}
             </span>
-            <span className="text-rowan-muted">{currency || 'UGX'}</span>
+            <span className="text-rowan-muted">{currency || userFiat}</span>
           </div>
           {maxNetFiat != null && maxNetFiat > 0 && (
             <button

@@ -1,6 +1,6 @@
 import db from '../db/index.js';
 import config from '../config/index.js';
-import { fiatToUgx } from '../utils/financial.js';
+import kycTierService from './kyc/kycTierService.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -15,50 +15,26 @@ import logger from '../utils/logger.js';
  * Check if a user's requested cash-out violates any fraud rules.
  * Returns { allowed: boolean, reason?: string }
  */
-async function checkTransaction(userId, fiatAmount, fiatCurrency) {
-  const userResult = await db.query(`SELECT * FROM users WHERE id = $1`, [userId]);
-  const user = userResult.rows[0];
-  if (!user) return { allowed: false, reason: 'User not found' };
-  if (!user.is_active) return { allowed: false, reason: 'Account disabled' };
-
-  // [PHASE 4] Get KYC limits from config instead of hardcoding
-  const limits = config.kycLimits[user.kyc_level] || config.kycLimits.NONE;
-  const amount = parseFloat(fiatAmount);
-
-  // [F-3 FIX] Normalize fiat amount to UGX for limit comparison (limits are in UGX)
-  const amountUgx = fiatToUgx(amount, fiatCurrency);
-
-  // 1. Per-transaction cap (UGX-normalized)
-  if (amountUgx > limits.perTx) {
-    await logAlert(userId, 'PER_TX_LIMIT', `Attempted ${amount} ${fiatCurrency} (${amountUgx} UGX), limit is ${limits.perTx} UGX`);
-    return { allowed: false, reason: `Exceeds per-transaction limit of ${limits.perTx} UGX for KYC level ${user.kyc_level}` };
-  }
-
-  // 2. Daily limit — sum fiat moved today, normalized to UGX
-  // [F-3 FIX] Use CASE to normalize multi-currency daily totals to UGX
-  const kesToUgx = config.usdcFiatRates.UGX / config.usdcFiatRates.KES;
-  const tzsToUgx = config.usdcFiatRates.UGX / config.usdcFiatRates.TZS;
-  const dailyResult = await db.query(
-    `SELECT COALESCE(SUM(
-       CASE fiat_currency
-         WHEN 'KES' THEN fiat_amount * $2
-         WHEN 'TZS' THEN fiat_amount * $3
-         ELSE fiat_amount
-       END
-     ), 0) as daily_total_ugx
-     FROM transactions
-     WHERE user_id = $1
-       AND state NOT IN ('FAILED', 'REFUNDED')
-       AND created_at >= CURRENT_DATE`,
-    [userId, kesToUgx, tzsToUgx]
+async function checkTransaction(userId, fiatAmount, fiatCurrency, options = {}) {
+  const tierCheck = await kycTierService.checkTransactionLimits(
+    userId,
+    fiatAmount,
+    fiatCurrency,
+    options
   );
-  const dailyTotalUgx = parseFloat(dailyResult.rows[0].daily_total_ugx);
-  if (dailyTotalUgx + amountUgx > limits.daily) {
-    await logAlert(userId, 'DAILY_LIMIT', `Daily total would be ${dailyTotalUgx + amountUgx} UGX, limit is ${limits.daily} UGX`);
-    return { allowed: false, reason: `Exceeds daily limit of ${limits.daily} UGX (used today: ${Math.round(dailyTotalUgx)} UGX)` };
+  if (!tierCheck.allowed) {
+    if (tierCheck.code === 'KYC_PER_TX_LIMIT') {
+      await logAlert(userId, 'PER_TX_LIMIT', tierCheck.reason);
+    } else if (tierCheck.code === 'KYC_DAILY_LIMIT') {
+      await logAlert(userId, 'DAILY_LIMIT', tierCheck.reason);
+    }
+    return tierCheck;
   }
 
-  // 3. Concurrent quote check — flag users requesting multiple simultaneous quotes
+  const limits = tierCheck.limits;
+  const amountUgx = tierCheck.amountUgx;
+
+  // Concurrent quote check
   // [PHASE 4] Use config-driven threshold instead of hardcoded 3
   const concurrentResult = await db.query(
     `SELECT COUNT(*) as open_quotes
@@ -72,14 +48,12 @@ async function checkTransaction(userId, fiatAmount, fiatCurrency) {
     return { allowed: false, reason: 'Too many open quotes. Please wait for existing quotes to expire.' };
   }
 
-  // 4. Flag unusually large transactions (above threshold % of limit)
-  // [PHASE 4] Use config-driven threshold instead of hardcoded 0.8
-  if (amountUgx > limits.perTx * config.fraud.largeTransactionAlertThreshold) {
-    await logAlert(userId, 'LARGE_TX', `Transaction of ${amount} ${fiatCurrency} (${Math.round(amountUgx)} UGX) is above ${Math.round(config.fraud.largeTransactionAlertThreshold * 100)}% of per-tx limit`);
-    // Allow but flag — admin can review
+  // Flag unusually large transactions (above threshold % of limit)
+  if (amountUgx > limits.perTxUgx * config.fraud.largeTransactionAlertThreshold) {
+    await logAlert(userId, 'LARGE_TX', `Transaction of ${fiatAmount} ${fiatCurrency} (${Math.round(amountUgx)} UGX) is above ${Math.round(config.fraud.largeTransactionAlertThreshold * 100)}% of per-tx limit`);
   }
 
-  return { allowed: true };
+  return { allowed: true, limits };
 }
 
 /**

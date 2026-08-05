@@ -1,6 +1,10 @@
 import { COUNTRY_CODES, NETWORKS } from './constants'
 
-export const SUPPORTED_COUNTRIES = ['UG', 'KE', 'TZ']
+/** Launch surface: Uganda only. */
+export const SUPPORTED_COUNTRIES = ['UG']
+
+/** Markets shown as disabled “Coming soon” in pickers (not selectable). */
+export const COMING_SOON_COUNTRIES = ['KE', 'TZ']
 
 export const COUNTRY_FIAT = {
   UG: 'UGX',

@@ -12,8 +12,9 @@ import { fileURLToPath } from 'url';
 import config from './config/index.js';
 import { USDC_ASSET } from './config/stellar.js';
 import db from './db/index.js';
-import redis from './db/redis.js';
+import redis, { redisPingWithTimeout } from './db/redis.js';
 import { errorHandler } from './middleware/validate.js';
+// NOTE: redis is used for locks/OTP/etc; jobQueue loads after HTTP listen.
 
 // Routes
 import wellKnownRoutes from './routes/wellKnown.js';
@@ -29,6 +30,10 @@ import userRoutes from './routes/user.js';
 import ratesRoutes from './routes/rates.js';
 import disputesRoutes from './routes/disputes.js';
 import configRoutes from './routes/config.js';
+import countriesRoutes from './routes/countries.js';
+import paymentsRoutes from './routes/payments.js';
+import yellowPayWebhookRoutes from './routes/webhooks/yellowpay.js';
+import utilitiesRoutes from './routes/utilities.js';
 import chatRoutes from './routes/chat.js';
 import tradersRoutes from './routes/traders.js';
 import reviewsRoutes from './routes/reviews.js';
@@ -38,7 +43,8 @@ import testnetRoutes from './routes/testnet.js';
 import websocket from './services/websocket.js';
 import horizonWatcher from './services/horizonWatcher.js';
 import ensureMarketMakerOffers from './services/offerMonitor.js';
-import './services/jobQueue.js'; // self-initializing (registers cron jobs)
+// jobQueue loaded after HTTP listen — see start()
+import countryService from './services/countries/countryService.js';
 import logger from './utils/logger.js';
 
 const app = express();
@@ -203,19 +209,33 @@ if (config.nodeEnv === 'development') {
 }
 
 app.get('/health', async (req, res) => {
+  // DB is required for a healthy process. Redis on Render KV often blips
+  // (ECONNRESET); do not 503 the whole service on a transient redis ping,
+  // or Render deploys / health checks will fail while workers are reconnecting.
   try {
     await db.query('SELECT 1');
-    const redisPing = await redis.ping();
-    res.json({
-      status: 'ok',
-      db: 'connected',
-      redis: redisPing === 'PONG' ? 'connected' : 'error',
-      horizon: horizonWatcher.getStatus(),
-      uptime: process.uptime(),
-    });
   } catch (err) {
-    res.status(503).json({ status: 'error', message: err.message });
+    return res.status(503).json({ status: 'error', message: err.message, db: 'error' });
   }
+
+  let redisStatus = redis.status || 'unknown';
+  try {
+    const redisPing = await Promise.race([
+      redis.ping(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('redis ping timeout')), 2_000)),
+    ]);
+    redisStatus = redisPing === 'PONG' ? 'connected' : 'error';
+  } catch {
+    redisStatus = redis.status === 'ready' ? 'degraded' : redis.status || 'disconnected';
+  }
+
+  res.json({
+    status: 'ok',
+    db: 'connected',
+    redis: redisStatus,
+    horizon: horizonWatcher.getStatus(),
+    uptime: process.uptime(),
+  });
 });
 
 // ─── API Routes ─────────────────────────────────────────────
@@ -226,6 +246,10 @@ app.use('/api/v1/cashout', cashoutRoutes);
 app.use('/api/v1/buy', buyRoutes);
 app.use('/api/v1/express', expressRoutes);
 app.use('/api/v1/config', configRoutes);
+app.use('/api/v1/countries', countriesRoutes);
+app.use('/api/v1/payments', paymentsRoutes);
+app.use('/api/v1/webhooks', yellowPayWebhookRoutes);
+app.use('/api/v1/utilities', utilitiesRoutes);
 app.use('/api/v1/disputes', disputesRoutes);
 app.use('/api/v1/trader/onboarding', traderOnboardingRoutes); // ← SPECIFIC path first
 app.use('/api/v1/trader/payout-settings', payoutSettingsRoutes);
@@ -377,80 +401,143 @@ async function runMigrations() {
 }
 
 // ─── Boot ───────────────────────────────────────────────────
-async function start() {
-  try {
-    // Verify DB connection (retry up to 3 times for Supabase cold-start wake-up)
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        await db.query('SELECT NOW()');
-        logger.info('[DB] PostgreSQL connected (raw pool)');
-        break;
-      } catch (dbErr) {
-        logger.warn(`[DB] Connection attempt ${attempt}/3 failed`, { error: dbErr.message });
-        if (attempt === 3) throw dbErr;
-        const delay = attempt * 5000;
-        logger.info(`[DB] Retrying in ${delay / 1000}s (Supabase may be waking up)...`);
-        await new Promise(r => setTimeout(r, delay));
-      }
-    }
-
-    // Verify Redis
-    await redis.ping();
-    logger.info('[Redis] Connected');
-
-    // Run database migrations
-    await runMigrations();
-
-    // Bootstrap: seed admin + ensure USDC trustline + ensure storage bucket
-    await seedAdminAccount();
-    await ensureUsdcTrustline();
-
-    // ── [C-3 FIX] Startup scan for orphaned transactions ──
-    try {
-      const orphanResult = await db.query(
-        `SELECT id, state, trader_matched_at, escrow_locked_at
-         FROM transactions
-         WHERE state IN ('TRADER_MATCHED', 'ESCROW_LOCKED')
-           AND created_at < NOW() - INTERVAL '30 minutes'`
-      );
-      if (orphanResult.rows.length > 0) {
-        logger.warn(`[Bootstrap] Found ${orphanResult.rows.length} potentially orphaned transactions — orphan recovery cron will handle them`);
-      }
-    } catch (err) {
-      logger.warn('[Bootstrap] Orphan scan skipped', { error: err.message });
-    }
-
-    // Ensure Supabase Storage bucket exists (idempotent — safe to run every boot)
-    try {
-      const { default: storageService } = await import('./services/storageService.js');
-      await storageService.ensureBucket();
-      await storageService.ensureChatBucket();
-      await storageService.ensureDisputeEvidenceBucket();
-      await storageService.ensureKycBucket();
-    } catch (err) {
-      logger.warn('[Bootstrap] Supabase Storage bucket check skipped', { error: err.message });
-    }
-
-    // Init WebSocket
-    websocket.init(httpServer);
-
-    // Start Horizon escrow watcher
-    await horizonWatcher.startWatcher();
-
-    // Ensure market maker offers exist (recreate if missing)
-    await ensureMarketMakerOffers();
-
-    // Start HTTP server — bind to 0.0.0.0 so physical devices on the LAN can reach it
-    httpServer.listen(config.port, '0.0.0.0', () => {
-      logger.info(`[Server] Rowan Backend running on port ${config.port}`, {
+/**
+ * Bind HTTP first so Render sees an open port. Then run DB/Redis/migrations
+ * and start workers. Blocking forever on redis.ping / horizon must never
+ * prevent `listen` (that produced "No open ports detected").
+ */
+function listenHttp() {
+  return new Promise((resolve, reject) => {
+    const onError = (err) => {
+      httpServer.off('listening', onListening);
+      reject(err);
+    };
+    const onListening = () => {
+      httpServer.off('error', onError);
+      logger.info(`[Server] Rowan Backend listening on port ${config.port}`, {
         environment: config.nodeEnv,
         stellarNetwork: config.stellar.network,
         escrowAddress: config.stellar.escrowPublicKey || 'NOT SET',
       });
-    });
+      resolve();
+    };
+    httpServer.once('error', onError);
+    httpServer.once('listening', onListening);
+    websocket.init(httpServer);
+    httpServer.listen(config.port, '0.0.0.0');
+  });
+}
+
+async function bootstrapAfterListen() {
+  // Verify DB connection (retry up to 3 times for Supabase cold-start wake-up)
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await db.query('SELECT NOW()');
+      logger.info('[DB] PostgreSQL connected (raw pool)');
+      break;
+    } catch (dbErr) {
+      logger.warn(`[DB] Connection attempt ${attempt}/3 failed`, { error: dbErr.message });
+      if (attempt === 3) throw dbErr;
+      const delay = attempt * 5000;
+      logger.info(`[DB] Retrying in ${delay / 1000}s (Supabase may be waking up)...`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+
+  // Bounded redis checks — never hang if Key Value is flapping
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await redisPingWithTimeout(redis, 2_000);
+      logger.info('[Redis] Ping OK');
+      break;
+    } catch (redisErr) {
+      logger.warn(`[Redis] Ping attempt ${attempt}/3 failed`, { error: redisErr.message });
+      if (attempt === 3) {
+        logger.error(
+          '[Redis] Unreachable at boot — continuing so the service stays live; fix REDIS_URL / Key Value',
+          {
+            error: redisErr.message,
+            redisUrlHost: (() => {
+              try {
+                return new URL(config.redisUrl).hostname;
+              } catch {
+                return 'invalid';
+              }
+            })(),
+          }
+        );
+      }
+    }
+  }
+
+  await runMigrations();
+  await countryService.loadCache();
+  await seedAdminAccount();
+  await ensureUsdcTrustline();
+
+  try {
+    const orphanResult = await db.query(
+      `SELECT id, state, trader_matched_at, escrow_locked_at
+       FROM transactions
+       WHERE state IN ('TRADER_MATCHED', 'ESCROW_LOCKED')
+         AND created_at < NOW() - INTERVAL '30 minutes'`
+    );
+    if (orphanResult.rows.length > 0) {
+      logger.warn(
+        `[Bootstrap] Found ${orphanResult.rows.length} potentially orphaned transactions — orphan recovery cron will handle them`
+      );
+    }
   } catch (err) {
-    logger.error('Failed to start server', { error: err.message });
+    logger.warn('[Bootstrap] Orphan scan skipped', { error: err.message });
+  }
+
+  try {
+    const { default: storageService } = await import('./services/storageService.js');
+    await storageService.ensureBucket();
+    await storageService.ensureChatBucket();
+    await storageService.ensureDisputeEvidenceBucket();
+    await storageService.ensureKycBucket();
+  } catch (err) {
+    logger.warn('[Bootstrap] Supabase Storage bucket check skipped', { error: err.message });
+  }
+
+  // Load Bull only after port is open (fewer early Redis sockets)
+  try {
+    await import('./services/jobQueue.js');
+    logger.info('[JobQueue] Queues initialized');
+  } catch (err) {
+    logger.error('[JobQueue] Failed to initialize queues', { error: err.message });
+  }
+
+  try {
+    await horizonWatcher.startWatcher();
+  } catch (err) {
+    logger.warn('[Bootstrap] Horizon watcher failed to start', { error: err.message });
+  }
+
+  try {
+    await ensureMarketMakerOffers();
+  } catch (err) {
+    logger.warn('[Bootstrap] Market maker offers check failed', { error: err.message });
+  }
+}
+
+async function start() {
+  try {
+    await listenHttp();
+  } catch (err) {
+    logger.error('Failed to bind HTTP port', { error: err.message, port: config.port });
     process.exit(1);
+  }
+
+  try {
+    await bootstrapAfterListen();
+    logger.info('[Bootstrap] Complete');
+  } catch (err) {
+    // Keep process alive for /health — ops can fix DB/env without full restart loop
+    logger.error('[Bootstrap] Failed after listen — service is up but degraded', {
+      error: err.message,
+    });
   }
 }
 

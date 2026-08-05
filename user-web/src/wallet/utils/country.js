@@ -1,11 +1,21 @@
 import { COUNTRY_CODES, NETWORKS } from './constants'
 
-export const SUPPORTED_COUNTRIES = ['UG', 'KE', 'TZ']
+/**
+ * Launch surface: Uganda only.
+ * NETWORKS / COUNTRY_CODES keep full metadata for receipts and history.
+ */
+export const SUPPORTED_COUNTRIES = ['UG']
+
+/** Markets shown as disabled “Coming soon” in pickers (not selectable). */
+export const COMING_SOON_COUNTRIES = ['KE', 'TZ', 'RW', 'NG', 'GH']
 
 export const COUNTRY_FIAT = {
   UG: 'UGX',
   KE: 'KES',
   TZ: 'TZS',
+  RW: 'RWF',
+  NG: 'NGN',
+  GH: 'GHS',
 }
 
 /** Fiat code → country code (first match). */
@@ -20,6 +30,35 @@ export function isSupportedCountry(code) {
 
 export function getFiatForCountry(country) {
   return COUNTRY_FIAT[country] || 'UGX'
+}
+
+/** Pick first non-empty fiat code, else derive from country, else UGX. */
+export function resolveFiatCurrency(...candidates) {
+  const found = candidates.find((c) => c && String(c).trim())
+  if (found) return found
+  const country = candidates.find((c) => isSupportedCountry(c))
+  if (country) return getFiatForCountry(country)
+  return 'UGX'
+}
+
+/** Default utility amount bounds when API config is missing (local currency). */
+export const COUNTRY_UTILITY_LIMITS = {
+  UG: { min: 1000, max: 500000 },
+  KE: { min: 100, max: 50000 },
+  TZ: { min: 1000, max: 500000 },
+  RW: { min: 500, max: 500000 },
+  NG: { min: 500, max: 500000 },
+  GH: { min: 10, max: 5000 },
+}
+
+export function getUtilityLimitsForCountry(country) {
+  return COUNTRY_UTILITY_LIMITS[country] || COUNTRY_UTILITY_LIMITS.UG
+}
+
+export function getElectricityTokenLabel(country) {
+  if (country === 'UG') return 'Yaka token'
+  if (country === 'KE') return 'Electricity token'
+  return 'Prepaid token'
 }
 
 export function getDialCodeForCountry(country) {

@@ -30,7 +30,18 @@ export async function sendTestnetUsdc(publicKey) {
   const amount = config.testnetFaucet.amount;
   const cooldownKey = `testnet:faucet:${publicKey}`;
 
-  const account = await server.loadAccount(publicKey);
+  let account;
+  try {
+    account = await server.loadAccount(publicKey);
+  } catch (err) {
+    if (err?.response?.status === 404) {
+      throw new Error(
+        'Stellar account not activated yet. Fund with Friendbot (Receive → Set up network fees) before requesting test USDC.'
+      );
+    }
+    throw err;
+  }
+
   const usdcLine = account.balances.find(
     (b) => b.asset_code === USDC_ASSET.code && b.asset_issuer === USDC_ASSET.issuer
   );
@@ -51,6 +62,15 @@ export async function sendTestnetUsdc(publicKey) {
 
   const faucetKeypair = StellarSdk.Keypair.fromSecret(secret);
   const faucetAccount = await server.loadAccount(faucetKeypair.publicKey());
+  const faucetUsdcLine = faucetAccount.balances.find(
+    (b) => b.asset_code === USDC_ASSET.code && b.asset_issuer === USDC_ASSET.issuer
+  );
+  const faucetUsdc = faucetUsdcLine ? parseFloat(faucetUsdcLine.balance) : 0;
+  if (faucetUsdc < amount) {
+    throw new Error(
+      `Testnet treasury is low (${faucetUsdc.toFixed(2)} USDC). Ops: npm run script:treasury-prepare → Circle → sweep`
+    );
+  }
 
   const tx = new StellarSdk.TransactionBuilder(faucetAccount, {
     fee: config.stellarMaxFee,

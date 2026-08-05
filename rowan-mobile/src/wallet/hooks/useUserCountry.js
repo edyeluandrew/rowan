@@ -35,8 +35,11 @@ export default function useUserCountry() {
           return
         }
         const storedFiat = await getPreference(FIAT_PREF)
-        if (!cancelled && storedFiat && COUNTRY_FIAT[fiatToCountry(storedFiat)]) {
-          setCountryState(fiatToCountry(storedFiat))
+        if (!cancelled && storedFiat) {
+          const fromFiat = fiatToCountry(storedFiat)
+          if (isSupportedCountry(fromFiat)) {
+            setCountryState(fromFiat)
+          }
         }
       } catch {
         /* defaults */

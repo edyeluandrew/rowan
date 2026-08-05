@@ -4,7 +4,8 @@ import logger from '../utils/logger.js';
 const STELLAR_ADDRESS_RE = /^G[A-Z2-7]{55}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_HASH_RE = /^[a-f0-9]{64}$/i; // SHA-256 hex
-const MOBILE_NETWORKS = ['MPESA_KE', 'MTN_UG', 'AIRTEL_UG', 'MTN_TZ', 'AIRTEL_TZ'];
+/** Launch surface: Uganda mobile money only. Other corridors re-enabled with country flags. */
+const MOBILE_NETWORKS = ['MTN_UG', 'AIRTEL_UG'];
 
 /**
  * Validate required fields on the request body.

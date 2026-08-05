@@ -1,8 +1,9 @@
 import jwt from 'jsonwebtoken';
 import config from '../config/index.js';
+import kycTierService from '../services/kyc/kycTierService.js';
 import logger from '../utils/logger.js';
 import db from '../db/index.js';
-import { fiatToUgx } from '../utils/financial.js';
+import quoteEngine from '../services/quoteEngine.js';
 
 /**
  * Authenticate wallet users via JWT.
@@ -115,68 +116,38 @@ async function ensureActiveTrader(traderId) {
 }
 
 /**
- * Verify per-transaction limits and daily limits for a user.
- * [H-3 FIX] Normalizes multi-currency transactions to UGX equivalent.
+ * @deprecated Prefer enforceKycTransactionLimits from middleware/kycLimits.js
  */
 export async function checkUserLimits(req, res, next) {
   try {
+    const network = req.body?.network;
+    const fiatCurrency = network ? quoteEngine.networkToFiat(network) : 'UGX';
+    const countryCode = network ? kycTierService.networkToCountryCode(network) : null;
+
+    let fiatEstimate = null;
+    if (req.body.fiatAmount != null && req.body.fiatAmount !== '') {
+      fiatEstimate = parseFloat(req.body.fiatAmount);
+    } else if (req.body.xlmAmount != null && req.body.xlmAmount !== '') {
+      const rate = await quoteEngine.getLegacyXlmRate(fiatCurrency);
+      fiatEstimate = parseFloat(req.body.xlmAmount) * rate;
+    }
+
+    if (fiatEstimate != null && Number.isFinite(fiatEstimate)) {
+      const check = await kycTierService.checkTransactionLimits(
+        req.userId,
+        fiatEstimate,
+        fiatCurrency,
+        { countryCode }
+      );
+      if (!check.allowed) {
+        return res.status(400).json({ error: check.reason, code: check.code });
+      }
+      req.kycLimits = check.limits;
+    }
+
     const userResult = await db.query(`SELECT * FROM users WHERE id = $1`, [req.userId]);
-    const user = userResult.rows[0];
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (!user.is_active) return res.status(403).json({ error: 'Account disabled' });
-
-    const hasXlm = req.body.xlmAmount != null && req.body.xlmAmount !== '';
-    const hasFiat = req.body.fiatAmount != null && req.body.fiatAmount !== '';
-    const xlmAmount = hasXlm ? parseFloat(req.body.xlmAmount) : NaN;
-    const fiatAmount = hasFiat ? parseFloat(req.body.fiatAmount) : NaN;
-
-    const quoteEngine = (await import('../services/quoteEngine.js')).default;
-    const network = req.body.network;
-    const fiatCurrency = quoteEngine.networkToFiat(network);
-    const currentRate = await quoteEngine.getLegacyXlmRate(fiatCurrency);
-
-    let estimatedFiat;
-    let estimatedXlm;
-    if (hasFiat) {
-      estimatedFiat = fiatAmount;
-      estimatedXlm = fiatAmount / currentRate;
-    } else {
-      estimatedXlm = xlmAmount;
-      estimatedFiat = xlmAmount * currentRate;
-    }
-
-    // Per-transaction limit (XLM)
-    if (Number.isFinite(estimatedXlm) && estimatedXlm > parseFloat(user.per_tx_limit)) {
-      return res.status(400).json({
-        error: `Exceeds per-transaction limit of ${user.per_tx_limit} XLM`,
-      });
-    }
-
-    // ── [H-3 FIX] Daily limit — sum fiat moved today, normalized to UGX ──
-    const dailyResult = await db.query(
-      `SELECT fiat_amount, fiat_currency
-       FROM transactions
-       WHERE user_id = $1
-         AND state NOT IN ('FAILED', 'REFUNDED')
-         AND created_at >= CURRENT_DATE`,
-      [req.userId]
-    );
-
-    let dailyTotalUgx = 0;
-    for (const row of dailyResult.rows) {
-      dailyTotalUgx += fiatToUgx(parseFloat(row.fiat_amount), row.fiat_currency);
-    }
-
-    const estimatedUgx = fiatToUgx(estimatedFiat, fiatCurrency);
-
-    const dailyLimitUgx = parseFloat(user.daily_limit_ugx || 500000);
-    if (dailyTotalUgx + estimatedUgx > dailyLimitUgx) {
-      return res.status(400).json({
-        error: `Exceeds daily limit of ${dailyLimitUgx} UGX (used today: ${Math.round(dailyTotalUgx)} UGX)`,
-      });
-    }
-
-    req.user = user;
+    req.user = userResult.rows[0];
+    if (!req.user) return res.status(404).json({ error: 'User not found' });
     next();
   } catch (err) {
     logger.error('[Auth] Limit check error:', err.message);

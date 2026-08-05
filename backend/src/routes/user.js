@@ -10,6 +10,9 @@ import auditLogService from '../services/auditLogService.js';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
 import config from '../config/index.js';
+import kycTierService from '../services/kyc/kycTierService.js';
+import { getUserUsdcTrustlineStatus } from '../services/userStellarService.js';
+import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 import { stroopsToUsdc } from '../utils/financial.js';
 import {
   generateTotpSecret,
@@ -28,7 +31,7 @@ import websocket from '../services/websocket.js';
 import { formatShortId } from '../utils/shortId.js';
 import disputeEvidenceService from '../services/disputeEvidenceService.js';
 import storageService from '../services/storageService.js';
-import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
+import userHistoryService from '../services/userHistoryService.js';
 
 const router = Router();
 
@@ -97,22 +100,20 @@ router.get('/history', authUser, async (req, res, next) => {
       usdc_amount: Number(tx.usdc_amount) || 0,
     }));
 
-    // Also get summary stats
-    const statsResult = await db.query(
-      `SELECT
-         COUNT(*)::int as total,
-         COUNT(*) FILTER (WHERE state = 'COMPLETE')::int as total_completed,
-         COUNT(*) FILTER (WHERE state = 'FAILED' OR state = 'REFUNDED')::int as total_failed,
-         COALESCE(SUM(fiat_amount) FILTER (WHERE state = 'COMPLETE'), 0) as total_fiat_received,
-         COALESCE(SUM(xlm_amount) FILTER (WHERE state = 'COMPLETE'), 0) as total_xlm_cashed
-       FROM transactions
-       WHERE user_id = $1`,
-      [req.userId]
-    );
+    // Summary stats (P2P + utilities)
+    const stats = await userHistoryService.getWalletHistoryStats(req.userId);
 
     res.json({
       transactions,
-      stats: statsResult.rows[0],
+      stats: {
+        total: stats.total,
+        total_completed: stats.completed,
+        total_failed: null,
+        total_fiat_received: null,
+        total_xlm_cashed: null,
+        p2p_total: stats.p2p_total,
+        utility_total: stats.utility_total,
+      },
     });
   } catch (err) {
     next(err);
@@ -153,28 +154,82 @@ const KYC_DOCUMENT_TYPES = ['NATIONAL_ID', 'PASSPORT', 'DRIVERS_LICENSE'];
  */
 router.get('/kyc', authUser, async (req, res, next) => {
   try {
-    const userRes = await db.query(
-      `SELECT kyc_level, daily_limit_ugx FROM users WHERE id = $1`,
-      [req.userId]
-    );
-    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    const { kyc_level, daily_limit_ugx } = userRes.rows[0];
+    const countryCode = req.query.country
+      ? String(req.query.country).trim().toUpperCase()
+      : null;
 
-    const subRes = await db.query(
-      `SELECT id, requested_level, status, review_notes, created_at, reviewed_at
+    const summary = await kycTierService.getUserTierSummary(req.userId, countryCode);
+    if (!summary) return res.status(404).json({ error: 'User not found' });
+
+      const subRes = await db.query(
+        `SELECT id, requested_level, status, review_notes, created_at, reviewed_at
          FROM kyc_submissions
         WHERE user_id = $1
         ORDER BY created_at DESC
         LIMIT 1`,
-      [req.userId]
-    );
+        [req.userId]
+      ).catch((err) => {
+        if (err.code === '42P01') {
+          logger.warn('[User] kyc_submissions table missing — returning without latest_submission');
+          return { rows: [] };
+        }
+        throw err;
+      });
 
     res.json({
-      kyc_level,
-      daily_limit_ugx: parseInt(daily_limit_ugx, 10),
-      limits: config.kycLimits[kyc_level] || config.kycLimits.NONE,
-      tiers: config.kycLimits,
+      kyc_level: summary.kyc_level,
+      tier: summary.tier,
+      daily_limit_ugx: summary.limits.daily_ugx,
+      limits: {
+        per_tx_ugx: summary.limits.per_tx_ugx,
+        daily_ugx: summary.limits.daily_ugx,
+        daily_used_ugx: summary.limits.daily_used_ugx,
+        daily_remaining_ugx: summary.limits.daily_remaining_ugx,
+      },
+      products: summary.products,
+      tiers: summary.tiers,
+      country_code: summary.country_code,
       latest_submission: subRes.rows[0] || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/user/wallet/usdc
+ * B1 partial — on-chain USDC balance + locked in active P2P orders.
+ */
+router.get('/wallet/usdc', authUser, async (req, res, next) => {
+  try {
+    const userRes = await db.query(
+      `SELECT stellar_address FROM users WHERE id = $1`,
+      [req.userId]
+    );
+    const stellarAddress = userRes.rows[0]?.stellar_address;
+    const onChain = await getUserUsdcTrustlineStatus(stellarAddress);
+
+    const lockedRes = await db.query(
+      `SELECT COALESCE(SUM(usdc_amount), 0) AS locked_usdc
+       FROM transactions
+       WHERE user_id = $1
+         AND state::text = ANY($2::text[])
+         AND usdc_amount IS NOT NULL`,
+      [req.userId, USER_ACTIVE_ORDER_STATES]
+    );
+    const lockedUsdc = Number(lockedRes.rows[0]?.locked_usdc || 0);
+    const availableUsdc = Math.max(0, onChain.balance - lockedUsdc);
+
+    res.json({
+      stellarAddress,
+      hasTrustline: onChain.hasTrustline,
+      balance: {
+        total: onChain.balance,
+        locked: lockedUsdc,
+        available: availableUsdc,
+      },
+      currency: 'USDC',
+      timestamp: new Date().toISOString(),
     });
   } catch (err) {
     next(err);
@@ -1048,7 +1103,7 @@ router.post('/transactions/:id/confirm-receipt', authUser, sensitiveActionLimite
 
     // Attempt USDC release (releaseToTrader handles state transition to COMPLETE)
     try {
-      const releaseTxHash = await escrowController.releaseToTrader(transactionId);
+      const releaseTxHash = await escrowController.releaseAfterUserConfirmation(transactionId);
 
       if (!releaseTxHash) {
         const fresh = await db.query(
@@ -1149,120 +1204,24 @@ router.get('/transactions/active', authUser, async (req, res, next) => {
 
 /**
  * GET /api/v1/user/transactions/history
- * Paginated P2P transaction history with trader and review metadata.
+ * Paginated P2P + utility history. Query: page, limit, status, range, category (all|p2p|utilities)
  */
 router.get('/transactions/history', authUser, async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
-    const offset = (page - 1) * limit;
-    const { status, range } = req.query;
+    const category = ['all', 'p2p', 'utilities'].includes(req.query.category)
+      ? req.query.category
+      : 'all';
 
-    const params = [req.userId];
-    const conditions = ['t.user_id = $1'];
-
-    if (status === 'completed') {
-      conditions.push(`t.state = 'COMPLETE'`);
-    } else if (status === 'cancelled') {
-      conditions.push(`t.state = 'FAILED'`);
-    } else if (status === 'refunded') {
-      conditions.push(`t.state = 'REFUNDED'`);
-    } else if (status === 'disputed') {
-      conditions.push(`(t.dispute_id IS NOT NULL OR t.state IN ('DISPUTE_OPENED', 'DISPUTE_REFUND_PENDING', 'DISPUTE_RELEASE_PENDING'))`);
-    }
-
-    if (range === 'week') {
-      conditions.push(`t.created_at >= NOW() - INTERVAL '7 days'`);
-    } else if (range === 'month') {
-      conditions.push(`t.created_at >= NOW() - INTERVAL '30 days'`);
-    }
-
-    const whereClause = conditions.join(' AND ');
-
-    const countResult = await db.query(
-      `SELECT COUNT(*)::int AS total FROM transactions t WHERE ${whereClause}`,
-      params
-    );
-    const total = countResult.rows[0]?.total || 0;
-
-    params.push(limit, offset);
-    const result = await db.query(
-      `SELECT
-         t.id,
-         t.state,
-         t.xlm_amount,
-         t.usdc_amount,
-         t.fiat_amount,
-         t.fiat_currency,
-         t.locked_rate,
-         t.network,
-         t.order_side,
-         t.created_at,
-         t.completed_at,
-         t.dispute_id,
-         t.preferred_payout_setting_id,
-         t.trader_id,
-         tr.name AS trader_name,
-         EXISTS (
-           SELECT 1 FROM reviews r
-           WHERE r.transaction_id = t.id AND r.reviewer_id = t.user_id
-         ) AS review_submitted
-       FROM transactions t
-       LEFT JOIN traders tr ON tr.id = t.trader_id
-       WHERE ${whereClause}
-       ORDER BY t.created_at DESC
-       LIMIT $${params.length - 1} OFFSET $${params.length}`,
-      params
-    );
-
-    const transactions = result.rows.map((row) => {
-      const shortRef = row.id.replace(/-/g, '').slice(0, 8).toUpperCase();
-      let durationMinutes = null;
-      if (row.completed_at && row.created_at) {
-        durationMinutes = Math.max(
-          1,
-          Math.round((new Date(row.completed_at) - new Date(row.created_at)) / 60000)
-        );
-      }
-      const usdcAmount = row.usdc_amount != null ? parseFloat(row.usdc_amount) : null;
-      const fiatAmount = row.fiat_amount != null ? parseFloat(row.fiat_amount) : null;
-      const rate = row.locked_rate != null ? parseFloat(row.locked_rate) : null;
-      // Prefer stored USDC; if missing (legacy rows), derive from fiat ÷ rate.
-      let resolvedUsdc = Number.isFinite(usdcAmount) && usdcAmount > 0 ? usdcAmount : null;
-      if (resolvedUsdc == null && Number.isFinite(fiatAmount) && fiatAmount > 0
-          && Number.isFinite(rate) && rate > 0) {
-        resolvedUsdc = parseFloat((fiatAmount / rate).toFixed(7));
-      }
-      return {
-        id: row.id,
-        short_id: `ROW-${shortRef}`,
-        state: row.state,
-        xlm_amount: row.xlm_amount != null ? parseFloat(row.xlm_amount) : null,
-        usdc_amount: resolvedUsdc,
-        fiat_amount: fiatAmount,
-        currency: row.fiat_currency,
-        rate,
-        locked_rate: rate,
-        network: row.network,
-        order_side: row.order_side || 'SELL',
-        trader_name: row.trader_name,
-        trader_id: row.trader_id,
-        payment_method: row.network,
-        created_at: row.created_at,
-        completed_at: row.completed_at,
-        duration_minutes: durationMinutes,
-        review_submitted: !!row.review_submitted,
-        was_disputed: !!row.dispute_id,
-        selection_method: row.preferred_payout_setting_id ? 'manual' : 'auto',
-      };
+    const result = await userHistoryService.getUnifiedTransactionHistory({
+      userId: req.userId,
+      page: req.query.page,
+      limit: req.query.limit,
+      status: req.query.status || 'all',
+      range: req.query.range || 'all',
+      category,
     });
 
-    res.json({
-      transactions,
-      total,
-      page,
-      pages: Math.max(1, Math.ceil(total / limit)),
-    });
+    res.json(result);
   } catch (err) {
     next(err);
   }

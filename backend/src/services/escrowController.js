@@ -9,7 +9,7 @@ import config from '../config/index.js';
 import db from '../db/index.js';
 import redis from '../db/redis.js';
 import quoteEngine from './quoteEngine.js';
-import matchingEngine from './matchingEngine.js';
+import paymentExecutor from './payments/paymentExecutor.js';
 import payoutSettingsService from './payoutSettingsService.js';
 import fraudMonitor from './fraudMonitor.js';
 import stateMachine from './transactionStateMachine.js';
@@ -274,12 +274,12 @@ async function handleDeposit({ memo, amount, sourceAccount, txHash }) {
     // 6. Match trader while still ESCROW_LOCKED — matchTrader atomically transitions
     //    to TRADER_MATCHED only when a trader + payout setting are assigned.
     //    Do NOT pre-transition with trader_id=null (causes UI stall / rematch loops).
-    logger.info(`[Escrow] Matching trader for tx ${transaction.id} (state: ESCROW_LOCKED)`);
+    logger.info(`[Escrow] Settling offramp for tx ${transaction.id} (state: ESCROW_LOCKED)`);
     try {
-      await matchingEngine.matchTrader(transaction.id);
-      logger.info(`[Escrow] matchTrader finished for tx ${transaction.id}`);
+      await paymentExecutor.settleOfframpPayout(transaction.id);
+      logger.info(`[Escrow] settleOfframpPayout finished for tx ${transaction.id}`);
     } catch (matchingErr) {
-      logger.error(`[Escrow] matchTrader error for tx ${transaction.id}: ${matchingErr?.message}`);
+      logger.error(`[Escrow] settleOfframpPayout error for tx ${transaction.id}: ${matchingErr?.message}`);
       throw matchingErr;
     }
   } catch (err) {
@@ -428,10 +428,10 @@ async function handleUsdcCashoutDeposit({ memo, amount, sourceAccount, txHash })
   logger.info(`[Escrow] USDC cash-out tx ${transaction.id} created — ${traderUsdc} USDC locked`);
 
   try {
-    await matchingEngine.matchTrader(transaction.id);
-    logger.info(`[Escrow] matchTrader finished for USDC tx ${transaction.id}`);
+    await paymentExecutor.settleOfframpPayout(transaction.id);
+    logger.info(`[Escrow] settleOfframpPayout finished for USDC tx ${transaction.id}`);
   } catch (matchingErr) {
-    logger.error(`[Escrow] matchTrader error for USDC tx ${transaction.id}: ${matchingErr?.message}`);
+    logger.error(`[Escrow] settleOfframpPayout error for USDC tx ${transaction.id}: ${matchingErr?.message}`);
     try {
       const refundHash = await refundUsdc(userStellarAddress, amount, 'Matching failed');
       await stateMachine.transition(transaction.id, 'ESCROW_LOCKED', 'REFUNDED', {
@@ -811,6 +811,225 @@ async function releaseToTrader(transactionId) {
 }
 
 /**
+ * Send USDC from Rowan escrow to an aggregator escrow address.
+ * Called immediately after offramp API returns escrowAddress.
+ */
+async function sendUsdcToAggregatorEscrow({
+  transactionId,
+  destinationAddress,
+  usdcAmount,
+  aggregatorRef,
+}) {
+  const lockKey = `lock:aggregator-settle:${transactionId}`;
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', config.platform.redisLockTtlReleaseSeconds, 'NX');
+  if (!lockAcquired) {
+    logger.warn(`[Escrow] Aggregator settle lock held for tx ${transactionId}`);
+    return null;
+  }
+
+  try {
+    const txCheck = await db.query(
+      `SELECT id, state, aggregator_settlement_tx, usdc_amount FROM transactions WHERE id = $1`,
+      [transactionId]
+    );
+    const row = txCheck.rows[0];
+    if (!row || row.state !== 'ESCROW_LOCKED') {
+      throw new Error(`Transaction ${transactionId} not in ESCROW_LOCKED for aggregator settlement`);
+    }
+    if (row.aggregator_settlement_tx) {
+      return row.aggregator_settlement_tx;
+    }
+
+    const usdcDecimal = Number(usdcAmount ?? row.usdc_amount);
+    if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+      throw new Error(`Invalid USDC amount for aggregator settlement: ${usdcAmount}`);
+    }
+
+    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+    const stellarTx = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: destinationAddress,
+          asset: USDC_ASSET,
+          amount: usdcDecimal.toFixed(7),
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    stellarTx.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(stellarTx);
+
+    await db.query(
+      `UPDATE transactions SET aggregator_settlement_tx = $1, updated_at = NOW() WHERE id = $2`,
+      [result.hash, transactionId]
+    );
+
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'aggregator_escrow_settlement',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      new_value: { aggregator_settlement_tx: result.hash, destination: destinationAddress },
+      metadata: { aggregator_ref: aggregatorRef, usdc_amount: usdcDecimal },
+    });
+
+    logger.info(`[Escrow] Sent ${usdcDecimal} USDC to aggregator escrow for tx ${transactionId}: ${result.hash}`);
+    return result.hash;
+  } finally {
+    setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
+  }
+}
+
+/**
+ * Complete aggregator offramp after user confirms — USDC already sent to aggregator.
+ */
+async function completeAggregatorOfframp(transactionId) {
+  const txResult = await db.query(
+    `SELECT id, state, payout_provider, aggregator_settlement_tx, stellar_release_tx
+     FROM transactions
+     WHERE id = $1 AND payout_provider IN ('kotani_pay', 'yellow_pay')
+       AND state IN ('USER_CONFIRMATION_PENDING', 'DISPUTE_RELEASE_PENDING', 'RELEASE_BLOCKED', 'FIAT_PAYOUT_SUBMITTED')`,
+    [transactionId]
+  );
+  const transaction = txResult.rows[0];
+  if (!transaction) {
+    throw new Error('Aggregator transaction not found or wrong state');
+  }
+
+  if (transaction.stellar_release_tx) {
+    return transaction.stellar_release_tx;
+  }
+
+  const settlementHash = transaction.aggregator_settlement_tx;
+  const appealExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const fromState = transaction.state === 'FIAT_PAYOUT_SUBMITTED' ? 'FIAT_PAYOUT_SUBMITTED' : transaction.state;
+
+  if (fromState === 'FIAT_PAYOUT_SUBMITTED') {
+    await stateMachine.transition(transactionId, 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING');
+  }
+
+  const fresh = await db.query(`SELECT state FROM transactions WHERE id = $1`, [transactionId]);
+  const currentState = fresh.rows[0]?.state || 'USER_CONFIRMATION_PENDING';
+
+  await stateMachine.transition(transactionId, currentState, 'COMPLETE', {
+    stellar_release_tx: settlementHash || null,
+    appeal_expires_at: appealExpiresAt,
+  });
+
+  return settlementHash;
+}
+
+/**
+ * Release USDC to Yellow Pay settlement wallet after user confirms automated offramp.
+ * Requires YELLOW_PAY_SETTLEMENT_STELLAR in env.
+ */
+async function releaseToSettlement(transactionId) {
+  const settlementAddress = config.yellowPay?.settlementStellarAddress;
+  if (!settlementAddress) {
+    throw new Error('Yellow Pay settlement Stellar address not configured (YELLOW_PAY_SETTLEMENT_STELLAR)');
+  }
+
+  const lockKey = `lock:release:${transactionId}`;
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', config.platform.redisLockTtlReleaseSeconds, 'NX');
+  if (!lockAcquired) {
+    logger.warn(`[Escrow] Settlement release lock held for tx ${transactionId}`);
+    return null;
+  }
+
+  try {
+    const txResult = await db.query(
+      `SELECT * FROM transactions
+       WHERE id = $1
+         AND payout_provider = 'yellow_pay'
+         AND state IN ('USER_CONFIRMATION_PENDING', 'DISPUTE_RELEASE_PENDING', 'RELEASE_BLOCKED')`,
+      [transactionId]
+    );
+    const transaction = txResult.rows[0];
+    if (!transaction) {
+      throw new Error('Yellow Pay transaction not found or wrong state');
+    }
+
+    if (transaction.stellar_release_tx) {
+      return transaction.stellar_release_tx;
+    }
+
+    const usdcDecimal = Number(transaction.usdc_amount);
+    if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+      throw new Error(`Invalid USDC amount for settlement release: ${transaction.usdc_amount}`);
+    }
+
+    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+    const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: settlementAddress,
+          asset: USDC_ASSET,
+          amount: usdcDecimal.toFixed(7),
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    tx.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(tx);
+
+    const appealExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await stateMachine.transition(transactionId, transaction.state, 'COMPLETE', {
+      stellar_release_tx: result.hash,
+      appeal_expires_at: appealExpiresAt,
+    });
+
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'escrow_release_settlement',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      new_value: { state: 'COMPLETE', stellar_release_tx: result.hash },
+      metadata: {
+        payout_provider: 'yellow_pay',
+        aggregator_ref: transaction.aggregator_ref,
+        settlement_address: settlementAddress,
+        usdc_amount: transaction.usdc_amount,
+      },
+    });
+
+    logger.info(`[Escrow] Released ${transaction.usdc_amount} USDC to Yellow settlement — tx: ${result.hash}`);
+    return result.hash;
+  } finally {
+    setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
+  }
+}
+
+/**
+ * Release escrow after user confirms receipt — aggregator or P2P trader.
+ */
+async function releaseAfterUserConfirmation(transactionId) {
+  const txResult = await db.query(
+    `SELECT payout_provider, aggregator_settlement_tx FROM transactions WHERE id = $1`,
+    [transactionId]
+  );
+  const payoutProvider = txResult.rows[0]?.payout_provider;
+  // Legacy aggregator rows (yellow_pay; historic kotani_pay) complete via escrow release helpers.
+  if (payoutProvider === 'kotani_pay') {
+    return completeAggregatorOfframp(transactionId);
+  }
+  if (payoutProvider === 'yellow_pay') {
+    if (txResult.rows[0]?.aggregator_settlement_tx) {
+      return completeAggregatorOfframp(transactionId);
+    }
+    return releaseToSettlement(transactionId);
+  }
+  return releaseToTrader(transactionId);
+}
+
+/**
  * Release USDC from escrow to the wallet user (BUY orders).
  */
 async function releaseToUser(transactionId) {
@@ -1104,6 +1323,10 @@ async function syncBuyUsdcLock(transactionId, traderId) {
 }
 
 async function refundUsdc(userStellarAddress, usdcAmount, reason) {
+  const amount = parseFloat(usdcAmount).toFixed(7);
+  if (!(Number(amount) > 0)) {
+    throw new Error(`Invalid USDC refund amount: ${usdcAmount}`);
+  }
   try {
     const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
 
@@ -1115,7 +1338,7 @@ async function refundUsdc(userStellarAddress, usdcAmount, reason) {
         StellarSdk.Operation.payment({
           destination: userStellarAddress,
           asset: USDC_ASSET,
-          amount: parseFloat(usdcAmount).toFixed(7),
+          amount,
         })
       )
       .setTimeout(30)
@@ -1135,6 +1358,10 @@ async function refundUsdc(userStellarAddress, usdcAmount, reason) {
  * Refund native XLM from escrow to the user (pre-swap path only).
  */
 async function refundXlm(userStellarAddress, xlmAmount, reason) {
+  const amount = parseFloat(xlmAmount).toFixed(7);
+  if (!(Number(amount) > 0)) {
+    throw new Error(`Invalid XLM refund amount: ${xlmAmount}`);
+  }
   try {
     const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
 
@@ -1146,7 +1373,7 @@ async function refundXlm(userStellarAddress, xlmAmount, reason) {
         StellarSdk.Operation.payment({
           destination: userStellarAddress,
           asset: StellarSdk.Asset.native(),
-          amount: parseFloat(xlmAmount).toFixed(7),
+          amount,
         })
       )
       .setTimeout(30)
@@ -1463,7 +1690,11 @@ async function refundToUser(transactionId, { adminId = null, retry = false } = {
 }
 
 /**
- * [PHASE 2H] Orphan / auto-refund handler with pre-swap vs post-swap branching.
+ * [PHASE 2H] Orphan / auto-refund handler.
+ * Branching:
+ *   1. Post-swap (XLM deposit → USDC held, stellar_swap_tx set) → USDC→XLM path payment
+ *   2. USDC-native cash-out (usdc_amount > 0, no swap) → direct USDC payment
+ *   3. Pre-swap XLM deposit (xlm_amount > 0) → direct XLM payment
  * Does NOT mark REFUNDED unless on-chain refund succeeds.
  */
 async function refundOrphanTransaction(transactionId, reason) {
@@ -1492,12 +1723,42 @@ async function refundOrphanTransaction(transactionId, reason) {
 
   await releaseMatchFloatForTransaction(tx);
 
-  const postSwap = !!(tx.stellar_swap_tx && Number(tx.usdc_amount) > 0);
+  const usdcDecimal = Number(tx.usdc_amount);
+  const xlmDecimal = Number(tx.xlm_amount);
+  const hasSwap = !!(tx.stellar_swap_tx);
 
-  if (postSwap) {
+  // Legacy path: user deposited XLM, escrow swapped to USDC — return XLM via path payment
+  if (hasSwap && Number.isFinite(usdcDecimal) && usdcDecimal > 0) {
     return refundOrphanPostSwap(tx, reason);
   }
-  return refundOrphanPreSwap(tx, reason);
+
+  // USDC-native cash-out: user deposited USDC (xlm_amount is typically 0)
+  if (Number.isFinite(usdcDecimal) && usdcDecimal > 0) {
+    return refundOrphanUsdc(tx, reason);
+  }
+
+  // Pre-swap: user deposited XLM, never swapped
+  if (Number.isFinite(xlmDecimal) && xlmDecimal > 0) {
+    return refundOrphanPreSwap(tx, reason);
+  }
+
+  await auditLogService.log({
+    actor_role: 'system',
+    action: 'orphan_refund_failed',
+    resource_type: 'transaction',
+    resource_id: tx.id,
+    metadata: {
+      reason,
+      code: 'INVALID_ORPHAN_REFUND_AMOUNT',
+      usdc_amount: tx.usdc_amount,
+      xlm_amount: tx.xlm_amount,
+      stellar_swap_tx: tx.stellar_swap_tx,
+    },
+  });
+  logger.error(
+    `[Escrow] Orphan refund has no valid amount for tx ${tx.id}: usdc=${tx.usdc_amount} xlm=${tx.xlm_amount}`
+  );
+  return { status: 'failed', code: 'INVALID_ORPHAN_REFUND_AMOUNT' };
 }
 
 async function userHasUsdcTrustline(stellarAddress) {
@@ -1586,9 +1847,118 @@ async function refundOrphanPostSwap(tx, reason) {
   }
 }
 
-async function refundOrphanPreSwap(tx, reason) {
+/**
+ * Direct USDC refund for native USDC cash-outs (no XLM deposit / swap).
+ * Mirrors dispute refundToUser asset choice; records REFUNDED only after submit.
+ */
+async function refundOrphanUsdc(tx, reason) {
+  const usdcDecimal = Number(tx.usdc_amount);
+  if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: { reason, code: 'INVALID_USDC_AMOUNT' },
+    });
+    return { status: 'failed', code: 'INVALID_USDC_AMOUNT' };
+  }
+
+  if (!tx.user_stellar) {
+    await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [
+      'ORPHAN_USDC_REFUND_BLOCKED: USER_MISSING_STELLAR_ADDRESS',
+      tx.id,
+    ]);
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: { reason, code: 'USER_MISSING_STELLAR_ADDRESS', asset: 'USDC' },
+    });
+    return { status: 'blocked', code: 'USER_MISSING_STELLAR_ADDRESS' };
+  }
+
+  const hasTrustline = await userHasUsdcTrustline(tx.user_stellar);
+  if (!hasTrustline) {
+    await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [
+      'ORPHAN_USDC_REFUND_BLOCKED: USER_MISSING_USDC_TRUSTLINE',
+      tx.id,
+    ]);
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: {
+        reason,
+        code: 'USER_MISSING_USDC_TRUSTLINE',
+        asset: 'USDC',
+        user_stellar: tx.user_stellar,
+      },
+    });
+    logger.warn(
+      `[Escrow] Orphan USDC refund blocked for tx ${tx.id}: no USDC trustline on ${tx.user_stellar}`
+    );
+    return { status: 'blocked', code: 'USER_MISSING_USDC_TRUSTLINE' };
+  }
+
   try {
-    const refundHash = await refundXlm(tx.user_stellar, tx.xlm_amount, reason);
+    const refundHash = await refundUsdc(tx.user_stellar, usdcDecimal, reason);
+    if (stateMachine.isValidTransition(tx.state, 'REFUNDED')) {
+      await stateMachine.transition(tx.id, tx.state, 'REFUNDED', {
+        stellar_refund_tx: refundHash,
+        failure_reason: reason,
+      });
+    } else {
+      await db.query(
+        `UPDATE transactions
+         SET state = 'REFUNDED', stellar_refund_tx = $1, refunded_at = NOW(), failure_reason = $2, refund_error = NULL
+         WHERE id = $3`,
+        [refundHash, reason, tx.id]
+      );
+    }
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_succeeded',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      new_value: { state: 'REFUNDED', stellar_refund_tx: refundHash },
+      metadata: { reason, usdc_amount: usdcDecimal, asset: 'USDC' },
+    });
+    return { status: 'refunded', refundHash, asset: 'USDC' };
+  } catch (err) {
+    logger.error(`[Escrow] Orphan USDC refund failed for tx ${tx.id}:`, err.message);
+    await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [
+      `ORPHAN_USDC_REFUND_FAILED: ${err.message}`,
+      tx.id,
+    ]);
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: { reason, error: err.message, asset: 'USDC' },
+    });
+    return { status: 'failed', error: err.message };
+  }
+}
+
+async function refundOrphanPreSwap(tx, reason) {
+  const xlmDecimal = Number(tx.xlm_amount);
+  if (!Number.isFinite(xlmDecimal) || xlmDecimal <= 0) {
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: { reason, code: 'INVALID_XLM_AMOUNT', asset: 'XLM' },
+    });
+    return { status: 'failed', code: 'INVALID_XLM_AMOUNT' };
+  }
+
+  try {
+    const refundHash = await refundXlm(tx.user_stellar, xlmDecimal, reason);
     if (stateMachine.isValidTransition(tx.state, 'REFUNDED')) {
       await stateMachine.transition(tx.id, tx.state, 'REFUNDED', {
         stellar_refund_tx: refundHash,
@@ -1606,11 +1976,15 @@ async function refundOrphanPreSwap(tx, reason) {
       resource_type: 'transaction',
       resource_id: tx.id,
       new_value: { state: 'REFUNDED', stellar_refund_tx: refundHash },
-      metadata: { reason, asset: 'XLM' },
+      metadata: { reason, xlm_amount: xlmDecimal, asset: 'XLM' },
     });
     return { status: 'refunded', refundHash, asset: 'XLM' };
   } catch (err) {
     logger.error(`[Escrow] Orphan XLM refund failed for tx ${tx.id}:`, err.message);
+    await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [
+      `ORPHAN_XLM_REFUND_FAILED: ${err.message}`,
+      tx.id,
+    ]);
     await auditLogService.log({
       actor_role: 'system',
       action: 'orphan_refund_failed',
@@ -1835,6 +2209,9 @@ export default {
   syncBuyUsdcLock,
   swapXlmToUsdc,
   releaseToTrader,
+  sendUsdcToAggregatorEscrow,
+  releaseToSettlement,
+  releaseAfterUserConfirmation,
   releaseToUser,
   retryReleaseBlocked,
   refundXlm,
