@@ -1,7 +1,7 @@
 import Queue from 'bull';
 import config from '../config/index.js';
 import db from '../db/index.js';
-import redis, { buildRedisOptions } from '../db/redis.js';
+import redis, { buildBullRedisOptions } from '../db/redis.js';
 import websocket from '../services/websocket.js';
 import notificationService from '../services/notificationService.js';
 import stateMachine from './transactionStateMachine.js';
@@ -18,8 +18,8 @@ import logger from '../utils/logger.js';
  */
 
 const defaultOpts = {
-  // Shared keepAlive / family / maxRetries so Bull survives Render KV resets
-  redis: buildRedisOptions(config.redisUrl),
+  // keepAlive / family / maxRetries; enableReadyCheck must be false for Bull
+  redis: buildBullRedisOptions(config.redisUrl),
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },

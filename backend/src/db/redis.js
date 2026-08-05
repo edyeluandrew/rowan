@@ -8,8 +8,13 @@ import logger from '../utils/logger.js';
  * Render Key Value / Valkey often drops idle TCP clients (ECONNRESET). Without
  * keepAlive + retry strategy this floods logs and can flop /health mid-deploy
  * when ~9 Bull queues each open multiple connections to the same instance.
+ *
+ * @param {string} [url]
+ * @param {{ forBull?: boolean }} [opts]
+ *   forBull: Bull requires maxRetriesPerRequest:null AND enableReadyCheck:false
+ *   on subscriber/bclient (see OptimalBits/bull#1873). App client can ready-check.
  */
-export function buildRedisOptions(url = config.redisUrl) {
+export function buildRedisOptions(url = config.redisUrl, opts = {}) {
   if (!url) {
     throw new Error('REDIS_URL is not set');
   }
@@ -27,6 +32,8 @@ export function buildRedisOptions(url = config.redisUrl) {
       ? decodeURIComponent(parsed.username)
       : undefined;
 
+  const forBull = !!opts.forBull;
+
   return {
     host: parsed.hostname,
     port: parseInt(parsed.port, 10) || 6379,
@@ -39,7 +46,8 @@ export function buildRedisOptions(url = config.redisUrl) {
     keepAlive: 10_000,
     // Required for Bull (and safer for command retry after reconnect)
     maxRetriesPerRequest: null,
-    enableReadyCheck: true,
+    // Bull bclient/subscriber crash if enableReadyCheck is true
+    enableReadyCheck: forBull ? false : true,
     enableOfflineQueue: true,
     // rediss:// = TLS (Render external URL). Internal redis:// has no TLS.
     tls: url.startsWith('rediss://')
@@ -62,6 +70,11 @@ export function buildRedisOptions(url = config.redisUrl) {
       return false;
     },
   };
+}
+
+/** Options object safe to pass to `new Queue(..., { redis: ... })`. */
+export function buildBullRedisOptions(url = config.redisUrl) {
+  return buildRedisOptions(url, { forBull: true });
 }
 
 const redis = new Redis(buildRedisOptions());
