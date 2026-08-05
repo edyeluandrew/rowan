@@ -158,13 +158,20 @@ export default function Utilities({ utilityType = 'airtime' }) {
 
   const loadBundles = useCallback(async () => {
     if (!isData || !network || !fullPhone) return
-    if (dataAvailability && !dataAvailability.available) {
-      setBundles([])
-      setBundlesError(
-        `Reloadly sandbox has no data bundle products for ${country} yet. `
-        + 'Try Uganda (UG) or Nigeria (NG), or use Airtime for this country.'
-      )
-      return
+    // Soft gate: only hard-stop for corridors we know are empty (e.g. KE sandbox).
+    // Still attempt plan load if availability is unknown — avoid false "no plans" from
+    // mock/catalog glitches that previously blocked working UG Reloadly products.
+    if (dataAvailability && dataAvailability.available === false) {
+      const knownEmpty = ['KE', 'TZ', 'RW'].includes(String(country).toUpperCase())
+      if (knownEmpty) {
+        setBundles([])
+        setBundlesError(
+          `Reloadly sandbox has no data bundle products for ${country} yet. `
+          + 'Switch to Uganda for data tests, or use Airtime here.'
+        )
+        return
+      }
+      // UG / NG / etc: fall through and try live bundles; show banner separately.
     }
     setBundlesLoading(true)
     setBundlesError(null)
@@ -328,10 +335,10 @@ export default function Utilities({ utilityType = 'airtime' }) {
         </div>
       )}
 
-      {isData && dataAvailability && !dataAvailability.available && (
+      {isData && dataAvailability && !dataAvailability.available && ['KE', 'TZ', 'RW'].includes(String(country).toUpperCase()) && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-3 mb-4">
           <p className="text-rowan-yellow text-sm">
-            Reloadly sandbox has no data plans for {country}. Use Airtime here, or switch country to UG / NG / GH for data bundle tests.
+            Reloadly sandbox has no data plans for {country}. Use Airtime here, or switch to Uganda for data bundle tests.
           </p>
         </div>
       )}

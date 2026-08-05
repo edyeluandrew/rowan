@@ -102,31 +102,65 @@ function mockResponse(path, options) {
     };
   }
   if (path.match(/\/operators\/\d+$/)) {
+    const idMatch = path.match(/\/operators\/(\d+)$/);
+    const id = Number(idMatch?.[1] || 123);
+    const isData = [1151, 1152, 1171, 1172, 342, 281].includes(id);
     return {
-      operatorId: 123,
-      id: 123,
-      name: 'MTN Uganda Data',
-      data: true,
-      bundle: true,
-      denominationType: 'FIXED',
+      operatorId: id,
+      id,
+      name: isData ? `Mock Data Operator ${id}` : `Mock Airtime Operator ${id}`,
+      data: isData && ![1171, 1172].includes(id),
+      bundle: [1171, 1172].includes(id),
+      denominationType: isData ? 'FIXED' : 'RANGE',
       supportsLocalAmounts: true,
       destinationCurrencyCode: 'UGX',
-      localFixedAmounts: [1000, 2000, 3000, 5000, 10000],
-      localFixedAmountsDescriptions: {
-        '1000': '150MB — 24 hours',
-        '2000': '350MB — 3 days',
-        '3000': '500MB — 7 days',
-        '5000': '1GB — 7 days',
-        '10000': '2.5GB — 30 days',
-      },
+      minAmount: 0.27,
+      maxAmount: 27,
+      localMinAmount: 1000,
+      localMaxAmount: 100000,
+      localFixedAmounts: isData ? [1000, 2000, 3000, 5000, 10000] : undefined,
+      localFixedAmountsDescriptions: isData
+        ? {
+            '1000': '150MB — 24 hours',
+            '2000': '350MB — 3 days',
+            '3000': '500MB — 7 days',
+            '5000': '1GB — 7 days',
+            '10000': '2.5GB — 30 days',
+          }
+        : undefined,
+      fx: { rate: 3750, currencyCode: 'UGX' },
       country: { isoName: 'UG', name: 'Uganda' },
     };
   }
   if (path.includes('/operators/countries')) {
-    return [
-      { id: 123, name: 'MTN Uganda', country: { isoName: 'UG' } },
-      { id: 124, name: 'Airtel Uganda', country: { isoName: 'UG' } },
-    ];
+    const iso = (path.match(/\/operators\/countries\/([A-Z]{2})/i) || [])[1] || 'UG';
+    const code = String(iso).toUpperCase();
+    // Include data/bundle flags — getDataAvailability filters on these.
+    // (Plain airtime rows alone made UG appear "unavailable" in mock.)
+    if (code === 'UG') {
+      return [
+        { id: 515, operatorId: 515, name: 'MTN Uganda', data: false, bundle: false, denominationType: 'RANGE', supportsLocalAmounts: true, destinationCurrencyCode: 'UGX', country: { isoName: 'UG' } },
+        { id: 1151, operatorId: 1151, name: 'MTN Uganda Data', data: true, bundle: false, denominationType: 'FIXED', supportsLocalAmounts: true, destinationCurrencyCode: 'UGX', localFixedAmounts: [1000, 2000, 5000, 10000], localFixedAmountsDescriptions: { '1000': '150MB — 24h', '2000': '350MB', '5000': '1GB', '10000': '2.5GB' }, country: { isoName: 'UG' } },
+        { id: 1171, operatorId: 1171, name: 'MTN Uganda Bundles', data: false, bundle: true, denominationType: 'FIXED', supportsLocalAmounts: true, destinationCurrencyCode: 'UGX', localFixedAmounts: [1000, 3000, 5000], localFixedAmountsDescriptions: { '1000': 'Daily pack', '3000': 'Weekly', '5000': 'Monthly' }, country: { isoName: 'UG' } },
+        { id: 516, operatorId: 516, name: 'Airtel Uganda', data: false, bundle: false, denominationType: 'RANGE', supportsLocalAmounts: true, destinationCurrencyCode: 'UGX', country: { isoName: 'UG' } },
+        { id: 1152, operatorId: 1152, name: 'Airtel Uganda Data', data: true, bundle: false, denominationType: 'FIXED', supportsLocalAmounts: true, destinationCurrencyCode: 'UGX', localFixedAmounts: [1000, 2000, 5000, 10000], localFixedAmountsDescriptions: { '1000': '100MB', '2000': '250MB', '5000': '1GB', '10000': '2GB' }, country: { isoName: 'UG' } },
+        { id: 1172, operatorId: 1172, name: 'Airtel Uganda Bundles', data: false, bundle: true, denominationType: 'FIXED', supportsLocalAmounts: true, destinationCurrencyCode: 'UGX', localFixedAmounts: [1000, 2500, 5000], localFixedAmountsDescriptions: { '1000': 'Daily', '2500': 'Weekly', '5000': 'Monthly' }, country: { isoName: 'UG' } },
+      ];
+    }
+    if (code === 'NG') {
+      return [
+        { id: 341, operatorId: 341, name: 'MTN Nigeria', data: false, bundle: false, country: { isoName: 'NG' } },
+        { id: 342, operatorId: 342, name: 'MTN Nigeria Data', data: true, bundle: false, denominationType: 'FIXED', supportsLocalAmounts: true, destinationCurrencyCode: 'NGN', localFixedAmounts: [100, 200, 500], localFixedAmountsDescriptions: { '100': '100MB', '200': '200MB', '500': '1GB' }, country: { isoName: 'NG' } },
+      ];
+    }
+    if (code === 'GH') {
+      return [
+        { id: 280, operatorId: 280, name: 'MTN Ghana', data: false, bundle: false, country: { isoName: 'GH' } },
+        { id: 281, operatorId: 281, name: 'MTN Ghana Data', data: true, bundle: false, denominationType: 'FIXED', supportsLocalAmounts: true, destinationCurrencyCode: 'GHS', localFixedAmounts: [1, 5, 10], localFixedAmountsDescriptions: { '1': '100MB', '5': '1GB', '10': '3GB' }, country: { isoName: 'GH' } },
+      ];
+    }
+    // KE/TZ/RW sandbox often has zero data products — keep empty so UI can message correctly
+    return [];
   }
   if (path === '/topups' && options.method === 'POST') {
     const payload = JSON.parse(options.body || '{}');
