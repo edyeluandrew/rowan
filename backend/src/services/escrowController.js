@@ -1323,6 +1323,10 @@ async function syncBuyUsdcLock(transactionId, traderId) {
 }
 
 async function refundUsdc(userStellarAddress, usdcAmount, reason) {
+  const amount = parseFloat(usdcAmount).toFixed(7);
+  if (!(Number(amount) > 0)) {
+    throw new Error(`Invalid USDC refund amount: ${usdcAmount}`);
+  }
   try {
     const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
 
@@ -1334,7 +1338,7 @@ async function refundUsdc(userStellarAddress, usdcAmount, reason) {
         StellarSdk.Operation.payment({
           destination: userStellarAddress,
           asset: USDC_ASSET,
-          amount: parseFloat(usdcAmount).toFixed(7),
+          amount,
         })
       )
       .setTimeout(30)
@@ -1354,6 +1358,10 @@ async function refundUsdc(userStellarAddress, usdcAmount, reason) {
  * Refund native XLM from escrow to the user (pre-swap path only).
  */
 async function refundXlm(userStellarAddress, xlmAmount, reason) {
+  const amount = parseFloat(xlmAmount).toFixed(7);
+  if (!(Number(amount) > 0)) {
+    throw new Error(`Invalid XLM refund amount: ${xlmAmount}`);
+  }
   try {
     const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
 
@@ -1365,7 +1373,7 @@ async function refundXlm(userStellarAddress, xlmAmount, reason) {
         StellarSdk.Operation.payment({
           destination: userStellarAddress,
           asset: StellarSdk.Asset.native(),
-          amount: parseFloat(xlmAmount).toFixed(7),
+          amount,
         })
       )
       .setTimeout(30)
@@ -1682,7 +1690,11 @@ async function refundToUser(transactionId, { adminId = null, retry = false } = {
 }
 
 /**
- * [PHASE 2H] Orphan / auto-refund handler with pre-swap vs post-swap branching.
+ * [PHASE 2H] Orphan / auto-refund handler.
+ * Branching:
+ *   1. Post-swap (XLM deposit → USDC held, stellar_swap_tx set) → USDC→XLM path payment
+ *   2. USDC-native cash-out (usdc_amount > 0, no swap) → direct USDC payment
+ *   3. Pre-swap XLM deposit (xlm_amount > 0) → direct XLM payment
  * Does NOT mark REFUNDED unless on-chain refund succeeds.
  */
 async function refundOrphanTransaction(transactionId, reason) {
@@ -1711,12 +1723,42 @@ async function refundOrphanTransaction(transactionId, reason) {
 
   await releaseMatchFloatForTransaction(tx);
 
-  const postSwap = !!(tx.stellar_swap_tx && Number(tx.usdc_amount) > 0);
+  const usdcDecimal = Number(tx.usdc_amount);
+  const xlmDecimal = Number(tx.xlm_amount);
+  const hasSwap = !!(tx.stellar_swap_tx);
 
-  if (postSwap) {
+  // Legacy path: user deposited XLM, escrow swapped to USDC — return XLM via path payment
+  if (hasSwap && Number.isFinite(usdcDecimal) && usdcDecimal > 0) {
     return refundOrphanPostSwap(tx, reason);
   }
-  return refundOrphanPreSwap(tx, reason);
+
+  // USDC-native cash-out: user deposited USDC (xlm_amount is typically 0)
+  if (Number.isFinite(usdcDecimal) && usdcDecimal > 0) {
+    return refundOrphanUsdc(tx, reason);
+  }
+
+  // Pre-swap: user deposited XLM, never swapped
+  if (Number.isFinite(xlmDecimal) && xlmDecimal > 0) {
+    return refundOrphanPreSwap(tx, reason);
+  }
+
+  await auditLogService.log({
+    actor_role: 'system',
+    action: 'orphan_refund_failed',
+    resource_type: 'transaction',
+    resource_id: tx.id,
+    metadata: {
+      reason,
+      code: 'INVALID_ORPHAN_REFUND_AMOUNT',
+      usdc_amount: tx.usdc_amount,
+      xlm_amount: tx.xlm_amount,
+      stellar_swap_tx: tx.stellar_swap_tx,
+    },
+  });
+  logger.error(
+    `[Escrow] Orphan refund has no valid amount for tx ${tx.id}: usdc=${tx.usdc_amount} xlm=${tx.xlm_amount}`
+  );
+  return { status: 'failed', code: 'INVALID_ORPHAN_REFUND_AMOUNT' };
 }
 
 async function userHasUsdcTrustline(stellarAddress) {
@@ -1805,9 +1847,118 @@ async function refundOrphanPostSwap(tx, reason) {
   }
 }
 
-async function refundOrphanPreSwap(tx, reason) {
+/**
+ * Direct USDC refund for native USDC cash-outs (no XLM deposit / swap).
+ * Mirrors dispute refundToUser asset choice; records REFUNDED only after submit.
+ */
+async function refundOrphanUsdc(tx, reason) {
+  const usdcDecimal = Number(tx.usdc_amount);
+  if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: { reason, code: 'INVALID_USDC_AMOUNT' },
+    });
+    return { status: 'failed', code: 'INVALID_USDC_AMOUNT' };
+  }
+
+  if (!tx.user_stellar) {
+    await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [
+      'ORPHAN_USDC_REFUND_BLOCKED: USER_MISSING_STELLAR_ADDRESS',
+      tx.id,
+    ]);
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: { reason, code: 'USER_MISSING_STELLAR_ADDRESS', asset: 'USDC' },
+    });
+    return { status: 'blocked', code: 'USER_MISSING_STELLAR_ADDRESS' };
+  }
+
+  const hasTrustline = await userHasUsdcTrustline(tx.user_stellar);
+  if (!hasTrustline) {
+    await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [
+      'ORPHAN_USDC_REFUND_BLOCKED: USER_MISSING_USDC_TRUSTLINE',
+      tx.id,
+    ]);
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: {
+        reason,
+        code: 'USER_MISSING_USDC_TRUSTLINE',
+        asset: 'USDC',
+        user_stellar: tx.user_stellar,
+      },
+    });
+    logger.warn(
+      `[Escrow] Orphan USDC refund blocked for tx ${tx.id}: no USDC trustline on ${tx.user_stellar}`
+    );
+    return { status: 'blocked', code: 'USER_MISSING_USDC_TRUSTLINE' };
+  }
+
   try {
-    const refundHash = await refundXlm(tx.user_stellar, tx.xlm_amount, reason);
+    const refundHash = await refundUsdc(tx.user_stellar, usdcDecimal, reason);
+    if (stateMachine.isValidTransition(tx.state, 'REFUNDED')) {
+      await stateMachine.transition(tx.id, tx.state, 'REFUNDED', {
+        stellar_refund_tx: refundHash,
+        failure_reason: reason,
+      });
+    } else {
+      await db.query(
+        `UPDATE transactions
+         SET state = 'REFUNDED', stellar_refund_tx = $1, refunded_at = NOW(), failure_reason = $2, refund_error = NULL
+         WHERE id = $3`,
+        [refundHash, reason, tx.id]
+      );
+    }
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_succeeded',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      new_value: { state: 'REFUNDED', stellar_refund_tx: refundHash },
+      metadata: { reason, usdc_amount: usdcDecimal, asset: 'USDC' },
+    });
+    return { status: 'refunded', refundHash, asset: 'USDC' };
+  } catch (err) {
+    logger.error(`[Escrow] Orphan USDC refund failed for tx ${tx.id}:`, err.message);
+    await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [
+      `ORPHAN_USDC_REFUND_FAILED: ${err.message}`,
+      tx.id,
+    ]);
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: { reason, error: err.message, asset: 'USDC' },
+    });
+    return { status: 'failed', error: err.message };
+  }
+}
+
+async function refundOrphanPreSwap(tx, reason) {
+  const xlmDecimal = Number(tx.xlm_amount);
+  if (!Number.isFinite(xlmDecimal) || xlmDecimal <= 0) {
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'orphan_refund_failed',
+      resource_type: 'transaction',
+      resource_id: tx.id,
+      metadata: { reason, code: 'INVALID_XLM_AMOUNT', asset: 'XLM' },
+    });
+    return { status: 'failed', code: 'INVALID_XLM_AMOUNT' };
+  }
+
+  try {
+    const refundHash = await refundXlm(tx.user_stellar, xlmDecimal, reason);
     if (stateMachine.isValidTransition(tx.state, 'REFUNDED')) {
       await stateMachine.transition(tx.id, tx.state, 'REFUNDED', {
         stellar_refund_tx: refundHash,
@@ -1825,11 +1976,15 @@ async function refundOrphanPreSwap(tx, reason) {
       resource_type: 'transaction',
       resource_id: tx.id,
       new_value: { state: 'REFUNDED', stellar_refund_tx: refundHash },
-      metadata: { reason, asset: 'XLM' },
+      metadata: { reason, xlm_amount: xlmDecimal, asset: 'XLM' },
     });
     return { status: 'refunded', refundHash, asset: 'XLM' };
   } catch (err) {
     logger.error(`[Escrow] Orphan XLM refund failed for tx ${tx.id}:`, err.message);
+    await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [
+      `ORPHAN_XLM_REFUND_FAILED: ${err.message}`,
+      tx.id,
+    ]);
     await auditLogService.log({
       actor_role: 'system',
       action: 'orphan_refund_failed',
