@@ -1,6 +1,7 @@
 import Queue from 'bull';
 import config from '../config/index.js';
 import db from '../db/index.js';
+import Redis from 'ioredis';
 import redis, { buildBullRedisOptions } from '../db/redis.js';
 import websocket from '../services/websocket.js';
 import notificationService from '../services/notificationService.js';
@@ -12,14 +13,48 @@ import logger from '../utils/logger.js';
  * Bull job queues for async/deferred tasks.
  * Backed by Render Key Value (Redis-compatible Valkey).
  *
- * Note: each Queue opens multiple ioredis clients. Prefer one Redis instance
- * per environment, and do not point local dev at prod Internal URL unless you
- * intentionally share it (Internal host only resolves inside Render).
+ * Share one client + one subscriber across all queues. Each queue still needs
+ * its own bclient (blocking). That keeps sockets ~11 instead of ~27, which
+ * fits free Render Key Value limits and avoids Connected→closed thrashing that
+ * blocked boot (listen never ran → "No open ports detected").
  */
 
+const bullRedisOpts = buildBullRedisOptions(config.redisUrl);
+let sharedBullClient = null;
+let sharedBullSubscriber = null;
+
+function bullCreateClient(type) {
+  switch (type) {
+    case 'client':
+      if (!sharedBullClient) {
+        sharedBullClient = new Redis(bullRedisOpts);
+        sharedBullClient.on('error', (err) => {
+          if (!/ECONNRESET|EPIPE|Connection is closed/i.test(err.message || '')) {
+            logger.warn('[Redis:bull-client]', err.message);
+          }
+        });
+      }
+      return sharedBullClient;
+    case 'subscriber':
+      if (!sharedBullSubscriber) {
+        sharedBullSubscriber = new Redis(bullRedisOpts);
+        sharedBullSubscriber.on('error', (err) => {
+          if (!/ECONNRESET|EPIPE|Connection is closed/i.test(err.message || '')) {
+            logger.warn('[Redis:bull-sub]', err.message);
+          }
+        });
+      }
+      return sharedBullSubscriber;
+    case 'bclient':
+      // Blocking clients cannot be shared across queues
+      return new Redis(bullRedisOpts);
+    default:
+      return new Redis(bullRedisOpts);
+  }
+}
+
 const defaultOpts = {
-  // keepAlive / family / maxRetries; enableReadyCheck must be false for Bull
-  redis: buildBullRedisOptions(config.redisUrl),
+  createClient: bullCreateClient,
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },
