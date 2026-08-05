@@ -1,7 +1,7 @@
 import Queue from 'bull';
 import config from '../config/index.js';
 import db from '../db/index.js';
-import redis from '../db/redis.js';
+import redis, { buildRedisOptions } from '../db/redis.js';
 import websocket from '../services/websocket.js';
 import notificationService from '../services/notificationService.js';
 import stateMachine from './transactionStateMachine.js';
@@ -11,29 +11,15 @@ import logger from '../utils/logger.js';
 /**
  * Bull job queues for async/deferred tasks.
  * Backed by Render Key Value (Redis-compatible Valkey).
- * Migrated from Upstash to avoid request quota limits.
+ *
+ * Note: each Queue opens multiple ioredis clients. Prefer one Redis instance
+ * per environment, and do not point local dev at prod Internal URL unless you
+ * intentionally share it (Internal host only resolves inside Render).
  */
 
-// Parse Redis URL into an options object so Bull's internal ioredis client
-// gets maxRetriesPerRequest: null (prevents crash on transient disconnects).
-function parseRedisOpts(url) {
-  const parsed = new URL(url);
-  return {
-    host: parsed.hostname,
-    port: parseInt(parsed.port, 10) || 6379,
-    password: parsed.password || undefined,
-    username: parsed.username !== 'default' ? parsed.username : undefined,
-    tls: url.startsWith('rediss://') ? {} : undefined,
-    maxRetriesPerRequest: null,
-    enableOfflineQueue: true,
-    retryStrategy(times) {
-      return Math.min(times * 500, 15000);
-    },
-  };
-}
-
 const defaultOpts = {
-  redis: parseRedisOpts(config.redisUrl),
+  // Shared keepAlive / family / maxRetries so Bull survives Render KV resets
+  redis: buildRedisOptions(config.redisUrl),
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },

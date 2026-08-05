@@ -208,19 +208,33 @@ if (config.nodeEnv === 'development') {
 }
 
 app.get('/health', async (req, res) => {
+  // DB is required for a healthy process. Redis on Render KV often blips
+  // (ECONNRESET); do not 503 the whole service on a transient redis ping,
+  // or Render deploys / health checks will fail while workers are reconnecting.
   try {
     await db.query('SELECT 1');
-    const redisPing = await redis.ping();
-    res.json({
-      status: 'ok',
-      db: 'connected',
-      redis: redisPing === 'PONG' ? 'connected' : 'error',
-      horizon: horizonWatcher.getStatus(),
-      uptime: process.uptime(),
-    });
   } catch (err) {
-    res.status(503).json({ status: 'error', message: err.message });
+    return res.status(503).json({ status: 'error', message: err.message, db: 'error' });
   }
+
+  let redisStatus = redis.status || 'unknown';
+  try {
+    const redisPing = await Promise.race([
+      redis.ping(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('redis ping timeout')), 2_000)),
+    ]);
+    redisStatus = redisPing === 'PONG' ? 'connected' : 'error';
+  } catch {
+    redisStatus = redis.status === 'ready' ? 'degraded' : redis.status || 'disconnected';
+  }
+
+  res.json({
+    status: 'ok',
+    db: 'connected',
+    redis: redisStatus,
+    horizon: horizonWatcher.getStatus(),
+    uptime: process.uptime(),
+  });
 });
 
 // ─── API Routes ─────────────────────────────────────────────
@@ -403,9 +417,32 @@ async function start() {
       }
     }
 
-    // Verify Redis
-    await redis.ping();
-    logger.info('[Redis] Connected');
+    // Verify Redis (retry — Render Key Value can blip during deploy / cold start)
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        await redis.ping();
+        logger.info('[Redis] Connected');
+        break;
+      } catch (redisErr) {
+        logger.warn(`[Redis] Ping attempt ${attempt}/5 failed`, { error: redisErr.message });
+        if (attempt === 5) {
+          // Allow boot so deploys still roll out; queues will catch up on reconnect.
+          // Fail hard only if REDIS_URL is completely missing (config throws earlier).
+          logger.error('[Redis] Unreachable at boot — continuing; check REDIS_URL / Key Value instance', {
+            error: redisErr.message,
+            redisUrlHost: (() => {
+              try {
+                return new URL(config.redisUrl).hostname;
+              } catch {
+                return 'invalid';
+              }
+            })(),
+          });
+        } else {
+          await new Promise((r) => setTimeout(r, attempt * 2000));
+        }
+      }
+    }
 
     // Run database migrations
     await runMigrations();
