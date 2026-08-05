@@ -11,12 +11,11 @@ export const PAYMENT_SIDES = {
   ONRAMP: 'onramp',
 };
 
+/** Uganda-only launch: P2P first. Aggregators rejoin via countries.payment_config. */
 export const DEFAULT_OFFRAMP_CHAIN = [
-  PAYMENT_PROVIDERS.KOTANI_PAY,
   PAYMENT_PROVIDERS.P2P_TRADER,
 ];
 
 export const DEFAULT_ONRAMP_CHAIN = [
-  PAYMENT_PROVIDERS.KOTANI_PAY,
   PAYMENT_PROVIDERS.P2P_TRADER,
 ];

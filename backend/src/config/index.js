@@ -236,7 +236,7 @@ const config = {
         ? 'https://api.yellowcard.io'
         : 'https://sandbox-api.yellowcard.io'),
     webhookSecret: process.env.YELLOW_PAY_WEBHOOK_SECRET || '',
-    sandboxCorridors: (process.env.YELLOW_PAY_CORRIDORS || 'UG,KE,TZ,RW,NG,GH')
+    sandboxCorridors: (process.env.YELLOW_PAY_CORRIDORS || 'UG')
       .split(',')
       .map((c) => c.trim().toUpperCase())
       .filter(Boolean),
@@ -256,7 +256,7 @@ const config = {
     webhookSecret: process.env.KOTANI_PAY_WEBHOOK_SECRET || '',
     callbackUrl: process.env.KOTANI_PAY_CALLBACK_URL || '',
     senderStellarAddress: process.env.KOTANI_PAY_SENDER_STELLAR || process.env.ESCROW_PUBLIC_KEY || '',
-    sandboxCorridors: (process.env.KOTANI_PAY_CORRIDORS || 'UG,KE,TZ,RW,NG,GH')
+    sandboxCorridors: (process.env.KOTANI_PAY_CORRIDORS || 'UG')
       .split(',')
       .map((c) => c.trim().toUpperCase())
       .filter(Boolean),

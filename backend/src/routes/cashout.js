@@ -17,6 +17,7 @@ import USER_ACTIVE_ORDER_STATES from '../constants/userActiveOrderStates.js';
 import storageService from '../services/storageService.js';
 import paymentRouter from '../services/payments/paymentRouter.js';
 import { PAYMENT_SIDES } from '../services/payments/paymentConstants.js';
+import countryService from '../services/countries/countryService.js';
 import { formatShortId } from '../utils/shortId.js';
 
 /** Wait briefly for Horizon watcher + escrow to create the transaction row. */
@@ -151,9 +152,23 @@ router.post(
       }
 
       const countryCode = paymentRouter.networkToCountryCode(network);
-      const paymentPlan = countryCode
-        ? paymentRouter.resolvePaymentPlan({ countryCode, side: PAYMENT_SIDES.OFFRAMP })
-        : null;
+      if (!countryCode || !countryService.isActiveCountry(countryCode)) {
+        return res.status(400).json({
+          error: 'Cash-out is only available in Uganda for now. Other countries are coming soon.',
+          code: 'COUNTRY_NOT_AVAILABLE',
+          supportedCountries: countryService.getActiveCountries().map((c) => c.code),
+        });
+      }
+      if (!countryService.isValidNetworkForCountry(countryCode, network)) {
+        return res.status(400).json({
+          error: `Network ${network} is not available for ${countryCode}.`,
+          code: 'NETWORK_NOT_AVAILABLE',
+        });
+      }
+      const paymentPlan = paymentRouter.resolvePaymentPlan({
+        countryCode,
+        side: PAYMENT_SIDES.OFFRAMP,
+      });
 
       const networkLimits = await payoutSettingsService.getActiveNetworkLimits(network, fiatCurrency);
       const yellowAvailable = paymentPlan?.hasAutomatedRail;

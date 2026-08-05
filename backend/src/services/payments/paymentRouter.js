@@ -51,7 +51,7 @@ export function getProviderChain(countryCode, side) {
   }
 
   if (normalizedSide === PAYMENT_SIDES.OFFRAMP) {
-    const primary = cfg.default_offramp_provider || PAYMENT_PROVIDERS.KOTANI_PAY;
+    const primary = cfg.default_offramp_provider || PAYMENT_PROVIDERS.P2P_TRADER;
     const fallback = cfg.fallback_provider || PAYMENT_PROVIDERS.P2P_TRADER;
     return [primary, fallback].filter((v, i, arr) => arr.indexOf(v) === i);
   }

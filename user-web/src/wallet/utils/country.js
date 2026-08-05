@@ -1,7 +1,13 @@
 import { COUNTRY_CODES, NETWORKS } from './constants'
 
-/** Static fallback when API is unavailable (kept in sync with migration 042). */
-export const SUPPORTED_COUNTRIES = ['UG', 'KE', 'TZ', 'RW', 'NG', 'GH']
+/**
+ * Launch surface: Uganda only.
+ * NETWORKS / COUNTRY_CODES keep full metadata for receipts and history.
+ */
+export const SUPPORTED_COUNTRIES = ['UG']
+
+/** Markets shown as disabled “Coming soon” in pickers (not selectable). */
+export const COMING_SOON_COUNTRIES = ['KE', 'TZ', 'RW', 'NG', 'GH']
 
 export const COUNTRY_FIAT = {
   UG: 'UGX',
