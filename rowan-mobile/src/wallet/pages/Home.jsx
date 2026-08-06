@@ -9,6 +9,8 @@ import {
   AlertTriangle,
   Bell,
   Coins,
+  Signal,
+  Wifi,
 } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
@@ -128,6 +130,25 @@ export default function Home() {
         >
           <ArrowUpFromLine size={20} className="text-rowan-green" />
           <span className="text-rowan-text text-xs font-medium">Sell</span>
+        </button>
+      </div>
+
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => navigate('/wallet/utilities/airtime')}
+          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
+        >
+          <Signal size={20} className="text-rowan-yellow" />
+          <span className="text-rowan-text text-xs font-medium">Airtime</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/wallet/utilities/data')}
+          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
+        >
+          <Wifi size={20} className="text-rowan-yellow" />
+          <span className="text-rowan-text text-xs font-medium">Data</span>
         </button>
       </div>
 

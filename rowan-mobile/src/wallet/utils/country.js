@@ -26,6 +26,13 @@ export function getFiatForCountry(country) {
   return COUNTRY_FIAT[country] || 'UGX'
 }
 
+/** Pick first non-empty fiat code, else UGX. */
+export function resolveFiatCurrency(...candidates) {
+  const found = candidates.find((c) => c && String(c).trim())
+  if (found) return found
+  return 'UGX'
+}
+
 export function getDialCodeForCountry(country) {
   return COUNTRY_CODES[country]?.code || '+256'
 }
