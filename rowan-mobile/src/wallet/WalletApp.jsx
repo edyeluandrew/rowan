@@ -40,6 +40,11 @@ import DisputeForm from './pages/DisputeForm';
 import BiometricSetup from './pages/BiometricSetup';
 import RateAlerts from './pages/RateAlerts';
 import TwoFactorSettings from './pages/security/TwoFactorSettings';
+import UtilitiesHub from './pages/UtilitiesHub';
+import Utilities from './pages/Utilities';
+import UtilitiesConfirm from './pages/UtilitiesConfirm';
+import UtilitiesSend from './pages/UtilitiesSend';
+import UtilityStatus from './pages/UtilityStatus';
 
 /** Initialize push notifications once on first authenticated render */
 function PushNotificationInit() {
@@ -83,6 +88,15 @@ export default function WalletApp() {
             <Route path="help" element={<Help />} />
             <Route path="security/2fa" element={<TwoFactorSettings />} />
             <Route path="receipt/:transactionId" element={<TransactionReceipt />} />
+
+            <Route path="utilities" element={<UtilitiesHub />}>
+              <Route index element={<Navigate to="airtime" replace />} />
+              <Route path="airtime" element={<Utilities utilityType="airtime" />} />
+              <Route path="data" element={<Utilities utilityType="data" />} />
+            </Route>
+            <Route path="utilities/confirm" element={<UtilitiesConfirm />} />
+            <Route path="utilities/send" element={<UtilitiesSend />} />
+            <Route path="utilities/status/:id" element={<UtilityStatus />} />
 
             {/* Catch-all within wallet */}
             <Route path="*" element={<Navigate to="home" replace />} />

@@ -27,6 +27,7 @@
 | [ROWAN_POSITIONING.md](./ROWAN_POSITIONING.md) | Market position — “Borderless value. Local payouts.” |
 | [MANUAL_MOBILE_MONEY_PAYOUT_POLICY.md](./MANUAL_MOBILE_MONEY_PAYOUT_POLICY.md) | Product policy for partner MoMo (not automated rails) |
 | [FUTURE_FIAT_FX_PROVIDER.md](./FUTURE_FIAT_FX_PROVIDER.md) | Live FX provider design (Phase 2H-4) |
+| [**legal/**](./legal/README.md) | **Compliance pack** — AML, user T&Cs, privacy, trader & partner agreements (draft templates) |
 
 ---
 
