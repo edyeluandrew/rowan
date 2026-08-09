@@ -1,10 +1,13 @@
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
-import { CheckCircle2, ChevronLeft, XCircle, Hash, Clock, ExternalLink } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, XCircle, Hash, Clock, ExternalLink, Loader2 } from 'lucide-react'
 import Button from '../components/ui/Button'
 import { maskPhoneNumber } from '../utils/crypto'
 import { labelsFor } from '../utils/utilityLabels'
 import { CURRENT_NETWORK } from '../utils/constants'
 import { resolveFiatCurrency } from '../utils/country'
+import { getUtilityPurchase } from '../api/utilities'
+import useWallet from '../hooks/useWallet'
 
 function resolveStatus(purchase, data) {
   return purchase?.status || data?.status || data?.state || null
@@ -14,13 +17,76 @@ export default function UtilityStatus() {
   const navigate = useNavigate()
   const location = useLocation()
   const { id } = useParams()
-  const { purchase, quote, phone: phoneFromState } = location.state || {}
+  const { purchase: statePurchase, quote, phone: phoneFromState } = location.state || {}
+  const { refresh: refreshBalance } = useWallet()
+  const [purchase, setPurchase] = useState(statePurchase || null)
+  const [loadError, setLoadError] = useState(null)
+  const [loading, setLoading] = useState(!statePurchase && !!id)
+
   const data = purchase || quote
-  const labels = labelsFor(data)
+  const labels = labelsFor(data || quote || {})
+
+  // Deep-link / history resume: load by id when no navigation state
+  useEffect(() => {
+    if (statePurchase || !id) return
+    let cancelled = false
+    setLoading(true)
+    setLoadError(null)
+    getUtilityPurchase(id)
+      .then((result) => {
+        if (!cancelled) setPurchase(result)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setLoadError(err.response?.data?.error || err.message || 'Could not load purchase')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [id, statePurchase])
+
+  // After buy, balance changed — soft-refresh Horizon so Home is current
+  useEffect(() => {
+    const status = resolveStatus(purchase, data)
+    if (status === 'COMPLETED' || status === 'FAILED') {
+      refreshBalance()
+    }
+  }, [purchase?.status, data?.status, refreshBalance])
+
+  const goHome = () => navigate('/wallet/home', { replace: false })
+
+  if (loading) {
+    return (
+      <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-4 flex flex-col items-center justify-center gap-3">
+        <Loader2 size={28} className="text-rowan-muted animate-spin" />
+        <p className="text-rowan-muted text-sm">Loading purchase…</p>
+      </div>
+    )
+  }
 
   if (!data) {
-    navigate(labels.utilitiesPath, { replace: true })
-    return null
+    return (
+      <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-4">
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            type="button"
+            onClick={goHome}
+            className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center"
+          >
+            <ChevronLeft size={24} />
+          </button>
+          <h1 className="text-rowan-text text-lg font-bold">Purchase</h1>
+        </div>
+        <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-6 text-center">
+          <p className="text-rowan-text text-sm">
+            {loadError || 'Purchase not found'}
+          </p>
+          <Button className="mt-4" onClick={goHome}>Back to home</Button>
+        </div>
+      </div>
+    )
   }
 
   const status = resolveStatus(purchase, data)
@@ -41,7 +107,7 @@ export default function UtilityStatus() {
       <div className="flex items-center gap-3 mb-6">
         <button
           type="button"
-          onClick={() => navigate('/wallet/home')}
+          onClick={goHome}
           className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center"
         >
           <ChevronLeft size={24} />
@@ -106,15 +172,15 @@ export default function UtilityStatus() {
       )}
 
       <div className="mt-8 space-y-3">
-        <Button onClick={() => navigate(labels.utilitiesPath)}>
-          {labels.buyMore}
+        <Button onClick={goHome}>
+          Done — back to home
         </Button>
         <button
           type="button"
-          onClick={() => navigate('/wallet/home')}
+          onClick={() => navigate(labels.utilitiesPath)}
           className="w-full text-rowan-muted text-sm min-h-11"
         >
-          Back to home
+          {labels.buyMore}
         </button>
       </div>
 

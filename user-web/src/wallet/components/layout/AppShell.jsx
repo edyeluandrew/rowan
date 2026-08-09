@@ -22,23 +22,22 @@ export default function AppShell() {
   }
 
   return (
-    <div className="bg-rowan-bg min-h-screen text-rowan-text lg:flex">
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:w-60 lg:flex-col lg:fixed lg:inset-y-0 lg:border-r lg:border-rowan-border lg:bg-rowan-surface">
-        <div className="px-5 py-6">
-          <p className="text-rowan-green font-bold text-xl tracking-tight">Rowan</p>
-          {/* <p className="text-rowan-muted text-xs mt-1">Web wallet</p> */}
+    <div className="rowan-atmosphere min-h-screen text-rowan-text lg:flex">
+      <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 lg:border-r lg:border-rowan-border/80 lg:bg-rowan-surface/90 lg:backdrop-blur-sm">
+        <div className="px-6 py-7">
+          <p className="font-serif text-2xl text-rowan-green tracking-tight">Rowan</p>
+          <p className="text-rowan-muted text-xs mt-1 font-sans">USDC · mobile money</p>
         </div>
-        <nav className="flex-1 px-3 space-y-1">
+        <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
           {tabs.map(({ path, label, Icon }) => (
             <NavLink
               key={path}
               to={path}
               className={({ isActive }) =>
-                `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium min-h-11 ${
+                `flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium min-h-11 transition-colors ${
                   isActive
-                    ? 'bg-rowan-green text-white'
-                    : 'text-rowan-muted hover:bg-rowan-bg hover:text-rowan-text'
+                    ? 'bg-rowan-green text-white shadow-soft'
+                    : 'text-rowan-muted hover:bg-rowan-mint/60 hover:text-rowan-text'
                 }`
               }
             >
@@ -56,7 +55,7 @@ export default function AppShell() {
           <button
             type="button"
             onClick={handleLogout}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-rowan-border min-h-10 text-sm text-rowan-muted hover:text-rowan-text"
+            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-rowan-border min-h-10 text-sm text-rowan-muted hover:text-rowan-text hover:bg-rowan-mint/40"
           >
             <LogOut size={16} />
             Sign out
@@ -64,15 +63,13 @@ export default function AppShell() {
         </div>
       </aside>
 
-      {/* Main */}
-      <div className="flex-1 lg:pl-60">
+      <div className="flex-1 lg:pl-64 min-h-screen overflow-x-hidden">
         <div className="mx-auto w-full max-w-3xl pb-24 lg:pb-10 min-h-screen">
           <Outlet />
         </div>
       </div>
 
-      {/* Mobile bottom nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-rowan-surface border-t border-rowan-border z-40 safe-area-pb">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-rowan-surface/95 backdrop-blur-md border-t border-rowan-border z-40 safe-area-pb shadow-[0_-8px_30px_rgba(12,47,34,0.06)]">
         <div className="flex items-center justify-around h-16">
           {tabs.map(({ path, label, Icon }) => (
             <NavLink
@@ -84,8 +81,12 @@ export default function AppShell() {
                 }`
               }
             >
-              <Icon size={22} />
-              <span className="text-[10px] font-medium">{label}</span>
+              {({ isActive }) => (
+                <>
+                  <Icon size={22} strokeWidth={isActive ? 2.4 : 2} />
+                  <span className="text-[10px] font-semibold font-sans">{label}</span>
+                </>
+              )}
             </NavLink>
           ))}
         </div>

@@ -19,6 +19,8 @@ import PhoneInput from '../components/cashout/PhoneInput'
 import PaymentMethodPill from '../components/ui/PaymentMethodPill'
 import Button from '../components/ui/Button'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
+import { mapApiError } from '../utils/apiErrors'
+import { getRatesHealth } from '../utils/quoteSafety'
 
 export default function Cashout() {
   const navigate = useNavigate()
@@ -33,7 +35,7 @@ export default function Cashout() {
   } = location.state || {}
   const { isLocked } = useBiometricProtection()
   const { country, fiatCurrency: userFiat } = useUserCountry()
-  const { allRates, rates } = useRates(userFiat)
+  const { allRates, rates, refresh: refreshRates } = useRates(userFiat)
   const { usdcBalance, hasUsdcTrustline } = useWallet()
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
   const adNetwork = presetNetwork || selectedAd?.network || null
@@ -150,6 +152,14 @@ export default function Cashout() {
     setLoading(true)
     setError(null)
     try {
+      const snap = await refreshRates()
+      const health = getRatesHealth(snap?.rates, snap?.fetchedAt, snap?.error)
+      const hasTraderRate = selectedAd?.ratePerUsdc != null || selectedAd?.rate_per_usdc != null
+      if (!health.ok && !hasTraderRate) {
+        setError(health.message)
+        return
+      }
+
       const networkConfig = NETWORKS[network]
       const derivedCountryCode = networkConfig
         ? COUNTRY_CODES[networkConfig.country]?.code || '+256'
@@ -175,6 +185,8 @@ export default function Cashout() {
           selectedAd,
           traderName: presetTraderName || selectedAd?.traderName,
           payoutSettingId,
+          liveUsdcToFiat: health.ok ? health.usdcToFiat : null,
+          rateSnapshotAt: snap?.fetchedAt || Date.now(),
         },
       })
     } catch (err) {
@@ -183,7 +195,7 @@ export default function Cashout() {
         navigate(`/wallet/transaction/${data.transaction_id}`, { replace: true })
         return
       }
-      setError(data?.message || data?.error || err.message)
+      setError(mapApiError(err))
     } finally {
       setLoading(false)
     }

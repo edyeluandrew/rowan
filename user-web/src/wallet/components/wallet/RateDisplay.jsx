@@ -24,22 +24,22 @@ export default function RateDisplay({ allRates, loading, country = null }) {
         .filter(([key]) => !country || NETWORKS[key]?.country === country)
 
   return (
-    <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
-      <h3 className="text-rowan-text font-bold text-sm mb-3 flex items-center gap-2">
-        <ArrowLeftRight size={14} className="text-rowan-yellow" />
-        Live Rates
+    <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-4 mb-4 shadow-soft">
+      <h3 className="font-serif text-rowan-text text-base mb-3 flex items-center gap-2">
+        <ArrowLeftRight size={14} className="text-rowan-green" />
+        Live rates
       </h3>
       <div className="divide-y divide-rowan-border">
         {rateEntries.map(([key, rate]) => {
           const network = NETWORKS[key]
           return (
-            <div key={key} className="flex justify-between items-center py-2">
+            <div key={key} className="flex justify-between items-center py-2.5">
               <Badge color={network.color} bg={network.bg}>
                 {network.label}
               </Badge>
               <div className="flex items-center gap-2">
                 <ArrowLeftRight size={14} className="text-rowan-muted" />
-                <span className="text-rowan-yellow font-bold tabular-nums text-sm">
+                <span className="text-rowan-green font-bold tabular-nums text-sm font-sans">
                   {network.currency}{' '}
                   {Number(rate).toLocaleString('en-US', { maximumFractionDigits: 2 })}
                 </span>

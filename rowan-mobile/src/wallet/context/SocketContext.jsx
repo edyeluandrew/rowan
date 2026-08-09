@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext'
 import { SOCKET_RECONNECT_ATTEMPTS, SOCKET_RECONNECT_DELAY, SOCKET_RECONNECT_DELAY_MAX } from '../utils/constants'
 import { getPreference } from '../utils/storage'
 import { scheduleLocalNotification } from '../utils/notifications'
+import { buildLocalNotificationExtra } from '../utils/notificationRoutes'
 import { onLogout } from '../api/client'
 
 const SocketContext = createContext(null)
@@ -39,27 +40,50 @@ export function SocketProvider({ children }) {
       playNotification()
       scheduleLocalNotification({
         id: Date.now(),
-        title: '💰 Payment received!',
-        body: 'Your cash-out is complete. Check your mobile money account for the partner payout.',
-        data,
+        title: 'Payment received!',
+        body: 'Your trade is complete. Open Rowan for the receipt.',
+        data: buildLocalNotificationExtra('COMPLETE', data),
       })
     })
     socket.on('transaction_refunded', (data) => {
       playNotification()
       scheduleLocalNotification({
         id: Date.now() + 1,
-        title: '↩️ Refund processed',
+        title: 'Refund processed',
         body: 'Your USDC has been refunded to your wallet.',
-        data,
+        data: buildLocalNotificationExtra('REFUNDED', data),
       })
     })
     socket.on('trader_matched', (data) => {
       playNotification()
       scheduleLocalNotification({
         id: Date.now() + 2,
-        title: '🤝 Trader matched',
-        body: 'A trader has been assigned to your cashout.',
-        data,
+        title: 'Trader matched',
+        body: 'A trader is handling your order. Tap to open it.',
+        data: buildLocalNotificationExtra('TRADER_MATCHED', data),
+      })
+    })
+    socket.on('transaction_update', (data) => {
+      const state = String(data?.state || '').toUpperCase()
+      if (state === 'FIAT_PAYOUT_SUBMITTED' || state === 'USER_CONFIRMATION_PENDING') {
+        playNotification()
+        scheduleLocalNotification({
+          id: Date.now() + 3,
+          title: state === 'FIAT_PAYOUT_SUBMITTED' ? 'Payout sent' : 'Confirm receipt',
+          body: state === 'FIAT_PAYOUT_SUBMITTED'
+            ? 'Mobile money was submitted. Open your order to confirm.'
+            : 'Confirm you received mobile money to finish the trade.',
+          data: buildLocalNotificationExtra(state, data),
+        })
+      }
+    })
+    socket.on('dispute_opened', (data) => {
+      playNotification()
+      scheduleLocalNotification({
+        id: Date.now() + 4,
+        title: 'Dispute opened',
+        body: 'Open your order to review the dispute.',
+        data: buildLocalNotificationExtra('DISPUTE_OPENED', data),
       })
     })
 

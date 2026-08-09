@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { AlertTriangle, ChevronLeft, Clock, ShieldCheck } from 'lucide-react'
 import { buildAndSignUsdcPayment, submitTransaction } from '../utils/stellar'
@@ -9,6 +9,8 @@ import UtilityQuoteSummary from '../components/utilities/UtilityQuoteSummary'
 import Button from '../components/ui/Button'
 import { getHorizonUrl } from '../../shared/utils/config'
 import { labelsFor, getUtilityType } from '../utils/utilityLabels'
+import { mapApiError } from '../utils/apiErrors'
+import { createSubmitGuard } from '../utils/submitGuard'
 
 export default function UtilitiesSend() {
   const navigate = useNavigate()
@@ -17,14 +19,16 @@ export default function UtilitiesSend() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [quoteExpired, setQuoteExpired] = useState(false)
+  const submitGuard = useRef(createSubmitGuard()).current
+
+  const labels = labelsFor({ type: utilityType || getUtilityType(quote) })
+  const horizonUrl = getHorizonUrl()
 
   if (!quote) {
     navigate(labels.utilitiesPath || '/wallet/utilities/airtime', { replace: true })
     return null
   }
 
-  const labels = labelsFor({ type: utilityType || getUtilityType(quote) })
-  const horizonUrl = getHorizonUrl()
   const useMockPath = mockPurchaseAllowed && quote.reloadlyMock
 
   const finishPurchase = async (paymentTxHash) => {
@@ -32,14 +36,15 @@ export default function UtilitiesSend() {
       quoteId: quote.quoteId || quote.id,
       paymentTxHash,
     })
-    navigate(`/wallet/utilities/status/${quote.quoteId || quote.id}`, {
+    navigate(`/wallet/utilities/status/${result.id || quote.quoteId || quote.id}`, {
       state: { purchase: result, quote, phone, utilityType: getUtilityType(quote), billLookup },
       replace: true,
     })
   }
 
   const handlePay = async () => {
-    if (quoteExpired) return
+    if (quoteExpired || loading) return
+    if (!submitGuard.tryStart()) return
     setLoading(true)
     setError(null)
     try {
@@ -70,15 +75,15 @@ export default function UtilitiesSend() {
       })
       const txResult = await submitTransaction(signedXdr, horizonUrl)
       await finishPurchase(txResult.id)
+      // leave guard locked — screen unmounts after navigate
     } catch (err) {
-      const data = err.response?.data
       if (err.response?.status === 410) {
-        setError('Quote expired. Please get a new quote.')
+        setError(mapApiError(err, 'Quote expired. Please get a new quote.'))
         setQuoteExpired(true)
       } else {
-        setError(data?.error || err.message)
+        setError(mapApiError(err))
       }
-    } finally {
+      submitGuard.release()
       setLoading(false)
     }
   }
@@ -117,6 +122,7 @@ export default function UtilitiesSend() {
           <p className="text-rowan-muted text-xs">
             Send exactly {Number(quote.usdcAmount).toFixed(4)} USDC with memo{' '}
             <span className="font-mono text-rowan-text">{quote.memo}</span> {labels.deliveryNote}
+            {' '}Tap pay once — do not double-send.
           </p>
         </div>
       )}
@@ -146,8 +152,12 @@ export default function UtilitiesSend() {
 
       {!quoteExpired && (
         <div className="mt-8">
-          <Button onClick={handlePay} loading={loading}>
-            {useMockPath ? 'Complete test purchase' : labels.sendButton}
+          <Button onClick={handlePay} loading={loading} disabled={loading}>
+            {loading
+              ? 'Sending… please wait'
+              : useMockPath
+                ? 'Complete test purchase'
+                : labels.sendButton}
           </Button>
         </div>
       )}

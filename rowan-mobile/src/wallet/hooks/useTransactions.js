@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
-import { getHistory } from '../api/user'
+import { getHistory, getTransactionHistory } from '../api/user'
 import { useSocketContext } from '../context/SocketContext'
-import { normalizeWalletHistoryResponse } from '../utils/transactions'
+import { normalizeP2pHistoryResponse, normalizeWalletHistoryStats } from '../utils/transactions'
 
 const HISTORY_REFRESH_EVENTS = [
   'transaction_complete',
@@ -15,7 +15,7 @@ const HISTORY_REFRESH_EVENTS = [
 ]
 
 /**
- * Hook to fetch paginated transaction history.
+ * Unified P2P + utility history — same source as History tab.
  */
 export default function useTransactions() {
   const { pathname } = useLocation()
@@ -28,26 +28,38 @@ export default function useTransactions() {
   const [error, setError] = useState(null)
 
   const fetchPage = useCallback(async (pageNum = 1, append = false) => {
-    setLoading(true)
+    // Only show spinner on first load / load-more; keep Recent visible during refresh
+    if (append) setLoading(true)
     setError(null)
     try {
-      const data = await getHistory({ page: pageNum, limit: 20 })
-      const { transactions: list, stats: nextStats } = normalizeWalletHistoryResponse(data)
+      // History list is the source of truth (same as History tab). Stats is best-effort.
+      const historyData = await getTransactionHistory({ page: pageNum, limit: 20, category: 'all' })
+      const { transactions: list, pages } = normalizeP2pHistoryResponse(historyData)
 
       if (append) {
-        setTransactions((prev) => [...prev, ...list])
+        setTransactions((prev) => {
+          const seen = new Set(prev.map((t) => `${t.kind || 'p2p'}-${t.id}`))
+          return [
+            ...prev,
+            ...list.filter((t) => !seen.has(`${t.kind || 'p2p'}-${t.id}`)),
+          ]
+        })
       } else {
         setTransactions(list)
       }
 
-      setStats((prev) => {
-        const merged = nextStats || prev
-        if (merged && pageNum === 1 && list.length > 0 && merged.total < list.length) {
-          return { ...merged, total: list.length }
+      if (pageNum === 1) {
+        try {
+          const statsData = await getHistory({ limit: 1 })
+          if (statsData?.stats) {
+            setStats(normalizeWalletHistoryStats(statsData.stats))
+          }
+        } catch {
+          // ignore — do not blank the recent list if legacy stats fail
         }
-        return merged
-      })
-      setHasMore(list.length === 20)
+      }
+
+      setHasMore(list.length === 20 && pageNum < (pages || 1))
       setPage(pageNum)
     } catch (err) {
       setError(err.message)
@@ -62,6 +74,7 @@ export default function useTransactions() {
     fetchPage(1)
   }, [fetchPage])
 
+  // Reload when user lands on home / history / profile (including back from cashout)
   useEffect(() => {
     if (
       pathname === '/wallet/home' ||
@@ -69,6 +82,28 @@ export default function useTransactions() {
       pathname === '/wallet/profile'
     ) {
       refresh()
+    }
+  }, [pathname, refresh])
+
+  // App / tab focus (common after completing a trade elsewhere)
+  useEffect(() => {
+    const onFocus = () => {
+      if (
+        pathname === '/wallet/home' ||
+        pathname === '/wallet/history' ||
+        pathname === '/wallet/profile'
+      ) {
+        refresh()
+      }
+    }
+    const onVis = () => {
+      if (document.visibilityState === 'visible') onFocus()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVis)
     }
   }, [pathname, refresh])
 

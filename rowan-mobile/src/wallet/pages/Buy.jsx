@@ -14,6 +14,8 @@ import NetworkSelector from '../components/cashout/NetworkSelector'
 import Button from '../components/ui/Button'
 import PaymentMethodPill from '../components/ui/PaymentMethodPill'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
+import { mapApiError } from '../utils/apiErrors'
+import { getRatesHealth } from '../utils/quoteSafety'
 
 /** Match backend buy quote fee/spread for indicative USDC estimate */
 const FEE_FACTOR = 0.99
@@ -41,7 +43,7 @@ export default function Buy() {
 
   const { country, fiatCurrency: userFiat } = useUserCountry()
   const { hasUsdcTrustline } = useWallet()
-  const { rates } = useRates(userFiat)
+  const { rates, refresh: refreshRates } = useRates(userFiat)
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
 
   const adNetwork = presetNetwork || selectedAd?.network || null
@@ -105,6 +107,14 @@ export default function Buy() {
     setLoading(true)
     setError(null)
     try {
+      const snap = await refreshRates()
+      const health = getRatesHealth(snap?.rates, snap?.fetchedAt, snap?.error)
+      // Express needs live board rate; manual ads may use trader rate
+      if (!health.ok && isExpress && !traderRate) {
+        setError(health.message)
+        return
+      }
+
       const phoneHash = await hashPhoneNumber('buy-placeholder')
       const quote = await getBuyQuote({
         fiatAmount: netFiat,
@@ -122,10 +132,12 @@ export default function Buy() {
           traderName: presetTraderName || selectedAd?.traderName || quote.traderName,
           selectedAd: isExpress ? null : selectedAd,
           express: isExpress,
+          liveUsdcToFiat: health.ok ? health.usdcToFiat : traderRate,
+          rateSnapshotAt: snap?.fetchedAt || Date.now(),
         },
       })
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Could not get quote')
+      setError(mapApiError(err, 'Could not get quote'))
     } finally {
       setLoading(false)
     }

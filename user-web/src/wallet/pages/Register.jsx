@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getSecure } from '../../shared/utils/storage'
-import { COUNTRY_CODES } from '../utils/constants'
 import { getDialCodeForCountry } from '../utils/country'
 import { persistUserCountry } from '../hooks/useUserCountry'
 import CountryPicker from '../components/settings/CountryPicker'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import OnboardingShell from '../components/layout/OnboardingShell'
 import WalletTwoFactorLoginModal from './WalletTwoFactorLoginModal'
 
 export default function Register() {
@@ -35,7 +35,6 @@ export default function Register() {
     setError(null)
     try {
       const response = await registerWithWallet(fullPhone)
-
       if (response?.requiresTwoFactorVerification === true) {
         setTempUserId(response.userId)
         setShow2faModal(true)
@@ -54,7 +53,6 @@ export default function Register() {
     setError(null)
     try {
       const response = await loginWithWallet()
-
       if (response?.requiresTwoFactorVerification === true) {
         setTempUserId(response.userId)
         setShow2faModal(true)
@@ -74,13 +72,11 @@ export default function Register() {
     try {
       const keypair = await getSecure('rowan_stellar_keypair')
       const kpData = keypair ? JSON.parse(keypair) : null
-
       await setWalletAuthAfter2FA(
         verifyResponse.token,
         verifyResponse.user || { id: tempUserId },
         kpData
       )
-
       setShow2faModal(false)
       setTempUserId(null)
       await saveCountryAndGoHome()
@@ -98,21 +94,23 @@ export default function Register() {
   }
 
   return (
-    <div className="bg-rowan-bg min-h-screen flex flex-col px-6 pt-12 pb-8">
-      <h2 className="text-rowan-text text-xl font-bold text-center mb-2">
-        Set up your account
-      </h2>
-      <p className="text-rowan-muted text-sm text-center mb-6">
-        Choose your country — we&apos;ll show balances and cash out in your local mobile money currency
+    <OnboardingShell
+      step={3}
+      stepTotal={3}
+      title="Almost done"
+      subtitle="Country and phone so balances and cash-out use the right mobile money network."
+    >
+      <p className="text-xs font-medium text-rowan-muted uppercase tracking-wider mb-2 font-sans">
+        Country
       </p>
-
-      <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Your country</p>
       <CountryPicker value={country} onChange={setCountry} disabled={loading} />
 
-      <p className="text-rowan-muted text-xs uppercase tracking-wider mt-6 mb-2">Phone number</p>
+      <p className="text-xs font-medium text-rowan-muted uppercase tracking-wider mt-5 mb-2 font-sans">
+        Phone number
+      </p>
       <div className="flex">
-        <div className="bg-rowan-surface border border-rowan-border rounded-l-xl px-3 py-4 text-rowan-muted text-sm w-20 flex items-center justify-center shrink-0">
-          {COUNTRY_CODES[country]?.flag} {countryCode}
+        <div className="bg-rowan-bg border border-rowan-border rounded-l-2xl px-3 py-3.5 text-rowan-muted text-sm w-[4.25rem] flex items-center justify-center shrink-0 font-semibold font-sans">
+          {countryCode}
         </div>
         <Input
           type="tel"
@@ -120,22 +118,23 @@ export default function Register() {
           value={phone}
           onChange={(e) => setPhone(e.target.value.replace(/[^\d]/g, ''))}
           placeholder="7XXXXXXXX"
-          className="rounded-l-none border-l-0"
+          className="rounded-l-none border-l-0 rounded-r-2xl"
         />
       </div>
 
-      {error && <p className="text-rowan-red text-sm mt-4">{error}</p>}
+      {error && <p className="text-rowan-red text-sm mt-4 font-sans">{error}</p>}
 
-      <div className="mt-8">
+      <div className="mt-7">
         <Button onClick={handleRegister} loading={loading} disabled={phone.length < 7}>
-          Create Account
+          Finish setup
         </Button>
       </div>
 
       <button
+        type="button"
         onClick={handleLogin}
         disabled={loading}
-        className="text-rowan-yellow text-sm underline text-center mt-4 min-h-11"
+        className="text-rowan-green text-sm underline text-center mt-4 min-h-11 w-full font-sans"
       >
         Already have an account?
       </button>
@@ -146,6 +145,6 @@ export default function Register() {
         onSuccess={handleAfter2FA}
         onCancel={handle2faCancel}
       />
-    </div>
+    </OnboardingShell>
   )
 }

@@ -15,7 +15,7 @@ const HISTORY_REFRESH_EVENTS = [
 ]
 
 /**
- * Hook to fetch paginated transaction history.
+ * Unified P2P + utility history for Home Recent + profile stats.
  */
 export default function useTransactions() {
   const { pathname } = useLocation()
@@ -28,26 +28,38 @@ export default function useTransactions() {
   const [error, setError] = useState(null)
 
   const fetchPage = useCallback(async (pageNum = 1, append = false) => {
-    setLoading(true)
+    // Keep Recent visible on soft refresh; only show spinner when loading more pages
+    if (append) setLoading(true)
     setError(null)
     try {
-      const [historyData, statsData] = await Promise.all([
-        getTransactionHistory({ page: pageNum, limit: 20, category: 'all' }),
-        pageNum === 1 ? getHistory({ limit: 1 }) : Promise.resolve(null),
-      ])
-      const { transactions: list } = normalizeP2pHistoryResponse(historyData)
+      // Same source as History tab; stats is optional and must not fail the list.
+      const historyData = await getTransactionHistory({ page: pageNum, limit: 20, category: 'all' })
+      const { transactions: list, pages } = normalizeP2pHistoryResponse(historyData)
 
       if (append) {
-        setTransactions((prev) => [...prev, ...list])
+        setTransactions((prev) => {
+          const seen = new Set(prev.map((t) => `${t.kind || 'p2p'}-${t.id}`))
+          return [
+            ...prev,
+            ...list.filter((t) => !seen.has(`${t.kind || 'p2p'}-${t.id}`)),
+          ]
+        })
       } else {
         setTransactions(list)
       }
 
-      if (statsData?.stats) {
-        setStats(normalizeWalletHistoryStats(statsData.stats))
+      if (pageNum === 1) {
+        try {
+          const statsData = await getHistory({ limit: 1 })
+          if (statsData?.stats) {
+            setStats(normalizeWalletHistoryStats(statsData.stats))
+          }
+        } catch {
+          // ignore
+        }
       }
 
-      setHasMore(list.length === 20 && pageNum < (historyData.pages || 1))
+      setHasMore(list.length === 20 && pageNum < (pages || 1))
       setPage(pageNum)
     } catch (err) {
       setError(err.message)
@@ -69,6 +81,27 @@ export default function useTransactions() {
       pathname === '/wallet/profile'
     ) {
       refresh()
+    }
+  }, [pathname, refresh])
+
+  useEffect(() => {
+    const onFocus = () => {
+      if (
+        pathname === '/wallet/home' ||
+        pathname === '/wallet/history' ||
+        pathname === '/wallet/profile'
+      ) {
+        refresh()
+      }
+    }
+    const onVis = () => {
+      if (document.visibilityState === 'visible') onFocus()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVis)
     }
   }, [pathname, refresh])
 

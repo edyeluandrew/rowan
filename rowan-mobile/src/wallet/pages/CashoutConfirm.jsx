@@ -1,22 +1,30 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, ShieldCheck, AlertTriangle, UserCheck } from 'lucide-react'
 import QuoteSummary from '../components/cashout/QuoteSummary'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import Button from '../components/ui/Button'
 import { getActiveTransaction } from '../api/user'
+import useRates from '../hooks/useRates'
+import useUserCountry from '../hooks/useUserCountry'
 import {
   formatLockedRateLine,
   getTraderDisplayName,
 } from '../utils/p2pFormat'
+import { getRatesHealth, checkRateDrift } from '../utils/quoteSafety'
+import { createSubmitGuard } from '../utils/submitGuard'
+import { mapApiError } from '../utils/apiErrors'
 
 export default function CashoutConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, network, phone, requestedFiat, traderName, selectedAd } = location.state || {}
+  const { quote, network, phone, requestedFiat, traderName, selectedAd, liveUsdcToFiat: liveAtQuote } = location.state || {}
   const [expired, setExpired] = useState(false)
   const [checkingActive, setCheckingActive] = useState(false)
   const [activeError, setActiveError] = useState(null)
+  const { fiatCurrency: userFiat } = useUserCountry()
+  const { refresh: refreshRates } = useRates(quote?.fiatCurrency || userFiat)
+  const submitGuard = useRef(createSubmitGuard()).current
 
   if (!quote) {
     navigate('/wallet/cashout', { replace: true })
@@ -29,10 +37,25 @@ export default function CashoutConfirm() {
     : null
 
   const handleConfirm = async () => {
-    if (expired) return
+    if (expired || !submitGuard.tryStart()) return
     setCheckingActive(true)
     setActiveError(null)
     try {
+      const snap = await refreshRates()
+      const health = getRatesHealth(snap?.rates, snap?.fetchedAt, snap?.error)
+      if (!health.ok) {
+        setActiveError(health.message)
+        submitGuard.release()
+        return
+      }
+      const refRate = liveAtQuote ?? quote.userRate
+      const drift = checkRateDrift(refRate, health.usdcToFiat)
+      if (drift?.drifted) {
+        setActiveError(drift.message)
+        submitGuard.release()
+        return
+      }
+
       const data = await getActiveTransaction()
       if (data?.active && data.transaction?.id) {
         setActiveError('You already have an active order in progress.')
@@ -49,8 +72,9 @@ export default function CashoutConfirm() {
         },
         replace: true,
       })
-    } catch {
-      setActiveError('Could not verify order status. Please try again.')
+    } catch (err) {
+      setActiveError(mapApiError(err, 'Could not verify order status. Please try again.'))
+      submitGuard.release()
     } finally {
       setCheckingActive(false)
     }
@@ -118,14 +142,19 @@ export default function CashoutConfirm() {
       )}
 
       {!expired && activeError && (
-        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mb-4">
+        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mb-4 mt-4">
           <p className="text-rowan-red text-sm">{activeError}</p>
+          {/new quote|moved about/i.test(activeError) && (
+            <Button className="mt-3" onClick={() => navigate('/wallet/cashout', { replace: true })}>
+              Get New Quote
+            </Button>
+          )}
         </div>
       )}
 
       {!expired && (
         <div className="mt-8">
-          <Button onClick={handleConfirm} loading={checkingActive}>
+          <Button onClick={handleConfirm} loading={checkingActive} disabled={checkingActive}>
             Confirm and Proceed
           </Button>
         </div>

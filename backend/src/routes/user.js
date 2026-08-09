@@ -399,6 +399,7 @@ router.get('/notifications', authUser, async (req, res, next) => {
       body: n.body,
       transaction_id: n.transaction_id,
       transactionId: n.transaction_id,
+      data: n.data || {},
       read_at: n.read_at,
       readAt: n.read_at,
       created_at: n.created_at,
@@ -1174,10 +1175,15 @@ router.post('/transactions/:id/confirm-receipt', authUser, sensitiveActionLimite
 router.get('/transactions/active', authUser, async (req, res, next) => {
   try {
     const result = await db.query(
-      `SELECT id, state, xlm_amount, fiat_amount, fiat_currency, network, created_at
-       FROM transactions
-       WHERE user_id = $1 AND state::text = ANY($2::text[])
-       ORDER BY created_at DESC
+      `SELECT
+         t.id, t.state, t.xlm_amount, t.usdc_amount, t.fiat_amount, t.fiat_currency,
+         t.network, t.order_side, t.created_at, t.matched_at, t.trader_matched_at,
+         t.preferred_payout_setting_id, t.trader_id,
+         tr.name AS trader_name
+       FROM transactions t
+       LEFT JOIN traders tr ON tr.id = t.trader_id
+       WHERE t.user_id = $1 AND t.state::text = ANY($2::text[])
+       ORDER BY t.created_at DESC
        LIMIT 1`,
       [req.userId, USER_ACTIVE_ORDER_STATES]
     );
@@ -1191,10 +1197,17 @@ router.get('/transactions/active', authUser, async (req, res, next) => {
         id: row.id,
         state: row.state,
         xlm_amount: row.xlm_amount != null ? parseFloat(row.xlm_amount) : null,
+        usdc_amount: row.usdc_amount != null ? parseFloat(row.usdc_amount) : null,
         fiat_amount: row.fiat_amount != null ? parseFloat(row.fiat_amount) : null,
         fiat_currency: row.fiat_currency,
         network: row.network,
+        order_side: row.order_side || 'SELL',
         created_at: row.created_at,
+        matched_at: row.matched_at,
+        trader_matched_at: row.trader_matched_at,
+        preferred_payout_setting_id: row.preferred_payout_setting_id,
+        trader_id: row.trader_id,
+        trader_name: row.trader_name,
       },
     });
   } catch (err) {

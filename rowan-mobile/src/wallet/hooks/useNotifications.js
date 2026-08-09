@@ -7,14 +7,18 @@ import {
   markNotificationsRead,
   markAllNotificationsRead,
 } from '../api/user'
+import { resolveNotificationPath } from '../utils/notificationRoutes'
 
 function normalizeNotification(n) {
+  const data = n.data && typeof n.data === 'object' ? n.data : {}
   return {
     id: n.id,
     type: n.type,
     title: n.title,
     body: n.body,
-    transactionId: n.transactionId ?? n.transaction_id,
+    transactionId: n.transactionId ?? n.transaction_id ?? data.transactionId ?? data.transaction_id,
+    data,
+    kind: n.kind ?? data.kind,
     readAt: n.readAt ?? n.read_at,
     createdAt: n.createdAt ?? n.created_at,
   }
@@ -108,8 +112,9 @@ export default function useNotifications() {
     if (!notification.readAt) {
       await markRead([notification.id])
     }
-    if (notification.transactionId) {
-      navigate(`/wallet/transaction/${notification.transactionId}`)
+    const path = resolveNotificationPath(notification)
+    if (path) {
+      navigate(path)
     }
   }, [markRead, navigate])
 

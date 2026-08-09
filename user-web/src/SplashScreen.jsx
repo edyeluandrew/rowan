@@ -1,13 +1,10 @@
 import { useState, useEffect } from 'react';
+import { RefreshCw } from 'lucide-react';
 
-/**
- * SplashScreen — shown while AuthContext bootstraps from secure storage.
- */
 export default function SplashScreen() {
   const [dots, setDots] = useState('');
 
   useEffect(() => {
-    console.log('[SplashScreen] 🚀 Mounted - app is alive and rendering');
     const id = setInterval(() => {
       setDots((prev) => (prev.length >= 3 ? '' : prev + '.'));
     }, 400);
@@ -15,9 +12,18 @@ export default function SplashScreen() {
   }, []);
 
   return (
-    <div className="bg-rowan-bg min-h-screen flex flex-col items-center justify-center">
-      <h1 className="text-rowan-green text-5xl font-bold tracking-widest">ROWAN</h1>
-      <p className="text-rowan-muted text-sm mt-4 h-5">Loading{dots}</p>
+    <div className="min-h-[100dvh] bg-rowan-bg flex flex-col items-center justify-center px-6">
+      <div
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_40%,rgba(18,184,26,0.12),transparent_60%)]"
+        aria-hidden
+      />
+      <p className="relative font-serif text-5xl sm:text-6xl text-rowan-green tracking-tight">
+        Rowan
+      </p>
+      <div className="relative flex items-center gap-2 mt-6 text-rowan-muted">
+        <RefreshCw size={14} className="animate-spin text-rowan-green" />
+        <p className="text-sm font-sans">Loading{dots}</p>
+      </div>
     </div>
   );
 }

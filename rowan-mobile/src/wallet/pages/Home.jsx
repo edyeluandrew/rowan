@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   ArrowDownLeft,
   ArrowDownToLine,
@@ -26,27 +26,46 @@ import RateDisplay from '../components/wallet/RateDisplay'
 import CashoutInProgressBanner from '../components/cashout/CashoutInProgressBanner'
 import ConnectionDot from '../components/ui/ConnectionDot'
 import NotificationBadge from '../components/ui/NotificationBadge'
-import TransactionCard from '../components/transactions/TransactionCard'
+import HistoryItemCard from '../components/history/HistoryItemCard'
 import { CURRENT_NETWORK, TESTNET_AUTO_USDC_AMOUNT } from '../utils/constants'
 import { usdcToFiat } from '../utils/fiat'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 import { getInProgressTransactions } from '../utils/transactions'
 
+/** Prefer /active API so resume works even if Recent is still loading; enrich from list when present. */
+function resolveActiveOrder(apiTx, transactions) {
+  const list = Array.isArray(transactions) ? transactions : []
+  const fromHistory = getInProgressTransactions(list.filter((tx) => tx.kind !== 'utility'))[0] || null
+  if (!apiTx?.id) return fromHistory
+  const richer = list.find((tx) => tx.id === apiTx.id && tx.kind !== 'utility')
+  return richer ? { ...apiTx, ...richer } : apiTx
+}
+
 export default function Home() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const { isLocked } = useBiometricProtection()
   const { usdcBalance, hasUsdcTrustline, loading: balanceLoading, refresh: refreshBalance, fundTestUsdc } = useWallet()
   const { country, fiatCurrency, ready: countryReady } = useUserCountry()
-  const { hasActiveOrder } = useActiveTransaction()
+  const { activeTransaction, hasActiveOrder, refresh: refreshActive } = useActiveTransaction()
   const [testUsdcState, setTestUsdcState] = useState('idle')
   const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates(fiatCurrency)
-  const { transactions, loading: txLoading } = useTransactions()
+  const { transactions, loading: txLoading, refresh: refreshTx } = useTransactions()
   const { unreadCount } = useNotificationsContext()
   const { permissionGranted, dismissed, requestPermission, dismissBanner } = usePushNotifications()
 
-  const inProgress = getInProgressTransactions(transactions)
-  const activeCashout = inProgress[0] || null
-  const recent = transactions.filter((tx) => tx.id !== activeCashout?.id).slice(0, 3)
+  const activeOrder = resolveActiveOrder(activeTransaction, transactions)
+  const recent = transactions
+    .filter((tx) => tx.id !== activeOrder?.id)
+    .slice(0, 5)
+
+  // After a trade (or reopening the app), keep balance / Recent / open order in sync
+  useEffect(() => {
+    if (pathname !== '/wallet/home') return
+    refreshBalance()
+    refreshTx()
+    refreshActive()
+  }, [pathname, refreshBalance, refreshTx, refreshActive])
 
   const usdcToFiatRate = rates?.usdcToFiat
   const fiatEquivalent = usdcBalance != null && usdcToFiatRate
@@ -56,7 +75,7 @@ export default function Home() {
   const needsUsdc = !balanceLoading
     && hasUsdcTrustline !== false
     && (usdcBalance == null || parseFloat(usdcBalance) < 0.01)
-    && !activeCashout
+    && !activeOrder
 
   const handleGetTestUsdc = async () => {
     setTestUsdcState('loading')
@@ -66,6 +85,13 @@ export default function Home() {
     } catch {
       setTestUsdcState('error')
     }
+  }
+
+  const pullHome = () => {
+    refreshBalance()
+    retryRates()
+    refreshTx()
+    refreshActive()
   }
 
   if (isLocked) return <BiometricLock />
@@ -93,15 +119,12 @@ export default function Home() {
         usdcBalance={usdcBalance}
         loading={balanceLoading || ratesLoading || !countryReady}
         refreshing={balanceLoading}
-        onRefresh={() => {
-          refreshBalance()
-          retryRates()
-        }}
+        onRefresh={pullHome}
       />
 
       <UsdcTrustlineSetup compact onEnabled={refreshBalance} />
 
-      {activeCashout && <CashoutInProgressBanner transaction={activeCashout} />}
+      {activeOrder && <CashoutInProgressBanner transaction={activeOrder} />}
 
       {/* Primary actions — short labels */}
       <div className="mt-4 grid grid-cols-3 gap-2">
@@ -115,7 +138,7 @@ export default function Home() {
         </button>
         <button
           type="button"
-          disabled={hasActiveOrder}
+          disabled={hasActiveOrder || !!activeOrder}
           onClick={() => navigate('/wallet/p2p', { state: { tab: 'buy' } })}
           className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
         >
@@ -124,7 +147,7 @@ export default function Home() {
         </button>
         <button
           type="button"
-          disabled={hasActiveOrder}
+          disabled={hasActiveOrder || !!activeOrder}
           onClick={() => navigate('/wallet/p2p', { state: { tab: 'sell' } })}
           className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
         >
@@ -245,24 +268,24 @@ export default function Home() {
           )}
         </div>
 
-        {txLoading ? (
+        {txLoading && transactions.length === 0 ? (
           <div className="flex justify-center py-8">
             <div className="animate-spin text-rowan-muted">
               <Clock size={20} />
             </div>
           </div>
-        ) : recent.length === 0 && !activeCashout ? (
+        ) : recent.length === 0 && !activeOrder ? (
           <div className="bg-rowan-surface rounded-xl p-8 text-center">
             <Star size={32} className="text-rowan-muted mx-auto mb-3" />
             <p className="text-rowan-muted text-sm">No transactions yet</p>
             <p className="text-rowan-muted text-xs mt-1">
-              Receive, buy, or sell to get started
+              Receive, buy, sell, or airtime to get started
             </p>
           </div>
         ) : (
           <div className="space-y-2">
             {recent.map((tx) => (
-              <TransactionCard key={tx.id} transaction={tx} />
+              <HistoryItemCard key={`${tx.kind || 'p2p'}-${tx.id}`} transaction={tx} />
             ))}
           </div>
         )}

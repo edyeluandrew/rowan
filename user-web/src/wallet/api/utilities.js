@@ -77,6 +77,12 @@ export function getUtilityBillDelivery(purchaseId) {
     .then(unwrap)
 }
 
+export function getUtilityPurchase(purchaseId) {
+  return client
+    .get(`/api/v1/utilities/purchase/${purchaseId}`)
+    .then(unwrap)
+}
+
 export function getUtilityHistory(limit = 20) {
   return client
     .get('/api/v1/utilities/history', { params: { limit } })
