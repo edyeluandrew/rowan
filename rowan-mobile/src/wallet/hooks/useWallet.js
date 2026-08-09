@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useSocketContext } from '../context/SocketContext'
 import { loadAccountBalances, provisionUsdcWallet, fundTestUsdcWallet } from '../utils/stellar'
 import { getSecure } from '../utils/storage'
 import { CURRENT_NETWORK, TESTNET_MIN_USDC_FOR_SKIP } from '../utils/constants'
@@ -10,6 +11,7 @@ import { CURRENT_NETWORK, TESTNET_MIN_USDC_FOR_SKIP } from '../utils/constants'
  */
 export default function useWallet() {
   const { keypair } = useAuth()
+  const { on, off } = useSocketContext()
   const [balance, setBalance] = useState(null)
   const [usdcBalance, setUsdcBalance] = useState(null)
   const [hasUsdcTrustline, setHasUsdcTrustline] = useState(null)
@@ -17,18 +19,20 @@ export default function useWallet() {
   const [error, setError] = useState(null)
   const provisionAttempted = useRef(null)
   const testUsdcAttempted = useRef(null)
+  const hasLoadedBalance = useRef(false)
 
   const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL
 
   const fetchBalance = useCallback(async () => {
     if (!keypair?.publicKey) return
-    setLoading(true)
+    if (!hasLoadedBalance.current) setLoading(true)
     setError(null)
     try {
       const balances = await loadAccountBalances(keypair.publicKey, horizonUrl)
       setBalance(balances.xlm)
       setUsdcBalance(balances.usdc)
       setHasUsdcTrustline(balances.hasUsdcTrustline)
+      hasLoadedBalance.current = true
     } catch (err) {
       setError(err.message)
     } finally {
@@ -39,6 +43,19 @@ export default function useWallet() {
   useEffect(() => {
     fetchBalance()
   }, [fetchBalance])
+
+  // USDC changes on escrow lock / release — keep Home balance current
+  useEffect(() => {
+    const handler = () => fetchBalance()
+    const events = [
+      'transaction_complete',
+      'transaction_update',
+      'transaction_refunded',
+      'trader_matched',
+    ]
+    events.forEach((evt) => on(evt, handler))
+    return () => events.forEach((evt) => off(evt, handler))
+  }, [fetchBalance, on, off])
 
   useEffect(() => {
     if (!keypair?.publicKey || loading || hasUsdcTrustline !== false) return

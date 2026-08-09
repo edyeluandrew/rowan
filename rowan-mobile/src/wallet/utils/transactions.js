@@ -131,20 +131,46 @@ export function getInProgressTransactions(transactions) {
 
 export function normalizeP2pHistoryItem(tx) {
   if (!tx || typeof tx !== 'object') return null
-  return normalizeWalletTransaction({
-    ...tx,
-    fiat_currency: tx.currency ?? tx.fiat_currency,
-    trader_name: tx.trader_name,
-  })
+  if (tx.kind === 'utility') {
+    return {
+      kind: 'utility',
+      id: tx.id,
+      shortId: tx.short_id,
+      state: tx.state,
+      status: tx.state,
+      utilityType: tx.utility_type,
+      utilityLabel: tx.utility_label,
+      bundleDescription: tx.bundle_description,
+      usdcAmount: tx.usdc_amount,
+      fiatAmount: tx.fiat_amount,
+      currency: tx.currency ?? tx.fiat_currency,
+      network: tx.network,
+      recipientPhone: tx.recipient_phone,
+      operatorName: tx.operator_name,
+      paymentTxHash: tx.payment_tx_hash,
+      externalRef: tx.external_ref,
+      createdAt: tx.created_at,
+      completedAt: tx.completed_at,
+    }
+  }
+  return {
+    kind: 'p2p',
+    ...normalizeWalletTransaction({
+      ...tx,
+      fiat_currency: tx.currency ?? tx.fiat_currency,
+      trader_name: tx.trader_name,
+    }),
+  }
 }
 
 export function normalizeP2pHistoryResponse(data) {
   if (!data || typeof data !== 'object') {
     return { transactions: [], total: 0, page: 1, pages: 1 }
   }
+  const raw = data.transactions ?? data.data?.transactions ?? []
   return {
-    transactions: (data.transactions || []).map(normalizeP2pHistoryItem).filter(Boolean),
-    total: data.total ?? 0,
+    transactions: raw.map(normalizeP2pHistoryItem).filter(Boolean),
+    total: data.total ?? raw.length,
     page: data.page ?? 1,
     pages: data.pages ?? 1,
   }

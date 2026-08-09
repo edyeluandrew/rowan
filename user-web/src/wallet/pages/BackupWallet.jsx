@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Shield, TriangleAlert, KeyRound, Copy, CopyCheck } from 'lucide-react'
+import { TriangleAlert, KeyRound, Copy, CopyCheck } from 'lucide-react'
 import { getSecure } from '../utils/storage'
 import { COPY_FEEDBACK_TIMEOUT_MS, CLIPBOARD_AUTO_CLEAR_MS } from '../utils/constants'
 import Button from '../components/ui/Button'
+import OnboardingShell from '../components/layout/OnboardingShell'
 
 export default function BackupWallet() {
   const navigate = useNavigate()
@@ -37,93 +38,94 @@ export default function BackupWallet() {
       }, CLIPBOARD_AUTO_CLEAR_MS)
       setTimeout(() => setCopied(false), COPY_FEEDBACK_TIMEOUT_MS)
     } catch {
-      /* clipboard not available */
+      /* clipboard */
     }
   }
 
   if (step === 1) {
     return (
-      <div className="bg-rowan-bg min-h-screen flex flex-col px-6 pt-16">
-        <Shield size={48} className="text-rowan-yellow mx-auto" />
-        <h2 className="text-rowan-text text-xl font-bold text-center mt-4">
-          Keep your secret key safe
-        </h2>
-
-        <div className="space-y-3 mt-8">
+      <OnboardingShell
+        step={2}
+        stepTotal={3}
+        title="Protect your key"
+        subtitle="This secret key is cash. Anyone with it can move your funds."
+      >
+        <ul className="space-y-2.5 mb-6">
           {[
             'Never share it with anyone',
-            'Do not take a screenshot',
-            'Store it somewhere offline and safe',
-            'Anyone with this key controls your funds',
-          ].map((warning) => (
-            <div key={warning} className="flex items-center gap-3">
-              <TriangleAlert size={16} className="text-rowan-red flex-shrink-0" />
-              <span className="text-rowan-text text-sm">{warning}</span>
-            </div>
+            'Do not screenshot this screen',
+            'Store it offline or in a password manager',
+            'You alone recover the wallet with this key',
+          ].map((line) => (
+            <li
+              key={line}
+              className="flex items-start gap-3 rounded-2xl bg-rowan-bg border border-rowan-border px-3.5 py-3"
+            >
+              <TriangleAlert size={16} className="text-rowan-red flex-shrink-0 mt-0.5" />
+              <span className="text-sm text-rowan-text font-sans leading-snug">{line}</span>
+            </li>
           ))}
-        </div>
+        </ul>
 
-        <label className="flex items-start gap-3 mt-8 cursor-pointer min-h-11">
+        <label className="flex items-start gap-3 cursor-pointer min-h-11 mb-6">
           <input
             type="checkbox"
             checked={understood}
             onChange={() => setUnderstood(!understood)}
-            className="mt-1 w-5 h-5 rounded border-rowan-border accent-rowan-yellow"
+            className="mt-1 w-5 h-5 rounded border-rowan-border accent-rowan-green"
           />
-          <span className="text-rowan-muted text-sm">
+          <span className="text-sm text-rowan-muted leading-relaxed font-sans">
             I understand that losing this key means losing my funds
           </span>
         </label>
 
-        <div className="mt-8">
-          <Button onClick={() => setStep(2)} disabled={!understood}>
-            I understand — Show my key
-          </Button>
-        </div>
-      </div>
+        <Button onClick={() => setStep(2)} disabled={!understood}>
+          Show my secret key
+        </Button>
+      </OnboardingShell>
     )
   }
 
   return (
-    <div className="bg-rowan-bg min-h-screen flex flex-col px-6 pt-16">
-      <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mb-6 flex items-start gap-3">
-        <TriangleAlert size={20} className="text-rowan-red shrink-0 mt-0.5" />
+    <OnboardingShell
+      step={3}
+      stepTotal={3}
+      title="Save this key"
+      subtitle="Write it down offline. You will not see this screen again."
+    >
+      <div className="bg-rowan-red/10 border border-rowan-red/25 rounded-2xl p-3.5 mb-5 flex items-start gap-2.5">
+        <TriangleAlert size={18} className="text-rowan-red shrink-0 mt-0.5" />
         <div>
-          <p className="text-rowan-red text-sm font-medium">Do not screenshot</p>
-          <p className="text-rowan-muted text-xs mt-1">
-            Screenshots can be accessed by other apps. Write this key down on paper or use a password manager.
+          <p className="text-rowan-red text-sm font-medium font-sans">Do not screenshot</p>
+          <p className="text-rowan-muted text-xs mt-1 leading-relaxed font-sans">
+            Prefer paper or a password manager.
           </p>
         </div>
       </div>
 
-      <div className="bg-rowan-surface border border-rowan-yellow rounded-xl p-4">
+      <div className="bg-rowan-green text-white rounded-2xl p-4 sm:p-5 shadow-soft">
         <div className="flex items-center gap-2 mb-3">
-          <KeyRound size={16} className="text-rowan-yellow" />
-          <span className="text-rowan-yellow text-sm font-bold">Your Secret Key</span>
+          <KeyRound size={16} className="text-rowan-lime" />
+          <span className="text-rowan-lime text-xs font-bold uppercase tracking-wider font-sans">
+            Secret key
+          </span>
         </div>
-        <p className="text-rowan-yellow font-mono text-sm break-all select-all">
+        <p className="font-mono text-xs sm:text-sm break-all select-all leading-relaxed text-white/95">
           {secretKey}
         </p>
         <button
+          type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1.5 mt-3 text-rowan-muted text-xs"
+          className="flex items-center gap-1.5 mt-4 text-white/75 text-xs hover:text-white font-sans min-h-9"
         >
-          {copied ? (
-            <CopyCheck size={15} className="text-rowan-green" />
-          ) : (
-            <Copy size={15} />
-          )}
+          {copied ? <CopyCheck size={15} className="text-rowan-lime" /> : <Copy size={15} />}
           <span>{copied ? 'Copied' : 'Copy to clipboard'}</span>
         </button>
       </div>
 
-      <p className="text-rowan-muted text-xs text-center mt-4">
-        This screen will not be shown again
-      </p>
-
       <div className="mt-6">
-        <Button onClick={() => navigate('/register')}>I have saved my secret key</Button>
+        <Button onClick={() => navigate('/register')}>I have saved my key</Button>
       </div>
-    </div>
+    </OnboardingShell>
   )
 }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react'
 import useP2pHistory from '../hooks/useP2pHistory'
-import P2pHistoryCard from '../components/history/P2pHistoryCard'
+import HistoryItemCard from '../components/history/HistoryItemCard'
 import HistorySkeleton from '../components/history/HistorySkeleton'
 import Button from '../components/ui/Button'
 
@@ -36,7 +36,7 @@ export default function History() {
     loadMore,
     refresh,
     updateFilters,
-  } = useP2pHistory({ status: initialStatus, range: 'all' })
+  } = useP2pHistory({ status: initialStatus, range: 'all', category: 'all' })
   const [filtersOpen, setFiltersOpen] = useState(initialStatus !== 'all')
 
   const setStatus = (status) => updateFilters({ ...filters, status })
@@ -144,7 +144,7 @@ export default function History() {
       {transactions.length > 0 && (
         <div className="space-y-2">
           {transactions.map((tx) => (
-            <P2pHistoryCard key={tx.id} transaction={tx} />
+            <HistoryItemCard key={`${tx.kind || 'p2p'}-${tx.id}`} transaction={tx} />
           ))}
           {hasMore && (
             <Button

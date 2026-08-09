@@ -1,24 +1,20 @@
 /**
- * Casual-user web entry — wallet only (no trader).
+ * Landing — responsive, simple, exquisite.
+ * Desktop: brand + features | actions.
+ * Mobile: stacked hero → Get started.
  */
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Star, Lock, Smartphone, ArrowRight, Monitor } from 'lucide-react'
+import { ArrowRight, RefreshCw } from 'lucide-react'
 import { useAuth } from './context/AuthContext'
 import { getSecure } from './shared/utils/storage'
 import { formatAddress } from './wallet/utils/format'
 import WalletTwoFactorLoginModal from './wallet/pages/WalletTwoFactorLoginModal'
-
-const SLIDES = [
-  { Icon: Star, title: 'Your USDC wallet', desc: 'Buy and sell USDC with mobile money across East Africa.' },
-  { Icon: Lock, title: 'Escrow protected', desc: 'Funds stay locked until both sides confirm the trade.' },
-  { Icon: Smartphone, title: 'Express or pick a trader', desc: 'Auto-match the best rate, or choose who you trade with.' },
-]
+import { FeatureGrid, TrustLine } from './wallet/components/onboarding/OnboardingBits'
 
 export default function Login() {
   const { loginWithWallet, setWalletAuthAfter2FA } = useAuth()
   const navigate = useNavigate()
-  const [slide, setSlide] = useState(0)
   const [storedPublicKey, setStoredPublicKey] = useState(null)
   const [walletLoading, setWalletLoading] = useState(false)
   const [walletError, setWalletError] = useState(null)
@@ -26,12 +22,7 @@ export default function Login() {
   const [tempUserId, setTempUserId] = useState(null)
 
   useEffect(() => {
-    const t = setInterval(() => setSlide((s) => (s + 1) % SLIDES.length), 4500)
-    return () => clearInterval(t)
-  }, [])
-
-  useEffect(() => {
-    (async () => {
+    ;(async () => {
       try {
         const stored = await getSecure('rowan_stellar_keypair')
         if (!stored) return
@@ -82,87 +73,107 @@ export default function Login() {
     }
   }
 
-  const SlideIcon = SLIDES[slide].Icon
-
   return (
-    <div className="min-h-screen bg-rowan-bg text-rowan-text">
-      <div className="mx-auto max-w-6xl px-4 py-8 lg:py-16 grid lg:grid-cols-2 gap-10 items-center">
-        <div className="order-2 lg:order-1">
-          <div className="inline-flex items-center gap-2 text-rowan-green text-sm font-semibold mb-4">
-            <Monitor size={16} />
-            Rowan Web
-          </div>
-          <h1 className="text-4xl lg:text-5xl font-bold tracking-tight mb-3">Rowan</h1>
-          <p className="text-rowan-muted text-lg mb-8 max-w-md">
-            Buy and sell USDC with MTN, Airtel, and M-Pesa — same flows as the app, on your browser.
-          </p>
+    <div className="min-h-[100dvh] overflow-y-auto bg-rowan-bg text-rowan-text">
+      <div
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_100%_60%_at_10%_0%,rgba(18,184,26,0.14),transparent_50%),radial-gradient(ellipse_70%_40%_at_100%_100%,rgba(18,184,26,0.06),transparent_45%)]"
+        aria-hidden
+      />
 
-          <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-6 mb-6 min-h-[140px]">
-            <SlideIcon size={28} className="text-rowan-green mb-3" />
-            <p className="text-rowan-text font-semibold text-lg">{SLIDES[slide].title}</p>
-            <p className="text-rowan-muted text-sm mt-2">{SLIDES[slide].desc}</p>
-            <div className="flex gap-1.5 mt-4">
-              {SLIDES.map((_, i) => (
+      <div className="relative mx-auto min-h-[100dvh] w-full max-w-6xl grid lg:grid-cols-2 lg:items-stretch">
+        {/* Brand panel */}
+        <section className="flex flex-col justify-center px-5 sm:px-8 lg:px-12 pt-10 pb-6 lg:py-16 safe-top">
+          <p className="font-serif text-4xl sm:text-5xl lg:text-6xl text-rowan-green tracking-tight leading-none">
+            Rowan
+          </p>
+          <h1 className="mt-4 sm:mt-5 font-serif text-2xl sm:text-3xl lg:text-[2.15rem] text-rowan-text leading-snug max-w-md">
+            USDC that meets mobile money
+          </h1>
+          <p className="mt-3 text-sm sm:text-base text-rowan-muted leading-relaxed max-w-md font-sans">
+            Buy and sell dollar stablecoin with MTN, Airtel, and cash out locally — escrow protected.
+          </p>
+          <FeatureGrid className="mt-8 sm:mt-10 max-w-md" />
+        </section>
+
+        {/* Actions panel */}
+        <section className="flex items-end lg:items-center justify-center px-5 sm:px-8 lg:px-12 pb-8 pt-2 lg:py-16 safe-bottom">
+          <div className="w-full max-w-md rounded-3xl bg-white border border-rowan-border shadow-[0_16px_48px_rgba(11,15,12,0.08)] p-6 sm:p-8">
+            {storedPublicKey ? (
+              <>
+                <p className="text-xs uppercase tracking-[0.14em] text-rowan-muted font-sans mb-2">
+                  Welcome back
+                </p>
+                <h2 className="font-serif text-2xl text-rowan-text">Open your wallet</h2>
+                <p className="mt-2 text-sm text-rowan-muted font-sans">
+                  A wallet is ready on this device.
+                </p>
+                <p className="mt-4 font-mono text-xs sm:text-sm text-rowan-text bg-rowan-mint rounded-2xl px-3.5 py-3 break-all">
+                  {formatAddress(storedPublicKey)}
+                </p>
+                {walletError && (
+                  <p className="text-rowan-red text-sm mt-3">{walletError}</p>
+                )}
                 <button
-                  key={i}
                   type="button"
-                  aria-label={`Slide ${i + 1}`}
-                  onClick={() => setSlide(i)}
-                  className={`h-1.5 rounded-full transition-all ${i === slide ? 'w-6 bg-rowan-green' : 'w-1.5 bg-rowan-border'}`}
-                />
-              ))}
+                  disabled={walletLoading}
+                  onClick={handleOpenWallet}
+                  className="mt-6 w-full min-h-12 rounded-2xl bg-rowan-green text-white font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-60 transition active:scale-[0.99]"
+                >
+                  {walletLoading ? (
+                    <>
+                      <RefreshCw size={18} className="animate-spin" />
+                      Opening…
+                    </>
+                  ) : (
+                    <>
+                      Open wallet
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/import-wallet')}
+                  className="w-full mt-3 min-h-11 text-sm text-rowan-muted hover:text-rowan-text font-sans"
+                >
+                  Use a different wallet
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs uppercase tracking-[0.14em] text-rowan-muted font-sans mb-2">
+                  New here?
+                </p>
+                <h2 className="font-serif text-2xl sm:text-3xl text-rowan-text">Get started</h2>
+                <p className="mt-2 text-sm text-rowan-muted font-sans leading-relaxed">
+                  Create a free wallet in about a minute, or import one you already use on Stellar.
+                </p>
+                {walletError && (
+                  <p className="text-rowan-red text-sm mt-3">{walletError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => navigate('/wallet-setup')}
+                  className="mt-6 w-full min-h-12 rounded-2xl bg-rowan-green text-white font-semibold inline-flex items-center justify-center gap-2 transition active:scale-[0.99] shadow-[0_8px_24px_rgba(18,184,26,0.25)]"
+                >
+                  Get started
+                  <ArrowRight size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/import-wallet')}
+                  className="w-full mt-3 min-h-12 rounded-2xl border border-rowan-border text-rowan-text font-medium hover:bg-rowan-mint/40 transition font-sans"
+                >
+                  I already have a wallet
+                </button>
+              </>
+            )}
+
+            <div className="mt-6 pt-5 border-t border-rowan-border/70">
+              <TrustLine />
             </div>
           </div>
-        </div>
-
-        <div className="order-1 lg:order-2 bg-rowan-surface border border-rowan-border rounded-2xl p-6 lg:p-8 shadow-sm">
-          {storedPublicKey ? (
-            <>
-              <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Wallet on this device</p>
-              <p className="text-rowan-text font-mono text-sm mb-6">{formatAddress(storedPublicKey)}</p>
-              {walletError && <p className="text-rowan-red text-sm mb-4">{walletError}</p>}
-              <button
-                type="button"
-                disabled={walletLoading}
-                onClick={handleOpenWallet}
-                className="w-full min-h-12 rounded-xl bg-rowan-green text-white font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                {walletLoading ? 'Opening…' : 'Open wallet'}
-                {!walletLoading && <ArrowRight size={18} />}
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/import-wallet')}
-                className="w-full mt-3 min-h-11 text-rowan-muted text-sm"
-              >
-                Import a different wallet
-              </button>
-            </>
-          ) : (
-            <>
-              <h2 className="text-rowan-text text-xl font-bold mb-2">Get started</h2>
-              <p className="text-rowan-muted text-sm mb-6">
-                Create a new Stellar wallet in the browser, or import one you already use.
-              </p>
-              {walletError && <p className="text-rowan-red text-sm mb-4">{walletError}</p>}
-              <button
-                type="button"
-                onClick={() => navigate('/wallet-setup')}
-                className="w-full min-h-12 rounded-xl bg-rowan-green text-white font-semibold inline-flex items-center justify-center gap-2"
-              >
-                Create wallet
-                <ArrowRight size={18} />
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/import-wallet')}
-                className="w-full mt-3 min-h-11 rounded-xl border border-rowan-border text-rowan-text font-medium"
-              >
-                Import wallet
-              </button>
-            </>
-          )}
-        </div>
+        </section>
       </div>
 
       <WalletTwoFactorLoginModal

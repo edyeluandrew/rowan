@@ -9,6 +9,7 @@ import DisputeEvidenceSection from '../components/disputes/DisputeEvidenceSectio
 import useSocketHook from '../hooks/useSocket'
 // import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
 import PaymentWindowCountdown from '../components/cashout/PaymentWindowCountdown'
+import OrderGuidanceCard from '../components/cashout/OrderGuidanceCard'
 import OrderChat from '../components/chat/OrderChat'
 import ReviewModal from '../components/reviews/ReviewModal'
 import { getReviewStatus } from '../api/reviews'
@@ -20,6 +21,8 @@ import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
 import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder } from '../utils/transactions'
 import { STATE_SUBTITLES } from '../utils/constants'
+import { getOrderGuidance } from '../utils/orderGuidance'
+import { mapApiError } from '../utils/apiErrors'
 import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine } from '../utils/p2pFormat'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
@@ -181,14 +184,33 @@ export default function TransactionStatus() {
     && new Date(transaction.appealExpiresAt) > new Date()
     && !transaction?.appealArchivedAt
 
+  const isTerminal = transaction && TERMINAL_STATES.includes(transaction.state)
+
   const paymentWindowClosing = transaction?.state === 'TRADER_MATCHED'
     && paymentCountdown.remaining > 0
     && paymentCountdown.remaining <= 120
-  const canShowCancel = transaction?.state === 'TRADER_MATCHED' && !paymentWindowClosing
+  const paymentExpired = transaction?.state === 'TRADER_MATCHED'
+    && !!transaction?.paymentExpiresAt
+    && paymentCountdown.isExpired
+  const canShowCancel = transaction?.state === 'TRADER_MATCHED' && !paymentWindowClosing && !paymentExpired
 
   const showDisputeAction = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
     || appealWindowOpen
   const isBuy = isBuyOrder(transaction) || navOrderSide === 'BUY'
+  const guidance = transaction && !isTerminal
+    ? getOrderGuidance(transaction, {
+      isBuy,
+      paymentWindowClosing,
+      paymentExpired,
+      appealWindowOpen,
+    })
+    : null
+  // Dispute quick-action when wait depends on user (payout states), not cancel-waiting
+  const canDisputeFromGuidance = showDisputeAction && (
+    transaction?.state === 'FIAT_PAYOUT_SUBMITTED'
+    || transaction?.state === 'USER_CONFIRMATION_PENDING'
+    || appealWindowOpen
+  )
   const buyPaymentDetails = isBuy && transaction?.state === 'ESCROW_LOCKED' && transaction?.traderReceivePhone
     ? {
         role: 'trader_receive',
@@ -211,7 +233,7 @@ export default function TransactionStatus() {
       await submitBuyPayment({ transactionId: activeTxId, paymentReference: buyPaymentRef.trim() })
       setTransaction((prev) => mergeTransaction(prev, { state: 'FIAT_PAYOUT_SUBMITTED', payoutReference: buyPaymentRef.trim() }))
     } catch (err) {
-      setBuyPaymentError(err.response?.data?.error || 'Could not submit payment')
+      setBuyPaymentError(mapApiError(err, 'Could not submit payment'))
     } finally {
       setSubmittingBuyPayment(false)
     }
@@ -221,12 +243,14 @@ export default function TransactionStatus() {
     setCancelling(true)
     try {
       await cancelOrder(activeTxId)
-      setCancelNotice('Order cancelled. Refund is being processed.')
+      setCancelNotice(isBuy
+        ? 'Order cancelled. You can start a new trade.'
+        : 'Order cancelled. Refund is being processed to your USDC wallet.')
       setShowCancelModal(false)
       setTransaction((prev) => mergeTransaction(prev, { state: 'REFUNDED' }))
       setTimeout(() => navigate('/wallet/home', { replace: true }), 3000)
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not cancel this order')
+      setError(mapApiError(err, 'Could not cancel this order'))
       setShowCancelModal(false)
     } finally {
       setCancelling(false)
@@ -270,7 +294,7 @@ export default function TransactionStatus() {
       setTransaction((prev) => mergeTransaction(prev, { state: 'COMPLETE', ...result }))
       setShowConfirmModal(false)
     } catch (err) {
-      setConfirmError(err.response?.data?.error || err.message || 'Confirmation failed')
+      setConfirmError(mapApiError(err, 'Confirmation failed'))
     } finally {
       setConfirming(false)
     }
@@ -293,7 +317,7 @@ export default function TransactionStatus() {
       setShowDisputeModal(false)
       setDisputeReason('')
     } catch (err) {
-      setDisputeError(err.response?.data?.error || err.message || 'Dispute opening failed')
+      setDisputeError(mapApiError(err, 'Could not open dispute'))
     } finally {
       setDisputing(false)
     }
@@ -340,8 +364,6 @@ export default function TransactionStatus() {
   useSocketHook('transaction_complete', (data) => applySocketUpdate(data, 'COMPLETE'))
   useSocketHook('transaction_refunded', (data) => applySocketUpdate(data, 'REFUNDED'))
   useSocketHook('transaction_failed', (data) => applySocketUpdate(data, 'FAILED'))
-
-  const isTerminal = transaction && TERMINAL_STATES.includes(transaction.state)
 
   const RATE_LOCK_STATES = ['ESCROW_LOCKED', 'TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING']
   const showRateLock = transaction && RATE_LOCK_STATES.includes(transaction.state)
@@ -483,6 +505,16 @@ export default function TransactionStatus() {
             <OrderShortId transactionId={activeTxId} />
           </div>
         </div>
+      )}
+
+      {guidance && (
+        <OrderGuidanceCard
+          guidance={guidance}
+          canCancel={canShowCancel}
+          canDispute={canDisputeFromGuidance}
+          onCancel={() => setShowCancelModal(true)}
+          onDispute={() => setShowDisputeModal(true)}
+        />
       )}
 
       {showRateLock && lockedRateLine && (
@@ -663,7 +695,7 @@ export default function TransactionStatus() {
       {transaction?.state === 'TRADER_MATCHED' && paymentWindowClosing && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl px-4 py-3 my-4">
           <p className="text-rowan-yellow text-xs text-center">
-            Payment window closing — please wait or raise a dispute if payment is not received.
+            Last 2 minutes — cancel is closed. Stay on this screen; we will update automatically.
           </p>
         </div>
       )}
@@ -675,8 +707,13 @@ export default function TransactionStatus() {
             onClick={() => setShowCancelModal(true)}
             className="w-full border border-rowan-red/50 text-rowan-red rounded-xl px-4 py-3 min-h-11 text-sm font-medium bg-transparent"
           >
-            Cancel Order
+            Cancel order
           </button>
+          <p className="text-rowan-muted text-[11px] text-center mt-2">
+            {isBuy
+              ? 'Cancel free yourself to start a new trade. Only available until the last 2 minutes of the window.'
+              : 'Cancel refunds your USDC. Only available until the last 2 minutes of the payment window.'}
+          </p>
         </div>
       )}
 
@@ -768,7 +805,9 @@ export default function TransactionStatus() {
             <div className="w-9 h-1 bg-rowan-border rounded-full mx-auto mb-6" />
             <h3 className="text-rowan-text font-bold text-lg">Cancel this order?</h3>
             <p className="text-rowan-muted text-sm mt-3 mb-4">
-              Are you sure you want to cancel? Your USDC will be refunded within a few minutes.
+              {isBuy
+                ? 'Cancel frees you to start a new buy. The trader will no longer handle this order.'
+                : 'Your USDC in escrow will be refunded to your wallet within a few minutes.'}
             </p>
             <div className="flex flex-col gap-3">
               <Button

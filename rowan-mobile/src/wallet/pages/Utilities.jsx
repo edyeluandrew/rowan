@@ -23,6 +23,7 @@ import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
 import DataBundlePicker from '../components/utilities/DataBundlePicker'
 import Button from '../components/ui/Button'
+import { mapApiError } from '../utils/apiErrors'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 
 const UTILITY_META = {
@@ -308,8 +309,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
         },
       })
     } catch (err) {
-      const data = err.response?.data
-      setError(data?.error || data?.message || err.message)
+      setError(mapApiError(err))
     } finally {
       setLoading(false)
     }

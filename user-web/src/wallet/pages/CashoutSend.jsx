@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { AlertTriangle, ChevronLeft, Clock, ShieldCheck } from 'lucide-react'
 import { buildAndSignUsdcPayment, submitTransaction } from '../utils/stellar'
@@ -8,16 +8,19 @@ import useActiveTransaction from '../hooks/useActiveTransaction'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import QuoteSummary from '../components/cashout/QuoteSummary'
 import Button from '../components/ui/Button'
+import { mapApiError } from '../utils/apiErrors'
+import { createSubmitGuard } from '../utils/submitGuard'
 import { getHorizonUrl } from '../../shared/utils/config'
 
 export default function CashoutSend() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, network, phone } = location.state || {}
+  const { quote, phone } = location.state || {}
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [quoteExpired, setQuoteExpired] = useState(false)
+  const submitGuard = useRef(createSubmitGuard()).current
 
   useEffect(() => {
     if (!activeLoading && activeTransaction?.id) {
@@ -33,18 +36,19 @@ export default function CashoutSend() {
   const horizonUrl = getHorizonUrl()
 
   const handleSendNow = async () => {
-    if (quoteExpired) return
+    if (quoteExpired || loading) return
+    if (!submitGuard.tryStart()) return
     setLoading(true)
     setError(null)
     try {
       if (!quote.quoteId) {
-        throw new Error(`Quote object missing quoteId. Quote: ${JSON.stringify(quote)}`)
+        throw new Error('Quote is missing an id. Go back and get a new quote.')
       }
       if (!quote.escrowAddress) {
-        throw new Error(`Quote object missing escrowAddress. Quote: ${JSON.stringify(quote)}`)
+        throw new Error('Quote is missing escrow address. Get a new quote.')
       }
       if (!quote.memo) {
-        throw new Error(`Quote object missing memo. Quote: ${JSON.stringify(quote)}`)
+        throw new Error('Quote is missing payment memo. Get a new quote.')
       }
 
       const stored = await getSecure('rowan_stellar_keypair')
@@ -79,14 +83,15 @@ export default function CashoutSend() {
         state: { transactionId: transactionId || null, quoteId: quote.quoteId, stellarTxHash },
         replace: true,
       })
+      // leave guard locked — screen unmounts after navigate
     } catch (err) {
       if (err.response?.status === 410) {
-        setError('Quote expired. Please get a new quote.')
+        setError(mapApiError(err, 'Quote expired. Please get a new quote.'))
         setQuoteExpired(true)
       } else {
-        setError(err.message)
+        setError(mapApiError(err))
       }
-    } finally {
+      submitGuard.release()
       setLoading(false)
     }
   }
@@ -129,6 +134,7 @@ export default function CashoutSend() {
         <p className="text-rowan-muted text-xs">
           Your USDC is sent to escrow and held until mobile money arrives on your phone.
           If payment is not completed in time, your USDC is refunded automatically.
+          Tap send once — do not double-send while this page says Sending…
         </p>
       </div>
 
@@ -152,8 +158,8 @@ export default function CashoutSend() {
 
       {!quoteExpired && (
         <div className="mt-8">
-          <Button onClick={handleSendNow} loading={loading}>
-            Send USDC
+          <Button onClick={handleSendNow} loading={loading} disabled={loading}>
+            {loading ? 'Sending… please wait' : 'Send USDC'}
           </Button>
         </div>
       )}

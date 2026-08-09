@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   ArrowDownLeft,
   ArrowDownToLine,
@@ -30,8 +31,51 @@ import { usdcToFiat } from '../utils/fiat'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 import { getInProgressTransactions } from '../utils/transactions'
 
+/** Prefer /active API so resume works even if Recent is still loading; enrich from list when present. */
+function resolveActiveOrder(apiTx, transactions) {
+  const list = Array.isArray(transactions) ? transactions : []
+  const fromHistory = getInProgressTransactions(list.filter((tx) => tx.kind !== 'utility'))[0] || null
+  if (!apiTx?.id) return fromHistory
+  const richer = list.find((tx) => tx.id === apiTx.id && tx.kind !== 'utility')
+  return richer ? { ...apiTx, ...richer } : apiTx
+}
+
+const ACTIONS = [
+  {
+    key: 'receive',
+    label: 'Receive',
+    Icon: ArrowDownLeft,
+    path: '/wallet/receive',
+    needsOrderLock: false,
+  },
+  {
+    key: 'buy',
+    label: 'Buy',
+    Icon: ArrowDownToLine,
+    path: '/wallet/p2p',
+    state: { tab: 'buy' },
+    needsOrderLock: true,
+  },
+  {
+    key: 'sell',
+    label: 'Sell',
+    Icon: ArrowUpFromLine,
+    path: '/wallet/p2p',
+    state: { tab: 'sell' },
+    needsOrderLock: true,
+  },
+  {
+    key: 'airtime',
+    label: 'Airtime',
+    Icon: Signal,
+    path: '/wallet/utilities/airtime',
+    needsOrderLock: false,
+  },
+]
+
 export default function Home() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const { isLocked } = useBiometricProtection()
   const {
     usdcBalance,
@@ -43,15 +87,23 @@ export default function Home() {
     testUsdcProvisioning,
   } = useWallet()
   const { country, fiatCurrency, ready: countryReady } = useUserCountry()
-  const { hasActiveOrder } = useActiveTransaction()
+  const { activeTransaction, hasActiveOrder, refresh: refreshActive } = useActiveTransaction()
   const { rates, allRates, loading: ratesLoading, error: ratesError, refresh: retryRates } = useRates(fiatCurrency)
-  const { transactions, loading: txLoading } = useTransactions()
+  const { transactions, loading: txLoading, refresh: refreshTx } = useTransactions()
   const { unreadCount } = useNotificationsContext()
   const { permissionGranted, dismissed, requestPermission, dismissBanner } = usePushNotifications()
 
-  const inProgress = getInProgressTransactions(transactions)
-  const activeCashout = inProgress[0] || null
-  const recent = transactions.filter((tx) => tx.id !== activeCashout?.id).slice(0, 3)
+  const activeOrder = resolveActiveOrder(activeTransaction, transactions)
+  const recent = transactions
+    .filter((tx) => tx.id !== activeOrder?.id)
+    .slice(0, 5)
+
+  useEffect(() => {
+    if (pathname !== '/wallet/home') return
+    refreshBalance()
+    refreshTx()
+    refreshActive()
+  }, [pathname, refreshBalance, refreshTx, refreshActive])
 
   const usdcToFiatRate = rates?.usdcToFiat
   const spendableUsdc = usdcAvailable ?? usdcBalance
@@ -62,27 +114,35 @@ export default function Home() {
   const needsUsdc = !balanceLoading
     && hasUsdcTrustline !== false
     && (usdcBalance == null || parseFloat(usdcBalance) < 0.01)
-    && !activeCashout
+    && !activeOrder
 
   const autoFundingTestnet = CURRENT_NETWORK.isTest && needsUsdc
+
+  const pullHome = () => {
+    refreshBalance()
+    retryRates()
+    refreshTx()
+    refreshActive()
+  }
 
   if (isLocked) return <BiometricLock />
 
   return (
-    <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="min-h-screen overflow-y-auto rowan-atmosphere pb-24 px-4 pt-6">
+      <div className="flex items-center justify-between mb-5 animate-rise-in">
         <div>
-          <h1 className="text-rowan-text text-lg font-bold leading-tight">Rowan</h1>
-          <p className="text-rowan-muted text-xs">Borderless value. Local payouts.</p>
+          <h1 className="font-serif text-2xl text-rowan-green leading-tight">Rowan</h1>
+          <p className="text-rowan-muted text-xs font-sans mt-0.5">Borderless value · local payouts</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <ConnectionDot />
           <button
+            type="button"
             onClick={() => navigate('/wallet/notifications')}
-            className="relative text-rowan-muted min-h-11 min-w-11 flex items-center justify-center"
+            className="relative text-rowan-text bg-rowan-surface border border-rowan-border rounded-full min-h-11 min-w-11 flex items-center justify-center shadow-soft"
             aria-label="Notifications"
           >
-            <Bell size={22} />
+            <Bell size={20} />
             <NotificationBadge count={unreadCount} />
           </button>
         </div>
@@ -96,56 +156,47 @@ export default function Home() {
         usdcLocked={usdcLocked}
         loading={balanceLoading || ratesLoading || !countryReady}
         refreshing={balanceLoading}
-        onRefresh={() => {
-          refreshBalance()
-          retryRates()
-        }}
+        onRefresh={pullHome}
       />
 
       <UsdcTrustlineSetup compact onEnabled={refreshBalance} />
 
-      {activeCashout && <CashoutInProgressBanner transaction={activeCashout} />}
+      {activeOrder && <CashoutInProgressBanner transaction={activeOrder} />}
 
-      {/* Primary actions */}
-      <div className="mt-4 grid grid-cols-4 gap-2">
-        <button
-          type="button"
-          onClick={() => navigate('/wallet/receive')}
-          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
-        >
-          <ArrowDownLeft size={20} className="text-rowan-green" />
-          <span className="text-rowan-text text-xs font-medium">Receive</span>
-        </button>
-        <button
-          type="button"
-          disabled={hasActiveOrder}
-          onClick={() => navigate('/wallet/p2p', { state: { tab: 'buy' } })}
-          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
-        >
-          <ArrowDownToLine size={20} className="text-rowan-green" />
-          <span className="text-rowan-text text-xs font-medium">Buy</span>
-        </button>
-        <button
-          type="button"
-          disabled={hasActiveOrder}
-          onClick={() => navigate('/wallet/p2p', { state: { tab: 'sell' } })}
-          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
-        >
-          <ArrowUpFromLine size={20} className="text-rowan-green" />
-          <span className="text-rowan-text text-xs font-medium">Sell</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate('/wallet/utilities/airtime')}
-          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
-        >
-          <Signal size={20} className="text-rowan-gold" />
-          <span className="text-rowan-text text-xs font-medium">Airtime</span>
-        </button>
+      {/* Circular quick actions — same destinations as before */}
+      <div className="mt-5 grid grid-cols-4 gap-2">
+        {ACTIONS.map(({ key, label, Icon, path, state, needsOrderLock }) => {
+          const disabled = needsOrderLock && (hasActiveOrder || !!activeOrder)
+          return (
+            <button
+              key={key}
+              type="button"
+              disabled={disabled}
+              onClick={() => navigate(path, state ? { state } : undefined)}
+              className="flex flex-col items-center gap-2 min-h-11 disabled:opacity-45 group"
+            >
+              <span className="w-14 h-14 rounded-full bg-rowan-surface border border-rowan-border shadow-soft flex items-center justify-center group-active:scale-95 transition-transform group-hover:border-rowan-green/40">
+                <Icon size={22} className={key === 'airtime' ? 'text-rowan-gold' : 'text-rowan-green'} />
+              </span>
+              <span className="text-rowan-text text-[11px] font-semibold font-sans tracking-wide uppercase">
+                {label}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="mt-5 rounded-2xl bg-rowan-mint border border-rowan-green/20 px-4 py-3 flex items-center justify-between gap-3">
+        <p className="text-rowan-text text-sm font-medium font-sans">
+          Buy · Sell · Top up — on Stellar
+        </p>
+        <span className="text-[10px] uppercase tracking-wider text-rowan-green font-bold shrink-0">
+          Live
+        </span>
       </div>
 
       {autoFundingTestnet && testUsdcProvisioning === 'loading' && (
-        <div className="mt-4 bg-rowan-mint border border-rowan-green/30 rounded-xl p-4 flex items-center gap-3">
+        <div className="mt-4 bg-rowan-mint border border-rowan-green/30 rounded-2xl p-4 flex items-center gap-3">
           <RefreshCw size={18} className="text-rowan-green animate-spin-slow shrink-0" />
           <div>
             <p className="text-rowan-text text-sm font-medium">Setting up your testnet wallet</p>
@@ -157,7 +208,7 @@ export default function Home() {
       )}
 
       {autoFundingTestnet && testUsdcProvisioning === 'error' && (
-        <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4">
+        <div className="mt-4 bg-rowan-mint border border-rowan-border rounded-2xl p-4">
           <p className="text-rowan-text text-sm font-medium">Test USDC is taking longer than usual</p>
           <p className="text-rowan-muted text-xs mt-1">
             Pull to refresh your balance in a moment. If it stays empty, the testnet treasury may need a top-up.
@@ -166,8 +217,8 @@ export default function Home() {
       )}
 
       {!permissionGranted && !dismissed && (
-        <div className="mt-4 bg-rowan-surface border border-rowan-border rounded-xl p-4 flex items-start gap-3">
-          <Bell size={20} className="text-rowan-yellow shrink-0 mt-0.5" />
+        <div className="mt-4 bg-rowan-surface border border-rowan-border rounded-2xl p-4 flex items-start gap-3 shadow-soft">
+          <Bell size={20} className="text-rowan-green shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-rowan-text text-sm font-medium">Enable notifications</p>
             <p className="text-rowan-muted text-xs mt-1">
@@ -175,12 +226,14 @@ export default function Home() {
             </p>
             <div className="flex gap-3 mt-3">
               <button
+                type="button"
                 onClick={requestPermission}
-                className="bg-rowan-yellow text-rowan-bg text-xs font-medium px-4 py-2 rounded-lg min-h-9"
+                className="bg-rowan-green text-white text-xs font-medium px-4 py-2 rounded-full min-h-9"
               >
                 Enable
               </button>
               <button
+                type="button"
                 onClick={dismissBanner}
                 className="text-rowan-muted text-xs min-h-9"
               >
@@ -193,13 +246,13 @@ export default function Home() {
 
       <div className="mt-6">
         {ratesError ? (
-          <div className="bg-rowan-surface border border-rowan-red/30 rounded-xl p-4 mb-4">
+          <div className="bg-rowan-surface border border-rowan-red/30 rounded-2xl p-4 mb-4 shadow-soft">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertTriangle size={16} className="text-rowan-red" />
                 <span className="text-rowan-text text-sm font-medium">Rates unavailable</span>
               </div>
-              <button onClick={retryRates} className="text-rowan-yellow text-sm font-medium underline min-h-9">
+              <button type="button" onClick={retryRates} className="text-rowan-green text-sm font-medium underline min-h-9">
                 Retry
               </button>
             </div>
@@ -214,28 +267,29 @@ export default function Home() {
 
       <div className="mt-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-rowan-text text-sm font-semibold">Recent</h3>
+          <h3 className="font-serif text-lg text-rowan-text">Recent</h3>
           {transactions.length > 0 && (
             <button
+              type="button"
               onClick={() => navigate('/wallet/history')}
-              className="text-rowan-yellow text-xs min-h-9"
+              className="text-rowan-green text-xs font-semibold uppercase tracking-wider min-h-9"
             >
               View all
             </button>
           )}
         </div>
 
-        {txLoading ? (
+        {txLoading && transactions.length === 0 ? (
           <div className="flex justify-center py-8">
             <div className="animate-spin text-rowan-muted">
               <Clock size={20} />
             </div>
           </div>
-        ) : recent.length === 0 && !activeCashout ? (
-          <div className="bg-rowan-surface rounded-xl p-8 text-center">
-            <Star size={32} className="text-rowan-muted mx-auto mb-3" />
-            <p className="text-rowan-muted text-sm">No transactions yet</p>
-            <p className="text-rowan-muted text-xs mt-1">
+        ) : recent.length === 0 && !activeOrder ? (
+          <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-8 text-center shadow-soft">
+            <Star size={28} className="text-rowan-green mx-auto mb-3" />
+            <p className="font-serif text-rowan-text text-base">No transactions yet</p>
+            <p className="text-rowan-muted text-xs mt-1 font-sans">
               Receive, buy, sell, or buy airtime to get started
             </p>
           </div>

@@ -1,53 +1,54 @@
 import { useNavigate } from 'react-router-dom'
-import { PlusCircle, Download, Shield } from 'lucide-react'
+import { PlusCircle, Download, ArrowRight, ChevronRight } from 'lucide-react'
+import OnboardingShell from '../components/layout/OnboardingShell'
 
 export default function WalletSetup() {
   const navigate = useNavigate()
 
   return (
-    <div className="bg-rowan-bg min-h-screen flex flex-col px-6 pt-16">
-      <h1 className="text-rowan-yellow font-bold text-2xl tracking-widest text-center mb-2">
-        ROWAN
-      </h1>
-      <h2 className="text-rowan-text text-xl font-bold text-center mb-8">
-        Your Stellar Wallet
-      </h2>
-
-      {/* Create New Wallet */}
+    <OnboardingShell
+      step={1}
+      stepTotal={3}
+      title="Your wallet"
+      subtitle="Choose how you want to begin. You can always import another key later."
+    >
       <button
+        type="button"
         onClick={() => navigate('/create-wallet')}
-        className="bg-rowan-surface border border-rowan-yellow rounded-xl p-5 flex items-start gap-4 mb-4 text-left min-h-11"
+        className="group w-full text-left rounded-2xl border-2 border-rowan-green/30 bg-rowan-mint/40 hover:bg-rowan-mint hover:border-rowan-green/50 transition p-4 sm:p-5 mb-3 min-h-11"
       >
-        <PlusCircle size={28} className="text-rowan-yellow flex-shrink-0 mt-1" />
-        <div>
-          <p className="text-rowan-text font-bold">New Wallet</p>
-          <p className="text-rowan-muted text-sm mt-1">
-            Generate a brand new Stellar wallet. Perfect if you don&apos;t have one yet
-          </p>
+        <div className="flex items-start gap-3 sm:gap-4">
+          <div className="w-11 h-11 rounded-2xl bg-rowan-green flex items-center justify-center shrink-0">
+            <PlusCircle size={22} className="text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-rowan-text font-sans text-base">Create new wallet</p>
+            <p className="text-sm text-rowan-muted mt-1 leading-relaxed font-sans">
+              Generate a fresh Stellar keypair on this device. Best if you&apos;re new.
+            </p>
+          </div>
+          <ArrowRight size={18} className="text-rowan-green shrink-0 mt-1 opacity-70 group-hover:opacity-100" />
         </div>
       </button>
 
-      {/* Import Existing Wallet */}
       <button
+        type="button"
         onClick={() => navigate('/import-wallet')}
-        className="bg-rowan-surface border border-rowan-border rounded-xl p-5 flex items-start gap-4 mb-4 text-left min-h-11"
+        className="group w-full text-left rounded-2xl border border-rowan-border bg-rowan-bg/50 hover:bg-white hover:border-rowan-green/30 transition p-4 sm:p-5 min-h-11"
       >
-        <Download size={28} className="text-rowan-muted flex-shrink-0 mt-1" />
-        <div>
-          <p className="text-rowan-text font-bold">Import Wallet</p>
-          <p className="text-rowan-muted text-sm mt-1">
-            Import using your secret key. For existing Stellar wallets
-          </p>
+        <div className="flex items-start gap-3 sm:gap-4">
+          <div className="w-11 h-11 rounded-2xl bg-white border border-rowan-border flex items-center justify-center shrink-0">
+            <Download size={22} className="text-rowan-green" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-rowan-text font-sans text-base">Import existing</p>
+            <p className="text-sm text-rowan-muted mt-1 leading-relaxed font-sans">
+              Paste a secret key that starts with S.
+            </p>
+          </div>
+          <ChevronRight size={18} className="text-rowan-muted shrink-0 mt-1 group-hover:text-rowan-green" />
         </div>
       </button>
-
-      {/* Security note */}
-      <div className="flex items-center gap-2 justify-center mt-auto pb-8">
-        <Shield size={14} className="text-rowan-muted" />
-        <p className="text-rowan-muted text-xs text-center">
-          Your private key is stored securely on this device using hardware encryption
-        </p>
-      </div>
-    </div>
+    </OnboardingShell>
   )
 }

@@ -652,6 +652,30 @@ export async function getPurchaseHistory(userId, limit = 20) {
   return result.rows.map((row) => formatPurchase(row));
 }
 
+/**
+ * Single utility purchase for status / deep-link screens.
+ */
+export async function getPurchaseById(userId, purchaseId) {
+  const result = await db.query(
+    `SELECT *
+     FROM utility_purchases
+     WHERE id = $1 AND user_id = $2
+     LIMIT 1`,
+    [purchaseId, userId]
+  );
+  const row = result.rows[0];
+  if (!row) {
+    const err = new Error('Purchase not found');
+    err.status = 404;
+    throw err;
+  }
+  return formatPurchase(row, {
+    reloadlyMock: row.utility_type === 'bill'
+      ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
+      : reloadlyClient.reloadlyIsMock(),
+  });
+}
+
 function formatPurchase(row, extra = {}) {
   let receipt = null;
   if (row.receipt) {
@@ -711,4 +735,5 @@ export default {
   completePurchase,
   refreshBillDelivery,
   getPurchaseHistory,
+  getPurchaseById,
 };

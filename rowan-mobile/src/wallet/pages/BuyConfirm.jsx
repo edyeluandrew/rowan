@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, UserCheck, ShieldCheck } from 'lucide-react'
 import CountdownTimer from '../components/ui/CountdownTimer'
@@ -7,15 +7,23 @@ import { confirmBuyOrder } from '../api/buy'
 import { formatLockedRateLine, getTraderDisplayName } from '../utils/p2pFormat'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 import useWallet from '../hooks/useWallet'
+import useRates from '../hooks/useRates'
+import useUserCountry from '../hooks/useUserCountry'
+import { mapApiError } from '../utils/apiErrors'
+import { getRatesHealth, checkRateDrift } from '../utils/quoteSafety'
+import { createSubmitGuard } from '../utils/submitGuard'
 
 export default function BuyConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, traderName, selectedAd, express } = location.state || {}
+  const { quote, traderName, selectedAd, express, liveUsdcToFiat: liveAtQuote } = location.state || {}
   const [expired, setExpired] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const { hasUsdcTrustline } = useWallet()
+  const { fiatCurrency: userFiat } = useUserCountry()
+  const { refresh: refreshRates } = useRates(quote?.fiatCurrency || userFiat)
+  const submitGuard = useRef(createSubmitGuard()).current
   const trustlineError =
     error && /trustline|USDC/i.test(error)
 
@@ -31,17 +39,37 @@ export default function BuyConfirm() {
 
   const handleConfirm = async () => {
     if (expired || loading || hasUsdcTrustline === false) return
+    if (!submitGuard.tryStart()) return
     setLoading(true)
     setError(null)
     try {
+      const snap = await refreshRates()
+      const health = getRatesHealth(snap?.rates, snap?.fetchedAt, snap?.error)
+      if (!health.ok && express) {
+        setError(health.message)
+        submitGuard.release()
+        setLoading(false)
+        return
+      }
+      if (health.ok) {
+        const refRate = liveAtQuote ?? quote.userRate
+        const drift = checkRateDrift(refRate, health.usdcToFiat)
+        if (drift?.drifted) {
+          setError(drift.message)
+          submitGuard.release()
+          setLoading(false)
+          return
+        }
+      }
+
       const result = await confirmBuyOrder({ quoteId: quote.quoteId })
       navigate(`/wallet/transaction/${result.transactionId}`, {
         replace: true,
         state: { transactionId: result.transactionId, orderSide: 'BUY' },
       })
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not start order')
-    } finally {
+      setError(mapApiError(err, 'Could not start order'))
+      submitGuard.release()
       setLoading(false)
     }
   }
@@ -104,7 +132,20 @@ export default function BuyConfirm() {
         <UsdcTrustlineSetup compact onEnabled={() => setError(null)} />
       )}
 
-      {error && !trustlineError && <p className="text-rowan-red text-sm mt-4">{error}</p>}
+      {error && !trustlineError && (
+        <div className="mt-4">
+          <p className="text-rowan-red text-sm">{error}</p>
+          {/new quote|moved about/i.test(error) && (
+            <Button
+              className="mt-3"
+              variant="ghost"
+              onClick={() => navigate('/wallet/p2p', { replace: true, state: { tab: 'buy' } })}
+            >
+              Get a new quote
+            </Button>
+          )}
+        </div>
+      )}
 
       <Button
         className="w-full mt-8"
@@ -112,7 +153,7 @@ export default function BuyConfirm() {
         loading={loading}
         onClick={handleConfirm}
       >
-        {expired ? 'Quote expired' : 'Confirm & start order'}
+        {expired ? 'Quote expired' : loading ? 'Starting order…' : 'Confirm & start order'}
       </Button>
     </div>
   )

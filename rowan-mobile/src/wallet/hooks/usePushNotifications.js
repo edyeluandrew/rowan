@@ -1,15 +1,28 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { requestNotificationPermission, createNotificationChannel } from '../utils/notifications'
 import { getPreference, setPreference } from '../utils/storage'
+import { resolveNotificationPath } from '../utils/notificationRoutes'
 
 /**
- * Hook to manage push notification permissions and lifecycle.
+ * Hook to manage push notification permissions and deep-link taps.
  */
 export default function usePushNotifications() {
+  const navigate = useNavigate()
   const [permissionGranted, setPermissionGranted] = useState(false)
   const [dismissed, setDismissed] = useState(true)
   const initialised = useRef(false)
+  const navigateRef = useRef(navigate)
+  navigateRef.current = navigate
+
+  const openFromExtra = useCallback((extra) => {
+    if (!extra || typeof extra !== 'object') return
+    const path = resolveNotificationPath(extra)
+    if (path) {
+      navigateRef.current(path)
+    }
+  }, [])
 
   const initialize = useCallback(async () => {
     if (initialised.current) return
@@ -34,7 +47,20 @@ export default function usePushNotifications() {
     } catch {
       /* web fallback — always false */
     }
-  }, [])
+
+    try {
+      // Tap while app is backgrounded / cold start
+      await LocalNotifications.addListener('localNotificationActionPerformed', (event) => {
+        openFromExtra(event?.notification?.extra)
+      })
+      // Some platforms also surface notification itself
+      await LocalNotifications.addListener('localNotificationReceived', () => {
+        /* keep listener registration for channel readiness */
+      })
+    } catch {
+      /* LocalNotifications listeners not available (web) */
+    }
+  }, [openFromExtra])
 
   const requestPermission = useCallback(async () => {
     const granted = await requestNotificationPermission()

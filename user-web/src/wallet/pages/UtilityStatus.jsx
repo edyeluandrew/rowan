@@ -7,7 +7,8 @@ import { labelsFor, getUtilityType, billSandboxFallbackNote } from '../utils/uti
 import { CURRENT_NETWORK } from '../utils/constants'
 import { resolveFiatCurrency, getElectricityTokenLabel } from '../utils/country'
 import useUserCountry from '../hooks/useUserCountry'
-import { getUtilityBillDelivery } from '../api/utilities'
+import useWallet from '../hooks/useWallet'
+import { getUtilityBillDelivery, getUtilityPurchase } from '../api/utilities'
 
 function resolveStatus(purchase, data) {
   return purchase?.status || data?.status || data?.state || null
@@ -28,9 +29,32 @@ export default function UtilityStatus() {
   const { purchase: initialPurchase, quote, phone: phoneFromState, billLookup } = location.state || {}
   const [purchase, setPurchase] = useState(initialPurchase || null)
   const [deliveryLoading, setDeliveryLoading] = useState(false)
+  const [loadError, setLoadError] = useState(null)
+  const [loading, setLoading] = useState(!initialPurchase && !!id)
   const { country: userCountry } = useUserCountry()
+  const { refresh: refreshBalance } = useWallet()
   const data = purchase || quote
-  const labels = labelsFor(data)
+  const labels = labelsFor(data || quote || {})
+
+  useEffect(() => {
+    if (initialPurchase || !id) return
+    let cancelled = false
+    setLoading(true)
+    setLoadError(null)
+    getUtilityPurchase(id)
+      .then((result) => {
+        if (!cancelled) setPurchase(result)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setLoadError(err.response?.data?.error || err.message || 'Could not load purchase')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [id, initialPurchase])
 
   useEffect(() => {
     if (!id || !isPrepaidBillPayment(data)) return
@@ -51,11 +75,45 @@ export default function UtilityStatus() {
       })
 
     return () => { cancelled = true }
-  }, [id, data?.type, data?.serviceType, purchase?.electricityUnits, purchase?.electricityUnitsSource])
+  }, [id, data?.type, data?.serviceType, purchase?.electricityUnits, purchase?.electricityUnitsSource, purchase?.status])
+
+  useEffect(() => {
+    const status = resolveStatus(purchase, data)
+    if (status === 'COMPLETED' || status === 'FAILED') {
+      refreshBalance()
+    }
+  }, [purchase?.status, data?.status, refreshBalance])
+
+  const goHome = () => navigate('/wallet/home')
+
+  if (loading) {
+    return (
+      <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-4 flex flex-col items-center justify-center gap-3">
+        <Loader2 size={28} className="text-rowan-muted animate-spin" />
+        <p className="text-rowan-muted text-sm">Loading purchase…</p>
+      </div>
+    )
+  }
 
   if (!data) {
-    navigate(labels.utilitiesPath, { replace: true })
-    return null
+    return (
+      <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-4">
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            type="button"
+            onClick={goHome}
+            className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center"
+          >
+            <ChevronLeft size={24} />
+          </button>
+          <h1 className="text-rowan-text text-lg font-bold">Purchase</h1>
+        </div>
+        <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-6 text-center">
+          <p className="text-rowan-text text-sm">{loadError || 'Purchase not found'}</p>
+          <Button className="mt-4" onClick={goHome}>Back to home</Button>
+        </div>
+      </div>
+    )
   }
 
   const status = resolveStatus(purchase, data)
@@ -84,7 +142,8 @@ export default function UtilityStatus() {
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-4">
       <div className="flex items-center gap-3 mb-6">
         <button
-          onClick={() => navigate('/wallet/home')}
+          type="button"
+          onClick={goHome}
           className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center"
         >
           <ChevronLeft size={24} />
@@ -193,15 +252,15 @@ export default function UtilityStatus() {
       )}
 
       <div className="mt-8 space-y-3">
-        <Button onClick={() => navigate(labels.utilitiesPath)}>
-          {labels.buyMore}
+        <Button onClick={goHome}>
+          Done — back to home
         </Button>
         <button
           type="button"
-          onClick={() => navigate('/wallet/home')}
+          onClick={() => navigate(labels.utilitiesPath)}
           className="w-full text-rowan-muted text-sm min-h-11"
         >
-          Back to home
+          {labels.buyMore}
         </button>
       </div>
 

@@ -7,6 +7,7 @@ import { getHorizonUrl } from '../../shared/utils/config'
 import { setSecure } from '../utils/storage'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import OnboardingShell from '../components/layout/OnboardingShell'
 
 export default function ImportWallet() {
   const navigate = useNavigate()
@@ -17,7 +18,6 @@ export default function ImportWallet() {
 
   const valid = isValidSecretKey(secret)
 
-  // Clear sensitive input on unmount
   useEffect(() => () => setSecret(''), [])
 
   const handleImport = async () => {
@@ -44,54 +44,55 @@ export default function ImportWallet() {
       }
       navigate('/register')
     } catch {
-      /* import failed — invalid key */
+      /* invalid key */
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="bg-rowan-bg min-h-screen flex flex-col px-6 pt-16">
-      <h2 className="text-rowan-text text-xl font-bold text-center mb-2">Import Wallet</h2>
-      <p className="text-rowan-muted text-sm text-center mb-6">
-        Enter your Stellar secret key. Keys start with S
-      </p>
-
-      <div className="relative">
-        <Input
-          type={show ? 'text' : 'password'}
-          value={secret}
-          onChange={(e) => { setSecret(e.target.value); setTouched(true) }}
-          placeholder="S..."
-          error={touched && secret && !valid}
-          className="font-mono pr-20"
-          rightElement={
-            <div className="flex items-center gap-2">
-              {valid && <CheckCircle2 size={16} className="text-rowan-green" />}
-              <button onClick={() => setShow(!show)} className="text-rowan-muted p-1">
-                {show ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          }
-        />
-      </div>
+    <OnboardingShell
+      step={1}
+      stepTotal={2}
+      title="Import wallet"
+      subtitle="Paste your Stellar secret key. It starts with S and stays on this device only."
+    >
+      <label className="block text-xs font-medium text-rowan-muted uppercase tracking-wider mb-2 font-sans">
+        Secret key
+      </label>
+      <Input
+        type={show ? 'text' : 'password'}
+        value={secret}
+        onChange={(e) => { setSecret(e.target.value); setTouched(true) }}
+        placeholder="S…"
+        error={touched && secret && !valid}
+        className="font-mono pr-20"
+        rightElement={
+          <div className="flex items-center gap-2">
+            {valid && <CheckCircle2 size={16} className="text-rowan-green" />}
+            <button type="button" onClick={() => setShow(!show)} className="text-rowan-muted p-1" aria-label={show ? 'Hide' : 'Show'}>
+              {show ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+        }
+      />
 
       {touched && secret && !valid && (
-        <p className="text-rowan-red text-xs mt-2">Invalid secret key format</p>
+        <p className="text-rowan-red text-xs mt-2 font-sans">Invalid secret key format</p>
       )}
 
       <div className="mt-6">
         <Button onClick={handleImport} disabled={!valid} loading={loading}>
-          Import Wallet
+          Continue
         </Button>
       </div>
 
-      <div className="flex items-start gap-2 mt-6">
-        <TriangleAlert size={16} className="text-rowan-yellow flex-shrink-0 mt-0.5" />
-        <p className="text-rowan-muted text-xs">
-          Your key is stored locally using hardware encryption. It is never sent to our servers
+      <div className="flex items-start gap-2 mt-5">
+        <TriangleAlert size={15} className="text-rowan-green flex-shrink-0 mt-0.5" />
+        <p className="text-rowan-muted text-xs leading-relaxed font-sans">
+          Never share this key. Rowan never sends it to our servers.
         </p>
       </div>
-    </div>
+    </OnboardingShell>
   )
 }
