@@ -91,6 +91,10 @@ function billsViaMarzPay() {
   return config.marzPay.enabled !== false;
 }
 
+function airtimeViaMarzPay(countryCode = 'UG') {
+  return config.marzPay.enabled !== false && String(countryCode || 'UG').toUpperCase() === 'UG';
+}
+
 async function insertUtilityQuote({
   userId,
   utilityType,
@@ -136,9 +140,11 @@ async function insertUtilityQuote({
     ]
   );
 
-  const reloadlyMock = utilityType === 'bill'
-    ? (provider === 'marzpay' ? marzPayClient.marzPayIsMock() : reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock())
-    : reloadlyClient.reloadlyIsMock();
+  const reloadlyMock = provider === 'marzpay'
+    ? marzPayClient.marzPayIsMock()
+    : utilityType === 'bill'
+      ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
+      : reloadlyClient.reloadlyIsMock();
 
   return formatPurchase(result.rows[0], {
     treasuryPublicKey,
@@ -177,6 +183,16 @@ export async function getReloadlyDataAvailability(countryCode) {
     err.status = 400;
     throw err;
   }
+  if (airtimeViaMarzPay(code)) {
+    return {
+      countryCode: code,
+      available: true,
+      operators: ['MTN Uganda', 'Airtel Uganda'],
+      provider: 'marzpay',
+      reloadlyMock: marzPayClient.marzPayIsMock(),
+      marzPayMock: marzPayClient.marzPayIsMock(),
+    };
+  }
   return getDataAvailability(code);
 }
 
@@ -206,6 +222,10 @@ export async function getReloadlyTopupLimits({
     throw err;
   }
 
+  if (airtimeViaMarzPay(code)) {
+    return marzPayClient.getAirtimeLimits({ msisdn: phone, networkCode: network });
+  }
+
   return getTopupLimits({
     countryCode: code,
     networkCode: network,
@@ -215,6 +235,28 @@ export async function getReloadlyTopupLimits({
 }
 
 export async function listDataBundles({ countryCode, networkCode, recipientPhone }) {
+  const code = String(countryCode || 'UG').trim().toUpperCase();
+  if (airtimeViaMarzPay(code)) {
+    const catalog = await marzPayClient.listAirtimeBundles({
+      msisdn: normalizePhone(recipientPhone, code),
+      networkCode,
+    });
+    return {
+      operatorId: catalog.operatorId,
+      operatorName: catalog.operatorName,
+      denominationType: 'FIXED',
+      fiatCurrency: catalog.fiatCurrency,
+      bundles: catalog.bundles,
+      countryCode: code,
+      networkCode,
+      recipientPhone: catalog.recipientPhone,
+      provider: 'marzpay',
+      reloadlyMock: catalog.reloadlyMock,
+      marzPayMock: catalog.marzPayMock,
+      message: catalog.message || null,
+    };
+  }
+
   const limits = await getReloadlyTopupLimits({
     countryCode,
     networkCode,
@@ -460,6 +502,61 @@ export async function createQuote({
   const currency = countryService.getCurrencyForCountry(code);
   const fiat = Number(fiatAmount);
 
+  if (airtimeViaMarzPay(code)) {
+    const limits = await marzPayClient.getAirtimeLimits({ msisdn: phone, networkCode: network });
+    let bundleId = null;
+    if (utilityType === 'data') {
+      const catalog = await marzPayClient.listAirtimeBundles({ msisdn: phone, networkCode: network });
+      const match = (catalog.bundles || []).find((b) => (
+        String(b.bundleId || b.operatorId) === String(operatorId)
+        || Number(b.fiatAmount) === fiat
+      ));
+      if (!match) {
+        const err = new Error('Select a valid data bundle from the catalog');
+        err.status = 400;
+        throw err;
+      }
+      bundleId = match.bundleId || match.operatorId;
+      if (Number(match.fiatAmount) !== fiat) {
+        const err = new Error('Bundle price does not match the selected plan');
+        err.status = 400;
+        throw err;
+      }
+    } else {
+      assertFiatAmountAllowed({
+        fiatAmount: fiat,
+        utilityType,
+        limits,
+        fiatCurrency: currency,
+      });
+    }
+
+    const pricing = await utilityPricing.quoteUtilityPurchase({
+      fiatAmount: fiat,
+      fiatCurrency: currency,
+    });
+    const bundleLabel = bundleDescription ? String(bundleDescription).trim().slice(0, 500) : null;
+
+    return insertUtilityQuote({
+      userId,
+      utilityType,
+      code,
+      networkCode: network,
+      operatorId: bundleId || limits.operatorId,
+      operatorName: limits.operatorName,
+      recipientValue: phone,
+      pricing,
+      bundleLabel,
+      provider: 'marzpay',
+      receipt: {
+        provider: 'marzpay',
+        purchaseType: utilityType === 'data' ? 'bundle' : 'airtime',
+        bundleId,
+        detectedNetwork: limits.detectedNetwork,
+      },
+    });
+  }
+
   const { operator, limits } = await resolveOperatorForPhone({
     countryCode: code,
     networkCode: network,
@@ -523,8 +620,12 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
   }
 
   const retryFailedBill = purchase.status === 'FAILED'
-    && purchase.utility_type === 'bill'
-    && Boolean(purchase.payment_tx_hash);
+    && Boolean(purchase.payment_tx_hash)
+    && (
+      purchase.utility_type === 'bill'
+      || purchase.provider === 'marzpay'
+      || (['airtime', 'data'].includes(purchase.utility_type) && airtimeViaMarzPay(purchase.country_code))
+    );
 
   if (!retryFailedBill && purchase.status !== 'QUOTED' && purchase.status !== 'PENDING_PAYMENT') {
     const err = new Error(`Purchase cannot be completed from status ${purchase.status}`);
@@ -654,6 +755,48 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
       || reloadlyResult.id
       || reloadlyResult.transactionId
       || purchase.id;
+  } else if (purchase.provider === 'marzpay') {
+    const billMeta = readReceipt(purchase);
+    const purchaseType = purchase.utility_type === 'data' || billMeta.purchaseType === 'bundle'
+      ? 'bundle'
+      : 'airtime';
+    try {
+      let existingPay = null;
+      try {
+        existingPay = await marzPayClient.getAirtimePurchase(purchase.id);
+      } catch {
+        existingPay = null;
+      }
+      const existingStatus = String(existingPay?.data?.status || existingPay?.status || '').toLowerCase();
+      if (['completed', 'success', 'successful', 'pending'].includes(existingStatus)) {
+        reloadlyResult = existingPay;
+      } else {
+        reloadlyResult = await marzPayClient.purchaseAirtimeData({
+          reference: purchase.id,
+          purchaseType,
+          msisdn: purchase.recipient_phone,
+          amount: Number(purchase.fiat_amount),
+          bundleId: billMeta.bundleId || purchase.operator_id,
+        });
+      }
+      const liveStatus = String(reloadlyResult?.data?.status || reloadlyResult?.status || '').toLowerCase();
+      if (liveStatus === 'pending') {
+        reloadlyResult = await marzPayClient.waitForAirtimeSettlement(purchase.id);
+      }
+      reloadlyResult.provider = 'marzpay';
+    } catch (err) {
+      const reason = friendlyBillPayError(err);
+      await failPurchase(quoteId, reason);
+      const wrap = new Error(reason);
+      wrap.status = err.status || 502;
+      wrap.code = err.code;
+      throw wrap;
+    }
+    externalRef = reloadlyResult.data?.reference
+      || reloadlyResult.data?.uuid
+      || reloadlyResult.data?.provider_reference
+      || reloadlyResult.reference
+      || purchase.id;
   } else {
     let operatorId = purchase.operator_id;
 
@@ -690,9 +833,10 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
       || reloadlyResult.customIdentifier;
   }
 
-  const rawBillStatus = purchase.utility_type === 'bill'
+  const rawBillStatus = (purchase.utility_type === 'bill' || purchase.provider === 'marzpay')
     ? String(
       reloadlyResult?.data?.transaction?.status
+      || reloadlyResult?.data?.status
       || reloadlyResult?.transaction?.status
       || reloadlyResult?.status
       || 'COMPLETED'
@@ -733,11 +877,11 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
   );
 
   return formatPurchase(completed.rows[0], {
-    reloadlyMock: purchase.utility_type === 'bill'
-      ? (purchase.provider === 'marzpay' || billsViaMarzPay()
-        ? marzPayClient.marzPayIsMock()
-        : reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock())
-      : reloadlyClient.reloadlyIsMock(),
+    reloadlyMock: purchase.provider === 'marzpay' || billsViaMarzPay() && purchase.utility_type === 'bill'
+      ? marzPayClient.marzPayIsMock()
+      : purchase.utility_type === 'bill'
+        ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
+        : reloadlyClient.reloadlyIsMock(),
     billSettlementFallback: purchase.utility_type === 'bill' ? billSettlementFallback : false,
   });
 }
@@ -866,9 +1010,11 @@ export async function getPurchaseById(userId, purchaseId) {
     throw err;
   }
   return formatPurchase(row, {
-    reloadlyMock: row.utility_type === 'bill'
-      ? (row.provider === 'marzpay' ? marzPayClient.marzPayIsMock() : reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock())
-      : reloadlyClient.reloadlyIsMock(),
+    reloadlyMock: row.provider === 'marzpay'
+      ? marzPayClient.marzPayIsMock()
+      : row.utility_type === 'bill'
+        ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
+        : reloadlyClient.reloadlyIsMock(),
   });
 }
 

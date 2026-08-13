@@ -222,7 +222,7 @@ const config = {
     allowMockPurchase: process.env.UTILITY_ALLOW_MOCK_PURCHASE === 'true',
   },
 
-  // Uganda bills via MarzPay (Reloadly airtime/data stays separate)
+  // Uganda bills + airtime/data via MarzPay (Reloadly remains for other countries)
   marzPay: {
     enabled: process.env.MARZPAY_ENABLED !== 'false',
     mockMode: process.env.MARZPAY_MOCK_MODE === 'true'

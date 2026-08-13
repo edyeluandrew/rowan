@@ -158,9 +158,7 @@ export default function UtilityStatus() {
   const explorerUrl = paymentTxHash
     ? `${CURRENT_NETWORK.explorerUrl}/tx/${paymentTxHash}`
     : null
-  const canRetryBill = failed
-    && (purchase?.type === 'bill' || data?.type === 'bill' || labels.type === 'bill')
-    && Boolean(paymentTxHash)
+  const canRetryBill = failed && Boolean(paymentTxHash)
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-4">

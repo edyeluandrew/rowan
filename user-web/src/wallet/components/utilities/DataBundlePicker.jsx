@@ -22,7 +22,7 @@ export default function DataBundlePicker({
     return (
       <div className="flex items-center justify-center gap-2 py-8 text-rowan-muted text-sm">
         <Loader2 size={18} className="animate-spin" />
-        Loading data plans from Reloadly…
+        Loading data plans…
       </div>
     )
   }

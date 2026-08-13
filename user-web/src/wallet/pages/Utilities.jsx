@@ -167,8 +167,8 @@ export default function Utilities({ utilityType = 'airtime' }) {
       if (knownEmpty) {
         setBundles([])
         setBundlesError(
-          `Reloadly sandbox has no data bundle products for ${country} yet. `
-          + 'Switch to Uganda for data tests, or use Airtime here.'
+          `No data bundle products for ${country} yet. `
+          + 'Switch to Uganda for data, or use Airtime here.'
         )
         return
       }
@@ -294,7 +294,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
         fiatAmount: Math.round(netFiat),
         type: utilityType,
         ...(isData && selectedBundle ? {
-          operatorId: selectedBundle.operatorId,
+          operatorId: selectedBundle.bundleId || selectedBundle.operatorId,
           bundleDescription: selectedBundle.description,
         } : {}),
       })
@@ -327,10 +327,10 @@ export default function Utilities({ utilityType = 'airtime' }) {
 
       <UsdcTrustlineSetup compact />
 
-      {utilityConfig?.reloadlyMock && (
+      {(utilityConfig?.marzPayMock || utilityConfig?.reloadlyMock) && (
         <div className="bg-rowan-mint border border-rowan-green/30 rounded-xl p-3 mb-4">
           <p className="text-rowan-text text-xs">
-            Staging mode — utilities use mock Reloadly until API keys are added.
+            Staging mode — utilities use a mock provider until live keys are added.
           </p>
         </div>
       )}
@@ -338,7 +338,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
       {isData && dataAvailability && !dataAvailability.available && ['KE', 'TZ', 'RW'].includes(String(country).toUpperCase()) && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-3 mb-4">
           <p className="text-rowan-yellow text-sm">
-            Reloadly sandbox has no data plans for {country}. Use Airtime here, or switch to Uganda for data bundle tests.
+            No data plans for {country} yet. Use Airtime here, or switch to Uganda for data.
           </p>
         </div>
       )}
@@ -407,7 +407,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
       ) : (
         <>
           {limitsLoading && (
-            <p className="text-rowan-muted text-xs mt-4 px-1">Loading limits from Reloadly…</p>
+            <p className="text-rowan-muted text-xs mt-4 px-1">Loading airtime limits…</p>
           )}
           {limitsError && (
             <div className="mt-4 bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-3">
@@ -459,7 +459,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
           {minFiat != null && maxFiat != null && (
             <p className="text-rowan-muted text-xs mt-2 px-1">
               Min {Math.ceil(minFiat).toLocaleString()} · Max {Math.floor(maxFiat).toLocaleString()} {currency}
-              {utilityConfig?.limitsSource === 'reloadly' ? ' (from Reloadly)' : ''}
+              {utilityConfig?.limitsSource === 'reloadly' ? ' (from Reloadly)' : utilityConfig?.limitsSource === 'marzpay' ? ' (from MarzPay)' : ''}
             </p>
           )}
         </>

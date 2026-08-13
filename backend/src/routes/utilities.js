@@ -313,11 +313,12 @@ router.get('/config', (req, res) => {
     data: {
       feePercent: config.utilities.feePercent,
       quoteTtlSeconds: config.utilities.quoteTtlSeconds,
-      /** Airtime/data limits come from Reloadly per operator — use GET /utilities/limits */
-      limitsSource: 'reloadly',
+      /** UG airtime/data + bills via MarzPay; other countries still Reloadly. */
+      limitsSource: config.marzPay.enabled !== false ? 'marzpay' : 'reloadly',
       reloadlyMock: reloadlyClient.reloadlyIsMock(),
       reloadlyUtilitiesMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
       billsProvider: config.marzPay.enabled !== false ? 'marzpay' : 'reloadly',
+      airtimeProvider: config.marzPay.enabled !== false ? 'marzpay' : 'reloadly',
       marzPayMock: config.marzPay.mockMode || !config.marzPay.apiKey,
       marzPayBillFeeFiat: config.marzPay.billFeeFiat,
       utilitiesStagingFallback: (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'

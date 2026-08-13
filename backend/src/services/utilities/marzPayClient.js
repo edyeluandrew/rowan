@@ -1,6 +1,7 @@
 /**
- * MarzPay bills API — LIGHT/UMEME, NWSC, DSTV, GOTV.
- * Docs: https://wallet.wearemarz.com/documentation/bill-payments
+ * MarzPay bills + Uganda airtime/data.
+ * Bills: https://wallet.wearemarz.com/documentation/bill-payments
+ * Airtime/data: https://wallet.wearemarz.com/documentation/airtime-data
  */
 
 import crypto from 'crypto';
@@ -18,6 +19,20 @@ const MOCK_DSTV_BOUQUETS = [
 const MOCK_GOTV_BOUQUETS = [
   { code: 'GOTVMAX', name: 'GOtv Max', price: '45000', period: 1, period_label: '1 Month' },
   { code: 'GOTVSUPA', name: 'GOtv Supa', price: '25000', period: 1, period_label: '1 Month' },
+];
+
+const MOCK_MTN_BUNDLES = [
+  { product_id: 'MTN_UG_Data_Daily_500', name: 'MTN Daily 40MB', description: '40MB — 24 hours', price: 500, validity: '24 hours' },
+  { product_id: 'MTN_UG_Data_Weekly_2000', name: 'MTN Weekly 350MB', description: '350MB — 7 days', price: 2000, validity: '7 days' },
+  { product_id: 'MTN_UG_Data_Monthly_10000', name: 'MTN Monthly 1.5GB', description: '1.5GB — 30 days', price: 10000, validity: '30 days' },
+  { product_id: 'MTN_UG_Data_Monthly_20000', name: 'MTN Monthly 3.5GB', description: '3.5GB — 30 days', price: 20000, validity: '30 days' },
+];
+
+const MOCK_AIRTEL_BUNDLES = [
+  { product_id: 'AIRTEL_UG_Data_Daily_500', name: 'Airtel Daily 45MB', description: '45MB — 24 hours', price: 500, validity: '24 hours' },
+  { product_id: 'AIRTEL_UG_Data_Weekly_2000', name: 'Airtel Weekly 400MB', description: '400MB — 7 days', price: 2000, validity: '7 days' },
+  { product_id: 'AIRTEL_UG_Data_Monthly_10000', name: 'Airtel Monthly 1.5GB', description: '1.5GB — 30 days', price: 10000, validity: '30 days' },
+  { product_id: 'AIRTEL_UG_Data_Monthly_20000', name: 'Airtel Monthly 4GB', description: '4GB — 30 days', price: 20000, validity: '30 days' },
 ];
 
 function cfg() {
@@ -229,6 +244,84 @@ function mockResponse(path, method, body) {
     };
   }
 
+  const route = String(path || '').split('?')[0];
+  if (route === '/airtime-data/catalog' && method === 'GET') {
+    return {
+      status: 'success',
+      data: {
+        country: 'UG',
+        currency: 'UGX',
+        networks: [
+          { code: 'MTN', airtime: true, bundles: true, min_airtime_amount: 500, airtime_delivery: 'immediate', bundle_delivery: 'immediate' },
+          { code: 'AIRTEL', airtime: true, bundles: true, min_airtime_amount: 500, airtime_delivery: 'immediate', bundle_delivery: 'async' },
+          { code: 'LYCA', airtime: true, bundles: false, min_airtime_amount: 500, airtime_delivery: 'immediate' },
+        ],
+        mtn: {
+          airtime: { name: 'Airtime top-up' },
+          bundles: { data: { label: 'Data Bundles', items: MOCK_MTN_BUNDLES } },
+        },
+        airtel: {
+          airtime: { name: 'Airtime top-up' },
+          bundles: { data: { label: 'Data Bundles', items: MOCK_AIRTEL_BUNDLES } },
+        },
+      },
+      _mock: true,
+    };
+  }
+
+  if (route === '/airtime-data/detect-network' && method === 'GET') {
+    const query = String(path || '').split('?')[1] || '';
+    const msisdn = decodeURIComponent((query.match(/msisdn=([^&]+)/) || [])[1] || '');
+    const network = detectUgNetworkFromMsisdn(msisdn);
+    return {
+      status: 'success',
+      data: { msisdn, network, gateways: network === 'MTN' ? ['mtn_eretailer'] : ['africastalking_airtime'] },
+      _mock: true,
+    };
+  }
+
+  if (route === '/airtime-data' && method === 'POST') {
+    const ref = body?.reference || crypto.randomUUID();
+    const purchaseType = body?.purchase_type || 'airtime';
+    const amount = purchaseType === 'bundle'
+      ? (MOCK_MTN_BUNDLES.concat(MOCK_AIRTEL_BUNDLES).find((b) => b.product_id === body?.bundle_id)?.price || 2000)
+      : Number(body?.amount) || 1000;
+    const network = detectUgNetworkFromMsisdn(body?.msisdn);
+    return {
+      status: 'success',
+      message: 'Airtime & Data purchase completed successfully.',
+      data: {
+        uuid: ref,
+        reference: ref,
+        status: 'completed',
+        provider_reference: `MOCK-AT-${Date.now()}`,
+        amount: { raw: amount, formatted: amount.toLocaleString(), currency: 'UGX' },
+        charge: { raw: 0, formatted: '0', currency: 'UGX' },
+        airtime_data: {
+          network,
+          purchase_type: purchaseType,
+          msisdn: body?.msisdn,
+          product_name: purchaseType === 'bundle' ? (body?.bundle_id || 'Data bundle') : 'Airtime top-up',
+          result: 'success',
+        },
+      },
+      _mock: true,
+    };
+  }
+
+  if (route.startsWith('/airtime-data/') && method === 'GET') {
+    const ref = route.split('/').pop();
+    return {
+      status: 'success',
+      data: {
+        reference: ref,
+        status: 'completed',
+        airtime_data: { result: 'success' },
+      },
+      _mock: true,
+    };
+  }
+
   return { status: 'success', data: {}, _mock: true };
 }
 
@@ -244,6 +337,184 @@ export function formatMarzPhone(phone) {
   if (digits.startsWith('256') === false && digits.length === 9) digits = `256${digits}`;
   if (!digits.startsWith('256')) digits = `256${digits.replace(/^0/, '')}`;
   return `+${digits}`;
+}
+
+/** Airtime/data MSISDN — 2567XXXXXXXX (no +). */
+export function formatMarzMsisdn(phone) {
+  return formatMarzPhone(phone).replace(/^\+/, '');
+}
+
+export function detectUgNetworkFromMsisdn(phone) {
+  const digits = formatMarzMsisdn(phone);
+  const local = digits.startsWith('256') ? digits.slice(3) : digits;
+  const p = local.startsWith('0') ? local.slice(1) : local;
+  if (/^(39|31|76|77|78)/.test(p)) return 'MTN';
+  if (/^(20|70|74|75)/.test(p)) return 'AIRTEL';
+  if (/^(72)/.test(p)) return 'LYCA';
+  return 'MTN';
+}
+
+export function rowanNetworkToMarz(networkCode) {
+  const raw = String(networkCode || '').toUpperCase();
+  if (raw.includes('AIRTEL')) return 'AIRTEL';
+  if (raw.includes('LYCA')) return 'LYCA';
+  return 'MTN';
+}
+
+function collectCatalogBundles(node, acc = []) {
+  if (!node) return acc;
+  if (Array.isArray(node)) {
+    node.forEach((item) => collectCatalogBundles(item, acc));
+    return acc;
+  }
+  if (typeof node !== 'object') return acc;
+  const id = node.product_id || node.bundle_id || node.productId;
+  const price = node.price ?? node.amount ?? node.cost ?? node.value;
+  if (id && price != null && Number(price) > 0) {
+    acc.push({
+      productId: String(id),
+      name: node.name || node.label || node.title || String(id),
+      description: node.description || node.name || node.label || String(id),
+      price: Number(price),
+      validity: node.validity || node.period || node.duration || null,
+    });
+    return acc;
+  }
+  Object.values(node).forEach((value) => collectCatalogBundles(value, acc));
+  return acc;
+}
+
+export async function getAirtimeCatalog() {
+  const body = await marzRequest('/airtime-data/catalog');
+  return body?.data || {};
+}
+
+export async function detectAirtimeNetwork(msisdn) {
+  const formatted = formatMarzMsisdn(msisdn);
+  const body = await marzRequest(`/airtime-data/detect-network?msisdn=${encodeURIComponent(formatted)}`);
+  const network = String(body?.data?.network || detectUgNetworkFromMsisdn(formatted)).toUpperCase();
+  return {
+    msisdn: formatted,
+    network,
+    gateways: body?.data?.gateways || [],
+    mock: Boolean(body?._mock || marzPayIsMock()),
+  };
+}
+
+export function networkInfoFromCatalog(catalog, networkCode) {
+  const networks = catalog?.networks || [];
+  const code = String(networkCode || 'MTN').toUpperCase();
+  return networks.find((n) => String(n.code || '').toUpperCase() === code) || null;
+}
+
+export function bundlesFromCatalog(catalog, networkCode) {
+  const code = String(networkCode || 'MTN').toUpperCase();
+  const tree = code === 'AIRTEL' ? catalog?.airtel : catalog?.mtn;
+  const items = collectCatalogBundles(tree?.bundles || tree);
+  const seen = new Set();
+  return items.filter((item) => {
+    if (seen.has(item.productId)) return false;
+    seen.add(item.productId);
+    return true;
+  }).sort((a, b) => a.price - b.price);
+}
+
+export async function getAirtimeLimits({ msisdn, networkCode }) {
+  const detected = await detectAirtimeNetwork(msisdn).catch(() => ({
+    msisdn: formatMarzMsisdn(msisdn),
+    network: rowanNetworkToMarz(networkCode),
+  }));
+  const catalog = await getAirtimeCatalog();
+  const network = detected.network || rowanNetworkToMarz(networkCode);
+  const info = networkInfoFromCatalog(catalog, network);
+  const min = Number(info?.min_airtime_amount) || 500;
+  return {
+    provider: 'marzpay',
+    denominationType: 'RANGE',
+    fiatCurrency: catalog?.currency || 'UGX',
+    minFiatAmount: min,
+    maxFiatAmount: 500000,
+    allowedAmounts: [],
+    suggestedAmounts: [1000, 2000, 5000, 10000, 20000],
+    operatorId: network,
+    operatorName: network === 'AIRTEL' ? 'Airtel Uganda' : network === 'LYCA' ? 'Lyca Mobile Uganda' : 'MTN Uganda',
+    countryCode: 'UG',
+    recipientPhone: detected.msisdn,
+    detectedNetwork: network,
+    supportsAirtime: info?.airtime !== false,
+    supportsBundles: info?.bundles === true,
+    reloadlyMock: marzPayIsMock(),
+    marzPayMock: marzPayIsMock(),
+  };
+}
+
+export async function listAirtimeBundles({ msisdn, networkCode }) {
+  const limits = await getAirtimeLimits({ msisdn, networkCode });
+  if (limits.detectedNetwork === 'LYCA' || limits.supportsBundles === false) {
+    return {
+      ...limits,
+      bundles: [],
+      message: 'Lyca numbers support airtime only — no data bundles.',
+    };
+  }
+  const catalog = await getAirtimeCatalog();
+  const items = bundlesFromCatalog(catalog, limits.detectedNetwork);
+  return {
+    ...limits,
+    bundles: items.map((item) => ({
+      fiatAmount: item.price,
+      fiatCurrency: limits.fiatCurrency,
+      description: item.description || item.name,
+      operatorId: item.productId,
+      operatorName: limits.operatorName,
+      bundleId: item.productId,
+    })),
+  };
+}
+
+export async function purchaseAirtimeData({
+  reference,
+  purchaseType,
+  msisdn,
+  amount,
+  bundleId,
+}) {
+  const type = purchaseType === 'bundle' || purchaseType === 'data' ? 'bundle' : 'airtime';
+  const payload = {
+    reference,
+    purchase_type: type,
+    msisdn: formatMarzMsisdn(msisdn),
+    ...(type === 'bundle'
+      ? { bundle_id: String(bundleId) }
+      : { amount: Math.round(Number(amount)) }),
+  };
+
+  logger.info('[MarzPay] purchaseAirtimeData', {
+    reference,
+    purchaseType: type,
+    amount: payload.amount || null,
+    bundleId: payload.bundle_id || null,
+    mock: marzPayIsMock(),
+  });
+
+  return marzRequest('/airtime-data', { method: 'POST', body: payload });
+}
+
+export async function getAirtimePurchase(reference) {
+  return marzRequest(`/airtime-data/${encodeURIComponent(reference)}`);
+}
+
+export async function waitForAirtimeSettlement(reference, { maxAttempts = 8, delayMs = 2500 } = {}) {
+  let last = await getAirtimePurchase(reference);
+  for (let i = 0; i < maxAttempts; i += 1) {
+    const status = String(last?.data?.status || last?.status || '').toLowerCase();
+    if (status === 'completed' || status === 'success' || status === 'successful' || status === 'failed') {
+      return last;
+    }
+    await new Promise((r) => setTimeout(r, delayMs));
+    last = await getAirtimePurchase(reference);
+  }
+  return last;
 }
 
 export async function listBillServices() {
@@ -382,6 +653,16 @@ export default {
   marzPayBillFeeFiat,
   normalizeUtilityCode,
   formatMarzPhone,
+  formatMarzMsisdn,
+  detectUgNetworkFromMsisdn,
+  rowanNetworkToMarz,
+  getAirtimeCatalog,
+  detectAirtimeNetwork,
+  getAirtimeLimits,
+  listAirtimeBundles,
+  purchaseAirtimeData,
+  getAirtimePurchase,
+  waitForAirtimeSettlement,
   listBillServices,
   listNwscAreas,
   listBouquetCodes,
