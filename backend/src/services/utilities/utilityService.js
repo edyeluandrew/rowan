@@ -72,6 +72,9 @@ function friendlyBillPayError(err) {
   if (code === 'BILLER_NOT_SUPPORTED' || code === 'BILLER_NOT_FOUND') {
     return 'This bill provider is not available right now. Try another provider or contact support.';
   }
+  if (/ip whitelist/i.test(msg)) {
+    return 'MarzPay blocked this server IP. After they whitelist Render outbound IPs, tap Retry — do not send USDC again.';
+  }
   return msg;
 }
 
@@ -519,13 +522,17 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
     return formatPurchase(purchase, { alreadyCompleted: true });
   }
 
-  if (purchase.status !== 'QUOTED' && purchase.status !== 'PENDING_PAYMENT') {
+  const retryFailedBill = purchase.status === 'FAILED'
+    && purchase.utility_type === 'bill'
+    && Boolean(purchase.payment_tx_hash);
+
+  if (!retryFailedBill && purchase.status !== 'QUOTED' && purchase.status !== 'PENDING_PAYMENT') {
     const err = new Error(`Purchase cannot be completed from status ${purchase.status}`);
     err.status = 409;
     throw err;
   }
 
-  if (new Date(purchase.expires_at) < new Date()) {
+  if (!retryFailedBill && new Date(purchase.expires_at) < new Date()) {
     await db.query(
       `UPDATE utility_purchases SET status = 'EXPIRED', updated_at = NOW() WHERE id = $1`,
       [quoteId]
@@ -535,36 +542,45 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
     throw err;
   }
 
-  const allowMock = config.utilities.allowMockPurchase && !paymentTxHash;
-  if (!paymentTxHash && !allowMock) {
-    const err = new Error('paymentTxHash is required');
-    err.status = 400;
-    err.code = 'PAYMENT_TX_REQUIRED';
-    throw err;
-  }
-
-  if (!allowMock) {
-    const verification = await utilityUsdcService.verifyUtilityUsdcPayment({
-      paymentTxHash,
-      expectedFrom: purchase.stellar_address,
-      expectedUsdc: Number(purchase.usdc_amount),
-      expectedMemo: purchase.memo,
-    });
-
-    if (!verification.ok) {
-      const err = new Error(verification.reason);
+  if (retryFailedBill) {
+    await db.query(
+      `UPDATE utility_purchases
+       SET status = 'PROCESSING', error_message = NULL, updated_at = NOW()
+       WHERE id = $1`,
+      [quoteId]
+    );
+  } else {
+    const allowMock = config.utilities.allowMockPurchase && !paymentTxHash;
+    if (!paymentTxHash && !allowMock) {
+      const err = new Error('paymentTxHash is required');
       err.status = 400;
-      err.code = verification.code;
+      err.code = 'PAYMENT_TX_REQUIRED';
       throw err;
     }
-  }
 
-  await db.query(
-    `UPDATE utility_purchases
-     SET status = 'PROCESSING', payment_tx_hash = $2, updated_at = NOW()
-     WHERE id = $1`,
-    [quoteId, paymentTxHash || `MOCK-${Date.now()}`]
-  );
+    if (!allowMock) {
+      const verification = await utilityUsdcService.verifyUtilityUsdcPayment({
+        paymentTxHash,
+        expectedFrom: purchase.stellar_address,
+        expectedUsdc: Number(purchase.usdc_amount),
+        expectedMemo: purchase.memo,
+      });
+
+      if (!verification.ok) {
+        const err = new Error(verification.reason);
+        err.status = 400;
+        err.code = verification.code;
+        throw err;
+      }
+    }
+
+    await db.query(
+      `UPDATE utility_purchases
+       SET status = 'PROCESSING', payment_tx_hash = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [quoteId, paymentTxHash || `MOCK-${Date.now()}`]
+    );
+  }
 
   let reloadlyResult;
   let externalRef;
@@ -583,16 +599,29 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
         if (!billMeta.notifyPhone) {
           throw Object.assign(new Error('Phone number missing on quote — get a new quote'), { status: 422 });
         }
-        reloadlyResult = await marzPayClient.payBill({
-          reference: purchase.id,
-          utilityCode: purchase.operator_id,
-          meterNumber: purchase.recipient_phone,
-          phoneNumber: billMeta.notifyPhone,
-          amount: Number(purchase.fiat_amount),
-          area: billMeta.area,
-          bouquetCode: billMeta.bouquetCode,
-          customerName: billMeta.customerName,
-        });
+        let existingPay = null;
+        try {
+          existingPay = await marzPayClient.getBillPayment(purchase.id);
+        } catch {
+          existingPay = null;
+        }
+        const existingStatus = String(
+          existingPay?.data?.transaction?.status || existingPay?.status || ''
+        ).toLowerCase();
+        if (['completed', 'success', 'successful', 'pending'].includes(existingStatus)) {
+          reloadlyResult = existingPay;
+        } else {
+          reloadlyResult = await marzPayClient.payBill({
+            reference: purchase.id,
+            utilityCode: purchase.operator_id,
+            meterNumber: purchase.recipient_phone,
+            phoneNumber: billMeta.notifyPhone,
+            amount: Number(purchase.fiat_amount),
+            area: billMeta.area,
+            bouquetCode: billMeta.bouquetCode,
+            customerName: billMeta.customerName,
+          });
+        }
         reloadlyResult.provider = 'marzpay';
       } else {
         const billPay = await reloadlyUtilityPaymentsClient.payBillForPurchase({

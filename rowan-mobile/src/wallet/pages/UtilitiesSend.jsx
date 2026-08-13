@@ -18,6 +18,8 @@ export default function UtilitiesSend() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [quoteExpired, setQuoteExpired] = useState(false)
+  const [usdcSent, setUsdcSent] = useState(false)
+  const paymentTxRef = useRef(null)
   const submitGuard = useRef(createSubmitGuard()).current
 
   const labels = labelsFor({ type: utilityType || getUtilityType(quote) })
@@ -48,32 +50,37 @@ export default function UtilitiesSend() {
     setError(null)
     try {
       if (useMockPath) {
-        await finishPurchase(null)
+        await finishPurchase(paymentTxRef.current || null)
         return
       }
 
-      const treasury = quote.treasuryPublicKey
-      const sendUsdc = quote.usdcAmount ?? quote.usdc_amount
-      const memo = quote.memo
+      if (!paymentTxRef.current) {
+        const treasury = quote.treasuryPublicKey
+        const sendUsdc = quote.usdcAmount ?? quote.usdc_amount
+        const memo = quote.memo
 
-      if (!treasury || !sendUsdc || !memo) {
-        throw new Error('Quote missing payment details. Get a new quote.')
+        if (!treasury || !sendUsdc || !memo) {
+          throw new Error('Quote missing payment details. Get a new quote.')
+        }
+
+        const stored = await getSecure('rowan_stellar_keypair')
+        if (!stored) throw new Error('Wallet not found. Please re-import your wallet.')
+        const kp = JSON.parse(stored)
+        if (!kp.secretKey) throw new Error('Wallet key data is corrupted.')
+
+        const signedXdr = await buildAndSignUsdcPayment({
+          sourceSecretKey: kp.secretKey,
+          destinationAddress: treasury,
+          usdcAmount: sendUsdc,
+          memo,
+          horizonUrl,
+        })
+        const txResult = await submitTransaction(signedXdr, horizonUrl)
+        paymentTxRef.current = txResult.id
+        setUsdcSent(true)
       }
 
-      const stored = await getSecure('rowan_stellar_keypair')
-      if (!stored) throw new Error('Wallet not found. Please re-import your wallet.')
-      const kp = JSON.parse(stored)
-      if (!kp.secretKey) throw new Error('Wallet key data is corrupted.')
-
-      const signedXdr = await buildAndSignUsdcPayment({
-        sourceSecretKey: kp.secretKey,
-        destinationAddress: treasury,
-        usdcAmount: sendUsdc,
-        memo,
-        horizonUrl,
-      })
-      const txResult = await submitTransaction(signedXdr, horizonUrl)
-      await finishPurchase(txResult.id)
+      await finishPurchase(paymentTxRef.current)
       // leave guard locked — screen unmounts after navigate
     } catch (err) {
       if (err.response?.status === 410) {
@@ -147,7 +154,22 @@ export default function UtilitiesSend() {
       {error && !quoteExpired && (
         <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-xl p-4 mt-4 flex items-start gap-3">
           <AlertTriangle size={20} className="text-rowan-red shrink-0 mt-0.5" />
-          <p className="text-rowan-red text-sm">{error}</p>
+          <div>
+            <p className="text-rowan-red text-sm">{error}</p>
+            {usdcSent ? (
+              <p className="text-rowan-muted text-xs mt-2">
+                USDC already sent. Retry only submits the bill — it will not send more USDC.
+              </p>
+            ) : (
+              <button
+                type="button"
+                className="text-rowan-yellow text-xs mt-2 underline"
+                onClick={() => navigate(labels.utilitiesPath || '/wallet/utilities/bills', { replace: true })}
+              >
+                Get a new quote
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -155,10 +177,12 @@ export default function UtilitiesSend() {
         <div className="mt-8">
           <Button onClick={handlePay} loading={loading} disabled={loading}>
             {loading
-              ? 'Sending… please wait'
-              : useMockPath
-                ? 'Complete test purchase'
-                : labels.sendButton}
+              ? (usdcSent ? 'Retrying bill…' : 'Sending… please wait')
+              : usdcSent
+                ? 'Retry bill payment'
+                : useMockPath
+                  ? 'Complete test purchase'
+                  : labels.sendButton}
           </Button>
         </div>
       )}

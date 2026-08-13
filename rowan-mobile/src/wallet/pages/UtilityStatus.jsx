@@ -6,7 +6,7 @@ import { maskPhoneNumber } from '../utils/crypto'
 import { labelsFor } from '../utils/utilityLabels'
 import { CURRENT_NETWORK } from '../utils/constants'
 import { resolveFiatCurrency } from '../utils/country'
-import { getUtilityPurchase } from '../api/utilities'
+import { getUtilityPurchase, completeUtilityPurchase } from '../api/utilities'
 import useWallet from '../hooks/useWallet'
 
 function resolveStatus(purchase, data) {
@@ -22,6 +22,8 @@ export default function UtilityStatus() {
   const [purchase, setPurchase] = useState(statePurchase || null)
   const [loadError, setLoadError] = useState(null)
   const [loading, setLoading] = useState(!statePurchase && !!id)
+  const [retrying, setRetrying] = useState(false)
+  const [retryError, setRetryError] = useState(null)
 
   const data = purchase || quote
   const labels = labelsFor(data || quote || {})
@@ -56,6 +58,25 @@ export default function UtilityStatus() {
   }, [purchase?.status, data?.status, refreshBalance])
 
   const goHome = () => navigate('/wallet/home', { replace: false })
+
+  const handleRetryBill = async () => {
+    const quoteId = purchase?.id || data?.id || id
+    const txHash = purchase?.paymentTxHash || data?.paymentTxHash || data?.payment_tx_hash
+    if (!quoteId || retrying) return
+    setRetrying(true)
+    setRetryError(null)
+    try {
+      const result = await completeUtilityPurchase({
+        quoteId,
+        paymentTxHash: txHash,
+      })
+      setPurchase(result)
+    } catch (err) {
+      setRetryError(err.response?.data?.error || err.message || 'Retry failed')
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -101,6 +122,9 @@ export default function UtilityStatus() {
   const explorerUrl = paymentTxHash
     ? `${CURRENT_NETWORK.explorerUrl}/tx/${paymentTxHash}`
     : null
+  const canRetryBill = failed
+    && (purchase?.type === 'bill' || data?.type === 'bill' || labels.type === 'bill')
+    && Boolean(paymentTxHash)
 
   return (
     <div className="bg-rowan-bg min-h-screen pb-24 px-4 pt-4">
@@ -154,6 +178,9 @@ export default function UtilityStatus() {
             {purchase?.errorMessage || data.errorMessage || data.error_message}
           </p>
         )}
+        {retryError && (
+          <p className="text-rowan-red text-sm mt-2">{retryError}</p>
+        )}
         {data.reloadlyMock && completed && (
           <p className="text-rowan-muted text-xs mt-3">{labels.mockNote}</p>
         )}
@@ -172,6 +199,11 @@ export default function UtilityStatus() {
       )}
 
       <div className="mt-8 space-y-3">
+        {canRetryBill && (
+          <Button onClick={handleRetryBill} loading={retrying} disabled={retrying}>
+            {retrying ? 'Retrying bill…' : 'Retry bill payment (no extra USDC)'}
+          </Button>
+        )}
         <Button onClick={goHome}>
           Done — back to home
         </Button>
