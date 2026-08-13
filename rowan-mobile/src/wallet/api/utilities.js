@@ -62,3 +62,29 @@ export function getUtilityHistory(limit = 20) {
     .get('/api/v1/utilities/history', { params: { limit } })
     .then(unwrap)
 }
+
+export function getUtilityBillers(country) {
+  return client
+    .get('/api/v1/utilities/billers', { params: { country } })
+    .then(unwrap)
+}
+
+export function getUtilityBillLookup({ billerId, subscriberAccount, fiatAmount, serviceType, area }) {
+  return client
+    .get('/api/v1/utilities/bill-lookup', {
+      params: { billerId, subscriberAccount, fiatAmount, serviceType, area },
+    })
+    .then(unwrap)
+}
+
+export function getUtilityBillBouquets(utilityCode) {
+  return client
+    .get('/api/v1/utilities/bill-bouquets', { params: { utilityCode } })
+    .then(unwrap)
+}
+
+export function getUtilityBillDelivery(purchaseId) {
+  return client
+    .get(`/api/v1/utilities/purchase/${purchaseId}/delivery`)
+    .then(unwrap)
+}

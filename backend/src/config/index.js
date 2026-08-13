@@ -222,6 +222,17 @@ const config = {
     allowMockPurchase: process.env.UTILITY_ALLOW_MOCK_PURCHASE === 'true',
   },
 
+  // Uganda bills via MarzPay (Reloadly airtime/data stays separate)
+  marzPay: {
+    enabled: process.env.MARZPAY_ENABLED !== 'false',
+    mockMode: process.env.MARZPAY_MOCK_MODE === 'true'
+      || (!process.env.MARZPAY_API_KEY && (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'),
+    apiKey: process.env.MARZPAY_API_KEY || '',
+    apiSecret: process.env.MARZPAY_API_SECRET || '',
+    baseUrl: (process.env.MARZPAY_BASE_URL || 'https://wallet.wearemarz.com/api/v1').replace(/\/$/, ''),
+    billFeeFiat: parseInt(process.env.MARZPAY_BILL_FEE_UGX, 10) || 1200,
+  },
+
   // Phase 2 C1/C9 — Yellow Card / Yellow Pay (automated MoMo on/off-ramp)
   yellowPay: {
     enabled: process.env.YELLOW_PAY_ENABLED !== 'false',

@@ -2,12 +2,45 @@
  * Parse Reloadly utility bill transaction payloads (units, token, customer name).
  */
 
+function extractMarzPayDelivery(payload) {
+  const data = payload.data || payload;
+  const bill = data.bill_payment || data.transaction?.bill_payment || null;
+  const tx = data.transaction || {};
+  if (!bill && !tx.uuid && payload.provider !== 'marzpay') return null;
+
+  const token = bill?.token
+    || bill?.yaka_token
+    || bill?.pin
+    || bill?.units_token
+    || data.token
+    || null;
+  const unitsRaw = bill?.units || bill?.units_display || null;
+  const customerName = bill?.customer_name || tx.customer_name || payload.customerName || null;
+
+  if (!token && !customerName && !bill) return null;
+
+  return {
+    customerName,
+    token,
+    units: unitsRaw ? parseFloat(String(unitsRaw)) || null : null,
+    unitLabel: /kwh/i.test(String(unitsRaw || '')) ? 'kWh' : 'units',
+    unitsDisplay: unitsRaw ? String(unitsRaw) : null,
+    billerReferenceId: tx.provider_reference || tx.reference || null,
+    source: 'marzpay',
+  };
+}
+
 export function extractBillDelivery(reloadlyPayload) {
   if (!reloadlyPayload) return null;
 
+  const marz = extractMarzPayDelivery(reloadlyPayload);
+  if (marz && (marz.token || marz.customerName || reloadlyPayload.provider === 'marzpay')) {
+    return marz;
+  }
+
   const tx = reloadlyPayload.transaction || reloadlyPayload;
   const billDetails = tx.billDetails || reloadlyPayload.billDetails;
-  if (!billDetails) return null;
+  if (!billDetails) return marz;
 
   const subscriber = billDetails.subscriberDetails || {};
   const customerName = subscriber.customerName
@@ -48,7 +81,11 @@ export function extractElectricityDelivery(reloadlyPayload) {
 
 export function getReloadlyTransactionId(receipt) {
   if (!receipt) return null;
-  return receipt.id ?? receipt.transaction?.id ?? null;
+  return receipt.id
+    ?? receipt.transaction?.id
+    ?? receipt.data?.transaction?.uuid
+    ?? receipt.data?.transaction?.reference
+    ?? null;
 }
 
 export default {

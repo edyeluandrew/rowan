@@ -42,6 +42,7 @@ import RateAlerts from './pages/RateAlerts';
 import TwoFactorSettings from './pages/security/TwoFactorSettings';
 import UtilitiesHub from './pages/UtilitiesHub';
 import Utilities from './pages/Utilities';
+import UtilitiesBills from './pages/UtilitiesBills';
 import UtilitiesConfirm from './pages/UtilitiesConfirm';
 import UtilitiesSend from './pages/UtilitiesSend';
 import UtilityStatus from './pages/UtilityStatus';
@@ -93,6 +94,7 @@ export default function WalletApp() {
               <Route index element={<Navigate to="airtime" replace />} />
               <Route path="airtime" element={<Utilities utilityType="airtime" />} />
               <Route path="data" element={<Utilities utilityType="data" />} />
+              <Route path="bills" element={<UtilitiesBills />} />
             </Route>
             <Route path="utilities/confirm" element={<UtilitiesConfirm />} />
             <Route path="utilities/send" element={<UtilitiesSend />} />

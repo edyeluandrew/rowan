@@ -1,10 +1,11 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { ChevronLeft, Signal, Wifi } from 'lucide-react'
+import { ChevronLeft, Signal, Wifi, Zap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 const TABS = [
   { to: '/wallet/utilities/airtime', label: 'Airtime', Icon: Signal },
   { to: '/wallet/utilities/data', label: 'Data', Icon: Wifi },
+  { to: '/wallet/utilities/bills', label: 'Bills', Icon: Zap },
 ]
 
 export default function UtilitiesHub() {

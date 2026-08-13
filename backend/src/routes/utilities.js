@@ -133,7 +133,22 @@ router.get('/bill-lookup', authUser, async (req, res, next) => {
       subscriberAccount,
       fiatAmount: Number.isFinite(fiatAmount) ? fiatAmount : 0,
       billerServiceType: req.query.serviceType,
+      area: req.query.area,
     });
+    res.json({ status: 'ok', data, timestamp: new Date().toISOString() });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/utilities/bill-bouquets?utilityCode=DSTV|GOTV
+ */
+router.get('/bill-bouquets', authUser, async (req, res, next) => {
+  try {
+    const utilityCode = String(req.query.utilityCode || req.query.billerId || 'DSTV');
+    const data = await utilityService.listBillBouquets(utilityCode);
     res.json({ status: 'ok', data, timestamp: new Date().toISOString() });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -204,6 +219,10 @@ router.post(
         subscriberAccount: req.body.subscriberAccount,
         billerServiceType: req.body.billerServiceType || req.body.serviceType,
         billerType: req.body.billerType,
+        area: req.body.area,
+        bouquetCode: req.body.bouquetCode,
+        notifyPhone: req.body.notifyPhone || req.body.recipientPhone,
+        customerName: req.body.customerName,
       });
 
       res.json({ status: 'ok', data: quote, timestamp: new Date().toISOString() });
@@ -298,8 +317,12 @@ router.get('/config', (req, res) => {
       limitsSource: 'reloadly',
       reloadlyMock: reloadlyClient.reloadlyIsMock(),
       reloadlyUtilitiesMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+      billsProvider: config.marzPay.enabled !== false ? 'marzpay' : 'reloadly',
+      marzPayMock: config.marzPay.mockMode || !config.marzPay.apiKey,
+      marzPayBillFeeFiat: config.marzPay.billFeeFiat,
       utilitiesStagingFallback: (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'
-        && process.env.RELOADLY_UTILITIES_STAGING_FALLBACK !== 'false',
+        && process.env.RELOADLY_UTILITIES_STAGING_FALLBACK !== 'false'
+        && config.marzPay.enabled === false,
       mockPurchaseAllowed: config.utilities.allowMockPurchase,
     },
     timestamp: new Date().toISOString(),

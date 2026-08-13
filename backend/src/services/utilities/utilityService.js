@@ -8,6 +8,7 @@ import config from '../../config/index.js';
 import countryService from '../countries/countryService.js';
 import reloadlyClient from './reloadlyClient.js';
 import reloadlyUtilityPaymentsClient from './reloadlyUtilityPaymentsClient.js';
+import marzPayClient from './marzPayClient.js';
 import { extractBundlesFromOperator } from './utilityBundles.js';
 import {
   assertFiatAmountAllowed,
@@ -49,20 +50,42 @@ function buildBillReferenceId(purchaseId) {
 
 function friendlyBillPayError(err) {
   const msg = err?.body?.message || err?.message || 'Bill payment failed';
-  const code = err?.body?.errorCode || err?.code;
+  const code = err?.body?.error_code || err?.body?.errorCode || err?.code;
   if (/insufficient.?balance/i.test(msg) || code === 'INSUFFICIENT_BALANCE') {
-    return 'Reloadly Utilities wallet balance is too low. Fund it in the Reloadly dashboard (Utilities wallet, not Top-ups), then retry.';
+    return 'Bill-pay wallet balance is too low. Fund the MarzPay UGX wallet, then retry.';
+  }
+  if (code === 'SERVICE_NOT_SUBSCRIBED') {
+    return 'Bill Payments is not enabled on the MarzPay account. Subscribe in the MarzPay marketplace.';
+  }
+  if (code === 'AMOUNT_MISMATCH') {
+    return msg;
+  }
+  if (code === 'VERIFICATION_FAILED' || code === 'INVALID_SUBSCRIBER_ACCOUNT_NUMBER') {
+    return 'Could not verify this meter or account number. Check the number and try again.';
+  }
+  if (code === 'DUPLICATE_REFERENCE' || code === 'INVALID_REFERENCE_FORMAT') {
+    return 'Payment reference error. Get a new quote and try once.';
   }
   if (/retrieve\/update resources/i.test(msg)) {
-    return 'The utility provider (e.g. Umeme) is temporarily unavailable. If USDC was already sent, save your memo and contact support — we will retry or refund.';
-  }
-  if (code === 'INVALID_SUBSCRIBER_ACCOUNT_NUMBER') {
-    return 'Invalid meter or account number for this provider. Check the number and try again.';
+    return 'The utility provider is temporarily unavailable. If USDC was already sent, save your memo and contact support.';
   }
   if (code === 'BILLER_NOT_SUPPORTED' || code === 'BILLER_NOT_FOUND') {
     return 'This bill provider is not available right now. Try another provider or contact support.';
   }
   return msg;
+}
+
+function readReceipt(row) {
+  if (!row?.receipt) return {};
+  try {
+    return typeof row.receipt === 'string' ? JSON.parse(row.receipt) : row.receipt;
+  } catch {
+    return {};
+  }
+}
+
+function billsViaMarzPay() {
+  return config.marzPay.enabled !== false;
 }
 
 async function insertUtilityQuote({
@@ -75,6 +98,8 @@ async function insertUtilityQuote({
   recipientValue,
   pricing,
   bundleLabel,
+  provider = 'reloadly',
+  receipt = {},
 }) {
   const memo = buildMemo();
   const expiresAt = new Date(Date.now() + config.utilities.quoteTtlSeconds * 1000);
@@ -84,8 +109,8 @@ async function insertUtilityQuote({
     `INSERT INTO utility_purchases
        (user_id, utility_type, country_code, network_code, operator_id, operator_name,
         recipient_phone, fiat_amount, fiat_currency, usdc_amount, platform_fee_usdc,
-        fx_rate, status, memo, expires_at, bundle_description)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'QUOTED', $13, $14, $15)
+        fx_rate, status, memo, expires_at, bundle_description, provider, receipt)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'QUOTED', $13, $14, $15, $16, $17::jsonb)
      RETURNING *`,
     [
       userId,
@@ -95,7 +120,7 @@ async function insertUtilityQuote({
       operatorId ? String(operatorId) : null,
       operatorName,
       recipientValue,
-      pricing.fiatAmount,
+      pricing.billFiatAmount ?? pricing.fiatAmount,
       pricing.fiatCurrency,
       pricing.totalUsdc,
       pricing.platformFeeUsdc,
@@ -103,11 +128,13 @@ async function insertUtilityQuote({
       memo,
       expiresAt,
       bundleLabel,
+      provider,
+      JSON.stringify(receipt || {}),
     ]
   );
 
   const reloadlyMock = utilityType === 'bill'
-    ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
+    ? (provider === 'marzpay' ? marzPayClient.marzPayIsMock() : reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock())
     : reloadlyClient.reloadlyIsMock();
 
   return formatPurchase(result.rows[0], {
@@ -213,13 +240,48 @@ export async function listBillers(countryCode) {
     throw err;
   }
 
+  if (billsViaMarzPay()) {
+    if (code !== 'UG') {
+      return {
+        billers: [],
+        countryCode: code,
+        provider: 'marzpay',
+        marzPayMock: marzPayClient.marzPayIsMock(),
+        billFeeFiat: marzPayClient.marzPayBillFeeFiat(),
+        message: 'MarzPay bills are available in Uganda first.',
+      };
+    }
+    const [services, areas] = await Promise.all([
+      marzPayClient.listBillServices(),
+      marzPayClient.listNwscAreas().catch(() => []),
+    ]);
+    return {
+      billers: marzPayClient.servicesToBillers(services, { countryCode: code, areas }),
+      countryCode: code,
+      provider: 'marzpay',
+      marzPayMock: marzPayClient.marzPayIsMock(),
+      billFeeFiat: marzPayClient.marzPayBillFeeFiat(),
+      nwscAreas: areas,
+    };
+  }
+
   const raw = await reloadlyUtilityPaymentsClient.getBillers({ countryISOCode: code });
   const billers = normalizeBillersResponse(raw);
   return {
     billers,
     countryCode: code,
+    provider: 'reloadly',
     reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
   };
+}
+
+export async function listBillBouquets(utilityCode) {
+  if (!billsViaMarzPay()) {
+    const err = new Error('Bouquet catalog requires MarzPay bills');
+    err.status = 400;
+    throw err;
+  }
+  return marzPayClient.listBouquetCodes(utilityCode);
 }
 
 export async function lookupBillAccount({
@@ -227,12 +289,28 @@ export async function lookupBillAccount({
   subscriberAccount,
   fiatAmount,
   billerServiceType,
+  area,
 }) {
   const account = normalizeSubscriberAccount(subscriberAccount);
   if (!billerId || !account || account.length < 4) {
     const err = new Error('billerId and subscriberAccount are required');
     err.status = 400;
     throw err;
+  }
+
+  if (billsViaMarzPay()) {
+    const verified = await marzPayClient.verifyBillAccount({
+      utilityCode: billerId,
+      meterNumber: account,
+      area,
+    });
+    return {
+      ...verified,
+      billerId: String(billerId),
+      subscriberAccount: account,
+      serviceType: verified.customerType || billerServiceType || null,
+      marzPayMock: marzPayClient.marzPayIsMock(),
+    };
   }
 
   const result = await reloadlyUtilityPaymentsClient.lookupBillAccount({
@@ -264,6 +342,10 @@ export async function createQuote({
   subscriberAccount,
   billerServiceType,
   billerType,
+  area,
+  bouquetCode,
+  notifyPhone,
+  customerName,
 }) {
   const code = String(countryCode || 'UG').trim().toUpperCase();
   const utilityType = String(requestedType || 'airtime').toLowerCase();
@@ -289,6 +371,29 @@ export async function createQuote({
 
     const currency = countryService.getCurrencyForCountry(code);
     const fiat = Number(fiatAmount);
+    const utilityCode = billsViaMarzPay()
+      ? marzPayClient.normalizeUtilityCode(operatorId)
+      : String(operatorId);
+    const needsArea = utilityCode === 'NWSC';
+    const needsBouquet = utilityCode === 'DSTV' || utilityCode === 'GOTV';
+    const providerFeeFiat = billsViaMarzPay() ? marzPayClient.marzPayBillFeeFiat() : 0;
+    const phone = normalizePhone(notifyPhone || recipientPhone, code);
+
+    if (needsArea && !String(area || '').trim()) {
+      const err = new Error('NWSC area is required (e.g. Kampala)');
+      err.status = 400;
+      throw err;
+    }
+    if (needsBouquet && !String(bouquetCode || '').trim()) {
+      const err = new Error('TV bouquet code is required');
+      err.status = 400;
+      throw err;
+    }
+    if (billsViaMarzPay() && (!phone || phone.length < 11)) {
+      const err = new Error('A Uganda phone number is required for bill confirmation SMS');
+      err.status = 400;
+      throw err;
+    }
     if (fiat < config.utilities.minFiatAmount || fiat > config.utilities.maxFiatAmount) {
       const err = new Error(
         `Amount must be between ${config.utilities.minFiatAmount} and ${config.utilities.maxFiatAmount} ${currency}`
@@ -297,12 +402,16 @@ export async function createQuote({
       throw err;
     }
 
+    const chargeableFiat = fiat + providerFeeFiat;
     const pricing = await utilityPricing.quoteUtilityPurchase({
-      fiatAmount: fiat,
+      fiatAmount: chargeableFiat,
       fiatCurrency: currency,
     });
+    pricing.billFiatAmount = fiat;
+    pricing.providerFeeFiat = providerFeeFiat;
+    pricing.chargeableFiat = chargeableFiat;
 
-    const resolvedBillerName = billerName || bundleDescription || `Biller ${operatorId}`;
+    const resolvedBillerName = billerName || bundleDescription || `Biller ${utilityCode}`;
     const billLabel = bundleDescription
       || `${resolvedBillerName}`.trim().slice(0, 500);
 
@@ -311,17 +420,29 @@ export async function createQuote({
       utilityType: 'bill',
       code,
       networkCode: 'BILL',
-      operatorId,
+      operatorId: utilityCode,
       operatorName: resolvedBillerName,
       recipientValue: account,
       pricing,
       bundleLabel: billLabel,
+      provider: billsViaMarzPay() ? 'marzpay' : 'reloadly',
+      receipt: {
+        provider: billsViaMarzPay() ? 'marzpay' : 'reloadly',
+        utilityCode,
+        area: area || null,
+        bouquetCode: bouquetCode || null,
+        notifyPhone: phone ? marzPayClient.formatMarzPhone(phone) : null,
+        customerName: customerName || null,
+        providerFeeFiat,
+      },
     });
 
     return {
       ...quote,
-      serviceType: billerServiceType || null,
+      serviceType: billerServiceType || (utilityCode === 'LIGHT' ? 'PREPAID' : null),
       billerType: billerType || null,
+      providerFeeFiat,
+      billFiatAmount: fiat,
     };
   }
 
@@ -456,19 +577,37 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
       err.status = 422;
       throw err;
     }
+    const billMeta = readReceipt(purchase);
     try {
-      const billPay = await reloadlyUtilityPaymentsClient.payBillForPurchase({
-        billerId: purchase.operator_id,
-        subscriberAccountNumber: purchase.recipient_phone,
-        amount: Number(purchase.fiat_amount),
-        useLocalAmount: true,
-        referenceId: buildBillReferenceId(purchase.id),
-        countryCode: purchase.country_code,
-      });
-      reloadlyResult = billPay.result;
-      billSettlementFallback = billPay.usedStagingFallback;
-      if (billPay.fallbackReason) {
-        reloadlyResult._fallbackReason = billPay.fallbackReason;
+      if (purchase.provider === 'marzpay' || billsViaMarzPay()) {
+        if (!billMeta.notifyPhone) {
+          throw Object.assign(new Error('Phone number missing on quote — get a new quote'), { status: 422 });
+        }
+        reloadlyResult = await marzPayClient.payBill({
+          reference: purchase.id,
+          utilityCode: purchase.operator_id,
+          meterNumber: purchase.recipient_phone,
+          phoneNumber: billMeta.notifyPhone,
+          amount: Number(purchase.fiat_amount),
+          area: billMeta.area,
+          bouquetCode: billMeta.bouquetCode,
+          customerName: billMeta.customerName,
+        });
+        reloadlyResult.provider = 'marzpay';
+      } else {
+        const billPay = await reloadlyUtilityPaymentsClient.payBillForPurchase({
+          billerId: purchase.operator_id,
+          subscriberAccountNumber: purchase.recipient_phone,
+          amount: Number(purchase.fiat_amount),
+          useLocalAmount: true,
+          referenceId: buildBillReferenceId(purchase.id),
+          countryCode: purchase.country_code,
+        });
+        reloadlyResult = billPay.result;
+        billSettlementFallback = billPay.usedStagingFallback;
+        if (billPay.fallbackReason) {
+          reloadlyResult._fallbackReason = billPay.fallbackReason;
+        }
       }
     } catch (err) {
       const reason = friendlyBillPayError(err);
@@ -478,10 +617,14 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
       wrap.code = err.code;
       throw wrap;
     }
-    externalRef = reloadlyResult.referenceId
+    externalRef = reloadlyResult.data?.transaction?.reference
+      || reloadlyResult.data?.transaction?.uuid
+      || reloadlyResult.data?.transaction?.provider_reference
+      || reloadlyResult.referenceId
       || reloadlyResult.transaction?.referenceId
       || reloadlyResult.id
-      || reloadlyResult.transactionId;
+      || reloadlyResult.transactionId
+      || purchase.id;
   } else {
     let operatorId = purchase.operator_id;
 
@@ -518,13 +661,19 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
       || reloadlyResult.customIdentifier;
   }
 
-  const finalStatus = purchase.utility_type === 'bill'
+  const rawBillStatus = purchase.utility_type === 'bill'
     ? String(
-      reloadlyResult?.transaction?.status
+      reloadlyResult?.data?.transaction?.status
+      || reloadlyResult?.transaction?.status
       || reloadlyResult?.status
       || 'COMPLETED'
     ).toUpperCase()
     : 'COMPLETED';
+  const finalStatus = rawBillStatus === 'SUCCESS' || rawBillStatus === 'SUCCESSFUL'
+    ? 'COMPLETED'
+    : rawBillStatus === 'PENDING'
+      ? 'PROCESSING'
+      : rawBillStatus;
   const purchaseStatus = finalStatus === 'FAILED'
     ? 'FAILED'
     : finalStatus === 'PROCESSING'
@@ -545,14 +694,20 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
       quoteId,
       purchase.utility_type === 'bill' ? purchase.operator_id : String(purchase.operator_id || ''),
       externalRef,
-      JSON.stringify(reloadlyResult),
+      JSON.stringify({
+        ...readReceipt(purchase),
+        ...reloadlyResult,
+        provider: purchase.provider || readReceipt(purchase).provider || 'reloadly',
+      }),
       purchaseStatus,
     ]
   );
 
   return formatPurchase(completed.rows[0], {
     reloadlyMock: purchase.utility_type === 'bill'
-      ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
+      ? (purchase.provider === 'marzpay' || billsViaMarzPay()
+        ? marzPayClient.marzPayIsMock()
+        : reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock())
       : reloadlyClient.reloadlyIsMock(),
     billSettlementFallback: purchase.utility_type === 'bill' ? billSettlementFallback : false,
   });
@@ -589,33 +744,43 @@ export async function refreshBillDelivery({ userId, purchaseId }) {
     receipt = null;
   }
 
-  const txId = getReloadlyTransactionId(receipt);
-  if (!txId) {
-    return formatPurchase(purchase, {
-      reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
-    });
-  }
-
+  const viaMarz = purchase.provider === 'marzpay' || receipt.provider === 'marzpay';
   let reloadlyResult;
   try {
-    reloadlyResult = await reloadlyUtilityPaymentsClient.waitForBillSettlement(
-      { id: txId, ...receipt },
-      { maxAttempts: 8, delayMs: 2500 }
-    );
+    if (viaMarz) {
+      reloadlyResult = await marzPayClient.waitForBillSettlement(purchase.id);
+      reloadlyResult.provider = 'marzpay';
+    } else {
+      const txId = getReloadlyTransactionId(receipt);
+      if (!txId) {
+        return formatPurchase(purchase, {
+          reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+        });
+      }
+      reloadlyResult = await reloadlyUtilityPaymentsClient.waitForBillSettlement(
+        { id: txId, ...receipt },
+        { maxAttempts: 8, delayMs: 2500 }
+      );
+    }
   } catch (err) {
     logger.warn('[UtilityService] refreshBillDelivery poll failed', {
       purchaseId,
       error: err.message,
     });
     return formatPurchase(purchase, {
-      reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+      reloadlyMock: viaMarz
+        ? marzPayClient.marzPayIsMock()
+        : reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
     });
   }
 
   const finalStatus = String(
-    reloadlyResult?.transaction?.status || reloadlyResult?.status || ''
+    reloadlyResult?.data?.transaction?.status
+    || reloadlyResult?.transaction?.status
+    || reloadlyResult?.status
+    || ''
   ).toUpperCase();
-  const purchaseStatus = finalStatus === 'SUCCESSFUL'
+  const purchaseStatus = finalStatus === 'SUCCESSFUL' || finalStatus === 'SUCCESS' || finalStatus === 'COMPLETED'
     ? 'COMPLETED'
     : finalStatus === 'FAILED'
       ? 'FAILED'
@@ -629,11 +794,13 @@ export async function refreshBillDelivery({ userId, purchaseId }) {
          updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
-    [purchaseId, purchaseStatus, JSON.stringify(reloadlyResult)]
+    [purchaseId, purchaseStatus, JSON.stringify({ ...receipt, ...reloadlyResult, provider: viaMarz ? 'marzpay' : (receipt.provider || 'reloadly') })]
   );
 
   return formatPurchase(updated.rows[0], {
-    reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+    reloadlyMock: viaMarz
+      ? marzPayClient.marzPayIsMock()
+      : reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
   });
 }
 
@@ -671,7 +838,7 @@ export async function getPurchaseById(userId, purchaseId) {
   }
   return formatPurchase(row, {
     reloadlyMock: row.utility_type === 'bill'
-      ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
+      ? (row.provider === 'marzpay' ? marzPayClient.marzPayIsMock() : reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock())
       : reloadlyClient.reloadlyIsMock(),
   });
 }
@@ -713,13 +880,16 @@ function formatPurchase(row, extra = {}) {
     reloadlyMock: extra.reloadlyMock ?? reloadlyClient.reloadlyIsMock(),
     pricing: extra.pricing,
     alreadyCompleted: extra.alreadyCompleted || false,
-    serviceType: extra.serviceType || null,
+    serviceType: extra.serviceType || receipt?.customerType || (row.operator_id === 'LIGHT' ? 'PREPAID' : null),
     billSettlementFallback: extra.billSettlementFallback || false,
     electricityEstimate: extra.electricityEstimate || null,
-    subscriberName: electricityDelivery?.customerName || extra.subscriberName || null,
+    subscriberName: electricityDelivery?.customerName || extra.subscriberName || receipt?.customerName || null,
     electricityToken: electricityDelivery?.token || null,
     electricityUnits: electricityDelivery?.unitsDisplay || electricityDelivery?.units || null,
     electricityUnitsSource: electricityDelivery?.source || null,
+    billsProvider: row.provider || receipt?.provider || null,
+    providerFeeFiat: extra.pricing?.providerFeeFiat ?? receipt?.providerFeeFiat ?? null,
+    billFiatAmount: extra.pricing?.billFiatAmount ?? Number(row.fiat_amount),
   };
 }
 
@@ -730,6 +900,7 @@ export default {
   getReloadlyDataAvailability,
   listDataBundles,
   listBillers,
+  listBillBouquets,
   lookupBillAccount,
   createQuote,
   completePurchase,

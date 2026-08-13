@@ -77,7 +77,7 @@ export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
               </p>
               {isPrepaidBill && !unitsFromReloadly && (
                 <p className="text-rowan-muted text-xs mt-2 leading-snug">
-                  Units & prepaid token from Reloadly appear on your receipt after payment.
+                  Units and prepaid token appear on your receipt after payment if the provider returns them.
                 </p>
               )}
             </>
@@ -115,11 +115,22 @@ export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
         {(quote.operatorName || quote.billerName) && labels.type === 'bill' && (
           <DetailRow label="Provider" value={quote.operatorName || quote.billerName} />
         )}
+        {quote.providerFeeFiat != null && Number(quote.providerFeeFiat) > 0 && (
+          <DetailRow
+            label="Bill service fee"
+            value={`${Number(quote.providerFeeFiat).toLocaleString()} ${currency}`}
+          />
+        )}
         {feeUsdc != null && (
           <DetailRow label="Platform fee" value={`${Number(feeUsdc).toFixed(4)} USDC`} />
         )}
-        {quote.reloadlyMock && (
-          <DetailRow label="Mode" value="Sandbox mock" />
+        {(quote.reloadlyMock || quote.billsProvider === 'marzpay') && (
+          <DetailRow
+            label="Bills rail"
+            value={quote.billsProvider === 'marzpay'
+              ? (quote.reloadlyMock ? 'MarzPay mock' : 'MarzPay')
+              : 'Sandbox mock'}
+          />
         )}
         {quote.billSettlementFallback && (
           <DetailRow
