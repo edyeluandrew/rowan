@@ -33,6 +33,20 @@ export function resolveFiatCurrency(...candidates) {
   return 'UGX'
 }
 
+/** Default utility amount bounds when API config is missing (local currency). */
+export const COUNTRY_UTILITY_LIMITS = {
+  UG: { min: 1000, max: 500000 },
+  KE: { min: 100, max: 50000 },
+  TZ: { min: 1000, max: 500000 },
+  RW: { min: 500, max: 500000 },
+  NG: { min: 500, max: 500000 },
+  GH: { min: 10, max: 5000 },
+}
+
+export function getUtilityLimitsForCountry(country) {
+  return COUNTRY_UTILITY_LIMITS[country] || COUNTRY_UTILITY_LIMITS.UG
+}
+
 export function getDialCodeForCountry(country) {
   return COUNTRY_CODES[country]?.code || '+256'
 }
