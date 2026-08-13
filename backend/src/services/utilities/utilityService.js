@@ -95,6 +95,13 @@ function airtimeViaMarzPay(countryCode = 'UG') {
   return config.marzPay.enabled !== false && String(countryCode || 'UG').toUpperCase() === 'UG';
 }
 
+function marzNetworkToRowan(detected) {
+  const code = String(detected || '').toUpperCase();
+  if (code === 'AIRTEL') return 'AIRTEL_UG';
+  if (code === 'LYCA') return 'LYCA_UG';
+  return 'MTN_UG';
+}
+
 async function insertUtilityQuote({
   userId,
   utilityType,
@@ -211,19 +218,22 @@ export async function getReloadlyTopupLimits({
     err.status = 400;
     throw err;
   }
-  if (!countryService.isValidNetworkForCountry(code, network)) {
-    const err = new Error(`Network ${network} is not valid for ${code}`);
-    err.status = 400;
-    throw err;
-  }
   if (!phone || phone.length < 9) {
     const err = new Error('Valid recipient phone is required');
     err.status = 400;
     throw err;
   }
-
   if (airtimeViaMarzPay(code)) {
-    return marzPayClient.getAirtimeLimits({ msisdn: phone, networkCode: network });
+    const limits = await marzPayClient.getAirtimeLimits({ msisdn: phone, networkCode: network });
+    return {
+      ...limits,
+      networkCode: marzNetworkToRowan(limits.detectedNetwork),
+    };
+  }
+  if (!countryService.isValidNetworkForCountry(code, network)) {
+    const err = new Error(`Network ${network} is not valid for ${code}`);
+    err.status = 400;
+    throw err;
   }
 
   return getTopupLimits({
@@ -491,22 +501,22 @@ export async function createQuote({
     };
   }
 
-  const network = String(networkCode || '').trim().toUpperCase();
   const phone = normalizePhone(recipientPhone, code);
-  if (!countryService.isValidNetworkForCountry(code, network)) {
-    const err = new Error(`Network ${network} is not valid for ${code}`);
-    err.status = 400;
-    throw err;
-  }
-
   const currency = countryService.getCurrencyForCountry(code);
   const fiat = Number(fiatAmount);
 
   if (airtimeViaMarzPay(code)) {
-    const limits = await marzPayClient.getAirtimeLimits({ msisdn: phone, networkCode: network });
+    const limits = await marzPayClient.getAirtimeLimits({
+      msisdn: phone,
+      networkCode: String(networkCode || '').trim().toUpperCase(),
+    });
+    const resolvedNetwork = marzNetworkToRowan(limits.detectedNetwork);
     let bundleId = null;
     if (utilityType === 'data') {
-      const catalog = await marzPayClient.listAirtimeBundles({ msisdn: phone, networkCode: network });
+      const catalog = await marzPayClient.listAirtimeBundles({
+        msisdn: phone,
+        networkCode: resolvedNetwork,
+      });
       const match = (catalog.bundles || []).find((b) => (
         String(b.bundleId || b.operatorId) === String(operatorId)
         || Number(b.fiatAmount) === fiat
@@ -541,7 +551,7 @@ export async function createQuote({
       userId,
       utilityType,
       code,
-      networkCode: network,
+      networkCode: resolvedNetwork,
       operatorId: bundleId || limits.operatorId,
       operatorName: limits.operatorName,
       recipientValue: phone,
@@ -555,6 +565,13 @@ export async function createQuote({
         detectedNetwork: limits.detectedNetwork,
       },
     });
+  }
+
+  const network = String(networkCode || '').trim().toUpperCase();
+  if (!countryService.isValidNetworkForCountry(code, network)) {
+    const err = new Error(`Network ${network} is not valid for ${code}`);
+    err.status = 400;
+    throw err;
   }
 
   const { operator, limits } = await resolveOperatorForPhone({

@@ -49,8 +49,11 @@ router.get('/limits', authUser, async (req, res, next) => {
     const recipientPhone = String(req.query.recipientPhone || '').trim();
     const utilityType = String(req.query.type || 'airtime').toLowerCase();
 
-    if (!networkCode || !recipientPhone) {
-      return res.status(400).json({ error: 'networkCode and recipientPhone are required' });
+    if (!recipientPhone) {
+      return res.status(400).json({ error: 'recipientPhone is required' });
+    }
+    if (!networkCode && country !== 'UG') {
+      return res.status(400).json({ error: 'networkCode is required' });
     }
 
     const data = await utilityService.getReloadlyTopupLimits({
@@ -94,8 +97,11 @@ router.get('/bundles', authUser, async (req, res, next) => {
     const country = String(req.query.country || 'UG').trim().toUpperCase();
     const networkCode = String(req.query.networkCode || '').trim().toUpperCase();
     const recipientPhone = String(req.query.recipientPhone || '').trim();
-    if (!networkCode || !recipientPhone) {
-      return res.status(400).json({ error: 'networkCode and recipientPhone are required' });
+    if (!recipientPhone) {
+      return res.status(400).json({ error: 'recipientPhone is required' });
+    }
+    if (!networkCode && country !== 'UG') {
+      return res.status(400).json({ error: 'networkCode is required' });
     }
     const data = await utilityService.listDataBundles({
       countryCode: country,
@@ -195,10 +201,14 @@ router.post(
           return res.status(400).json({ error: 'fiatAmount must be a positive number' });
         }
       } else {
-        const missing = ['country', 'networkCode', 'recipientPhone', 'fiatAmount']
+        const missing = ['country', 'recipientPhone', 'fiatAmount']
           .filter((f) => req.body[f] == null || req.body[f] === '');
         if (missing.length) {
           return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
+        }
+        const quoteCountry = String(req.body.country || 'UG').trim().toUpperCase();
+        if (!req.body.networkCode && quoteCountry !== 'UG') {
+          return res.status(400).json({ error: 'networkCode is required' });
         }
         const fiat = Number(req.body.fiatAmount);
         if (!Number.isFinite(fiat) || fiat <= 0) {

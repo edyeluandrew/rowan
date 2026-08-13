@@ -15,11 +15,9 @@ import {
   getUtilityOperators,
   getUtilityDataAvailability,
 } from '../api/utilities'
-import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
 import { getNetworksForCountry, getDialCodeForCountry } from '../utils/country'
 import { limitsFromReloadlyOperators } from '../utils/reloadlyOperatorMatch'
 import AmountInput from '../components/cashout/AmountInput'
-import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
 import DataBundlePicker from '../components/utilities/DataBundlePicker'
 import Button from '../components/ui/Button'
@@ -47,10 +45,8 @@ const UTILITY_META = {
   },
 }
 
-function buildFullPhone(phone, network, country) {
-  const networkConfig = NETWORKS[network]
-  const derivedCountryCode = networkConfig?.country || country
-  const dialCode = getDialCodeForCountry(derivedCountryCode)
+function buildFullPhone(phone, country) {
+  const dialCode = getDialCodeForCountry(country)
   const cleanPhone = phone.replace(/\D/g, '')
   if (cleanPhone.startsWith('256') || cleanPhone.startsWith('254') || cleanPhone.startsWith('255') || cleanPhone.startsWith('250') || cleanPhone.startsWith('234') || cleanPhone.startsWith('233')) {
     return cleanPhone
@@ -69,7 +65,6 @@ export default function Utilities({ utilityType = 'airtime' }) {
   const spendableUsdc = usdcAvailable ?? usdcBalance
   const { rates } = useRates(fiatCurrency)
   const [fiatAmount, setFiatAmount] = useState('')
-  const [network, setNetwork] = useState('')
   const [phone, setPhone] = useState('')
   const [selectedBundle, setSelectedBundle] = useState(null)
   const [bundles, setBundles] = useState([])
@@ -111,14 +106,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
     () => Object.keys(getNetworksForCountry(country)),
     [country]
   )
-
-  useEffect(() => {
-    if (countryNetworks.length > 0) {
-      setNetwork((prev) => (countryNetworks.includes(prev) ? prev : countryNetworks[0]))
-    } else {
-      setNetwork('')
-    }
-  }, [country, countryNetworks])
+  const dialNetwork = countryNetworks[0] || ''
 
   useEffect(() => {
     setSelectedBundle(null)
@@ -126,7 +114,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
     setBundleOperatorName(null)
   }, [country])
 
-  const currency = network ? NETWORKS[network]?.currency : fiatCurrency
+  const currency = fiatCurrency
   const usdcToFiatRate = rates?.usdcToFiat || 0
   const feePercent = utilityConfig?.feePercent ?? 1
   const minFiat = operatorLimits?.minFiatAmount ?? null
@@ -137,9 +125,11 @@ export default function Utilities({ utilityType = 'airtime' }) {
   const suggestedAmounts = operatorLimits?.suggestedAmounts || []
 
   const phoneValid = phone.replace(/\D/g, '').length >= 9
-  const fullPhone = phoneValid && network
-    ? buildFullPhone(phone, network, country)
-    : null
+  const fullPhone = phoneValid ? buildFullPhone(phone, country) : null
+  const detectedNetwork = operatorLimits?.networkCode
+    || operatorLimits?.detectedNetwork
+    || null
+  const detectedName = bundleOperatorName || operatorLimits?.operatorName || null
 
   const netFiat = isData
     ? (selectedBundle?.fiatAmount ?? 0)
@@ -158,7 +148,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
   const aboveMax = !isData && maxFiat != null && netFiat > maxFiat
 
   const loadBundles = useCallback(async () => {
-    if (!isData || !network || !fullPhone) return
+    if (!isData || !fullPhone) return
     // Soft gate: only hard-stop for corridors we know are empty (e.g. KE sandbox).
     // Still attempt plan load if availability is unknown — avoid false "no plans" from
     // mock/catalog glitches that previously blocked working UG Reloadly products.
@@ -178,11 +168,8 @@ export default function Utilities({ utilityType = 'airtime' }) {
     setBundlesError(null)
     setSelectedBundle(null)
     try {
-      const networkConfig = NETWORKS[network]
-      const derivedCountryCode = networkConfig?.country || country
       const catalog = await getUtilityBundles({
-        country: derivedCountryCode,
-        networkCode: network,
+        country,
         recipientPhone: fullPhone,
       })
       setBundles(catalog.bundles || [])
@@ -198,30 +185,27 @@ export default function Utilities({ utilityType = 'airtime' }) {
     } finally {
       setBundlesLoading(false)
     }
-  }, [isData, network, fullPhone, country, dataAvailability])
+  }, [isData, fullPhone, country, dataAvailability])
 
   useEffect(() => {
     if (!isData) return
-    if (!phoneValid || !network) {
+    if (!phoneValid) {
       setBundles([])
       setSelectedBundle(null)
       setBundlesError(null)
       return
     }
     loadBundles()
-  }, [isData, phoneValid, network, fullPhone, loadBundles])
+  }, [isData, phoneValid, fullPhone, loadBundles])
 
   const loadOperatorLimits = useCallback(async () => {
-    if (isData || !network || !fullPhone) return
+    if (isData || !fullPhone) return
     setLimitsLoading(true)
     setLimitsError(null)
     setOperatorLimits(null)
     try {
-      const networkConfig = NETWORKS[network]
-      const derivedCountryCode = networkConfig?.country || country
       const limits = await getUtilityLimits({
-        country: derivedCountryCode,
-        networkCode: network,
+        country,
         recipientPhone: fullPhone,
         type: 'airtime',
       })
@@ -230,10 +214,8 @@ export default function Utilities({ utilityType = 'airtime' }) {
       const status = err.response?.status
       if (status === 404) {
         try {
-          const networkConfig = NETWORKS[network]
-          const derivedCountryCode = networkConfig?.country || country
-          const operators = await getUtilityOperators(derivedCountryCode)
-          const fallback = limitsFromReloadlyOperators(operators, network, currency)
+          const operators = await getUtilityOperators(country)
+          const fallback = limitsFromReloadlyOperators(operators, dialNetwork, currency)
           if (fallback) {
             setOperatorLimits(fallback)
             setLimitsError(null)
@@ -248,23 +230,22 @@ export default function Utilities({ utilityType = 'airtime' }) {
     } finally {
       setLimitsLoading(false)
     }
-  }, [isData, network, fullPhone, country, currency])
+  }, [isData, fullPhone, country, currency, dialNetwork])
 
   useEffect(() => {
     if (isData) return
-    if (!phoneValid || !network) {
+    if (!phoneValid) {
       setOperatorLimits(null)
       setLimitsError(null)
       return
     }
     loadOperatorLimits()
-  }, [isData, phoneValid, network, fullPhone, loadOperatorLimits])
+  }, [isData, phoneValid, fullPhone, loadOperatorLimits])
 
   const canProceed = isData
     ? !!selectedBundle
       && hasUsdcTrustline !== false
       && !exceedsWallet
-      && network
       && phoneValid
     : netFiat > 0
       && minFiat != null
@@ -273,7 +254,6 @@ export default function Utilities({ utilityType = 'airtime' }) {
       && netFiat <= maxFiat
       && hasUsdcTrustline !== false
       && !exceedsWallet
-      && network
       && phoneValid
       && !limitsLoading
 
@@ -284,12 +264,8 @@ export default function Utilities({ utilityType = 'airtime' }) {
     setLoading(true)
     setError(null)
     try {
-      const networkConfig = NETWORKS[network]
-      const derivedCountryCode = networkConfig?.country || country
-
       const quote = await getUtilityQuote({
-        country: derivedCountryCode,
-        networkCode: network,
+        country,
         recipientPhone: fullPhone,
         fiatAmount: Math.round(netFiat),
         type: utilityType,
@@ -302,7 +278,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
       navigate('/wallet/utilities/confirm', {
         state: {
           quote,
-          network,
+          network: quote.networkCode || detectedNetwork,
           phone: fullPhone,
           utilityType,
           mockPurchaseAllowed: utilityConfig?.mockPurchaseAllowed,
@@ -364,13 +340,14 @@ export default function Utilities({ utilityType = 'airtime' }) {
         </div>
       </div>
 
-      <div className="mt-2">
-        <NetworkSelector selected={network} onSelect={setNetwork} country={country} />
-      </div>
-
       <div className="mt-6">
-        <PhoneInput phone={phone} onPhoneChange={setPhone} network={network} />
+        <PhoneInput phone={phone} onPhoneChange={setPhone} network={dialNetwork} />
         <p className="text-rowan-muted text-xs mt-2 px-1">{meta.phoneHint}</p>
+        {detectedName && (
+          <p className="text-rowan-green text-xs mt-2 px-1">
+            Detected network: {detectedName}
+          </p>
+        )}
       </div>
 
       {isData ? (
