@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /wallet
+Disallow: /wallet/
+Disallow: /wallet-setup
+Disallow: /create-wallet
+Disallow: /backup-wallet
+Disallow: /import-wallet
+Disallow: /register
+Disallow: /wallet-2fa-verify
+
+Sitemap: https://rowanpay.app/sitemap.xml

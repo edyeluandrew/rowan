@@ -1,0 +1,24 @@
+{
+  "name": "Rowan",
+  "short_name": "Rowan",
+  "description": "Mobile money and digital asset infrastructure for Africa",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F9F7",
+  "theme_color": "#12B81A",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -4,25 +4,28 @@ import { ArrowLeftRight, Shield, Smartphone, Wallet } from 'lucide-react'
 export function FeatureGrid({ className = '' }) {
   const items = [
     { Icon: Wallet, label: 'USDC wallet', hint: 'Hold dollars on Stellar' },
-    { Icon: ArrowLeftRight, label: 'Buy & sell', hint: 'Match traders live' },
-    { Icon: Smartphone, label: 'Mobile money', hint: 'MTN, Airtel & more' },
+    { Icon: ArrowLeftRight, label: 'Buy & sell', hint: 'Match traders with escrow' },
+    { Icon: Smartphone, label: 'Mobile money', hint: 'MTN, Airtel & local rails' },
     { Icon: Shield, label: 'Escrow safe', hint: 'Confirm before release' },
   ]
 
   return (
-    <div className={`grid grid-cols-2 gap-2.5 sm:gap-3 ${className}`}>
-      {items.map(({ Icon, label, hint }) => (
-        <div
-          key={label}
-          className="rounded-2xl bg-white/90 border border-rowan-border/80 px-3 py-3 sm:px-4 sm:py-3.5 shadow-sm"
-        >
-          <div className="w-9 h-9 rounded-xl bg-rowan-mint flex items-center justify-center mb-2">
-            <Icon size={18} className="text-rowan-green" strokeWidth={2} />
-          </div>
-          <p className="text-sm font-semibold text-rowan-text font-sans">{label}</p>
-          <p className="text-xs text-rowan-muted mt-0.5 font-sans leading-snug">{hint}</p>
-        </div>
-      ))}
+    <div className={className}>
+      <h2 className="sr-only">What Rowan offers</h2>
+      <ul className="grid grid-cols-2 gap-2.5 sm:gap-3 list-none m-0 p-0">
+        {items.map(({ Icon, label, hint }) => (
+          <li
+            key={label}
+            className="rounded-2xl bg-white/90 border border-rowan-border/80 px-3 py-3 sm:px-4 sm:py-3.5 shadow-sm"
+          >
+            <div className="w-9 h-9 rounded-xl bg-rowan-mint flex items-center justify-center mb-2" aria-hidden="true">
+              <Icon size={18} className="text-rowan-green" strokeWidth={2} />
+            </div>
+            <p className="text-sm font-semibold text-rowan-text font-sans m-0">{label}</p>
+            <p className="text-xs text-rowan-muted mt-0.5 font-sans leading-snug m-0">{hint}</p>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

@@ -2,16 +2,104 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rowan | Mobile Money &amp; Digital Asset Infrastructure</title>
+    <meta
+      name="description"
+      content="Send and receive USDC, cash out to mobile money, and pay airtime, data, and bills. All in one Rowan wallet."
+    />
+    <meta name="theme-color" content="#12B81A" />
+    <meta name="application-name" content="Rowan" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://rowanpay.app/" />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="shortcut icon" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Rowan — Buy & sell USDC</title>
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Rowan" />
+    <meta property="og:title" content="Rowan | Mobile Money &amp; Digital Asset Infrastructure" />
+    <meta
+      property="og:description"
+      content="Send and receive USDC, cash out to mobile money, and pay airtime, data, and bills. All in one Rowan wallet."
+    />
+    <meta property="og:url" content="https://rowanpay.app/" />
+    <meta property="og:image" content="https://rowanpay.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Rowan: mobile money and digital asset infrastructure" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- X / Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Rowan | Mobile Money &amp; Digital Asset Infrastructure" />
+    <meta
+      name="twitter:description"
+      content="Send and receive USDC, cash out to mobile money, and pay airtime, data, and bills. All in one Rowan wallet."
+    />
+    <meta name="twitter:image" content="https://rowanpay.app/og-image.png" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "name": "Rowan",
+            "url": "https://rowanpay.app",
+            "logo": "https://rowanpay.app/favicon.svg",
+            "description": "Send and receive USDC, cash out to mobile money, and pay airtime, data, and bills. All in one Rowan wallet."
+          },
+          {
+            "@type": "WebSite",
+            "name": "Rowan",
+            "url": "https://rowanpay.app",
+            "description": "Send and receive USDC, cash out to mobile money, and pay airtime, data, and bills. All in one Rowan wallet.",
+            "publisher": {
+              "@type": "Organization",
+              "name": "Rowan",
+              "url": "https://rowanpay.app"
+            }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Rowan",
+            "applicationCategory": "FinanceApplication",
+            "operatingSystem": "Web",
+            "url": "https://rowanpay.app",
+            "description": "Send and receive USDC, cash out to mobile money, and pay airtime, data, and bills. All in one Rowan wallet.",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <main style="max-width:40rem;margin:2rem auto;padding:0 1.25rem;font-family:system-ui,sans-serif;color:#22272B;line-height:1.5">
+        <h1>Rowan: send, receive, and spend USDC</h1>
+        <p>
+          Send and receive USDC, cash out to mobile money, and pay airtime, data, and bills. All in one Rowan wallet.
+          Escrow-protected buy and sell with MTN and Airtel.
+        </p>
+        <p><a href="https://rowanpay.app/">Enable JavaScript to open the Rowan wallet</a>.</p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
