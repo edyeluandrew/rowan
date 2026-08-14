@@ -1,17 +1,30 @@
 /**
- * Landing — responsive, simple, exquisite.
- * Desktop: brand + features | actions.
- * Mobile: stacked hero → Get started.
- * Public SEO surface for https://rowanpay.app/
+ * Public landing page for https://rowanpay.app/
+ * Hero → rails → how it works → features → bills → security → coverage → FAQ → CTA → footer.
+ * Also the wallet entry point (create / open / import).
  */
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { ArrowRight, RefreshCw } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowRight, RefreshCw, ShieldCheck, Zap, Smartphone } from 'lucide-react'
 import { useAuth } from './context/AuthContext'
 import { getSecure } from './shared/utils/storage'
 import { formatAddress } from './wallet/utils/format'
 import WalletTwoFactorLoginModal from './wallet/pages/WalletTwoFactorLoginModal'
-import { FeatureGrid, TrustLine } from './wallet/components/onboarding/OnboardingBits'
+import { TrustLine } from './wallet/components/onboarding/OnboardingBits'
+import LandingStoryVisual from './components/LandingStoryVisual'
+import SiteHeader from './components/landing/SiteHeader'
+import Reveal from './components/landing/Reveal'
+import {
+  RailsStrip,
+  HowItWorks,
+  Features,
+  BillsSection,
+  Security,
+  Coverage,
+  Faq,
+  FaqJsonLd,
+  SiteFooter,
+} from './components/landing/Sections'
 
 export default function Login() {
   const { loginWithWallet, setWalletAuthAfter2FA } = useAuth()
@@ -74,120 +87,174 @@ export default function Login() {
     }
   }
 
+  const primaryAction = () => {
+    if (storedPublicKey) return handleOpenWallet()
+    return navigate('/wallet-setup')
+  }
+  const primaryLabel = storedPublicKey ? 'Open wallet' : 'Get started'
+
   return (
-    <div className="min-h-[100dvh] overflow-y-auto bg-rowan-bg text-rowan-text">
+    <div className="relative min-h-[100dvh] bg-rowan-bg text-rowan-text">
       <div
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_100%_60%_at_10%_0%,rgba(18,184,26,0.14),transparent_50%),radial-gradient(ellipse_70%_40%_at_100%_100%,rgba(18,184,26,0.06),transparent_45%)]"
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_100%_60%_at_50%_0%,rgba(18,184,26,0.14),transparent_55%),radial-gradient(ellipse_70%_40%_at_100%_100%,rgba(18,184,26,0.06),transparent_45%)]"
         aria-hidden="true"
       />
 
-      <header className="relative mx-auto w-full max-w-6xl px-5 sm:px-8 lg:px-12 pt-6 safe-top">
-        <p className="font-serif text-2xl sm:text-3xl text-rowan-green tracking-tight leading-none">
-          <Link to="/" className="hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-rowan-green rounded-sm">
-            Rowan
-          </Link>
-        </p>
-      </header>
+      <div className="relative">
+        <SiteHeader ctaLabel={primaryLabel} onCta={primaryAction} />
 
-      <main className="relative mx-auto min-h-[calc(100dvh-8rem)] w-full max-w-6xl grid lg:grid-cols-2 lg:items-stretch">
-        {/* Brand panel */}
-        <section className="flex flex-col justify-center px-5 sm:px-8 lg:px-12 pt-6 pb-6 lg:py-12" aria-labelledby="rowan-hero-heading">
-          <h1 id="rowan-hero-heading" className="font-serif text-2xl sm:text-3xl lg:text-[2.15rem] text-rowan-text leading-snug max-w-md">
-            Payment and liquidity infrastructure for Africa
-          </h1>
-          <p className="mt-3 text-sm sm:text-base text-rowan-muted leading-relaxed max-w-md font-sans">
-            Send and receive USDC, cash out to MTN or Airtel, and spend on airtime, data, and bills. Escrow protected, in one wallet.
-          </p>
-          <FeatureGrid className="mt-8 sm:mt-10 max-w-md" />
-        </section>
+        <main>
+          {/* —— Hero —— */}
+          <section className="pt-8 pb-14 sm:pt-12 sm:pb-20 lg:pt-16 lg:pb-24" aria-labelledby="rowan-hero-heading">
+            <div className="mx-auto w-full max-w-6xl px-5 sm:px-8 lg:px-12">
+              <div className="grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-14">
+                <div>
+                  <Reveal>
+                    <p className="inline-flex items-center gap-2 rounded-full border border-rowan-green/30 bg-rowan-mint px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-rowan-green-dark font-sans">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rowan-green animate-pulse" aria-hidden="true" />
+                      Live in Uganda
+                    </p>
+                  </Reveal>
 
-        {/* Actions panel */}
-        <section className="flex items-end lg:items-center justify-center px-5 sm:px-8 lg:px-12 pb-8 pt-2 lg:py-12 safe-bottom" aria-labelledby="rowan-cta-heading">
-          <div className="w-full max-w-md rounded-3xl bg-white border border-rowan-border shadow-[0_16px_48px_rgba(11,15,12,0.08)] p-6 sm:p-8">
-            {storedPublicKey ? (
-              <>
-                <p className="text-xs uppercase tracking-[0.14em] text-rowan-muted font-sans mb-2">
-                  Welcome back
-                </p>
-                <h2 id="rowan-cta-heading" className="font-serif text-2xl text-rowan-text">Open your wallet</h2>
-                <p className="mt-2 text-sm text-rowan-muted font-sans">
-                  A wallet is ready on this device.
-                </p>
-                <p className="mt-4 font-mono text-xs sm:text-sm text-rowan-text bg-rowan-mint rounded-2xl px-3.5 py-3 break-all">
-                  {formatAddress(storedPublicKey)}
-                </p>
-                {walletError && (
-                  <p className="text-rowan-red text-sm mt-3" role="alert">{walletError}</p>
-                )}
-                <button
-                  type="button"
-                  disabled={walletLoading}
-                  onClick={handleOpenWallet}
-                  className="mt-6 w-full min-h-12 rounded-2xl bg-rowan-green text-white font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-60 transition active:scale-[0.99]"
-                >
-                  {walletLoading ? (
-                    <>
-                      <RefreshCw size={18} className="animate-spin" aria-hidden="true" />
-                      Opening…
-                    </>
-                  ) : (
-                    <>
-                      Open wallet
-                      <ArrowRight size={18} aria-hidden="true" />
-                    </>
+                  <Reveal delay={80}>
+                    <h1
+                      id="rowan-hero-heading"
+                      className="mt-5 font-serif text-[2rem] leading-[1.15] sm:text-[2.6rem] lg:text-[3.1rem] text-rowan-text"
+                    >
+                      Payment and liquidity infrastructure for Africa
+                    </h1>
+                  </Reveal>
+
+                  <Reveal delay={140}>
+                    <p className="mt-4 max-w-lg text-base sm:text-lg text-rowan-muted font-sans leading-relaxed">
+                      Send and receive USDC, cash out to MTN or Airtel, and spend on airtime, data and bills.
+                      Escrow protected, in one wallet.
+                    </p>
+                  </Reveal>
+
+                  <Reveal delay={200}>
+                    <div className="mt-7 flex flex-col sm:flex-row gap-3">
+                      <button
+                        type="button"
+                        onClick={primaryAction}
+                        disabled={walletLoading}
+                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-rowan-green px-6 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(18,184,26,0.28)] transition active:scale-[0.99] disabled:opacity-60"
+                      >
+                        {walletLoading ? (
+                          <>
+                            <RefreshCw size={18} className="animate-spin" aria-hidden="true" />
+                            Opening…
+                          </>
+                        ) : (
+                          <>
+                            {primaryLabel}
+                            <ArrowRight size={18} aria-hidden="true" />
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/import-wallet')}
+                        className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-rowan-border bg-white px-6 text-sm font-medium text-rowan-text transition hover:bg-rowan-mint/50 font-sans"
+                      >
+                        {storedPublicKey ? 'Use a different wallet' : 'I already have a wallet'}
+                      </button>
+                    </div>
+                  </Reveal>
+
+                  {storedPublicKey && (
+                    <p className="mt-4 inline-block font-mono text-xs text-rowan-text bg-rowan-mint rounded-xl px-3 py-2">
+                      {formatAddress(storedPublicKey)}
+                    </p>
                   )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/import-wallet')}
-                  className="w-full mt-3 min-h-11 text-sm text-rowan-muted hover:text-rowan-text font-sans"
-                >
-                  Use a different wallet
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="text-xs uppercase tracking-[0.14em] text-rowan-muted font-sans mb-2">
-                  New here?
-                </p>
-                <h2 id="rowan-cta-heading" className="font-serif text-2xl sm:text-3xl text-rowan-text">Get started</h2>
-                <p className="mt-2 text-sm text-rowan-muted font-sans leading-relaxed">
-                  Create a free wallet in about a minute, or import one you already use on Stellar.
-                </p>
-                {walletError && (
-                  <p className="text-rowan-red text-sm mt-3" role="alert">{walletError}</p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => navigate('/wallet-setup')}
-                  className="mt-6 w-full min-h-12 rounded-2xl bg-rowan-green text-white font-semibold inline-flex items-center justify-center gap-2 transition active:scale-[0.99] shadow-[0_8px_24px_rgba(18,184,26,0.25)]"
-                >
-                  Get started
-                  <ArrowRight size={18} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/import-wallet')}
-                  className="w-full mt-3 min-h-12 rounded-2xl border border-rowan-border text-rowan-text font-medium hover:bg-rowan-mint/40 transition font-sans"
-                >
-                  I already have a wallet
-                </button>
-              </>
-            )}
 
-            <div className="mt-6 pt-5 border-t border-rowan-border/70">
-              <TrustLine />
+                  {walletError && (
+                    <p className="mt-3 text-sm text-rowan-red" role="alert">{walletError}</p>
+                  )}
+
+                  <Reveal delay={260}>
+                    <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-3 list-none p-0 m-0">
+                      {[
+                        { Icon: ShieldCheck, label: 'Escrow protected' },
+                        { Icon: Zap, label: 'Payouts in minutes' },
+                        { Icon: Smartphone, label: 'MTN & Airtel' },
+                      ].map(({ Icon, label }) => (
+                        <li key={label} className="flex items-center gap-2">
+                          <Icon size={15} className="text-rowan-green" aria-hidden="true" />
+                          <span className="text-xs sm:text-sm text-rowan-muted font-sans">{label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </Reveal>
+                </div>
+
+                <Reveal className="flex justify-center lg:justify-end" delay={120}>
+                  <LandingStoryVisual />
+                </Reveal>
+              </div>
             </div>
-          </div>
-        </section>
-      </main>
+          </section>
 
-      <footer className="relative mx-auto w-full max-w-6xl px-5 sm:px-8 lg:px-12 pb-8 pt-2 safe-bottom">
-        <p className="text-[11px] sm:text-xs text-rowan-muted font-sans max-w-xl leading-relaxed">
-          Rowan is a USDC wallet for Africa. Send and receive, cash out to mobile money, and pay airtime, data, and utility bills in-app.
-          Keys stay on your device.
-        </p>
-      </footer>
+          <RailsStrip />
+          <HowItWorks />
+          <Features />
+          <BillsSection />
+          <Security />
+          <Coverage />
+          <Faq />
+
+          {/* —— Closing CTA —— */}
+          <section className="py-16 sm:py-20 lg:py-24" aria-labelledby="rowan-cta-heading">
+            <div className="mx-auto w-full max-w-6xl px-5 sm:px-8 lg:px-12">
+              <Reveal>
+                <div className="relative overflow-hidden rounded-3xl border border-rowan-green/25 bg-rowan-mint px-6 py-10 sm:px-10 sm:py-14 text-center">
+                  <div
+                    className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_50%_0%,rgba(18,184,26,0.18),transparent_60%)]"
+                    aria-hidden="true"
+                  />
+                  <div className="relative mx-auto max-w-xl">
+                    <h2 id="rowan-cta-heading" className="font-serif text-2xl sm:text-3xl lg:text-[2.1rem] text-rowan-text leading-snug">
+                      {storedPublicKey ? 'Your wallet is ready' : 'Create your wallet in about a minute'}
+                    </h2>
+                    <p className="mt-3 text-sm sm:text-base text-rowan-muted font-sans leading-relaxed">
+                      {storedPublicKey
+                        ? 'Pick up where you left off. Everything stays on this device.'
+                        : 'Free to create, no paperwork to start, and your keys never leave your device.'}
+                    </p>
+
+                    <div className="mt-7 flex flex-col sm:flex-row sm:justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={primaryAction}
+                        disabled={walletLoading}
+                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-rowan-green px-7 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(18,184,26,0.28)] transition active:scale-[0.99] disabled:opacity-60"
+                      >
+                        {primaryLabel}
+                        <ArrowRight size={18} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/import-wallet')}
+                        className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-rowan-border bg-white px-7 text-sm font-medium text-rowan-text transition hover:bg-white/70 font-sans"
+                      >
+                        Import a wallet
+                      </button>
+                    </div>
+
+                    <div className="mt-7">
+                      <TrustLine />
+                    </div>
+                  </div>
+                </div>
+              </Reveal>
+            </div>
+          </section>
+        </main>
+
+        <SiteFooter />
+      </div>
+
+      <FaqJsonLd />
 
       <WalletTwoFactorLoginModal
         isVisible={show2faModal}

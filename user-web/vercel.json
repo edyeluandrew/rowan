@@ -34,16 +34,9 @@
       ]
     }
   ],
-  "redirects": [
-    {
-      "source": "/favicon.ico",
-      "destination": "/favicon.svg",
-      "permanent": false
-    }
-  ],
   "rewrites": [
     {
-      "source": "/((?!robots\\.txt|sitemap\\.xml|og-image\\.png|favicon\\.svg|apple-touch-icon\\.png|site\\.webmanifest).*)",
+      "source": "/((?!.*\\.(?:png|ico|svg|webmanifest|txt|xml|json|webp)$).*)",
       "destination": "/index.html"
     }
   ]
