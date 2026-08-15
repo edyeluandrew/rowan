@@ -113,12 +113,8 @@ export default function ExpressSheet({ open, onClose, initialSide = 'buy' }) {
 
     navigate('/wallet/cashout', {
       state: {
-        selectedAd: ad,
-        payoutSettingId: ad.payoutSettingId,
-        traderName: trader.traderName,
-        network: ad.network,
-        prefillFiat: String(preview.estimatedFiat ?? preview.fiatAmount),
-        expressMatch: true,
+        network: network || ad.network,
+        prefillFiat: String(preview.estimatedFiat ?? preview.fiatAmount || ''),
       },
     })
   }
@@ -158,7 +154,10 @@ export default function ExpressSheet({ open, onClose, initialSide = 'buy' }) {
             </button>
             <button
               type="button"
-              onClick={() => { setSide('sell'); setAmount(''); setPreview(null); setError(null) }}
+              onClick={() => {
+                onClose?.()
+                navigate('/wallet/cashout')
+              }}
               className={`flex-1 py-2.5 rounded-lg text-sm font-semibold min-h-11 ${
                 !isBuy ? 'bg-rowan-green text-white' : 'text-rowan-muted'
               }`}

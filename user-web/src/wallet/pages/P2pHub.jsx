@@ -148,7 +148,7 @@ export default function P2pHub() {
               </button>
               <button
                 type="button"
-                onClick={() => setTab('sell')}
+                onClick={() => navigate('/wallet/cashout')}
                 className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-semibold min-h-11 transition-colors ${
                   tab === 'sell' ? 'bg-rowan-green text-white' : 'text-rowan-muted'
                 }`}
@@ -159,7 +159,7 @@ export default function P2pHub() {
             <button
               type="button"
               disabled={hasActiveOrder}
-              onClick={() => setExpressOpen(true)}
+              onClick={() => (tab === 'sell' ? navigate('/wallet/cashout') : setExpressOpen(true))}
               className="shrink-0 inline-flex items-center gap-1.5 bg-rowan-surface border border-rowan-border rounded-xl px-3 py-2.5 min-h-11 text-rowan-text text-sm font-semibold disabled:opacity-50"
             >
               <Zap size={16} className="text-rowan-gold shrink-0" />

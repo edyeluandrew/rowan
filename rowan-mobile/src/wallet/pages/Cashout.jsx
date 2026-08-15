@@ -229,7 +229,10 @@ export default function Cashout() {
 
       {!selectedAd && !presetTraderName && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
-          <p className="text-rowan-text text-sm font-medium">Express sell</p>
+          <p className="text-rowan-text text-sm font-medium">Cash out to your phone</p>
+          <p className="text-rowan-muted text-xs mt-1">
+            We send mobile money to your MTN or Airtel number. No trader.
+          </p>
         </div>
       )}
 

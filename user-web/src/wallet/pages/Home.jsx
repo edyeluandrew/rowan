@@ -60,8 +60,7 @@ const ACTIONS = [
     key: 'sell',
     label: 'Sell',
     Icon: ArrowUpFromLine,
-    path: '/wallet/p2p',
-    state: { tab: 'sell' },
+    path: '/wallet/cashout',
     needsOrderLock: true,
   },
   {
