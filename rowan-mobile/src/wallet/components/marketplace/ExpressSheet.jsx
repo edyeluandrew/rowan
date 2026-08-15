@@ -114,7 +114,7 @@ export default function ExpressSheet({ open, onClose, initialSide = 'buy' }) {
     navigate('/wallet/cashout', {
       state: {
         network: network || ad.network,
-        prefillFiat: String(preview.estimatedFiat ?? preview.fiatAmount || ''),
+        prefillFiat: String(preview.estimatedFiat ?? preview.fiatAmount ?? ''),
       },
     })
   }
