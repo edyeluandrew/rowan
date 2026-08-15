@@ -11,6 +11,7 @@
     "script:bootstrap": "node scripts/bootstrapEscrow.js",
     "script:utility-trustline": "node scripts/bootstrapUtilityTreasuryTrustline.mjs",
     "script:genkey": "node scripts/genKey.mjs",
+    "script:marzpay-settlement": "node scripts/bootstrapMarzPaySettlement.mjs --write-env",
     "script:seed-admin": "node scripts/seedAdmin.js",
     "script:test-db": "node scripts/testDb.mjs",
     "script:test-webauth": "node scripts/testDbDirect.mjs",

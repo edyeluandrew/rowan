@@ -231,6 +231,18 @@ const config = {
     apiSecret: process.env.MARZPAY_API_SECRET || '',
     baseUrl: (process.env.MARZPAY_BASE_URL || 'https://wallet.wearemarz.com/api/v1').replace(/\/$/, ''),
     billFeeFiat: parseInt(process.env.MARZPAY_BILL_FEE_UGX, 10) || 1200,
+    webhookSecret: process.env.MARZPAY_WEBHOOK_SECRET || '',
+    webhookUrl: process.env.MARZPAY_WEBHOOK_URL || '',
+    settlementStellarAddress: process.env.MARZPAY_SETTLEMENT_STELLAR || '',
+    feeStellarAddress: process.env.MARZPAY_FEE_STELLAR
+      || process.env.UTILITY_USDC_PUBLIC_KEY
+      || '',
+    offrampCountries: (process.env.MARZPAY_OFFRAMP_COUNTRIES || 'UG')
+      .split(',')
+      .map((c) => c.trim().toUpperCase())
+      .filter(Boolean),
+    sendMoneyMinFiat: parseInt(process.env.MARZPAY_SEND_MIN_UGX, 10) || 500,
+    sendMoneyMaxFiat: parseInt(process.env.MARZPAY_SEND_MAX_UGX, 10) || 10000000,
   },
 
   // Phase 2 C1/C9 — Yellow Card / Yellow Pay (automated MoMo on/off-ramp)

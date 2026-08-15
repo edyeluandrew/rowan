@@ -1007,6 +1007,147 @@ async function releaseToSettlement(transactionId) {
   }
 }
 
+function splitUsdcForMarzPay(usdcAmount, feeFiat, netFiat) {
+  const total = Number(usdcAmount);
+  const fee = Number(feeFiat) || 0;
+  const net = Number(netFiat) || 0;
+  const denom = fee + net;
+  if (!Number.isFinite(total) || total <= 0) {
+    throw new Error(`Invalid USDC amount for MarzPay split: ${usdcAmount}`);
+  }
+  if (!(denom > 0) || fee <= 0) {
+    return { principal: total.toFixed(7), fee: '0.0000000' };
+  }
+  let feeUsdc = Math.floor(((total * fee) / denom) * 1e7) / 1e7;
+  if (feeUsdc < 0.0000001) feeUsdc = 0;
+  if (feeUsdc >= total) feeUsdc = 0;
+  const principal = Number((total - feeUsdc).toFixed(7));
+  return { principal: principal.toFixed(7), fee: feeUsdc.toFixed(7) };
+}
+
+/**
+ * After MarzPay disbursement.completed: send principal USDC to their Stellar
+ * address and the platform fee to Rowan's fee wallet.
+ */
+async function releaseToMarzPaySettlement(transactionId) {
+  const settlementAddress = config.marzPay?.settlementStellarAddress;
+  if (!settlementAddress) {
+    throw new Error('MarzPay settlement Stellar address not configured (MARZPAY_SETTLEMENT_STELLAR)');
+  }
+
+  const lockKey = `lock:release:${transactionId}`;
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', config.platform.redisLockTtlReleaseSeconds, 'NX');
+  if (!lockAcquired) {
+    logger.warn(`[Escrow] MarzPay settlement release lock held for tx ${transactionId}`);
+    return null;
+  }
+
+  try {
+    const txResult = await db.query(
+      `SELECT t.*, q.platform_fee
+       FROM transactions t
+       LEFT JOIN quotes q ON q.id = t.quote_id
+       WHERE t.id = $1
+         AND t.payout_provider = 'marz_pay'
+         AND t.state IN ('FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'DISPUTE_RELEASE_PENDING', 'RELEASE_BLOCKED')`,
+      [transactionId]
+    );
+    const transaction = txResult.rows[0];
+    if (!transaction) {
+      throw new Error('MarzPay transaction not found or wrong state');
+    }
+
+    if (transaction.stellar_release_tx) {
+      return transaction.stellar_release_tx;
+    }
+
+    const split = splitUsdcForMarzPay(
+      transaction.usdc_amount,
+      transaction.platform_fee,
+      transaction.fiat_amount
+    );
+    const feeAddress = String(config.marzPay?.feeStellarAddress || '').trim();
+    const sendFee = Number(split.fee) > 0 && feeAddress && feeAddress !== settlementAddress;
+
+    const escrowAccount = await horizon.loadAccount(config.stellar.escrowPublicKey);
+    const builder = new StellarSdk.TransactionBuilder(escrowAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    }).addOperation(
+      StellarSdk.Operation.payment({
+        destination: settlementAddress,
+        asset: USDC_ASSET,
+        amount: split.principal,
+      })
+    );
+
+    if (sendFee) {
+      builder.addOperation(
+        StellarSdk.Operation.payment({
+          destination: feeAddress,
+          asset: USDC_ASSET,
+          amount: split.fee,
+        })
+      );
+    }
+
+    const stellarTx = builder.setTimeout(30).build();
+    stellarTx.sign(escrowKeypair);
+    const result = await horizon.submitTransaction(stellarTx);
+
+    if (transaction.platform_fee != null) {
+      const feeInFiat = parseFloat(transaction.platform_fee);
+      const currency = transaction.fiat_currency || 'UGX';
+      const KES_TO_UGX_r = config.usdcFiatRates.UGX / config.usdcFiatRates.KES;
+      const TZS_TO_UGX_r = config.usdcFiatRates.UGX / config.usdcFiatRates.TZS;
+      const revenueUgx = currency === 'KES' ? Math.round(feeInFiat * KES_TO_UGX_r)
+                       : currency === 'TZS' ? Math.round(feeInFiat * TZS_TO_UGX_r)
+                       : Math.round(feeInFiat);
+      await db.query(
+        `UPDATE transactions SET platform_revenue_ugx = $1 WHERE id = $2`,
+        [revenueUgx, transactionId]
+      );
+    }
+
+    if (transaction.state === 'FIAT_PAYOUT_SUBMITTED') {
+      await stateMachine.transition(transactionId, 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING');
+    }
+
+    const fresh = await db.query(`SELECT state FROM transactions WHERE id = $1`, [transactionId]);
+    const currentState = fresh.rows[0]?.state || 'USER_CONFIRMATION_PENDING';
+    const appealExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await stateMachine.transition(transactionId, currentState, 'COMPLETE', {
+      stellar_release_tx: result.hash,
+      appeal_expires_at: appealExpiresAt,
+    });
+
+    await auditLogService.log({
+      actor_role: 'system',
+      action: 'escrow_release_marzpay',
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      new_value: { state: 'COMPLETE', stellar_release_tx: result.hash },
+      metadata: {
+        payout_provider: 'marz_pay',
+        aggregator_ref: transaction.aggregator_ref,
+        settlement_address: settlementAddress,
+        fee_address: sendFee ? feeAddress : null,
+        usdc_principal: split.principal,
+        usdc_fee: sendFee ? split.fee : '0',
+      },
+    });
+
+    logger.info(`[Escrow] Released MarzPay split for tx ${transactionId}`, {
+      principal: split.principal,
+      fee: sendFee ? split.fee : '0',
+      hash: result.hash,
+    });
+    return result.hash;
+  } finally {
+    setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
+  }
+}
+
 /**
  * Release escrow after user confirms receipt — aggregator or P2P trader.
  */
@@ -1025,6 +1166,9 @@ async function releaseAfterUserConfirmation(transactionId) {
       return completeAggregatorOfframp(transactionId);
     }
     return releaseToSettlement(transactionId);
+  }
+  if (payoutProvider === 'marz_pay') {
+    return releaseToMarzPaySettlement(transactionId);
   }
   return releaseToTrader(transactionId);
 }
@@ -2211,6 +2355,7 @@ export default {
   releaseToTrader,
   sendUsdcToAggregatorEscrow,
   releaseToSettlement,
+  releaseToMarzPaySettlement,
   releaseAfterUserConfirmation,
   releaseToUser,
   retryReleaseBlocked,

@@ -33,6 +33,7 @@ import configRoutes from './routes/config.js';
 import countriesRoutes from './routes/countries.js';
 import paymentsRoutes from './routes/payments.js';
 import yellowPayWebhookRoutes from './routes/webhooks/yellowpay.js';
+import marzPayWebhookRoutes from './routes/webhooks/marzpay.js';
 import utilitiesRoutes from './routes/utilities.js';
 import chatRoutes from './routes/chat.js';
 import tradersRoutes from './routes/traders.js';
@@ -198,7 +199,14 @@ if (corsOrigin === '*') {
     credentials: true,
   }));
 }
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({
+  limit: '100kb',
+  verify: (req, _res, buf) => {
+    if (req.originalUrl && req.originalUrl.startsWith('/api/v1/webhooks/marzpay')) {
+      req.rawBody = buf.toString('utf8');
+    }
+  },
+}));
 
 // Request logging (dev)
 if (config.nodeEnv === 'development') {
@@ -249,6 +257,7 @@ app.use('/api/v1/config', configRoutes);
 app.use('/api/v1/countries', countriesRoutes);
 app.use('/api/v1/payments', paymentsRoutes);
 app.use('/api/v1/webhooks', yellowPayWebhookRoutes);
+app.use('/api/v1/webhooks', marzPayWebhookRoutes);
 app.use('/api/v1/utilities', utilitiesRoutes);
 app.use('/api/v1/disputes', disputesRoutes);
 app.use('/api/v1/trader/onboarding', traderOnboardingRoutes); // ← SPECIFIC path first

@@ -192,6 +192,45 @@ function mockResponse(path, method, body) {
     };
   }
 
+  if (path === '/send-money' && method === 'POST') {
+    const ref = body?.reference || crypto.randomUUID();
+    const amount = Number(body?.amount) || 1000;
+    return {
+      status: 'success',
+      message: 'Send money initiated successfully.',
+      data: {
+        transaction: {
+          uuid: crypto.randomUUID(),
+          reference: ref,
+          status: 'processing',
+          provider_reference: `MOCK-SM-${Date.now()}`,
+        },
+        disbursement: {
+          amount: { raw: amount, formatted: amount.toLocaleString(), currency: body?.country === 'KE' ? 'KES' : 'UGX' },
+          provider: 'mtn',
+          phone_number: body?.phone_number,
+          mode: 'sandbox',
+        },
+      },
+      _mock: true,
+    };
+  }
+
+  if (path.startsWith('/send-money/') && method === 'GET') {
+    const ref = path.split('/').pop();
+    return {
+      status: 'success',
+      data: {
+        transaction: {
+          uuid: ref,
+          reference: ref,
+          status: 'completed',
+        },
+      },
+      _mock: true,
+    };
+  }
+
   if (path === '/bill-payment' && method === 'POST') {
     const ref = body?.reference || crypto.randomUUID();
     const amount = Number(body?.amount) || 10000;
@@ -627,6 +666,69 @@ export async function waitForBillSettlement(reference, { maxAttempts = 6, delayM
   return last;
 }
 
+export async function sendMoney({
+  amount,
+  phoneNumber,
+  country = 'UG',
+  reference,
+  description,
+  callbackUrl,
+  metadata,
+}) {
+  const payload = {
+    amount: Math.round(Number(amount)),
+    phone_number: formatMarzPhone(phoneNumber),
+    country: String(country || 'UG').toUpperCase(),
+    reference,
+    ...(description ? { description: String(description).slice(0, 255) } : {}),
+    ...(callbackUrl ? { callback_url: String(callbackUrl).slice(0, 255) } : {}),
+    ...(metadata ? { metadata } : {}),
+  };
+
+  logger.info('[MarzPay] sendMoney', {
+    reference,
+    amount: payload.amount,
+    country: payload.country,
+    mock: marzPayIsMock(),
+  });
+
+  return marzRequest('/send-money', { method: 'POST', body: payload });
+}
+
+export async function getSendMoney(uuid) {
+  return marzRequest(`/send-money/${encodeURIComponent(uuid)}`);
+}
+
+/**
+ * HMAC-SHA256 over `{timestamp}.{rawBody}` when signing is enabled in the MarzPay dashboard.
+ * Unsigned callbacks are accepted only in mock mode.
+ */
+export function verifyWebhookSignature({ rawBody, timestamp, signatureHeader }) {
+  const secret = cfg().webhookSecret;
+  if (!secret) {
+    if (!marzPayIsMock()) {
+      logger.warn('[MarzPay] MARZPAY_WEBHOOK_SECRET is empty — accepting unsigned disbursement callbacks');
+    }
+    return true;
+  }
+  const ts = String(timestamp || '');
+  const header = String(signatureHeader || '');
+  const body = typeof rawBody === 'string' ? rawBody : '';
+  const match = header.match(/v1=([a-f0-9]+)/i);
+  const received = match ? match[1] : '';
+  if (!ts || !received) return false;
+
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(`${ts}.${body}`)
+    .digest('hex');
+
+  const receivedBuf = Buffer.from(received, 'utf8');
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  if (receivedBuf.length !== expectedBuf.length) return false;
+  return crypto.timingSafeEqual(receivedBuf, expectedBuf);
+}
+
 export function servicesToBillers(services, { countryCode = 'UG', areas = [] } = {}) {
   return (services || []).map((svc) => {
     const code = normalizeUtilityCode(svc.code);
@@ -670,5 +772,8 @@ export default {
   payBill,
   getBillPayment,
   waitForBillSettlement,
+  sendMoney,
+  getSendMoney,
+  verifyWebhookSignature,
   servicesToBillers,
 };

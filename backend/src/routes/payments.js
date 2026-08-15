@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import paymentRouter from '../services/payments/paymentRouter.js';
 import yellowPayProvider from '../services/payments/providers/yellowPayProvider.js';
+import marzPayProvider from '../services/payments/providers/marzPayProvider.js';
 import config from '../config/index.js';
 import { PAYMENT_SIDES } from '../services/payments/paymentConstants.js';
 
@@ -33,9 +34,18 @@ router.get('/routes', (req, res) => {
  */
 router.get('/providers/status', (_req, res) => {
   const yc = config.yellowPay || {};
+  const mz = config.marzPay || {};
   res.json({
     status: 'ok',
     data: {
+      marzPay: {
+        enabled: mz.enabled,
+        mockMode: marzPayProvider.marzPayIsMock(),
+        configured: Boolean(mz.apiKey && mz.apiSecret),
+        offrampCountries: mz.offrampCountries || [],
+        settlementConfigured: Boolean(mz.settlementStellarAddress),
+        webhookSigning: Boolean(mz.webhookSecret),
+      },
       yellowPay: {
         enabled: yc.enabled,
         mockMode: yellowPayProvider.yellowPayIsMock(),

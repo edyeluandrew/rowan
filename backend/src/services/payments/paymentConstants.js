@@ -1,5 +1,6 @@
 /** Registered payment rail providers (C2). */
 export const PAYMENT_PROVIDERS = {
+  MARZ_PAY: 'marz_pay',
   YELLOW_PAY: 'yellow_pay',
   P2P_TRADER: 'p2p_trader',
 };

@@ -1,10 +1,12 @@
 /**
  * Phase 2 C9 — Country-aware payment provider routing.
- * Default: P2P trader (Uganda launch). Yellow Pay optional via countries.payment_config.
+ * Default: P2P trader. Uganda offramp uses MarzPay when settlement address
+ * is configured; P2P remains the fallback.
  */
 
 import countryService from '../countries/countryService.js';
 import yellowPayProvider from './providers/yellowPayProvider.js';
+import marzPayProvider from './providers/marzPayProvider.js';
 import p2pTraderProvider from './providers/p2pTraderProvider.js';
 import {
   PAYMENT_PROVIDERS,
@@ -65,6 +67,22 @@ export function getProviderChain(countryCode, side) {
 }
 
 function evaluateProvider(providerId, countryCode, side) {
+  if (providerId === PAYMENT_PROVIDERS.MARZ_PAY) {
+    if (marzPayProvider.isAvailable(countryCode, side)) {
+      return {
+        id: PAYMENT_PROVIDERS.MARZ_PAY,
+        label: 'MarzPay',
+        automated: true,
+        mock: marzPayProvider.marzPayIsMock(),
+      };
+    }
+    return {
+      id: PAYMENT_PROVIDERS.MARZ_PAY,
+      unavailable: true,
+      reason: marzPayProvider.unavailableReason(countryCode, side),
+    };
+  }
+
   if (providerId === PAYMENT_PROVIDERS.YELLOW_PAY) {
     if (yellowPayProvider.isAvailable(countryCode, side)) {
       return {

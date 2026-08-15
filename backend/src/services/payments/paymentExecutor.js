@@ -1,6 +1,7 @@
 /**
- * Phase 2 C1 — Execute offramp settlement after escrow lock.
- * P2P trader by default; Yellow Pay when configured in payment_config.
+ * Execute offramp settlement after escrow lock.
+ * MarzPay disbursement for Uganda when configured; Yellow Pay if routed;
+ * P2P trader as fallback.
  */
 
 import db from '../../db/index.js';
@@ -10,6 +11,7 @@ import matchingEngine from '../matchingEngine.js';
 import notificationService from '../notificationService.js';
 import paymentRouter from './paymentRouter.js';
 import yellowPayProvider from './providers/yellowPayProvider.js';
+import marzPayProvider from './providers/marzPayProvider.js';
 import { PAYMENT_PROVIDERS, PAYMENT_SIDES } from './paymentConstants.js';
 
 async function loadTransaction(transactionId) {
@@ -22,16 +24,27 @@ async function loadTransaction(transactionId) {
   return result.rows[0] || null;
 }
 
+function aggregatorLabel(providerId) {
+  if (providerId === PAYMENT_PROVIDERS.MARZ_PAY) return 'MarzPay';
+  if (providerId === PAYMENT_PROVIDERS.YELLOW_PAY) return 'Yellow Pay';
+  return 'Automated payout';
+}
+
 async function markAggregatorPayoutSubmitted(transaction, providerId, payoutResult) {
   await db.query(
     `UPDATE transactions
      SET payout_provider = $1,
          payment_rail = $1,
          aggregator_ref = $2,
-         payout_reference = $2,
+         payout_reference = $3,
          updated_at = NOW()
-     WHERE id = $3`,
-    [providerId, payoutResult.referenceId, transaction.id]
+     WHERE id = $4`,
+    [
+      providerId,
+      payoutResult.referenceId,
+      payoutResult.providerUuid || payoutResult.referenceId,
+      transaction.id,
+    ]
   );
 
   const updated = await stateMachine.transition(
@@ -46,7 +59,7 @@ async function markAggregatorPayoutSubmitted(transaction, providerId, payoutResu
     return false;
   }
 
-  const label = providerId === PAYMENT_PROVIDERS.YELLOW_PAY ? 'Yellow Pay' : 'Automated payout';
+  const label = aggregatorLabel(providerId);
   notificationService.notifyUser(transaction.user_id, 'aggregator_payout_submitted', {
     transactionId: transaction.id,
     state: 'FIAT_PAYOUT_SUBMITTED',
@@ -56,7 +69,7 @@ async function markAggregatorPayoutSubmitted(transaction, providerId, payoutResu
     mock: payoutResult.mock,
     message: payoutResult.mock
       ? `Automated payout initiated (${label} sandbox). Confirm when MoMo arrives.`
-      : `${label} is sending your mobile money. Confirm receipt when it arrives.`,
+      : `${label} is sending your mobile money.`,
   }).catch(() => {});
 
   notificationService.createNotification(
@@ -73,19 +86,50 @@ async function markAggregatorPayoutSubmitted(transaction, providerId, payoutResu
   return true;
 }
 
-async function tryYellowPayOfframp(transaction) {
+async function tryMarzPayOfframp(transaction) {
   const countryCode = paymentRouter.networkToCountryCode(transaction.network);
   if (!countryCode) return false;
-
-  const plan = paymentRouter.resolvePaymentPlan({
-    countryCode,
-    side: PAYMENT_SIDES.OFFRAMP,
-  });
-
-  if (plan.primary?.id !== PAYMENT_PROVIDERS.YELLOW_PAY || plan.primary?.unavailable) {
+  if (!marzPayProvider.isAvailable(countryCode, PAYMENT_SIDES.OFFRAMP)) return false;
+  if (!transaction.payout_phone) return false;
+  if (!marzPayProvider.amountInRange(transaction.fiat_amount)) {
+    logger.info(`[PaymentExecutor] MarzPay amount out of range for tx ${transaction.id}`);
     return false;
   }
 
+  let payoutResult;
+  try {
+    payoutResult = await marzPayProvider.sendPayout({
+      countryCode,
+      amount: parseFloat(transaction.fiat_amount),
+      currency: transaction.fiat_currency,
+      phone: transaction.payout_phone,
+      recipientName: transaction.payout_name || undefined,
+      transactionId: transaction.id,
+    });
+  } catch (err) {
+    logger.error(`[PaymentExecutor] MarzPay sendPayout failed for tx ${transaction.id}: ${err.message}`);
+    return false;
+  }
+
+  const ok = await markAggregatorPayoutSubmitted(
+    transaction,
+    PAYMENT_PROVIDERS.MARZ_PAY,
+    payoutResult
+  );
+  if (!ok) return false;
+
+  logger.info(`[PaymentExecutor] MarzPay payout initiated for tx ${transaction.id}`, {
+    referenceId: payoutResult.referenceId,
+    mock: payoutResult.mock,
+    countryCode,
+  });
+  return true;
+}
+
+async function tryYellowPayOfframp(transaction) {
+  const countryCode = paymentRouter.networkToCountryCode(transaction.network);
+  if (!countryCode) return false;
+  if (!yellowPayProvider.isAvailable(countryCode, PAYMENT_SIDES.OFFRAMP)) return false;
   if (!transaction.payout_phone) return false;
 
   const reference = `ROWAN-${transaction.id.slice(0, 8)}-${Date.now()}`;
@@ -131,14 +175,36 @@ export async function settleOfframpPayout(transactionId) {
     return { rail: transaction.payout_provider || 'skipped', skipped: true };
   }
 
-  if (transaction.payout_provider === PAYMENT_PROVIDERS.YELLOW_PAY
-    || transaction.payout_provider === 'kotani_pay') {
-    // Legacy aggregator tx ids still skip re-queue; new flow is P2P.
+  if (
+    transaction.payout_provider === PAYMENT_PROVIDERS.MARZ_PAY
+    || transaction.payout_provider === PAYMENT_PROVIDERS.YELLOW_PAY
+    || transaction.payout_provider === 'kotani_pay'
+  ) {
     return { rail: transaction.payout_provider, skipped: true };
   }
 
-  if (await tryYellowPayOfframp(transaction)) {
-    return { rail: PAYMENT_PROVIDERS.YELLOW_PAY, automated: true };
+  const countryCode = paymentRouter.networkToCountryCode(transaction.network);
+  const plan = countryCode
+    ? paymentRouter.resolvePaymentPlan({
+      countryCode,
+      side: PAYMENT_SIDES.OFFRAMP,
+    })
+    : { primary: null, fallbackChain: [] };
+
+  const ordered = [plan.primary, ...(plan.fallbackChain || [])].filter(Boolean);
+
+  for (const provider of ordered) {
+    if (provider.unavailable || !provider.automated) continue;
+    if (provider.id === PAYMENT_PROVIDERS.MARZ_PAY) {
+      if (await tryMarzPayOfframp(transaction)) {
+        return { rail: PAYMENT_PROVIDERS.MARZ_PAY, automated: true };
+      }
+    }
+    if (provider.id === PAYMENT_PROVIDERS.YELLOW_PAY) {
+      if (await tryYellowPayOfframp(transaction)) {
+        return { rail: PAYMENT_PROVIDERS.YELLOW_PAY, automated: true };
+      }
+    }
   }
 
   logger.info(`[PaymentExecutor] Matching P2P trader for tx ${transactionId}`);
