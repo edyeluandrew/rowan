@@ -89,6 +89,27 @@ async function marzRequest(path, { method = 'GET', body } = {}) {
   });
 }
 
+/** Send Money docs use multipart form fields, not JSON. */
+async function marzFormRequest(path, fields) {
+  if (marzPayIsMock()) {
+    return mockResponse(path, 'POST', fields);
+  }
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value == null || value === '') continue;
+    form.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+  }
+  const url = `${cfg().baseUrl}${path}`;
+  return fetchJson(url, {
+    method: 'POST',
+    headers: {
+      Authorization: authHeader(),
+      Accept: 'application/json',
+    },
+    body: form,
+  });
+}
+
 function mockResponse(path, method, body) {
   if (path === '/bill-payment/services' && method === 'GET') {
     return {
@@ -666,6 +687,14 @@ export async function waitForBillSettlement(reference, { maxAttempts = 6, delayM
   return last;
 }
 
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** MarzPay Send Money `reference` must be UUID v4 — never ROW- short ids. */
+export function marzPayReference(candidate) {
+  const value = String(candidate || '');
+  return UUID_V4.test(value) ? value : crypto.randomUUID();
+}
+
 export async function sendMoney({
   amount,
   phoneNumber,
@@ -676,23 +705,23 @@ export async function sendMoney({
   metadata,
 }) {
   const payload = {
-    amount: Math.round(Number(amount)),
+    amount: String(Math.round(Number(amount))),
     phone_number: formatMarzPhone(phoneNumber),
     country: String(country || 'UG').toUpperCase(),
-    reference,
+    reference: marzPayReference(reference),
     ...(description ? { description: String(description).slice(0, 255) } : {}),
     ...(callbackUrl ? { callback_url: String(callbackUrl).slice(0, 255) } : {}),
     ...(metadata ? { metadata } : {}),
   };
 
   logger.info('[MarzPay] sendMoney', {
-    reference,
+    reference: payload.reference,
     amount: payload.amount,
     country: payload.country,
     mock: marzPayIsMock(),
   });
 
-  return marzRequest('/send-money', { method: 'POST', body: payload });
+  return marzFormRequest('/send-money', payload);
 }
 
 export async function getSendMoney(uuid) {
@@ -774,6 +803,7 @@ export default {
   waitForBillSettlement,
   sendMoney,
   getSendMoney,
+  marzPayReference,
   verifyWebhookSignature,
   servicesToBillers,
 };

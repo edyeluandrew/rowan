@@ -3,7 +3,6 @@
  * Collections / buy are not wired here.
  */
 
-import crypto from 'crypto';
 import config from '../../../config/index.js';
 import logger from '../../../utils/logger.js';
 import {
@@ -11,6 +10,7 @@ import {
   sendMoney,
   getSendMoney,
   formatMarzPhone,
+  marzPayReference,
   verifyWebhookSignature as verifyMarzSignature,
 } from '../../utilities/marzPayClient.js';
 import { PAYMENT_PROVIDERS, PAYMENT_SIDES } from '../paymentConstants.js';
@@ -71,14 +71,11 @@ export async function sendPayout({
   amount,
   currency,
   phone,
-  reference,
   recipientName,
   transactionId,
 }) {
   const cfg = marzConfig();
-  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(reference || ''))
-    ? String(reference)
-    : crypto.randomUUID();
+  const uuid = marzPayReference();
 
   if (!amountInRange(amount)) {
     const err = new Error(

@@ -89,9 +89,18 @@ async function markAggregatorPayoutSubmitted(transaction, providerId, payoutResu
 
 async function tryMarzPayOfframp(transaction) {
   const countryCode = paymentRouter.networkToCountryCode(transaction.network);
-  if (!countryCode) return false;
-  if (!marzPayProvider.isAvailable(countryCode, PAYMENT_SIDES.OFFRAMP)) return false;
-  if (!transaction.payout_phone) return false;
+  if (!countryCode) {
+    logger.warn(`[PaymentExecutor] MarzPay skip tx ${transaction.id}: no country for network ${transaction.network}`);
+    return false;
+  }
+  if (!marzPayProvider.isAvailable(countryCode, PAYMENT_SIDES.OFFRAMP)) {
+    logger.warn(`[PaymentExecutor] MarzPay skip tx ${transaction.id}: ${marzPayProvider.unavailableReason(countryCode, PAYMENT_SIDES.OFFRAMP)}`);
+    return false;
+  }
+  if (!transaction.payout_phone) {
+    logger.warn(`[PaymentExecutor] MarzPay skip tx ${transaction.id}: missing payout_phone`);
+    return false;
+  }
   if (!marzPayProvider.amountInRange(transaction.fiat_amount)) {
     logger.info(`[PaymentExecutor] MarzPay amount out of range for tx ${transaction.id}`);
     return false;
@@ -108,7 +117,11 @@ async function tryMarzPayOfframp(transaction) {
       transactionId: transaction.id,
     });
   } catch (err) {
-    logger.error(`[PaymentExecutor] MarzPay sendPayout failed for tx ${transaction.id}: ${err.message}`);
+    logger.error(`[PaymentExecutor] MarzPay sendPayout failed for tx ${transaction.id}: ${err.message}`, {
+      code: err.code,
+      httpStatus: err.httpStatus,
+      body: err.body,
+    });
     return false;
   }
 
@@ -206,6 +219,19 @@ export async function settleOfframpPayout(transactionId) {
         return { rail: PAYMENT_PROVIDERS.YELLOW_PAY, automated: true };
       }
     }
+  }
+
+  const marzAvailable = ordered.some(
+    (provider) => provider.id === PAYMENT_PROVIDERS.MARZ_PAY && !provider.unavailable
+  );
+  if (marzAvailable) {
+    logger.error(`[PaymentExecutor] MarzPay did not pay tx ${transactionId}; skipping P2P trader fallback`);
+    notificationService.notifyUser(transaction.user_id, 'aggregator_payout_failed', {
+      transactionId: transaction.id,
+      state: transaction.state,
+      message: 'We could not send mobile money yet. Stay on this screen — we will refund if it does not go through.',
+    }).catch(() => {});
+    return { rail: PAYMENT_PROVIDERS.MARZ_PAY, automated: true, failed: true };
   }
 
   logger.info(`[PaymentExecutor] Matching P2P trader for tx ${transactionId}`);
