@@ -65,14 +65,22 @@ export function SocketProvider({ children }) {
     })
     socket.on('transaction_update', (data) => {
       const state = String(data?.state || '').toUpperCase()
+      const provider = String(data?.provider || data?.payout_provider || data?.payoutProvider || '').toLowerCase()
+      const automated = ['marz_pay', 'yellow_pay', 'kotani_pay'].includes(provider)
       if (state === 'FIAT_PAYOUT_SUBMITTED' || state === 'USER_CONFIRMATION_PENDING') {
         playNotification()
         scheduleLocalNotification({
           id: Date.now() + 3,
-          title: state === 'FIAT_PAYOUT_SUBMITTED' ? 'Payout sent' : 'Confirm receipt',
-          body: state === 'FIAT_PAYOUT_SUBMITTED'
-            ? 'Mobile money was submitted. Open your order to confirm.'
-            : 'Confirm you received mobile money to finish the trade.',
+          title: automated
+            ? (state === 'FIAT_PAYOUT_SUBMITTED' ? 'Payout sent' : 'Finishing payout')
+            : (state === 'FIAT_PAYOUT_SUBMITTED' ? 'Payout sent' : 'Confirm receipt'),
+          body: automated
+            ? (state === 'FIAT_PAYOUT_SUBMITTED'
+              ? 'Check your phone for mobile money. This order will complete automatically.'
+              : 'Your payout is finishing. Stay on this screen.')
+            : (state === 'FIAT_PAYOUT_SUBMITTED'
+              ? 'Mobile money was submitted. Open your order to confirm.'
+              : 'Confirm you received mobile money to finish the trade.'),
           data: buildLocalNotificationExtra(state, data),
         })
       }

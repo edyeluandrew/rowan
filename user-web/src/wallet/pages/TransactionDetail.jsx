@@ -19,7 +19,7 @@ import OrderShortId from '../components/ui/OrderShortId'
 import useJoinOrder from '../hooks/useJoinOrder'
 import { formatCurrency, getTraderDisplayName } from '../utils/p2pFormat'
 import { formatDateTime, formatAddress } from '../utils/format'
-import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder } from '../utils/transactions'
+import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder, isAutomatedOfframp } from '../utils/transactions'
 import { NETWORKS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 
 export default function TransactionDetail() {
@@ -92,6 +92,7 @@ export default function TransactionDetail() {
   const inProgress = tx && !['COMPLETE', 'REFUNDED', 'FAILED'].includes(tx.state)
   const isComplete = tx?.state === 'COMPLETE'
   const isBuy = isBuyOrder(tx)
+  const isAutomatedSell = !isBuy && isAutomatedOfframp(tx)
 
   // Active orders use TransactionStatus (has buy "I have sent fiat" / sell confirm)
   useEffect(() => {
@@ -234,8 +235,8 @@ export default function TransactionDetail() {
         </div>
       )}
 
-      {/* Receipt confirmation — sell only (buy waits for trader) */}
-      {!isBuy && tx.state === 'FIAT_PAYOUT_SUBMITTED' && (
+      {/* Receipt confirmation — P2P sell only */}
+      {!isBuy && !isAutomatedSell && tx.state === 'FIAT_PAYOUT_SUBMITTED' && (
         <div className="mb-4">
           <ReceiptConfirmationCard
             onConfirmReceipt={handleConfirmReceipt}
@@ -245,7 +246,16 @@ export default function TransactionDetail() {
         </div>
       )}
 
-      {!isBuy && tx.state === 'USER_CONFIRMATION_PENDING' && (
+      {!isBuy && isAutomatedSell && ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(tx.state) && (
+        <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-4 mb-4 text-center">
+          <p className="text-rowan-green text-sm font-medium">Mobile money is on the way</p>
+          <p className="text-rowan-muted text-xs mt-2">
+            Check your phone. This order completes automatically — you do not confirm to a trader.
+          </p>
+        </div>
+      )}
+
+      {!isBuy && !isAutomatedSell && tx.state === 'USER_CONFIRMATION_PENDING' && (
         <div className="mb-4">
           <ConfirmingReceiptCard />
         </div>
@@ -373,7 +383,7 @@ export default function TransactionDetail() {
         <TransactionStateTracker currentState={tx.state} timestamps={timestamps} orderSide={isBuy ? 'BUY' : 'SELL'} />
       </div> */}
 
-      {isComplete && !reviewSubmitted && (
+      {isComplete && !reviewSubmitted && !isAutomatedSell && tx.traderId && (
         <button
           type="button"
           onClick={() => setShowReviewModal(true)}

@@ -67,8 +67,9 @@ async function markAggregatorPayoutSubmitted(transaction, providerId, payoutResu
     fiat_currency: transaction.fiat_currency,
     provider: providerId,
     mock: payoutResult.mock,
+    payout_provider: providerId,
     message: payoutResult.mock
-      ? `Automated payout initiated (${label} sandbox). Confirm when MoMo arrives.`
+      ? `Automated payout initiated (${label} sandbox). Check your phone for MoMo.`
       : `${label} is sending your mobile money.`,
   }).catch(() => {});
 
@@ -78,7 +79,7 @@ async function markAggregatorPayoutSubmitted(transaction, providerId, payoutResu
     'FIAT_PAYOUT_SUBMITTED',
     'Payment on the way',
     payoutResult.mock
-      ? 'Sandbox payout initiated — confirm when you receive it.'
+      ? 'Sandbox payout initiated — check your phone for MoMo.'
       : `${label} is processing your payout.`,
     transaction.id
   ).catch(() => {});

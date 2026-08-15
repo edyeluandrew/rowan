@@ -115,7 +115,9 @@ export default function CashoutConfirm() {
         />
       </div>
       <p className="text-rowan-muted text-xs mb-4">
-        This timer is only for sending USDC from your wallet. After that, we match a trader and send mobile money separately.
+        {chosenTrader
+          ? 'This timer is only for sending USDC from your wallet. After that, the trader sends mobile money separately.'
+          : 'This timer is only for sending USDC from your wallet. After that we send mobile money to your phone.'}
       </p>
 
       <QuoteSummary quote={quote} phone={phone} requestedFiat={requestedFiat} />

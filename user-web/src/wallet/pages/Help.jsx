@@ -43,11 +43,11 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Where is my mobile money?',
-    a: 'Partners send MoMo manually. Estimates are typical, not guarantees. If the trader marked payout sent but you do not see funds, open a dispute — do not confirm receipt.',
+    a: 'Cash-out sends MoMo to your phone automatically. Check your MTN or Airtel SMS. If nothing arrives after a few minutes, open a dispute from the order screen. Buy orders still go through a trader.',
   },
   {
     q: 'I confirmed too early',
-    a: 'Confirmation releases escrow to the trader. If you have not received MoMo, contact support immediately with your order ID and any screenshots.',
+    a: 'Automated cash-outs complete on their own — you do not confirm to a trader. For trader orders, confirmation releases escrow. If you have not received MoMo, contact support with your order ID.',
   },
   {
     q: 'What is a USDC trustline?',
@@ -318,16 +318,16 @@ export default function Help() {
           </li>
           <li className="flex gap-2">
             <span className="text-rowan-yellow shrink-0">•</span>
-            Matches you with a verified trader for your network
+            Sends mobile money to your phone for cash-out. Buys still match a verified trader.
           </li>
           <li className="flex gap-2">
             <span className="text-rowan-yellow shrink-0">•</span>
-            Releases or refunds crypto after confirmation or dispute
+            Completes or refunds after payout or dispute
           </li>
         </ul>
         <p className="text-rowan-muted text-xs mt-3 leading-relaxed border-t border-rowan-border pt-3">
-          Rowan does <span className="text-rowan-text font-medium">not</span> send mobile money itself.
-          Partners report payouts manually — confirm only after you see funds in your MoMo account.
+          Cash-out sends mobile money to your registered number. Check your phone for the MoMo SMS —
+          the order completes automatically. If nothing arrives, open a dispute from the order screen.
         </p>
       </section>
 
@@ -339,9 +339,9 @@ export default function Help() {
         </div>
         <ol className="space-y-2 text-rowan-muted text-xs leading-relaxed list-decimal list-inside">
           <li>Get a quote and send the exact USDC + memo to escrow</li>
-          <li>Wait for a trader to accept and send mobile money</li>
-          <li>Check your MoMo balance, then confirm receipt in the app</li>
-          <li>USDC is released to the trader when you confirm</li>
+          <li>We send mobile money to your registered number</li>
+          <li>Check your MoMo SMS — the order completes automatically</li>
+          <li>If MoMo does not arrive, open a dispute from the order screen</li>
         </ol>
       </section>
 
@@ -365,8 +365,8 @@ export default function Help() {
           <p className="text-rowan-text text-sm font-semibold">Timing</p>
         </div>
         <p className="text-rowan-muted text-xs leading-relaxed">
-          Estimates are typical, not guarantees. Partners work during their hours. If an order sits
-          too long, open a dispute from the order screen or contact support with your order ID.
+          Estimates are typical, not guarantees. Cash-out MoMo is usually sent within a few minutes.
+          If an order sits too long, open a dispute from the order screen or contact support with your order ID.
         </p>
       </section>
 

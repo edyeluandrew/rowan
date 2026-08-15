@@ -4,7 +4,7 @@
  */
 
 import { BUY_STATE_SUBTITLES, STATE_SUBTITLES } from './constants'
-import { isBuyOrder } from './transactions'
+import { isAutomatedOfframp, isBuyOrder } from './transactions'
 
 /**
  * @returns {{
@@ -31,6 +31,7 @@ export function getOrderGuidance(transaction, {
   }
 
   const isBuy = isBuyHint ?? isBuyOrder(transaction)
+  const automatedSell = !isBuy && isAutomatedOfframp(transaction)
   const state = transaction.state
 
   if (state === 'QUOTE_CONFIRMED' || state === 'QUOTE_REQUESTED') {
@@ -38,7 +39,9 @@ export function getOrderGuidance(transaction, {
       title: isBuy ? 'Starting your buy…' : 'Send USDC to escrow',
       body: isBuy
         ? 'We are preparing your order. This usually takes a few seconds.'
-        : 'Finish sending USDC from your wallet if you have not already. Funds stay in escrow until you confirm MoMo.',
+        : automatedSell
+          ? 'Finish sending USDC from your wallet if you have not already. Funds stay in escrow until mobile money lands on your phone.'
+          : 'Finish sending USDC from your wallet if you have not already. Funds stay in escrow until you confirm MoMo.',
       urgency: 'normal',
     }
   }
@@ -50,6 +53,14 @@ export function getOrderGuidance(transaction, {
         body: 'Send the exact MoMo amount to the trader, then enter the payment reference and tap “I have sent fiat”.',
         tip: 'Only send via the number shown here. Chat the trader if details look wrong.',
         urgency: 'soon',
+      }
+    }
+    if (automatedSell) {
+      return {
+        title: 'Sending to your phone',
+        body: 'Your USDC is locked. We are sending mobile money to your registered number.',
+        tip: 'Watch for an MTN or Airtel confirmation SMS. You do not need to confirm with a trader.',
+        urgency: 'normal',
       }
     }
     return {
@@ -111,6 +122,15 @@ export function getOrderGuidance(transaction, {
         showDisputeHint: true,
       }
     }
+    if (automatedSell) {
+      return {
+        title: 'Check your mobile money',
+        body: 'Payout is in progress. Check your phone for the MoMo SMS. This order completes automatically when the payment lands.',
+        tip: 'If nothing arrives after a few minutes, stay on this screen or open a dispute.',
+        urgency: 'soon',
+        showDisputeHint: true,
+      }
+    }
     return {
       title: 'Check your mobile money',
       body: 'The trader says they sent MoMo. Confirm only after the money is in your account — that releases USDC from escrow.',
@@ -126,6 +146,14 @@ export function getOrderGuidance(transaction, {
         title: 'Releasing your USDC…',
         body: 'Trader confirmed. Your wallet balance should update shortly.',
         urgency: 'normal',
+      }
+    }
+    if (automatedSell) {
+      return {
+        title: 'Finishing your payout',
+        body: 'Mobile money was sent. We are completing the order — you do not need to release funds to a trader.',
+        urgency: 'normal',
+        showDisputeHint: true,
       }
     }
     return {

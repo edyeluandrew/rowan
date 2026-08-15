@@ -1,5 +1,6 @@
 import { formatCurrency } from './format'
 import { NETWORKS } from './constants'
+import { isAutomatedOfframp, isBuyOrder } from './transactions'
 
 /** Human readable transaction status — never show raw state enums in UI */
 export const USER_STATUS_LABELS = {
@@ -18,8 +19,15 @@ export const USER_STATUS_LABELS = {
   FAILED: 'Transaction failed',
 }
 
-export function getStatusLabel(state) {
+const AUTOMATED_STATUS_LABELS = {
+  ESCROW_LOCKED: 'Sending to your phone',
+  FIAT_PAYOUT_SUBMITTED: 'Check your phone',
+  USER_CONFIRMATION_PENDING: 'Finishing payout',
+}
+
+export function getStatusLabel(state, options = {}) {
   if (!state) return 'Processing'
+  if (options.automated && AUTOMATED_STATUS_LABELS[state]) return AUTOMATED_STATUS_LABELS[state]
   return USER_STATUS_LABELS[state] || 'Processing'
 }
 
@@ -66,34 +74,31 @@ export function formatUsdcRateLine(currency, ratePerUsdc) {
 
 /** Context-aware sell progress copy (P2P vs automated rail). */
 export function getSellProgressSubtitle(tx) {
-  if (!tx) return null
+  if (!tx || isBuyOrder(tx)) return null
   const state = tx.state
-  const traderId = tx.traderId ?? tx.trader_id
-  const payoutProvider = tx.payoutProvider ?? tx.payout_provider
-  const manualP2p = !!(tx.preferredPayoutSettingId ?? tx.preferred_payout_setting_id)
 
-  if (state === 'ESCROW_LOCKED' && !traderId) {
-    if (payoutProvider === 'yellow_pay') return 'Automated payout in progress'
-    if (!manualP2p) return 'Finding a trader for your cash out'
-    return 'Finding a trader for your cash out'
+  if (isAutomatedOfframp(tx)) {
+    if (state === 'ESCROW_LOCKED') return 'Sending mobile money to your phone'
+    if (state === 'FIAT_PAYOUT_SUBMITTED') return 'Check your phone — MoMo is on the way'
+    if (state === 'USER_CONFIRMATION_PENDING') return 'Finishing your payout'
+    return null
   }
+
+  const traderId = tx.traderId ?? tx.trader_id
+  if (state === 'ESCROW_LOCKED' && !traderId) return 'Finding a trader for your cash out'
   if (state === 'TRADER_MATCHED') {
     return tx.matchedAt || tx.matched_at
       ? 'Trader accepted — waiting for mobile money'
       : 'A trader is reviewing your request'
   }
+  if (state === 'FIAT_PAYOUT_SUBMITTED') return 'Check your phone — confirm when MoMo arrives'
   return null
 }
 
 /** Sell order waiting on automated rail (not P2P trader match). */
 export function isAutomatedPayoutPending(tx) {
-  if (!tx) return false
-  const orderSide = String(tx.orderSide ?? tx.order_side ?? 'SELL').toUpperCase()
-  if (orderSide === 'BUY') return false
-  const state = tx.state
-  const traderId = tx.traderId ?? tx.trader_id
-  const manualP2p = !!(tx.preferredPayoutSettingId ?? tx.preferred_payout_setting_id)
-  return state === 'ESCROW_LOCKED' && !traderId && !manualP2p
+  if (!isAutomatedOfframp(tx)) return false
+  return ['ESCROW_LOCKED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(tx.state)
 }
 export function formatMemberSince(isoString) {
   if (!isoString) return null

@@ -19,11 +19,11 @@ import Button from '../components/ui/Button'
 import OrderShortId from '../components/ui/OrderShortId'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
-import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder } from '../utils/transactions'
+import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder, isAutomatedOfframp } from '../utils/transactions'
 import { STATE_SUBTITLES } from '../utils/constants'
 import { getOrderGuidance } from '../utils/orderGuidance'
 import { mapApiError } from '../utils/apiErrors'
-import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine } from '../utils/p2pFormat'
+import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine, getSellProgressSubtitle } from '../utils/p2pFormat'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
 const POLL_INTERVAL = 3000 // Poll every 3 seconds while waiting
@@ -149,6 +149,7 @@ export default function TransactionStatus() {
 
   useEffect(() => {
     if (!activeTxId || transaction?.state !== 'COMPLETE' || reviewSubmitted) return
+    if (isAutomatedOfframp(transaction) || !transaction?.traderId) return
     let cancelled = false
     getReviewStatus(activeTxId)
       .then((data) => {
@@ -156,7 +157,7 @@ export default function TransactionStatus() {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [activeTxId, transaction?.state, reviewSubmitted])
+  }, [activeTxId, transaction?.state, transaction?.traderId, transaction?.payoutProvider, reviewSubmitted])
 
   useEffect(() => {
     const expiresAt = transaction?.appealExpiresAt
@@ -197,6 +198,7 @@ export default function TransactionStatus() {
   const showDisputeAction = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
     || appealWindowOpen
   const isBuy = isBuyOrder(transaction) || navOrderSide === 'BUY'
+  const isAutomatedSell = !isBuy && isAutomatedOfframp(transaction)
   const guidance = transaction && !isTerminal
     ? getOrderGuidance(transaction, {
       isBuy,
@@ -497,9 +499,11 @@ export default function TransactionStatus() {
 
       {transaction && !isTerminal && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 mb-4 text-center">
-          <p className="text-rowan-text text-sm font-semibold">{getStatusLabel(transaction.state)}</p>
-          {STATE_SUBTITLES[transaction.state] && (
-            <p className="text-rowan-muted text-xs mt-1">{STATE_SUBTITLES[transaction.state]}</p>
+          <p className="text-rowan-text text-sm font-semibold">{getStatusLabel(transaction.state, { automated: isAutomatedSell })}</p>
+          {(getSellProgressSubtitle(transaction) || STATE_SUBTITLES[transaction.state]) && (
+            <p className="text-rowan-muted text-xs mt-1">
+              {getSellProgressSubtitle(transaction) || STATE_SUBTITLES[transaction.state]}
+            </p>
           )}
           <div className="mt-2 flex justify-center">
             <OrderShortId transactionId={activeTxId} />
@@ -616,8 +620,41 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {/* Sell: confirm MoMo ABOVE chat so it is not buried */}
-      {!isBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
+      {/* Sell: automated payout — check phone, no trader confirm */}
+      {!isBuy && isAutomatedSell && ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state) && (
+        <div className="bg-rowan-green/10 border-2 border-rowan-green/40 rounded-xl p-4 my-4 space-y-4">
+          <div className="text-center">
+            <p className="text-rowan-green text-sm font-semibold">
+              {transaction.state === 'USER_CONFIRMATION_PENDING'
+                ? 'Finishing your payout'
+                : 'Mobile money is on the way'}
+            </p>
+            <p className="text-rowan-text text-sm font-medium mt-2">
+              {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} via {getNetworkLabel(transaction.network)}
+            </p>
+            {transaction.payoutReference && (
+              <p className="text-rowan-muted text-xs mt-1 font-mono">
+                Ref: {transaction.payoutReference}
+              </p>
+            )}
+            <p className="text-rowan-muted text-xs mt-2">
+              Check your MoMo SMS. This order completes automatically — you do not need to release USDC to a trader.
+            </p>
+          </div>
+          {showDisputeAction && (
+            <Button
+              variant="ghost"
+              className="text-rowan-red border-rowan-red w-full"
+              onClick={() => setShowDisputeModal(true)}
+            >
+              I did not receive it — dispute
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Sell: P2P confirm MoMo ABOVE chat so it is not buried */}
+      {!isBuy && !isAutomatedSell && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
         <div className="bg-rowan-green/10 border-2 border-rowan-green/40 rounded-xl p-4 my-4 space-y-4">
           <div className="text-center">
             <p className="text-rowan-green text-sm font-semibold">
@@ -652,7 +689,7 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {!isBuy && transaction?.state === 'USER_CONFIRMATION_PENDING' && (
+      {!isBuy && !isAutomatedSell && transaction?.state === 'USER_CONFIRMATION_PENDING' && (
         <div className="bg-rowan-surface rounded-xl p-4 my-4 space-y-4">
           <div className="text-center">
             <p className="text-rowan-text text-sm font-medium">

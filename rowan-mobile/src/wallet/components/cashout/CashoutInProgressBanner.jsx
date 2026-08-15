@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { Clock, ChevronRight } from 'lucide-react'
 import { STATE_SUBTITLES } from '../../utils/constants'
 import { formatFiatAmount } from '../../utils/fiat'
+import { getSellProgressSubtitle } from '../../utils/p2pFormat'
 import { isBuyOrder } from '../../utils/transactions'
 
 /**
@@ -13,8 +14,11 @@ export default function CashoutInProgressBanner({ transaction }) {
 
   const isBuy = isBuyOrder(transaction)
   const title = isBuy ? 'Buy in progress' : 'Sell in progress'
-  let subtitle = STATE_SUBTITLES[transaction.state] || (isBuy ? 'Trade in progress' : 'Cash out in progress')
-  if (transaction.state === 'TRADER_MATCHED') {
+  const sellSubtitle = !isBuy ? getSellProgressSubtitle(transaction) : null
+  let subtitle = sellSubtitle
+    || STATE_SUBTITLES[transaction.state]
+    || (isBuy ? 'Trade in progress' : 'Cash out in progress')
+  if (transaction.state === 'TRADER_MATCHED' && !sellSubtitle) {
     subtitle = transaction.matchedAt || transaction.traderMatchedAt
       ? (isBuy ? 'Trader ready — complete your MoMo payment' : 'Trader accepted — waiting for mobile money')
       : 'A trader is reviewing your request'

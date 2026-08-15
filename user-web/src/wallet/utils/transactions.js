@@ -56,6 +56,10 @@ export function normalizeWalletTransaction(tx) {
     orderSide: tx.orderSide ?? tx.order_side ?? 'SELL',
     traderReceivePhone: tx.traderReceivePhone ?? tx.trader_receive_phone ?? null,
     traderReceiveName: tx.traderReceiveName ?? tx.trader_receive_name ?? null,
+    payoutProvider: tx.payoutProvider ?? tx.payout_provider
+      ?? (['marz_pay', 'yellow_pay', 'kotani_pay'].includes(String(tx.provider || '').toLowerCase())
+        ? String(tx.provider).toLowerCase()
+        : null),
   }
 }
 
@@ -72,6 +76,23 @@ export function isManualP2pTransaction(tx) {
   if (method === 'manual') return true
   if (method === 'auto') return false
   return !!(tx.preferredPayoutSettingId ?? tx.preferred_payout_setting_id)
+}
+
+export const AUTOMATED_OFFRAMP_PROVIDERS = ['marz_pay', 'yellow_pay', 'kotani_pay']
+
+export function getPayoutProvider(tx) {
+  return String(tx?.payoutProvider ?? tx?.payout_provider ?? tx?.provider ?? '').toLowerCase()
+}
+
+/** Uganda cash-out via MarzPay (or Yellow Pay) — not a P2P trader order. */
+export function isAutomatedOfframp(tx) {
+  if (!tx || isBuyOrder(tx)) return false
+  const provider = getPayoutProvider(tx)
+  if (AUTOMATED_OFFRAMP_PROVIDERS.includes(provider)) return true
+  if (provider === 'p2p_trader') return false
+  if (isManualP2pTransaction(tx)) return false
+  if (tx.traderId ?? tx.trader_id) return false
+  return true
 }
 
 export function getTransactionStatusTimestamps(tx) {

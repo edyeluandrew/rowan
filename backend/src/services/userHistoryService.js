@@ -43,6 +43,7 @@ function mapP2pRow(row) {
     review_submitted: !!row.review_submitted,
     was_disputed: !!row.dispute_id,
     selection_method: row.preferred_payout_setting_id ? 'manual' : 'auto',
+    payout_provider: row.payout_provider || null,
   };
 }
 
@@ -123,7 +124,7 @@ export async function getUnifiedTransactionHistory({
       `SELECT
          t.id, t.state, t.xlm_amount, t.usdc_amount, t.fiat_amount, t.fiat_currency,
          t.locked_rate, t.network, t.order_side, t.created_at, t.completed_at,
-         t.dispute_id, t.preferred_payout_setting_id, t.trader_id,
+         t.dispute_id, t.preferred_payout_setting_id, t.trader_id, t.payout_provider,
          tr.name AS trader_name,
          EXISTS (
            SELECT 1 FROM reviews r

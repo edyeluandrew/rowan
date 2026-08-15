@@ -1178,7 +1178,7 @@ router.get('/transactions/active', authUser, async (req, res, next) => {
       `SELECT
          t.id, t.state, t.xlm_amount, t.usdc_amount, t.fiat_amount, t.fiat_currency,
          t.network, t.order_side, t.created_at, t.matched_at, t.trader_matched_at,
-         t.preferred_payout_setting_id, t.trader_id,
+         t.preferred_payout_setting_id, t.trader_id, t.payout_provider,
          tr.name AS trader_name
        FROM transactions t
        LEFT JOIN traders tr ON tr.id = t.trader_id
@@ -1208,6 +1208,7 @@ router.get('/transactions/active', authUser, async (req, res, next) => {
         preferred_payout_setting_id: row.preferred_payout_setting_id,
         trader_id: row.trader_id,
         trader_name: row.trader_name,
+        payout_provider: row.payout_provider || null,
       },
     });
   } catch (err) {

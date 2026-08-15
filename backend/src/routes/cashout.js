@@ -387,7 +387,7 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
               t.stellar_deposit_tx, t.stellar_release_tx, t.payment_expires_at,
               t.appeal_expires_at, t.appeal_archived_at, t.trader_id,
               t.locked_rate, t.preferred_payout_setting_id, t.order_side,
-              t.payout_reference, t.payout_proof_url,
+              t.payout_reference, t.payout_proof_url, t.payout_provider,
               tr.name AS trader_name
        FROM transactions t
        LEFT JOIN traders tr ON tr.id = t.trader_id
@@ -404,7 +404,7 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
                 t.stellar_deposit_tx, t.stellar_release_tx, t.payment_expires_at,
                 t.appeal_expires_at, t.appeal_archived_at, t.trader_id,
                 t.locked_rate, t.preferred_payout_setting_id, t.order_side,
-                t.payout_reference, t.payout_proof_url,
+                t.payout_reference, t.payout_proof_url, t.payout_provider,
                 tr.name AS trader_name
          FROM transactions t
          LEFT JOIN traders tr ON tr.id = t.trader_id
@@ -470,6 +470,7 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
       trader_receive_name: traderReceiveName,
       payout_reference: tx.payout_reference,
       payout_proof_url: payoutProofUrl,
+      payout_provider: tx.payout_provider || null,
     });
   } catch (err) {
     next(err);

@@ -1,5 +1,6 @@
 import { formatCurrency } from './format'
 import { NETWORKS } from './constants'
+import { isAutomatedOfframp, isBuyOrder } from './transactions'
 
 /** Human readable transaction status — never show raw state enums in UI */
 export const USER_STATUS_LABELS = {
@@ -18,8 +19,15 @@ export const USER_STATUS_LABELS = {
   FAILED: 'Transaction failed',
 }
 
-export function getStatusLabel(state) {
+const AUTOMATED_STATUS_LABELS = {
+  ESCROW_LOCKED: 'Sending to your phone',
+  FIAT_PAYOUT_SUBMITTED: 'Check your phone',
+  USER_CONFIRMATION_PENDING: 'Finishing payout',
+}
+
+export function getStatusLabel(state, options = {}) {
   if (!state) return 'Processing'
+  if (options.automated && AUTOMATED_STATUS_LABELS[state]) return AUTOMATED_STATUS_LABELS[state]
   return USER_STATUS_LABELS[state] || 'Processing'
 }
 
@@ -62,6 +70,35 @@ export function formatUsdcRateLine(currency, ratePerUsdc) {
   if (!currency || ratePerUsdc == null || !Number.isFinite(Number(ratePerUsdc))) return null
   const formatted = Number(ratePerUsdc).toLocaleString('en-US', { maximumFractionDigits: 2 })
   return `1 USDC ≈ ${currency} ${formatted}`
+}
+
+/** Context-aware sell progress copy (P2P vs automated rail). */
+export function getSellProgressSubtitle(tx) {
+  if (!tx || isBuyOrder(tx)) return null
+  const state = tx.state
+
+  if (isAutomatedOfframp(tx)) {
+    if (state === 'ESCROW_LOCKED') return 'Sending mobile money to your phone'
+    if (state === 'FIAT_PAYOUT_SUBMITTED') return 'Check your phone — MoMo is on the way'
+    if (state === 'USER_CONFIRMATION_PENDING') return 'Finishing your payout'
+    return null
+  }
+
+  const traderId = tx.traderId ?? tx.trader_id
+  if (state === 'ESCROW_LOCKED' && !traderId) return 'Finding a trader for your cash out'
+  if (state === 'TRADER_MATCHED') {
+    return tx.matchedAt || tx.matched_at
+      ? 'Trader accepted — waiting for mobile money'
+      : 'A trader is reviewing your request'
+  }
+  if (state === 'FIAT_PAYOUT_SUBMITTED') return 'Check your phone — confirm when MoMo arrives'
+  return null
+}
+
+/** Sell order waiting on automated rail (not P2P trader match). */
+export function isAutomatedPayoutPending(tx) {
+  if (!isAutomatedOfframp(tx)) return false
+  return ['ESCROW_LOCKED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(tx.state)
 }
 
 /** e.g. "Joined Jun 2024" */

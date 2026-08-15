@@ -128,10 +128,10 @@ export const BUY_STATE_ORDER = [
 
 export const STATE_SUBTITLES = {
   QUOTE_CONFIRMED: 'Waiting for your USDC payment',
-  ESCROW_LOCKED:   'Finding a trader for your cash out',
+  ESCROW_LOCKED:   'Paying out to your phone',
   TRADER_MATCHED:  'Mobile money payout pending',
-  FIAT_PAYOUT_SUBMITTED: 'Check your phone — confirm when MoMo arrives',
-  USER_CONFIRMATION_PENDING: 'Confirming your receipt',
+  FIAT_PAYOUT_SUBMITTED: 'Check your phone for mobile money',
+  USER_CONFIRMATION_PENDING: 'Finishing your payout',
   DISPUTE_OPENED: 'Dispute opened — under review',
   DISPUTE_RELEASE_PENDING: 'Resolving dispute',
   DISPUTE_REFUND_PENDING: 'Processing refund',
