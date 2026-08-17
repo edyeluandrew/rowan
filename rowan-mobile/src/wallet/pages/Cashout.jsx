@@ -128,9 +128,11 @@ export default function Cashout() {
   const minNetFiat = traderMinFiat ?? selectedNetworkLimits?.minFiat ?? null
 
   const usdcEstimate = usdcToFiatRate > 0 && netFiat > 0
-    ? (netFiat / usdcToFiatRate) * 1.03
+    ? (netFiat * 1.01) / usdcToFiatRate
     : 0
-  const platformFeeFiat = netFiat > 0 ? netFiat * 0.01 : 0
+  const platformFeeUsdc = usdcToFiatRate > 0 && netFiat > 0
+    ? (netFiat * 0.01) / usdcToFiatRate
+    : 0
 
   const exceedsWallet = maxNetFiat != null && netFiat > maxNetFiat
   const belowMin = minNetFiat != null && netFiat > 0 && netFiat < minNetFiat
@@ -284,8 +286,13 @@ export default function Cashout() {
         onFiatAmountChange={setFiatAmount}
         currency={currency}
         cryptoEstimate={usdcEstimate}
-        cryptoLabel="USDC"
-        platformFeeFiat={platformFeeFiat}
+        cryptoLabel="USDC you'll send"
+        fiatSubLabel={`${currency || 'UGX'} you'll receive`}
+        feeHint={
+          platformFeeUsdc > 0
+            ? `Rowan fee ${platformFeeUsdc.toFixed(4)} USDC — included in what you send, not taken from ${currency || 'UGX'}`
+            : null
+        }
         maxFiat={maxNetFiat}
       />
 

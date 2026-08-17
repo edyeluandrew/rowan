@@ -48,11 +48,11 @@ export default function ConfirmPayoutModal({ open, request, onClose }) {
           <>
             <h3 className="text-rowan-text font-bold text-lg">Confirm Payment Sent</h3>
             <p className="text-rowan-muted text-sm mt-3 mb-6">
-              By confirming you are declaring that you have sent{' '}
+              By confirming you are declaring that you have sent exactly{' '}
               <span className="text-rowan-yellow font-bold">
                 {formatCurrency(request.fiat_amount, request.fiat_currency)}
               </span>{' '}
-              via {request.network} to the recipient. False confirmations result in account suspension.
+              via {request.network} to the recipient. Do not deduct fees. False confirmations result in account suspension.
             </p>
 
             {error && <p className="text-rowan-red text-sm mb-3">{error}</p>}

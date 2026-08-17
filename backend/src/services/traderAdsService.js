@@ -432,7 +432,6 @@ async function findBestBuyAdForExpress({
   fiatAmount,
   userId = null,
   feePercent = 1,
-  spreadPercent = 1,
 } = {}) {
   const fiat = Number(fiatAmount);
   if (!Number.isFinite(fiat) || fiat <= 0) {
@@ -481,14 +480,13 @@ async function findBestBuyAdForExpress({
   );
 
   const feeMul = 1 - (Number(feePercent) / 100);
-  const spreadMul = 1 - (Number(spreadPercent) / 100);
   const band = await getBandForCurrency(currency);
 
   for (const row of result.rows) {
     const rate = parseFloat(row.rate_per_usdc);
     if (!rate || rate <= 0) continue;
     if (band && !isWithinBand(rate, band)) continue;
-    const usdcNeeded = (fiat * feeMul * spreadMul) / rate;
+    const usdcNeeded = (fiat * feeMul) / rate;
     if (parseFloat(row.net_usdc) < usdcNeeded) continue;
 
     const trustStatus = await getTraderUsdcTrustlineStatus(row.stellar_address);
