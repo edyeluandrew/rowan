@@ -8,6 +8,7 @@ import { SocketProvider } from './context/SocketContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import { UserCountryProvider } from './context/UserCountryContext';
 import usePushNotifications from './hooks/usePushNotifications';
+import useWalletIdleSession from './hooks/useWalletIdleSession';
 
 import AppShell from './components/layout/AppShell';
 
@@ -55,12 +56,18 @@ function PushNotificationInit() {
   return null;
 }
 
+function WalletIdleInit() {
+  useWalletIdleSession();
+  return null;
+}
+
 export default function WalletApp() {
   return (
     <SocketProvider>
       <NotificationsProvider>
         <UserCountryProvider>
         <PushNotificationInit />
+        <WalletIdleInit />
         <Routes>
             {/* Tab routes with bottom nav */}
             <Route element={<AppShell />}>

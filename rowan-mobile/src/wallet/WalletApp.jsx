@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { SocketProvider } from './context/SocketContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import usePushNotifications from './hooks/usePushNotifications';
+import useWalletIdleSession from './hooks/useWalletIdleSession';
 
 import AppShell from './components/layout/AppShell';
 
@@ -54,11 +55,17 @@ function PushNotificationInit() {
   return null;
 }
 
+function WalletIdleInit() {
+  useWalletIdleSession();
+  return null;
+}
+
 export default function WalletApp() {
   return (
     <SocketProvider>
       <NotificationsProvider>
         <PushNotificationInit />
+        <WalletIdleInit />
         <Routes>
             {/* Tab routes with bottom nav */}
             <Route element={<AppShell />}>

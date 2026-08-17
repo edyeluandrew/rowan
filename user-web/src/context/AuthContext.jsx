@@ -4,13 +4,13 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { setClientToken, onLogout } from '../shared/api/client';
 import {
-  getSecure, setSecure, removeSecure, initStorage,
+  getSecure, setSecure, removeSecure, initStorage, getPreference, setPreference,
 } from '../shared/utils/storage';
 import { fetchStellarToml, verifyChallengeTransaction, signChallengeTransaction } from '../wallet/utils/sep10';
 import { getHomeDomain } from '../shared/utils/config';
 import { hashPhoneNumber } from '../wallet/utils/crypto';
 import { getChallenge, submitChallenge, registerUser } from '../wallet/api/auth';
-import { CURRENT_NETWORK } from '../wallet/utils/constants';
+import { CURRENT_NETWORK, WALLET_IDLE_TIMEOUT_MS, WALLET_LAST_ACTIVE_KEY } from '../wallet/utils/constants';
 
 const AuthContext = createContext(null);
 
@@ -46,14 +46,21 @@ export function AuthProvider({ children }) {
         const kp = await getSecure('rowan_stellar_keypair');
 
         if (t && u) {
-          setClientToken(t);
-          setToken(t);
-          setUser(JSON.parse(u));
-          setRole(ROLE_WALLET);
-          setIsAuthenticated(true);
-          if (kp) {
-            const kpData = JSON.parse(kp);
-            setKeypair({ publicKey: kpData.publicKey });
+          const last = Number(await getPreference(WALLET_LAST_ACTIVE_KEY));
+          const idle = !Number.isFinite(last) || Date.now() - last >= WALLET_IDLE_TIMEOUT_MS;
+          if (idle) {
+            await removeSecure('rowan_token');
+            await removeSecure('rowan_user');
+          } else {
+            setClientToken(t);
+            setToken(t);
+            setUser(JSON.parse(u));
+            setRole(ROLE_WALLET);
+            setIsAuthenticated(true);
+            if (kp) {
+              const kpData = JSON.parse(kp);
+              setKeypair({ publicKey: kpData.publicKey });
+            }
           }
         }
       } catch {
@@ -99,6 +106,7 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: account });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
     return data;
   }, []);
 
@@ -136,6 +144,7 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: account });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
     return data;
   }, []);
 
@@ -151,6 +160,7 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: nextKeypair?.publicKey });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
   }, []);
 
   const logout = useCallback(async () => {

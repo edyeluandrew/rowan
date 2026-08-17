@@ -129,6 +129,9 @@ export const API_TIMEOUT = 30000
 export const OTP_COOLDOWN_SECONDS = 60
 export const ESTIMATED_DELIVERY = 'Under 5 minutes'
 export const COPY_FEEDBACK_TIMEOUT_MS = 2000
+/** Sign the user out of the API session after this much idle time. Keys stay on device. */
+export const WALLET_IDLE_TIMEOUT_MS = 5 * 60 * 1000
+export const WALLET_LAST_ACTIVE_KEY = 'rowan_wallet_last_active'
 export const WALLET_GEN_DELAY_MS = 1500
 export const CLIPBOARD_AUTO_CLEAR_MS = 30000
 export const STELLAR_TX_TIMEOUT_SECONDS = 180

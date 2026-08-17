@@ -9,7 +9,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { setClientToken, onLogout } from '../shared/api/client';
 import {
-  getSecure, setSecure, removeSecure, initStorage,
+  getSecure, setSecure, removeSecure, initStorage, getPreference, setPreference,
 } from '../shared/utils/storage';
 
 /* ── Wallet-specific imports (lazy to avoid bundling for traders) ── */
@@ -17,7 +17,7 @@ import { fetchStellarToml, verifyChallengeTransaction, signChallengeTransaction 
 import { getHomeDomain } from '../shared/utils/config';
 import { hashPhoneNumber } from '../wallet/utils/crypto';
 import { getChallenge, submitChallenge, registerUser } from '../wallet/api/auth';
-import { CURRENT_NETWORK } from '../wallet/utils/constants';
+import { CURRENT_NETWORK, WALLET_IDLE_TIMEOUT_MS, WALLET_LAST_ACTIVE_KEY } from '../wallet/utils/constants';
 
 /* ── Trader-specific import ── */
 import { loginTrader, signupTrader } from '../trader/api/auth';
@@ -69,18 +69,26 @@ export function AuthProvider({ children }) {
         console.log('[Auth] ✓ Keypair loaded:', kp ? 'found' : 'empty');
 
         if (t && u) {
-          console.log('[Auth] Restoring wallet session...');
-          setClientToken(t);
-          setToken(t);
-          const parsed = JSON.parse(u);
-          setUser(parsed);
-          setRole(ROLE_WALLET);
-          setIsAuthenticated(true);
-          if (kp) {
-            const kpData = JSON.parse(kp);
-            setKeypair({ publicKey: kpData.publicKey });
+          const last = Number(await getPreference(WALLET_LAST_ACTIVE_KEY));
+          const idle = !Number.isFinite(last) || Date.now() - last >= WALLET_IDLE_TIMEOUT_MS;
+          if (idle) {
+            console.log('[Auth] Wallet session idle — requiring login');
+            await removeSecure('rowan_token');
+            await removeSecure('rowan_user');
+          } else {
+            console.log('[Auth] Restoring wallet session...');
+            setClientToken(t);
+            setToken(t);
+            const parsed = JSON.parse(u);
+            setUser(parsed);
+            setRole(ROLE_WALLET);
+            setIsAuthenticated(true);
+            if (kp) {
+              const kpData = JSON.parse(kp);
+              setKeypair({ publicKey: kpData.publicKey });
+            }
+            console.log('[Auth] ✓ Wallet session restored');
           }
-          console.log('[Auth] ✓ Wallet session restored');
         } else {
           console.log('[Auth] No session found (first time or trader mode)');
         }
@@ -144,6 +152,7 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: account });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
     return data;
   }, []);
 
@@ -192,6 +201,7 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: account });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
     return data;
   }, []);
 
@@ -260,6 +270,7 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: keypair?.publicKey });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
   }, []);
 
   /* ═══════════════════════════════════════════════════════
