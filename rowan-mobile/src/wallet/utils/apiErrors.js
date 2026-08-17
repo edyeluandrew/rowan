@@ -49,7 +49,7 @@ const MESSAGE_SNIPPETS = [
   [/cancelled by buyer/i, 'This order was cancelled.'],
   [/could not cancel|cancellation is no longer/i, 'This order can no longer be cancelled. Wait for the window to end or open a dispute if needed.'],
   [/payment window is closing/i, 'The payment window is almost closed — wait it out or raise a dispute if something is wrong.'],
-  [/wallet balance is too low|reloadly/i, 'Top-up service is temporarily unavailable. Please try again in a few minutes.'],
+  [/wallet balance is too low|marzpay/i, 'Top-up service is temporarily unavailable. Please try again in a few minutes.'],
   [/rate/i, 'Rate or pricing failed. Refresh and try again.'],
   [/unauthorized|401|session/i, 'Session expired. Sign in again and retry.'],
   [/network error|failed to fetch|timeout|econnaborted/i, 'Could not reach the server. Check your connection and try again.'],

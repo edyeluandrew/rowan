@@ -179,7 +179,7 @@ export default function UtilityStatus() {
         {retryError && (
           <p className="text-rowan-red text-sm mt-2">{retryError}</p>
         )}
-        {data.reloadlyMock && completed && (
+        {(data.reloadlyMock || data.marzPayMock) && completed && (
           <p className="text-rowan-muted text-xs mt-3">{labels.mockNote}</p>
         )}
       </div>

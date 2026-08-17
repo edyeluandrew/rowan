@@ -1,11 +1,11 @@
 /**
  * Phase 2 C9 — Country-aware payment provider routing.
- * Default: P2P trader. Uganda offramp uses MarzPay when settlement address
- * is configured; P2P remains the fallback.
+ * Default and current Uganda launch: P2P for USDC buy/sell.
+ * MarzPay is bills/airtime/data, not the buy/sell chain.
  */
 
+import config from '../../config/index.js';
 import countryService from '../countries/countryService.js';
-import yellowPayProvider from './providers/yellowPayProvider.js';
 import marzPayProvider from './providers/marzPayProvider.js';
 import p2pTraderProvider from './providers/p2pTraderProvider.js';
 import {
@@ -49,21 +49,25 @@ export function getProviderChain(countryCode, side) {
   const listKey = normalizedSide === PAYMENT_SIDES.ONRAMP ? 'onramp' : 'offramp';
 
   const known = new Set(Object.values(PAYMENT_PROVIDERS));
+  let chain = [];
 
   if (Array.isArray(cfg[listKey]) && cfg[listKey].length) {
-    const chain = cfg[listKey].map(String).filter((id) => known.has(id));
-    if (chain.length) return chain;
-  }
-
-  if (normalizedSide === PAYMENT_SIDES.OFFRAMP) {
+    chain = cfg[listKey].map(String).filter((id) => known.has(id));
+  } else if (normalizedSide === PAYMENT_SIDES.OFFRAMP) {
     const primary = cfg.default_offramp_provider || PAYMENT_PROVIDERS.P2P_TRADER;
     const fallback = cfg.fallback_provider || PAYMENT_PROVIDERS.P2P_TRADER;
-    return [primary, fallback]
+    chain = [primary, fallback]
       .filter((id) => known.has(String(id)))
       .filter((v, i, arr) => arr.indexOf(v) === i);
+  } else {
+    chain = [...DEFAULT_ONRAMP_CHAIN];
   }
 
-  return normalizedSide === PAYMENT_SIDES.ONRAMP ? DEFAULT_ONRAMP_CHAIN : DEFAULT_OFFRAMP_CHAIN;
+  if (!config.marzPay?.buySellEnabled) {
+    chain = chain.filter((id) => id !== PAYMENT_PROVIDERS.MARZ_PAY);
+  }
+  if (chain.length) return chain;
+  return normalizedSide === PAYMENT_SIDES.ONRAMP ? [...DEFAULT_ONRAMP_CHAIN] : [...DEFAULT_OFFRAMP_CHAIN];
 }
 
 function evaluateProvider(providerId, countryCode, side) {
@@ -80,22 +84,6 @@ function evaluateProvider(providerId, countryCode, side) {
       id: PAYMENT_PROVIDERS.MARZ_PAY,
       unavailable: true,
       reason: marzPayProvider.unavailableReason(countryCode, side),
-    };
-  }
-
-  if (providerId === PAYMENT_PROVIDERS.YELLOW_PAY) {
-    if (yellowPayProvider.isAvailable(countryCode, side)) {
-      return {
-        id: PAYMENT_PROVIDERS.YELLOW_PAY,
-        label: 'Yellow Pay',
-        automated: true,
-        mock: yellowPayProvider.yellowPayIsMock(),
-      };
-    }
-    return {
-      id: PAYMENT_PROVIDERS.YELLOW_PAY,
-      unavailable: true,
-      reason: yellowPayProvider.unavailableReason(countryCode, side),
     };
   }
 

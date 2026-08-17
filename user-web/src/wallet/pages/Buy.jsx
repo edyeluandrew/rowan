@@ -82,6 +82,13 @@ export default function Buy() {
     }
   }, [activeLoading, activeTransaction, navigate])
 
+  useEffect(() => {
+    if (activeLoading || activeTransaction?.id) return
+    if (!payoutSettingId) {
+      navigate('/wallet/p2p', { replace: true, state: { tab: 'buy' } })
+    }
+  }, [activeLoading, activeTransaction, payoutSettingId, navigate])
+
   const netFiat = parseFloat(fiatAmount) || 0
   const currency = network ? NETWORKS[network]?.currency : userFiat
   const minNetFiat = isAutomated ? 500 : (selectedAd?.minAmount ?? null)
@@ -186,7 +193,7 @@ export default function Buy() {
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm font-medium">Pay from your phone</p>
           <p className="text-rowan-muted text-xs mt-1">
-            We send an MTN or Airtel prompt. Approve it to buy USDC. No trader.
+            Pick a trader on P2P. They send you payment instructions.
           </p>
         </div>
       )}

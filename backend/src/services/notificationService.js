@@ -607,7 +607,7 @@ async function notifyTrader(traderId, event, data) {
 
 /**
  * Phase 2: Send SMS via aggregator API.
- * Placeholder for Flutterwave / Africa's Talking integration.
+ * Placeholder for Africa's Talking SMS.
  */
 // async function sendSms(userId, message) {
 //   const user = await db.query('SELECT phone_hash FROM users WHERE id = $1', [userId]);

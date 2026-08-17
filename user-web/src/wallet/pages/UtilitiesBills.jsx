@@ -5,6 +5,7 @@ import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
 import useUserCountry from '../hooks/useUserCountry'
 import { getUtilityLimitsForCountry } from '../utils/country'
+import { billServiceFeeFiat, maxBillAmountForWallet } from '../utils/billFee'
 import useBiometricProtection from '../../shared/hooks/useBiometricProtection'
 import BiometricLock from '../../shared/components/BiometricLock'
 import {
@@ -114,8 +115,6 @@ export default function UtilitiesBills() {
   const selectedBouquet = bouquets.find((b) => b.code === bouquetCode)
   const currency = selectedBiller?.currency || fiatCurrency
   const usdcToFiatRate = rates?.usdcToFiat || 0
-  const feePercent = utilityConfig?.feePercent ?? 1
-  const providerFee = Number(utilityConfig?.marzPayBillFeeFiat || 1200)
   const countryLimits = getUtilityLimitsForCountry(country)
   const minFiat = selectedBiller?.minAmount ?? utilityConfig?.minFiatAmount ?? countryLimits.min
   const maxFiat = selectedBiller?.maxAmount ?? utilityConfig?.maxFiatAmount ?? countryLimits.max
@@ -123,7 +122,8 @@ export default function UtilitiesBills() {
   const netFiat = isTvBiller(selectedBiller)
     ? Number(selectedBouquet?.price || 0)
     : (parseFloat(fiatAmount) || 0)
-  const chargeableFiat = netFiat > 0 ? netFiat + providerFee : 0
+  const serviceFee = netFiat > 0 ? billServiceFeeFiat(netFiat, utilityConfig) : 0
+  const chargeableFiat = netFiat > 0 ? netFiat + serviceFee : 0
 
   useEffect(() => {
     const cleanAccount = accountNumber.replace(/\s+/g, '')
@@ -164,11 +164,14 @@ export default function UtilitiesBills() {
   }, [selectedBiller, accountNumber, area, netFiat])
 
   const usdcEstimate = usdcToFiatRate > 0 && chargeableFiat > 0
-    ? (chargeableFiat / usdcToFiatRate) * (1 + feePercent / 100)
+    ? chargeableFiat / usdcToFiatRate
     : 0
 
-  const walletMaxFiat = usdcToFiatRate > 0 && spendableUsdc != null
-    ? (spendableUsdc * usdcToFiatRate / (1 + feePercent / 100)) - providerFee
+  const walletGrossFiat = usdcToFiatRate > 0 && spendableUsdc != null
+    ? spendableUsdc * usdcToFiatRate
+    : null
+  const walletMaxFiat = walletGrossFiat != null
+    ? maxBillAmountForWallet(walletGrossFiat, utilityConfig)
     : null
 
   const accountValid = accountNumber.replace(/\s+/g, '').length >= 4
@@ -356,12 +359,12 @@ export default function UtilitiesBills() {
             currency={currency}
             cryptoEstimate={usdcEstimate}
             cryptoLabel="USDC"
-            platformFeeFiat={chargeableFiat * (feePercent / 100)}
+            platformFeeFiat={serviceFee}
             maxFiat={Math.min(maxFiat, walletMaxFiat ?? maxFiat)}
           />
           <p className="text-rowan-muted text-xs mt-2 px-1">
             Min {minFiat.toLocaleString()} · Max {maxFiat.toLocaleString()} {currency}
-            {' · '}MarzPay fee {providerFee.toLocaleString()} {currency} per bill
+            {serviceFee > 0 ? ` · Service fee ${serviceFee.toLocaleString()} ${currency}` : ''}
           </p>
         </div>
       )}
@@ -372,7 +375,7 @@ export default function UtilitiesBills() {
           <p className="text-rowan-muted text-xs mt-1">
             {Number(selectedBouquet.price).toLocaleString()} UGX
             {selectedBouquet.period_label ? ` · ${selectedBouquet.period_label}` : ''}
-            {' + '}{providerFee.toLocaleString()} UGX service fee
+            {' + '}{serviceFee.toLocaleString()} UGX service fee
           </p>
           <p className="text-rowan-yellow text-sm font-semibold mt-2 tabular-nums">
             ≈ {usdcEstimate.toFixed(4)} USDC

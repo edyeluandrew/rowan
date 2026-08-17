@@ -3,8 +3,6 @@ import { authUser } from '../middleware/auth.js';
 import { enforceKycTransactionLimits, requireKycProduct } from '../middleware/kycLimits.js';
 import { validate, validateTypes } from '../middleware/validate.js';
 import utilityService from '../services/utilities/utilityService.js';
-import reloadlyClient from '../services/utilities/reloadlyClient.js';
-import reloadlyUtilityPaymentsClient from '../services/utilities/reloadlyUtilityPaymentsClient.js';
 import config from '../config/index.js';
 
 const router = Router();
@@ -24,13 +22,13 @@ router.get('/providers', authUser, async (req, res, next) => {
 });
 
 /**
- * GET /api/v1/utilities/data-availability?country=KE
- * Whether Reloadly exposes data/bundle operators for this country.
+ * GET /api/v1/utilities/data-availability?country=UG
+ * Whether data bundles are available for this country.
  */
 router.get('/data-availability', authUser, async (req, res, next) => {
   try {
     const country = String(req.query.country || 'UG').trim().toUpperCase();
-    const data = await utilityService.getReloadlyDataAvailability(country);
+    const data = await utilityService.getDataAvailability(country);
     res.json({ status: 'ok', data, timestamp: new Date().toISOString() });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -40,7 +38,7 @@ router.get('/data-availability', authUser, async (req, res, next) => {
 
 /**
  * GET /api/v1/utilities/limits?country=UG&networkCode=MTN_UG&recipientPhone=256...&type=airtime|data
- * Reloadly operator min/max or data plan catalog for the given phone + network.
+ * MarzPay operator min/max or data plan catalog for the given phone + network.
  */
 router.get('/limits', authUser, async (req, res, next) => {
   try {
@@ -56,7 +54,7 @@ router.get('/limits', authUser, async (req, res, next) => {
       return res.status(400).json({ error: 'networkCode is required' });
     }
 
-    const data = await utilityService.getReloadlyTopupLimits({
+    const data = await utilityService.getTopupLimits({
       countryCode: country,
       networkCode,
       recipientPhone,
@@ -71,7 +69,7 @@ router.get('/limits', authUser, async (req, res, next) => {
 
 /**
  * GET /api/v1/utilities/operators?country=UG
- * Reloadly operator list (cached client-side recommended).
+ * Uganda airtime operators (MTN / Airtel).
  */
 router.get('/operators', authUser, async (req, res, next) => {
   try {
@@ -80,7 +78,6 @@ router.get('/operators', authUser, async (req, res, next) => {
     res.json({
       status: 'ok',
       data,
-      reloadlyMock: reloadlyClient.reloadlyIsMock(),
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -90,7 +87,7 @@ router.get('/operators', authUser, async (req, res, next) => {
 
 /**
  * GET /api/v1/utilities/bundles?country=UG&networkCode=MTN_UG&recipientPhone=256...
- * Reloadly fixed data bundles for a phone number.
+ * MarzPay data bundles for a phone number.
  */
 router.get('/bundles', authUser, async (req, res, next) => {
   try {
@@ -123,8 +120,7 @@ router.get('/bundles', authUser, async (req, res, next) => {
 
 /**
  * GET /api/v1/utilities/bill-lookup?billerId=&subscriberAccount=&fiatAmount=
- * Pre-payment account check — only returns name/units in Reloadly sandbox mock.
- * Live Reloadly confirms name + kWh on GET /transactions/{id} after payment.
+ * Pre-payment account check via MarzPay.
  */
 router.get('/bill-lookup', authUser, async (req, res, next) => {
   try {
@@ -285,7 +281,7 @@ router.get('/purchase/:id', authUser, async (req, res, next) => {
 
 /**
  * GET /api/v1/utilities/purchase/:id/delivery
- * Poll Reloadly for prepaid electricity units + Yaka token (bill payments only).
+ * Poll MarzPay for prepaid electricity units + Yaka token (bill payments only).
  */
 router.get('/purchase/:id/delivery', authUser, async (req, res, next) => {
   try {
@@ -322,18 +318,16 @@ router.get('/config', (req, res) => {
     status: 'ok',
     data: {
       feePercent: config.utilities.feePercent,
+      billFeePercent: config.utilities.billFeePercent,
+      billFeeMinFiat: config.utilities.billFeeMinFiat,
+      billFeeMaxFiat: config.utilities.billFeeMaxFiat,
       quoteTtlSeconds: config.utilities.quoteTtlSeconds,
-      /** UG airtime/data + bills via MarzPay; other countries still Reloadly. */
-      limitsSource: config.marzPay.enabled !== false ? 'marzpay' : 'reloadly',
-      reloadlyMock: reloadlyClient.reloadlyIsMock(),
-      reloadlyUtilitiesMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
-      billsProvider: config.marzPay.enabled !== false ? 'marzpay' : 'reloadly',
-      airtimeProvider: config.marzPay.enabled !== false ? 'marzpay' : 'reloadly',
+      /** UG airtime/data + bills via MarzPay. */
+      limitsSource: 'marzpay',
+      billsProvider: 'marzpay',
+      airtimeProvider: 'marzpay',
       marzPayMock: config.marzPay.mockMode || !config.marzPay.apiKey,
       marzPayBillFeeFiat: config.marzPay.billFeeFiat,
-      utilitiesStagingFallback: (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'
-        && process.env.RELOADLY_UTILITIES_STAGING_FALLBACK !== 'false'
-        && config.marzPay.enabled === false,
       mockPurchaseAllowed: config.utilities.allowMockPurchase,
     },
     timestamp: new Date().toISOString(),

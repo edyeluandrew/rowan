@@ -81,6 +81,13 @@ export default function Cashout() {
     }
   }, [activeLoading, activeTransaction, navigate])
 
+  useEffect(() => {
+    if (activeLoading || activeTransaction?.id) return
+    if (!payoutSettingId) {
+      navigate('/wallet/p2p', { replace: true, state: { tab: 'sell' } })
+    }
+  }, [activeLoading, activeTransaction, payoutSettingId, navigate])
+
   const selectedRate = network && allRates
     ? Array.isArray(allRates)
       ? allRates.find((r) => r.network === network)
@@ -239,7 +246,7 @@ export default function Cashout() {
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm font-medium">Cash out to your phone</p>
           <p className="text-rowan-muted text-xs mt-1">
-            We send mobile money to your MTN or Airtel number. No trader.
+            A trader sends mobile money to your MTN or Airtel number.
           </p>
         </div>
       )}

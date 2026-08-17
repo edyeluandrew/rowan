@@ -52,14 +52,16 @@ const ACTIONS = [
     key: 'buy',
     label: 'Buy',
     Icon: ArrowDownToLine,
-    path: '/wallet/buy',
+    path: '/wallet/p2p',
+    state: { tab: 'buy' },
     needsOrderLock: true,
   },
   {
     key: 'sell',
     label: 'Sell',
     Icon: ArrowUpFromLine,
-    path: '/wallet/cashout',
+    path: '/wallet/p2p',
+    state: { tab: 'sell' },
     needsOrderLock: true,
   },
   {

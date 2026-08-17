@@ -88,7 +88,7 @@ export default function BuyConfirm() {
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm font-medium">Approve the MTN or Airtel prompt</p>
           <p className="text-rowan-muted text-xs mt-1">
-            After you confirm, we send a payment request to your phone. Approve it to buy USDC. No trader.
+            After you confirm, pay the trader via mobile money as instructed.
           </p>
         </div>
       )}

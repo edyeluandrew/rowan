@@ -1,7 +1,7 @@
 /**
  * Execute offramp settlement after escrow lock.
- * MarzPay disbursement for Uganda when configured; Yellow Pay if routed;
- * P2P trader as fallback.
+ * Launch: P2P trader for USDC sell. MarzPay Send Money stays off unless
+ * MARZPAY_BUY_SELL=true.
  */
 
 import db from '../../db/index.js';
@@ -10,7 +10,6 @@ import stateMachine from '../transactionStateMachine.js';
 import matchingEngine from '../matchingEngine.js';
 import notificationService from '../notificationService.js';
 import paymentRouter from './paymentRouter.js';
-import yellowPayProvider from './providers/yellowPayProvider.js';
 import marzPayProvider from './providers/marzPayProvider.js';
 import { PAYMENT_PROVIDERS, PAYMENT_SIDES } from './paymentConstants.js';
 
@@ -26,7 +25,6 @@ async function loadTransaction(transactionId) {
 
 function aggregatorLabel(providerId) {
   if (providerId === PAYMENT_PROVIDERS.MARZ_PAY) return 'MarzPay';
-  if (providerId === PAYMENT_PROVIDERS.YELLOW_PAY) return 'Yellow Pay';
   return 'Automated payout';
 }
 
@@ -145,39 +143,6 @@ async function tryMarzPayOfframp(transaction) {
   return true;
 }
 
-async function tryYellowPayOfframp(transaction) {
-  const countryCode = paymentRouter.networkToCountryCode(transaction.network);
-  if (!countryCode) return false;
-  if (!yellowPayProvider.isAvailable(countryCode, PAYMENT_SIDES.OFFRAMP)) return false;
-  if (!transaction.payout_phone) return false;
-
-  const reference = `ROWAN-${transaction.id.slice(0, 8)}-${Date.now()}`;
-  let payoutResult;
-  try {
-    payoutResult = await yellowPayProvider.sendPayout({
-      countryCode,
-      amount: parseFloat(transaction.fiat_amount),
-      currency: transaction.fiat_currency,
-      phone: transaction.payout_phone,
-      reference,
-      recipientName: transaction.payout_name || undefined,
-    });
-  } catch (err) {
-    logger.error(`[PaymentExecutor] Yellow Pay sendPayout failed for tx ${transaction.id}: ${err.message}`);
-    return false;
-  }
-
-  const ok = await markAggregatorPayoutSubmitted(transaction, PAYMENT_PROVIDERS.YELLOW_PAY, payoutResult);
-  if (!ok) return false;
-
-  logger.info(`[PaymentExecutor] Yellow Pay payout initiated for tx ${transaction.id}`, {
-    referenceId: payoutResult.referenceId,
-    mock: payoutResult.mock,
-    countryCode,
-  });
-  return true;
-}
-
 /**
  * Settle an offramp after USDC/XLM escrow lock.
  * @param {string} transactionId
@@ -196,7 +161,7 @@ export async function settleOfframpPayout(transactionId) {
 
   if (
     transaction.payout_provider === PAYMENT_PROVIDERS.MARZ_PAY
-    || transaction.payout_provider === PAYMENT_PROVIDERS.YELLOW_PAY
+    || transaction.payout_provider === 'yellow_pay'
     || transaction.payout_provider === 'kotani_pay'
   ) {
     return { rail: transaction.payout_provider, skipped: true };
@@ -217,11 +182,6 @@ export async function settleOfframpPayout(transactionId) {
     if (provider.id === PAYMENT_PROVIDERS.MARZ_PAY) {
       if (await tryMarzPayOfframp(transaction)) {
         return { rail: PAYMENT_PROVIDERS.MARZ_PAY, automated: true };
-      }
-    }
-    if (provider.id === PAYMENT_PROVIDERS.YELLOW_PAY) {
-      if (await tryYellowPayOfframp(transaction)) {
-        return { rail: PAYMENT_PROVIDERS.YELLOW_PAY, automated: true };
       }
     }
   }

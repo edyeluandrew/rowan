@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import paymentRouter from '../services/payments/paymentRouter.js';
-import yellowPayProvider from '../services/payments/providers/yellowPayProvider.js';
 import marzPayProvider from '../services/payments/providers/marzPayProvider.js';
 import config from '../config/index.js';
 import { PAYMENT_SIDES } from '../services/payments/paymentConstants.js';
@@ -9,7 +8,7 @@ const router = Router();
 
 /**
  * GET /api/v1/payments/routes
- * Public corridor routing (P2P default; Yellow Pay if configured).
+ * Public corridor routing (P2P for buy/sell).
  * ?country=UG&side=offramp
  */
 router.get('/routes', (req, res) => {
@@ -30,29 +29,23 @@ router.get('/routes', (req, res) => {
 
 /**
  * GET /api/v1/payments/providers/status
- * Aggregator health for ops / client feature flags.
+ * Rail health for ops / client feature flags.
  */
 router.get('/providers/status', (_req, res) => {
-  const yc = config.yellowPay || {};
   const mz = config.marzPay || {};
   res.json({
     status: 'ok',
     data: {
       marzPay: {
         enabled: mz.enabled,
+        buySellEnabled: Boolean(mz.buySellEnabled),
+        utilitiesOnly: !mz.buySellEnabled,
         mockMode: marzPayProvider.marzPayIsMock(),
         configured: Boolean(mz.apiKey && mz.apiSecret),
         offrampCountries: mz.offrampCountries || [],
         onrampCountries: mz.onrampCountries || [],
         settlementConfigured: Boolean(mz.settlementStellarAddress),
         webhookSigning: Boolean(mz.webhookSecret),
-      },
-      yellowPay: {
-        enabled: yc.enabled,
-        mockMode: yellowPayProvider.yellowPayIsMock(),
-        configured: Boolean(yc.clientId && yc.clientSecret) || Boolean(yc.apiKey),
-        sandboxCorridors: yc.sandboxCorridors || [],
-        baseUrl: yc.baseUrl,
       },
       p2pTrader: { enabled: true },
     },

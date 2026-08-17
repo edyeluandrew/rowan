@@ -74,7 +74,7 @@ export function getPayoutProvider(tx) {
   return String(tx?.payoutProvider ?? tx?.payout_provider ?? tx?.provider ?? '').toLowerCase()
 }
 
-/** Uganda cash-out via MarzPay (or Yellow Pay) — not a P2P trader order. */
+/** Historic automated cash-out (not a P2P trader order). */
 export function isAutomatedOfframp(tx) {
   if (!tx || isBuyOrder(tx)) return false
   const provider = getPayoutProvider(tx)

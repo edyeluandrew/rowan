@@ -194,27 +194,11 @@ const config = {
     provider: process.env.SCREENING_PROVIDER || 'local',
   },
 
-  // Phase 2 B2/B6 — Reloadly utilities (airtime, data, bills)
-  reloadly: {
-    enabled: process.env.RELOADLY_ENABLED === 'true',
-    mockMode: process.env.RELOADLY_MOCK_MODE === 'true'
-      || (!process.env.RELOADLY_CLIENT_ID && (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'),
-    clientId: process.env.RELOADLY_CLIENT_ID || '',
-    clientSecret: process.env.RELOADLY_CLIENT_SECRET || '',
-    authUrl: process.env.RELOADLY_AUTH_URL || 'https://auth.reloadly.com/oauth/token',
-    audience: process.env.RELOADLY_AUDIENCE
-      || ((process.env.STELLAR_NETWORK || 'testnet') === 'mainnet'
-        ? 'https://topups.reloadly.com'
-        : 'https://topups-sandbox.reloadly.com'),
-    baseUrl: process.env.RELOADLY_BASE_URL
-      || ((process.env.STELLAR_NETWORK || 'testnet') === 'mainnet'
-        ? 'https://topups.reloadly.com'
-        : 'https://topups-sandbox.reloadly.com'),
-    tokenCacheSeconds: parseInt(process.env.RELOADLY_TOKEN_CACHE_SECONDS, 10) || 3300,
-  },
-
   utilities: {
-    feePercent: parseFloat(process.env.UTILITY_FEE_PERCENT) || 1,
+    feePercent: parseFloat(process.env.UTILITY_FEE_PERCENT) || 0,
+    billFeePercent: parseFloat(process.env.UTILITY_BILL_FEE_PERCENT) || 1,
+    billFeeMinFiat: parseInt(process.env.UTILITY_BILL_FEE_MIN_UGX, 10) || 200,
+    billFeeMaxFiat: parseInt(process.env.UTILITY_BILL_FEE_MAX_UGX, 10) || 2000,
     quoteTtlSeconds: parseInt(process.env.UTILITY_QUOTE_TTL_SECONDS, 10) || 300,
     minFiatAmount: parseFloat(process.env.UTILITY_MIN_FIAT_AMOUNT) || 1000,
     maxFiatAmount: parseFloat(process.env.UTILITY_MAX_FIAT_AMOUNT) || 500000,
@@ -222,9 +206,11 @@ const config = {
     allowMockPurchase: process.env.UTILITY_ALLOW_MOCK_PURCHASE === 'true',
   },
 
-  // Uganda bills + airtime/data via MarzPay (Reloadly remains for other countries)
+  // Uganda bills + airtime/data via MarzPay.
+  // Collect/Send for buy/sell stay off unless MARZPAY_BUY_SELL=true.
   marzPay: {
     enabled: process.env.MARZPAY_ENABLED !== 'false',
+    buySellEnabled: process.env.MARZPAY_BUY_SELL === 'true',
     mockMode: process.env.MARZPAY_MOCK_MODE === 'true'
       || (!process.env.MARZPAY_API_KEY && (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'),
     apiKey: process.env.MARZPAY_API_KEY || '',
@@ -250,28 +236,6 @@ const config = {
       .filter(Boolean),
     sendMoneyMinFiat: parseInt(process.env.MARZPAY_SEND_MIN_UGX, 10) || 500,
     sendMoneyMaxFiat: parseInt(process.env.MARZPAY_SEND_MAX_UGX, 10) || 10000000,
-  },
-
-  // Phase 2 C1/C9 — Yellow Card / Yellow Pay (automated MoMo on/off-ramp)
-  yellowPay: {
-    enabled: process.env.YELLOW_PAY_ENABLED !== 'false',
-    mockMode: process.env.YELLOW_PAY_MOCK_MODE === 'true'
-      || (!process.env.YELLOW_PAY_CLIENT_ID && !process.env.YELLOW_PAY_API_KEY
-        && (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet'),
-    clientId: process.env.YELLOW_PAY_CLIENT_ID || '',
-    clientSecret: process.env.YELLOW_PAY_CLIENT_SECRET || '',
-    apiKey: process.env.YELLOW_PAY_API_KEY || '',
-    baseUrl: process.env.YELLOW_PAY_BASE_URL
-      || ((process.env.STELLAR_NETWORK || 'testnet') === 'mainnet'
-        ? 'https://api.yellowcard.io'
-        : 'https://sandbox-api.yellowcard.io'),
-    webhookSecret: process.env.YELLOW_PAY_WEBHOOK_SECRET || '',
-    sandboxCorridors: (process.env.YELLOW_PAY_CORRIDORS || 'UG')
-      .split(',')
-      .map((c) => c.trim().toUpperCase())
-      .filter(Boolean),
-    /** Rowan treasury Stellar address — USDC released here after Yellow Pay offramp confirmation */
-    settlementStellarAddress: process.env.YELLOW_PAY_SETTLEMENT_STELLAR || '',
   },
 
   // [PHASE 4] Fraud monitoring thresholds

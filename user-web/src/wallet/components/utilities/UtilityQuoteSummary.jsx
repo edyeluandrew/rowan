@@ -1,7 +1,7 @@
 import { Smartphone, ArrowLeftRight, Hash } from 'lucide-react'
 import { NETWORKS } from '../../utils/constants'
 import { maskPhoneNumber } from '../../utils/crypto'
-import { labelsFor, billSandboxFallbackNote } from '../../utils/utilityLabels'
+import { labelsFor } from '../../utils/utilityLabels'
 import { resolveFiatCurrency } from '../../utils/country'
 
 /**
@@ -24,7 +24,7 @@ export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
   )
   const subscriberName = quote.subscriberName || billLookup?.customerName
   const unitsDisplay = quote.electricityUnits || billLookup?.unitsDisplay
-  const unitsFromReloadly = unitsDisplay && (quote.electricityUnitsSource || billLookup?.source) === 'reloadly'
+  const unitsFromProvider = Boolean(unitsDisplay)
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5">
@@ -64,7 +64,7 @@ export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
               <p className="text-rowan-green text-lg font-bold leading-snug mt-0.5">
                 {quote.operatorName || bundleDescription}
               </p>
-              {unitsFromReloadly && (
+              {unitsFromProvider && (
                 <p className="text-rowan-green text-base font-semibold mt-1 tabular-nums">
                   {unitsDisplay}
                 </p>
@@ -75,7 +75,7 @@ export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
               <p className="text-rowan-muted text-sm tabular-nums mt-1">
                 {Number(fiatAmount).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
               </p>
-              {isPrepaidBill && !unitsFromReloadly && (
+              {isPrepaidBill && !unitsFromProvider && (
                 <p className="text-rowan-muted text-xs mt-2 leading-snug">
                   Units and prepaid token appear on your receipt after payment if the provider returns them.
                 </p>
@@ -100,8 +100,8 @@ export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
         {isBill && bundleDescription && (
           <DetailRow label="Service" value={bundleDescription} />
         )}
-        {unitsFromReloadly && (
-          <DetailRow label="Electricity (Reloadly)" value={unitsDisplay} />
+        {unitsFromProvider && (
+          <DetailRow label="Electricity" value={unitsDisplay} />
         )}
         {subscriberName && (
           <DetailRow label="Account holder" value={subscriberName} />
@@ -117,28 +117,17 @@ export default function UtilityQuoteSummary({ quote, phone, billLookup }) {
         )}
         {quote.providerFeeFiat != null && Number(quote.providerFeeFiat) > 0 && (
           <DetailRow
-            label="Bill service fee"
+            label="Service fee"
             value={`${Number(quote.providerFeeFiat).toLocaleString()} ${currency}`}
           />
         )}
-        {feeUsdc != null && (
+        {feeUsdc != null && Number(feeUsdc) > 0 && !(Number(quote.providerFeeFiat) > 0) && (
           <DetailRow label="Platform fee" value={`${Number(feeUsdc).toFixed(4)} USDC`} />
         )}
-        {(quote.reloadlyMock || quote.billsProvider === 'marzpay') && (
+        {(quote.marzPayMock || quote.reloadlyMock || quote.billsProvider === 'marzpay') && (
           <DetailRow
             label="Bills rail"
-            value={quote.billsProvider === 'marzpay'
-              ? (quote.reloadlyMock ? 'MarzPay mock' : 'MarzPay')
-              : 'Sandbox mock'}
-          />
-        )}
-        {quote.billSettlementFallback && (
-          <DetailRow
-            label="Sandbox note"
-            value={billSandboxFallbackNote({
-              operatorName: quote.operatorName || quote.billerName,
-              countryCode: quote.countryCode || quote.country_code,
-            })}
+            value={(quote.marzPayMock || quote.reloadlyMock) ? 'MarzPay mock' : 'MarzPay'}
           />
         )}
       </div>

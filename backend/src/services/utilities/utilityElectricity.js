@@ -1,5 +1,5 @@
 /**
- * Parse Reloadly utility bill transaction payloads (units, token, customer name).
+ * Parse MarzPay bill payloads (Yaka token, units, customer name).
  */
 
 function extractMarzPayDelivery(payload) {
@@ -30,66 +30,17 @@ function extractMarzPayDelivery(payload) {
   };
 }
 
-export function extractBillDelivery(reloadlyPayload) {
-  if (!reloadlyPayload) return null;
-
-  const marz = extractMarzPayDelivery(reloadlyPayload);
-  if (marz && (marz.token || marz.customerName || reloadlyPayload.provider === 'marzpay')) {
-    return marz;
-  }
-
-  const tx = reloadlyPayload.transaction || reloadlyPayload;
-  const billDetails = tx.billDetails || reloadlyPayload.billDetails;
-  if (!billDetails) return marz;
-
-  const subscriber = billDetails.subscriberDetails || {};
-  const customerName = subscriber.customerName
-    || subscriber.name
-    || subscriber.subscriberName
-    || billDetails.customerName
-    || null;
-
-  const pinDetails = billDetails.pinDetails || null;
-  const info1 = pinDetails?.info1 || pinDetails?.info2 || null;
-  let units = null;
-  let unitLabel = 'units';
-  if (info1) {
-    const match = String(info1).match(/([\d.]+)\s*(kWh|units?)/i);
-    if (match) {
-      units = parseFloat(match[1]);
-      unitLabel = match[2].toLowerCase().startsWith('kwh') ? 'kWh' : 'units';
-    }
-  }
-
-  if (!customerName && !pinDetails) return null;
-
-  return {
-    customerName,
-    token: pinDetails?.token || null,
-    units,
-    unitLabel,
-    unitsDisplay: info1 || (units != null ? `${units} ${unitLabel}` : null),
-    billerReferenceId: billDetails.billerReferenceId || null,
-    source: 'reloadly',
-  };
+export function extractBillDelivery(payload) {
+  if (!payload) return null;
+  return extractMarzPayDelivery(payload);
 }
 
 /** @deprecated use extractBillDelivery */
-export function extractElectricityDelivery(reloadlyPayload) {
-  return extractBillDelivery(reloadlyPayload);
-}
-
-export function getReloadlyTransactionId(receipt) {
-  if (!receipt) return null;
-  return receipt.id
-    ?? receipt.transaction?.id
-    ?? receipt.data?.transaction?.uuid
-    ?? receipt.data?.transaction?.reference
-    ?? null;
+export function extractElectricityDelivery(payload) {
+  return extractBillDelivery(payload);
 }
 
 export default {
   extractBillDelivery,
   extractElectricityDelivery,
-  getReloadlyTransactionId,
 };

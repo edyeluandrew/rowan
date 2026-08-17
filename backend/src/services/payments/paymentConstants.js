@@ -1,7 +1,6 @@
 /** Registered payment rail providers (C2). */
 export const PAYMENT_PROVIDERS = {
   MARZ_PAY: 'marz_pay',
-  YELLOW_PAY: 'yellow_pay',
   P2P_TRADER: 'p2p_trader',
 };
 
@@ -11,7 +10,7 @@ export const PAYMENT_SIDES = {
   ONRAMP: 'onramp',
 };
 
-/** Uganda-only launch: P2P first. Aggregators rejoin via countries.payment_config. */
+/** Uganda launch: P2P for USDC buy/sell. MarzPay is bills/airtime/data only. */
 export const DEFAULT_OFFRAMP_CHAIN = [
   PAYMENT_PROVIDERS.P2P_TRADER,
 ];

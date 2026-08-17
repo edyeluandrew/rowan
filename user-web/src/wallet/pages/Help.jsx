@@ -43,11 +43,11 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Where is my mobile money?',
-    a: 'Cash-out sends MoMo to your phone automatically. Check your MTN or Airtel SMS. If nothing arrives after a few minutes, open a dispute from the order screen. Buy sends a prompt to your phone — approve it, then USDC arrives.',
+    a: 'A trader sends mobile money to your phone. Confirm only after it arrives. For airtime and bills, MarzPay pays from our utility wallet — check the receipt if a token or top-up is slow.',
   },
   {
     q: 'I confirmed too early',
-    a: 'Automated cash-outs complete on their own — you do not confirm to a trader. For trader orders, confirmation releases escrow. If you have not received MoMo, contact support with your order ID.',
+    a: 'For trader orders, confirmation releases escrow. If you have not received MoMo, dispute instead of confirming. Airtime and bills complete on their own after you send USDC.',
   },
   {
     q: 'What is a USDC trustline?',
@@ -318,7 +318,7 @@ export default function Help() {
           </li>
           <li className="flex gap-2">
             <span className="text-rowan-yellow shrink-0">•</span>
-            Sends mobile money to your phone for cash-out. Buy sends a prompt to your phone — approve it to receive USDC.
+            Matches you with a verified trader for Buy and Sell. Airtime, data, and bills go through MarzPay.
           </li>
           <li className="flex gap-2">
             <span className="text-rowan-yellow shrink-0">•</span>
@@ -326,8 +326,8 @@ export default function Help() {
           </li>
         </ul>
         <p className="text-rowan-muted text-xs mt-3 leading-relaxed border-t border-rowan-border pt-3">
-          Cash-out sends mobile money to your registered number. Check your phone for the MoMo SMS —
-          the order completes automatically. If nothing arrives, open a dispute from the order screen.
+          Cash-out is a P2P trade. A trader sends MoMo to your number. Confirm only after it arrives.
+          Airtime and bills are paid from the MarzPay wallet after you send USDC.
         </p>
       </section>
 
@@ -338,9 +338,9 @@ export default function Help() {
           <p className="text-rowan-text text-sm font-semibold">Cash out (sell USDC)</p>
         </div>
         <ol className="space-y-2 text-rowan-muted text-xs leading-relaxed list-decimal list-inside">
-          <li>Get a quote and send the exact USDC + memo to escrow</li>
-          <li>We send mobile money to your registered number</li>
-          <li>Check your MoMo SMS — the order completes automatically</li>
+          <li>Pick a trader and send the exact USDC + memo to escrow</li>
+          <li>Wait for the trader to send mobile money to your number</li>
+          <li>Confirm only after MoMo arrives — that releases USDC</li>
           <li>If MoMo does not arrive, open a dispute from the order screen</li>
         </ol>
       </section>
@@ -352,9 +352,9 @@ export default function Help() {
           <p className="text-rowan-text text-sm font-semibold">Buy</p>
         </div>
         <ol className="space-y-2 text-rowan-muted text-xs leading-relaxed list-decimal list-inside">
-          <li>Enter your amount and mobile money number</li>
-          <li>Approve the MTN or Airtel prompt on your phone</li>
-          <li>USDC arrives in your wallet after we receive the payment</li>
+          <li>Pick a trader ad and follow the quote</li>
+          <li>Pay the trader via mobile money as instructed</li>
+          <li>Trader verifies payment, then USDC arrives in your wallet</li>
         </ol>
       </section>
 
@@ -365,7 +365,7 @@ export default function Help() {
           <p className="text-rowan-text text-sm font-semibold">Timing</p>
         </div>
         <p className="text-rowan-muted text-xs leading-relaxed">
-          Estimates are typical, not guarantees. Cash-out MoMo is usually sent within a few minutes.
+          Estimates are typical, not guarantees. P2P trades depend on the trader being online.
           If an order sits too long, open a dispute from the order screen or contact support with your order ID.
         </p>
       </section>

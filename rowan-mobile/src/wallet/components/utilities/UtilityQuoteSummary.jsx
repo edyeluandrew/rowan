@@ -65,11 +65,17 @@ export default function UtilityQuoteSummary({ quote, phone }) {
         {phone && (
           <DetailRow label="Phone" value={maskPhoneNumber(phone)} />
         )}
-        {feeUsdc != null && (
+        {quote.providerFeeFiat != null && Number(quote.providerFeeFiat) > 0 && (
+          <DetailRow
+            label="Service fee"
+            value={`${Number(quote.providerFeeFiat).toLocaleString()} ${currency}`}
+          />
+        )}
+        {feeUsdc != null && Number(feeUsdc) > 0 && !(Number(quote.providerFeeFiat) > 0) && (
           <DetailRow label="Platform fee" value={`${Number(feeUsdc).toFixed(4)} USDC`} />
         )}
-        {quote.reloadlyMock && (
-          <DetailRow label="Mode" value="Sandbox mock" />
+        {(quote.marzPayMock || quote.reloadlyMock) && (
+          <DetailRow label="Mode" value="MarzPay mock" />
         )}
       </div>
 

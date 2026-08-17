@@ -12,11 +12,9 @@ import {
   getUtilityHistory,
   getUtilityBundles,
   getUtilityLimits,
-  getUtilityOperators,
   getUtilityDataAvailability,
 } from '../api/utilities'
 import { getNetworksForCountry, getDialCodeForCountry } from '../utils/country'
-import { limitsFromReloadlyOperators } from '../utils/reloadlyOperatorMatch'
 import AmountInput from '../components/cashout/AmountInput'
 import PhoneInput from '../components/cashout/PhoneInput'
 import DataBundlePicker from '../components/utilities/DataBundlePicker'
@@ -116,7 +114,6 @@ export default function Utilities({ utilityType = 'airtime' }) {
 
   const currency = fiatCurrency
   const usdcToFiatRate = rates?.usdcToFiat || 0
-  const feePercent = utilityConfig?.feePercent ?? 1
   const minFiat = operatorLimits?.minFiatAmount ?? null
   const maxFiat = operatorLimits?.maxFiatAmount ?? null
   const fixedAmounts = operatorLimits?.denominationType === 'FIXED'
@@ -136,11 +133,11 @@ export default function Utilities({ utilityType = 'airtime' }) {
     : (parseFloat(fiatAmount) || 0)
 
   const usdcEstimate = usdcToFiatRate > 0 && netFiat > 0
-    ? (netFiat / usdcToFiatRate) * (1 + feePercent / 100)
+    ? netFiat / usdcToFiatRate
     : 0
 
   const walletMaxFiat = usdcToFiatRate > 0 && spendableUsdc != null
-    ? spendableUsdc * usdcToFiatRate / (1 + feePercent / 100)
+    ? spendableUsdc * usdcToFiatRate
     : null
 
   const exceedsWallet = walletMaxFiat != null && netFiat > walletMaxFiat
@@ -149,20 +146,10 @@ export default function Utilities({ utilityType = 'airtime' }) {
 
   const loadBundles = useCallback(async () => {
     if (!isData || !fullPhone) return
-    // Soft gate: only hard-stop for corridors we know are empty (e.g. KE sandbox).
-    // Still attempt plan load if availability is unknown — avoid false "no plans" from
-    // mock/catalog glitches that previously blocked working UG Reloadly products.
     if (dataAvailability && dataAvailability.available === false) {
-      const knownEmpty = ['KE', 'TZ', 'RW'].includes(String(country).toUpperCase())
-      if (knownEmpty) {
-        setBundles([])
-        setBundlesError(
-          `No data bundle products for ${country} yet. `
-          + 'Switch to Uganda for data, or use Airtime here.'
-        )
-        return
-      }
-      // UG / NG / etc: fall through and try live bundles; show banner separately.
+      setBundles([])
+      setBundlesError('No data plans for this country yet. Utilities are Uganda first.')
+      return
     }
     setBundlesLoading(true)
     setBundlesError(null)
@@ -211,20 +198,6 @@ export default function Utilities({ utilityType = 'airtime' }) {
       })
       setOperatorLimits(limits)
     } catch (err) {
-      const status = err.response?.status
-      if (status === 404) {
-        try {
-          const operators = await getUtilityOperators(country)
-          const fallback = limitsFromReloadlyOperators(operators, dialNetwork, currency)
-          if (fallback) {
-            setOperatorLimits(fallback)
-            setLimitsError(null)
-            return
-          }
-        } catch {
-          /* use error below */
-        }
-      }
       setOperatorLimits(null)
       setLimitsError(err.response?.data?.error || err.message)
     } finally {
@@ -303,18 +276,10 @@ export default function Utilities({ utilityType = 'airtime' }) {
 
       <UsdcTrustlineSetup compact />
 
-      {(utilityConfig?.marzPayMock || utilityConfig?.reloadlyMock) && (
+      {(utilityConfig?.marzPayMock) && (
         <div className="bg-rowan-mint border border-rowan-green/30 rounded-xl p-3 mb-4">
           <p className="text-rowan-text text-xs">
             Staging mode — utilities use a mock provider until live keys are added.
-          </p>
-        </div>
-      )}
-
-      {isData && dataAvailability && !dataAvailability.available && ['KE', 'TZ', 'RW'].includes(String(country).toUpperCase()) && (
-        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-3 mb-4">
-          <p className="text-rowan-yellow text-sm">
-            No data plans for {country} yet. Use Airtime here, or switch to Uganda for data.
           </p>
         </div>
       )}
@@ -377,7 +342,7 @@ export default function Utilities({ utilityType = 'airtime' }) {
           />
           {selectedBundle && usdcEstimate > 0 && (
             <p className="text-rowan-muted text-xs mt-3 px-1 tabular-nums">
-              ≈ {usdcEstimate.toFixed(4)} USDC including {feePercent}% fee
+              ≈ {usdcEstimate.toFixed(4)} USDC
             </p>
           )}
         </div>
@@ -430,13 +395,12 @@ export default function Utilities({ utilityType = 'airtime' }) {
             currency={currency}
             cryptoEstimate={usdcEstimate}
             cryptoLabel="USDC"
-            platformFeeFiat={netFiat * (feePercent / 100)}
+            platformFeeFiat={0}
             maxFiat={Math.min(maxFiat ?? Infinity, walletMaxFiat ?? maxFiat ?? Infinity)}
           />
           {minFiat != null && maxFiat != null && (
             <p className="text-rowan-muted text-xs mt-2 px-1">
               Min {Math.ceil(minFiat).toLocaleString()} · Max {Math.floor(maxFiat).toLocaleString()} {currency}
-              {utilityConfig?.limitsSource === 'reloadly' ? ' (from Reloadly)' : utilityConfig?.limitsSource === 'marzpay' ? ' (from MarzPay)' : ''}
             </p>
           )}
         </>

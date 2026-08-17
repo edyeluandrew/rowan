@@ -1,8 +1,7 @@
 /**
- * MarzPay rails:
- *   cash-out → Send Money (disbursement)
- *   buy      → Collect Money
- * Same UGX wallet: collections fund disbursements.
+ * MarzPay buy/sell rails (Collect / Send Money) — off by default.
+ * Launch uses MarzPay only for bills, airtime, and data via marzPayClient.
+ * Set MARZPAY_BUY_SELL=true to put Collect/Send back on the buy/sell chain.
  */
 
 import config from '../../../config/index.js';
@@ -60,6 +59,7 @@ function corridorEnabled(countryCode, side) {
 }
 
 export function isAvailable(countryCode, side = PAYMENT_SIDES.OFFRAMP) {
+  if (!marzConfig().buySellEnabled) return false;
   const normalized = String(side || '').toLowerCase();
   if (!corridorEnabled(countryCode, normalized)) return false;
   if (marzPayIsMock()) return true;
@@ -69,6 +69,9 @@ export function isAvailable(countryCode, side = PAYMENT_SIDES.OFFRAMP) {
 
 export function unavailableReason(countryCode, side = PAYMENT_SIDES.OFFRAMP) {
   const cfg = marzConfig();
+  if (!cfg.buySellEnabled) {
+    return 'MarzPay Collect/Send is off — bills, airtime, and data only';
+  }
   if (!cfg.enabled) return 'MarzPay disabled in config';
   const normalized = String(side || '').toLowerCase();
   const code = String(countryCode || '').toUpperCase();

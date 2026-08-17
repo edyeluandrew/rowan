@@ -114,6 +114,9 @@ async function tryMarzPayOnramp(transaction) {
   if (transaction.preferred_payout_setting_id) return false;
   const countryCode = paymentRouter.networkToCountryCode(transaction.network);
   if (!countryCode) return false;
+  if (!paymentRouter.getProviderChain(countryCode, PAYMENT_SIDES.ONRAMP).includes(PAYMENT_PROVIDERS.MARZ_PAY)) {
+    return false;
+  }
   if (!marzPayProvider.isAvailable(countryCode, PAYMENT_SIDES.ONRAMP)) return false;
   if (!transaction.payout_phone) {
     logger.warn(`[BuyOrchestrator] MarzPay collect skip tx ${transaction.id}: missing payout_phone`);

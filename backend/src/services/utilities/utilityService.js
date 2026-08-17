@@ -6,22 +6,13 @@ import crypto from 'crypto';
 import db from '../../db/index.js';
 import config from '../../config/index.js';
 import countryService from '../countries/countryService.js';
-import reloadlyClient from './reloadlyClient.js';
-import reloadlyUtilityPaymentsClient from './reloadlyUtilityPaymentsClient.js';
 import marzPayClient from './marzPayClient.js';
-import { extractBundlesFromOperator } from './utilityBundles.js';
-import {
-  assertFiatAmountAllowed,
-  getTopupLimits,
-  getDataAvailability,
-  listNormalizedOperators,
-  resolveOperatorForPhone,
-} from './reloadlyOperatorCatalog.js';
-import { normalizeBillersResponse } from './utilityBillers.js';
-import { extractBillDelivery, getReloadlyTransactionId } from './utilityElectricity.js';
+import { extractBillDelivery } from './utilityElectricity.js';
 import utilityPricing from './utilityPricing.js';
 import utilityUsdcService from './utilityUsdcService.js';
 import logger from '../../utils/logger.js';
+
+const { assertFiatAmountAllowed } = utilityPricing;
 
 function buildMemo() {
   const short = crypto.randomBytes(4).toString('hex');
@@ -41,11 +32,6 @@ function normalizePhone(phone, countryCode) {
 
 function normalizeSubscriberAccount(account) {
   return String(account || '').trim().replace(/\s+/g, '');
-}
-
-function buildBillReferenceId(purchaseId) {
-  const compact = String(purchaseId || '').replace(/-/g, '').slice(0, 16);
-  return `ROWAN-${compact}`;
 }
 
 function friendlyBillPayError(err) {
@@ -112,7 +98,7 @@ async function insertUtilityQuote({
   recipientValue,
   pricing,
   bundleLabel,
-  provider = 'reloadly',
+  provider = 'marzpay',
   receipt = {},
 }) {
   const memo = buildMemo();
@@ -147,16 +133,13 @@ async function insertUtilityQuote({
     ]
   );
 
-  const reloadlyMock = provider === 'marzpay'
-    ? marzPayClient.marzPayIsMock()
-    : utilityType === 'bill'
-      ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
-      : reloadlyClient.reloadlyIsMock();
+  const providerMock = marzPayClient.marzPayIsMock();
 
   return formatPurchase(result.rows[0], {
     treasuryPublicKey,
     pricing,
-    reloadlyMock,
+    reloadlyMock: providerMock,
+    marzPayMock: providerMock,
   });
 }
 
@@ -180,30 +163,40 @@ export async function listProviders(countryCode, type = 'airtime') {
 
 export async function listOperators(countryCode) {
   const code = String(countryCode || 'UG').trim().toUpperCase();
-  return listNormalizedOperators(code);
+  if (code !== 'UG') {
+    const err = new Error('Utilities are available in Uganda first');
+    err.status = 400;
+    throw err;
+  }
+  return [
+    { operatorId: 'MTN', operatorName: 'MTN Uganda', networkCode: 'MTN_UG', countryCode: 'UG' },
+    { operatorId: 'AIRTEL', operatorName: 'Airtel Uganda', networkCode: 'AIRTEL_UG', countryCode: 'UG' },
+  ];
 }
 
-export async function getReloadlyDataAvailability(countryCode) {
+export async function getDataAvailability(countryCode) {
   const code = String(countryCode || 'UG').trim().toUpperCase();
   if (!countryService.isActiveCountry(code)) {
     const err = new Error(`Unsupported country: ${code}`);
     err.status = 400;
     throw err;
   }
-  if (airtimeViaMarzPay(code)) {
-    return {
-      countryCode: code,
-      available: true,
-      operators: ['MTN Uganda', 'Airtel Uganda'],
-      provider: 'marzpay',
-      reloadlyMock: marzPayClient.marzPayIsMock(),
-      marzPayMock: marzPayClient.marzPayIsMock(),
-    };
+  if (code !== 'UG' || !airtimeViaMarzPay(code)) {
+    const err = new Error('Airtime and data are available in Uganda first');
+    err.status = 400;
+    throw err;
   }
-  return getDataAvailability(code);
+  return {
+    countryCode: code,
+    available: true,
+    operators: ['MTN Uganda', 'Airtel Uganda'],
+    provider: 'marzpay',
+    reloadlyMock: marzPayClient.marzPayIsMock(),
+    marzPayMock: marzPayClient.marzPayIsMock(),
+  };
 }
 
-export async function getReloadlyTopupLimits({
+export async function getTopupLimits({
   countryCode,
   networkCode,
   recipientPhone,
@@ -223,67 +216,42 @@ export async function getReloadlyTopupLimits({
     err.status = 400;
     throw err;
   }
-  if (airtimeViaMarzPay(code)) {
-    const limits = await marzPayClient.getAirtimeLimits({ msisdn: phone, networkCode: network });
-    return {
-      ...limits,
-      networkCode: marzNetworkToRowan(limits.detectedNetwork),
-    };
-  }
-  if (!countryService.isValidNetworkForCountry(code, network)) {
-    const err = new Error(`Network ${network} is not valid for ${code}`);
+  if (!airtimeViaMarzPay(code)) {
+    const err = new Error('Airtime and data are available in Uganda first');
     err.status = 400;
     throw err;
   }
-
-  return getTopupLimits({
-    countryCode: code,
-    networkCode: network,
-    recipientPhone: phone,
-    utilityType,
-  });
+  const limits = await marzPayClient.getAirtimeLimits({ msisdn: phone, networkCode: network });
+  return {
+    ...limits,
+    networkCode: marzNetworkToRowan(limits.detectedNetwork),
+  };
 }
 
 export async function listDataBundles({ countryCode, networkCode, recipientPhone }) {
   const code = String(countryCode || 'UG').trim().toUpperCase();
-  if (airtimeViaMarzPay(code)) {
-    const catalog = await marzPayClient.listAirtimeBundles({
-      msisdn: normalizePhone(recipientPhone, code),
-      networkCode,
-    });
-    return {
-      operatorId: catalog.operatorId,
-      operatorName: catalog.operatorName,
-      denominationType: 'FIXED',
-      fiatCurrency: catalog.fiatCurrency,
-      bundles: catalog.bundles,
-      countryCode: code,
-      networkCode,
-      recipientPhone: catalog.recipientPhone,
-      provider: 'marzpay',
-      reloadlyMock: catalog.reloadlyMock,
-      marzPayMock: catalog.marzPayMock,
-      message: catalog.message || null,
-    };
+  if (!airtimeViaMarzPay(code)) {
+    const err = new Error('Airtime and data are available in Uganda first');
+    err.status = 400;
+    throw err;
   }
-
-  const limits = await getReloadlyTopupLimits({
-    countryCode,
+  const catalog = await marzPayClient.listAirtimeBundles({
+    msisdn: normalizePhone(recipientPhone, code),
     networkCode,
-    recipientPhone,
-    utilityType: 'data',
   });
-
   return {
-    operatorId: limits.operatorId,
-    operatorName: limits.operatorName,
-    denominationType: limits.denominationType,
-    fiatCurrency: limits.fiatCurrency,
-    bundles: limits.bundles,
-    countryCode: limits.countryCode,
-    networkCode: limits.networkCode,
-    recipientPhone: normalizePhone(recipientPhone, limits.countryCode),
-    reloadlyMock: limits.reloadlyMock,
+    operatorId: catalog.operatorId,
+    operatorName: catalog.operatorName,
+    denominationType: 'FIXED',
+    fiatCurrency: catalog.fiatCurrency,
+    bundles: catalog.bundles,
+    countryCode: code,
+    networkCode,
+    recipientPhone: catalog.recipientPhone,
+    provider: 'marzpay',
+    reloadlyMock: catalog.marzPayMock,
+    marzPayMock: catalog.marzPayMock,
+    message: catalog.message || null,
   };
 }
 
@@ -295,38 +263,27 @@ export async function listBillers(countryCode) {
     throw err;
   }
 
-  if (billsViaMarzPay()) {
-    if (code !== 'UG') {
-      return {
-        billers: [],
-        countryCode: code,
-        provider: 'marzpay',
-        marzPayMock: marzPayClient.marzPayIsMock(),
-        billFeeFiat: marzPayClient.marzPayBillFeeFiat(),
-        message: 'MarzPay bills are available in Uganda first.',
-      };
-    }
-    const [services, areas] = await Promise.all([
-      marzPayClient.listBillServices(),
-      marzPayClient.listNwscAreas().catch(() => []),
-    ]);
+  if (!billsViaMarzPay() || code !== 'UG') {
     return {
-      billers: marzPayClient.servicesToBillers(services, { countryCode: code, areas }),
+      billers: [],
       countryCode: code,
       provider: 'marzpay',
       marzPayMock: marzPayClient.marzPayIsMock(),
       billFeeFiat: marzPayClient.marzPayBillFeeFiat(),
-      nwscAreas: areas,
+      message: 'Bills are available in Uganda first.',
     };
   }
-
-  const raw = await reloadlyUtilityPaymentsClient.getBillers({ countryISOCode: code });
-  const billers = normalizeBillersResponse(raw);
+  const [services, areas] = await Promise.all([
+    marzPayClient.listBillServices(),
+    marzPayClient.listNwscAreas().catch(() => []),
+  ]);
   return {
-    billers,
+    billers: marzPayClient.servicesToBillers(services, { countryCode: code, areas }),
     countryCode: code,
-    provider: 'reloadly',
-    reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+    provider: 'marzpay',
+    marzPayMock: marzPayClient.marzPayIsMock(),
+    billFeeFiat: marzPayClient.marzPayBillFeeFiat(),
+    nwscAreas: areas,
   };
 }
 
@@ -353,34 +310,22 @@ export async function lookupBillAccount({
     throw err;
   }
 
-  if (billsViaMarzPay()) {
-    const verified = await marzPayClient.verifyBillAccount({
-      utilityCode: billerId,
-      meterNumber: account,
-      area,
-    });
-    return {
-      ...verified,
-      billerId: String(billerId),
-      subscriberAccount: account,
-      serviceType: verified.customerType || billerServiceType || null,
-      marzPayMock: marzPayClient.marzPayIsMock(),
-    };
+  if (!billsViaMarzPay()) {
+    const err = new Error('Bills are available in Uganda first');
+    err.status = 400;
+    throw err;
   }
-
-  const result = await reloadlyUtilityPaymentsClient.lookupBillAccount({
-    billerId,
-    subscriberAccountNumber: account,
-    amount: Number(fiatAmount) || 0,
-    useLocalAmount: true,
+  const verified = await marzPayClient.verifyBillAccount({
+    utilityCode: billerId,
+    meterNumber: account,
+    area,
   });
-
   return {
-    ...result,
+    ...verified,
     billerId: String(billerId),
     subscriberAccount: account,
-    serviceType: billerServiceType || null,
-    reloadlyUtilitiesMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+    serviceType: verified.customerType || billerServiceType || null,
+    marzPayMock: marzPayClient.marzPayIsMock(),
   };
 }
 
@@ -426,12 +371,12 @@ export async function createQuote({
 
     const currency = countryService.getCurrencyForCountry(code);
     const fiat = Number(fiatAmount);
-    const utilityCode = billsViaMarzPay()
-      ? marzPayClient.normalizeUtilityCode(operatorId)
-      : String(operatorId);
+    const utilityCode = marzPayClient.normalizeUtilityCode(operatorId);
     const needsArea = utilityCode === 'NWSC';
     const needsBouquet = utilityCode === 'DSTV' || utilityCode === 'GOTV';
-    const providerFeeFiat = billsViaMarzPay() ? marzPayClient.marzPayBillFeeFiat() : 0;
+    const marzPayFeeFiat = marzPayClient.marzPayBillFeeFiat();
+    const platformFeeFiat = utilityPricing.rowanBillFeeFiat(fiat);
+    const providerFeeFiat = marzPayFeeFiat + platformFeeFiat;
     const phone = normalizePhone(notifyPhone || recipientPhone, code);
 
     if (needsArea && !String(area || '').trim()) {
@@ -444,7 +389,7 @@ export async function createQuote({
       err.status = 400;
       throw err;
     }
-    if (billsViaMarzPay() && (!phone || phone.length < 11)) {
+    if (!phone || phone.length < 11) {
       const err = new Error('A Uganda phone number is required for bill confirmation SMS');
       err.status = 400;
       throw err;
@@ -459,11 +404,15 @@ export async function createQuote({
 
     const chargeableFiat = fiat + providerFeeFiat;
     const pricing = await utilityPricing.quoteUtilityPurchase({
-      fiatAmount: chargeableFiat,
+      fiatAmount: fiat,
       fiatCurrency: currency,
+      extraFiat: providerFeeFiat,
+      platformFeeFiat,
     });
     pricing.billFiatAmount = fiat;
     pricing.providerFeeFiat = providerFeeFiat;
+    pricing.marzPayFeeFiat = marzPayFeeFiat;
+    pricing.platformFeeFiat = platformFeeFiat;
     pricing.chargeableFiat = chargeableFiat;
 
     const resolvedBillerName = billerName || bundleDescription || `Biller ${utilityCode}`;
@@ -480,15 +429,17 @@ export async function createQuote({
       recipientValue: account,
       pricing,
       bundleLabel: billLabel,
-      provider: billsViaMarzPay() ? 'marzpay' : 'reloadly',
+      provider: 'marzpay',
       receipt: {
-        provider: billsViaMarzPay() ? 'marzpay' : 'reloadly',
+        provider: 'marzpay',
         utilityCode,
         area: area || null,
         bouquetCode: bouquetCode || null,
         notifyPhone: phone ? marzPayClient.formatMarzPhone(phone) : null,
         customerName: customerName || null,
         providerFeeFiat,
+        marzPayFeeFiat,
+        platformFeeFiat,
       },
     });
 
@@ -567,54 +518,9 @@ export async function createQuote({
     });
   }
 
-  const network = String(networkCode || '').trim().toUpperCase();
-  if (!countryService.isValidNetworkForCountry(code, network)) {
-    const err = new Error(`Network ${network} is not valid for ${code}`);
-    err.status = 400;
-    throw err;
-  }
-
-  const { operator, limits } = await resolveOperatorForPhone({
-    countryCode: code,
-    networkCode: network,
-    recipientPhone: phone,
-    utilityType,
-  });
-
-  let bundleCatalog = null;
-  if (utilityType === 'data') {
-    bundleCatalog = extractBundlesFromOperator(operator, currency);
-  }
-
-  assertFiatAmountAllowed({
-    fiatAmount: fiat,
-    utilityType,
-    limits,
-    bundles: bundleCatalog?.bundles,
-    fiatCurrency: currency,
-  });
-
-  const pricing = await utilityPricing.quoteUtilityPurchase({
-    fiatAmount: fiat,
-    fiatCurrency: currency,
-  });
-
-  const resolvedOperatorId = operatorId || limits.operatorId;
-  const operatorName = limits.operatorName || operator?.name || null;
-
-  const bundleLabel = bundleDescription ? String(bundleDescription).trim().slice(0, 500) : null;
-
-  return insertUtilityQuote({
-    userId,
-    utilityType,
-    code,
-    networkCode: network,
-    operatorId: resolvedOperatorId,
-    operatorName,
-    recipientValue: phone,
-    pricing,
-    bundleLabel,
-  });
+  const err = new Error('Airtime and data are available in Uganda first');
+  err.status = 400;
+  throw err;
 }
 
 export async function completePurchase({ userId, quoteId, paymentTxHash, mockSkipPayment = false }) {
@@ -702,7 +608,6 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
 
   let reloadlyResult;
   let externalRef;
-  let billSettlementFallback = false;
 
   if (purchase.utility_type === 'bill') {
     if (!purchase.operator_id) {
@@ -713,49 +618,33 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
     }
     const billMeta = readReceipt(purchase);
     try {
-      if (purchase.provider === 'marzpay' || billsViaMarzPay()) {
-        if (!billMeta.notifyPhone) {
-          throw Object.assign(new Error('Phone number missing on quote — get a new quote'), { status: 422 });
-        }
-        let existingPay = null;
-        try {
-          existingPay = await marzPayClient.getBillPayment(purchase.id);
-        } catch {
-          existingPay = null;
-        }
-        const existingStatus = String(
-          existingPay?.data?.transaction?.status || existingPay?.status || ''
-        ).toLowerCase();
-        if (['completed', 'success', 'successful', 'pending'].includes(existingStatus)) {
-          reloadlyResult = existingPay;
-        } else {
-          reloadlyResult = await marzPayClient.payBill({
-            reference: purchase.id,
-            utilityCode: purchase.operator_id,
-            meterNumber: purchase.recipient_phone,
-            phoneNumber: billMeta.notifyPhone,
-            amount: Number(purchase.fiat_amount),
-            area: billMeta.area,
-            bouquetCode: billMeta.bouquetCode,
-            customerName: billMeta.customerName,
-          });
-        }
-        reloadlyResult.provider = 'marzpay';
-      } else {
-        const billPay = await reloadlyUtilityPaymentsClient.payBillForPurchase({
-          billerId: purchase.operator_id,
-          subscriberAccountNumber: purchase.recipient_phone,
-          amount: Number(purchase.fiat_amount),
-          useLocalAmount: true,
-          referenceId: buildBillReferenceId(purchase.id),
-          countryCode: purchase.country_code,
-        });
-        reloadlyResult = billPay.result;
-        billSettlementFallback = billPay.usedStagingFallback;
-        if (billPay.fallbackReason) {
-          reloadlyResult._fallbackReason = billPay.fallbackReason;
-        }
+      if (!billMeta.notifyPhone) {
+        throw Object.assign(new Error('Phone number missing on quote — get a new quote'), { status: 422 });
       }
+      let existingPay = null;
+      try {
+        existingPay = await marzPayClient.getBillPayment(purchase.id);
+      } catch {
+        existingPay = null;
+      }
+      const existingStatus = String(
+        existingPay?.data?.transaction?.status || existingPay?.status || ''
+      ).toLowerCase();
+      if (['completed', 'success', 'successful', 'pending'].includes(existingStatus)) {
+        reloadlyResult = existingPay;
+      } else {
+        reloadlyResult = await marzPayClient.payBill({
+          reference: purchase.id,
+          utilityCode: purchase.operator_id,
+          meterNumber: purchase.recipient_phone,
+          phoneNumber: billMeta.notifyPhone,
+          amount: Number(purchase.fiat_amount),
+          area: billMeta.area,
+          bouquetCode: billMeta.bouquetCode,
+          customerName: billMeta.customerName,
+        });
+      }
+      reloadlyResult.provider = 'marzpay';
     } catch (err) {
       const reason = friendlyBillPayError(err);
       await failPurchase(quoteId, reason);
@@ -772,7 +661,7 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
       || reloadlyResult.id
       || reloadlyResult.transactionId
       || purchase.id;
-  } else if (purchase.provider === 'marzpay') {
+  } else {
     const billMeta = readReceipt(purchase);
     const purchaseType = purchase.utility_type === 'data' || billMeta.purchaseType === 'bundle'
       ? 'bundle'
@@ -814,51 +703,15 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
       || reloadlyResult.data?.provider_reference
       || reloadlyResult.reference
       || purchase.id;
-  } else {
-    let operatorId = purchase.operator_id;
-
-    if (!operatorId) {
-      const detected = await reloadlyClient.autoDetectOperator(
-        purchase.country_code,
-        purchase.recipient_phone
-      );
-      operatorId = detected?.operatorId;
-    }
-
-    if (!operatorId) {
-      await failPurchase(quoteId, 'Could not resolve mobile operator for this number');
-      const err = new Error('Could not resolve mobile operator');
-      err.status = 422;
-      throw err;
-    }
-
-    try {
-      reloadlyResult = await reloadlyClient.sendAirtimeTopup({
-        operatorId,
-        amount: Number(purchase.fiat_amount),
-        countryCode: purchase.country_code,
-        phoneNumber: purchase.recipient_phone,
-        customIdentifier: purchase.id,
-      });
-    } catch (err) {
-      await failPurchase(quoteId, err.message);
-      throw err;
-    }
-
-    externalRef = reloadlyResult.transactionId
-      || reloadlyResult.operatorTransactionId
-      || reloadlyResult.customIdentifier;
   }
 
-  const rawBillStatus = (purchase.utility_type === 'bill' || purchase.provider === 'marzpay')
-    ? String(
-      reloadlyResult?.data?.transaction?.status
-      || reloadlyResult?.data?.status
-      || reloadlyResult?.transaction?.status
-      || reloadlyResult?.status
-      || 'COMPLETED'
-    ).toUpperCase()
-    : 'COMPLETED';
+  const rawBillStatus = String(
+    reloadlyResult?.data?.transaction?.status
+    || reloadlyResult?.data?.status
+    || reloadlyResult?.transaction?.status
+    || reloadlyResult?.status
+    || 'COMPLETED'
+  ).toUpperCase();
   const finalStatus = rawBillStatus === 'SUCCESS' || rawBillStatus === 'SUCCESSFUL'
     ? 'COMPLETED'
     : rawBillStatus === 'PENDING'
@@ -887,19 +740,15 @@ export async function completePurchase({ userId, quoteId, paymentTxHash, mockSki
       JSON.stringify({
         ...readReceipt(purchase),
         ...reloadlyResult,
-        provider: purchase.provider || readReceipt(purchase).provider || 'reloadly',
+        provider: purchase.provider || readReceipt(purchase).provider || 'marzpay',
       }),
       purchaseStatus,
     ]
   );
 
   return formatPurchase(completed.rows[0], {
-    reloadlyMock: purchase.provider === 'marzpay' || billsViaMarzPay() && purchase.utility_type === 'bill'
-      ? marzPayClient.marzPayIsMock()
-      : purchase.utility_type === 'bill'
-        ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
-        : reloadlyClient.reloadlyIsMock(),
-    billSettlementFallback: purchase.utility_type === 'bill' ? billSettlementFallback : false,
+    reloadlyMock: marzPayClient.marzPayIsMock(),
+    marzPayMock: marzPayClient.marzPayIsMock(),
   });
 }
 
@@ -934,33 +783,18 @@ export async function refreshBillDelivery({ userId, purchaseId }) {
     receipt = null;
   }
 
-  const viaMarz = purchase.provider === 'marzpay' || receipt.provider === 'marzpay';
   let reloadlyResult;
   try {
-    if (viaMarz) {
-      reloadlyResult = await marzPayClient.waitForBillSettlement(purchase.id);
-      reloadlyResult.provider = 'marzpay';
-    } else {
-      const txId = getReloadlyTransactionId(receipt);
-      if (!txId) {
-        return formatPurchase(purchase, {
-          reloadlyMock: reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
-        });
-      }
-      reloadlyResult = await reloadlyUtilityPaymentsClient.waitForBillSettlement(
-        { id: txId, ...receipt },
-        { maxAttempts: 8, delayMs: 2500 }
-      );
-    }
+    reloadlyResult = await marzPayClient.waitForBillSettlement(purchase.id);
+    reloadlyResult.provider = 'marzpay';
   } catch (err) {
     logger.warn('[UtilityService] refreshBillDelivery poll failed', {
       purchaseId,
       error: err.message,
     });
     return formatPurchase(purchase, {
-      reloadlyMock: viaMarz
-        ? marzPayClient.marzPayIsMock()
-        : reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+      reloadlyMock: marzPayClient.marzPayIsMock(),
+      marzPayMock: marzPayClient.marzPayIsMock(),
     });
   }
 
@@ -984,13 +818,12 @@ export async function refreshBillDelivery({ userId, purchaseId }) {
          updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
-    [purchaseId, purchaseStatus, JSON.stringify({ ...receipt, ...reloadlyResult, provider: viaMarz ? 'marzpay' : (receipt.provider || 'reloadly') })]
+    [purchaseId, purchaseStatus, JSON.stringify({ ...receipt, ...reloadlyResult, provider: 'marzpay' })]
   );
 
   return formatPurchase(updated.rows[0], {
-    reloadlyMock: viaMarz
-      ? marzPayClient.marzPayIsMock()
-      : reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock(),
+    reloadlyMock: marzPayClient.marzPayIsMock(),
+    marzPayMock: marzPayClient.marzPayIsMock(),
   });
 }
 
@@ -1027,11 +860,8 @@ export async function getPurchaseById(userId, purchaseId) {
     throw err;
   }
   return formatPurchase(row, {
-    reloadlyMock: row.provider === 'marzpay'
-      ? marzPayClient.marzPayIsMock()
-      : row.utility_type === 'bill'
-        ? reloadlyUtilityPaymentsClient.reloadlyUtilitiesIsMock()
-        : reloadlyClient.reloadlyIsMock(),
+    reloadlyMock: marzPayClient.marzPayIsMock(),
+    marzPayMock: marzPayClient.marzPayIsMock(),
   });
 }
 
@@ -1069,7 +899,8 @@ function formatPurchase(row, extra = {}) {
     createdAt: row.created_at,
     errorMessage: row.error_message,
     bundleDescription: row.bundle_description || null,
-    reloadlyMock: extra.reloadlyMock ?? reloadlyClient.reloadlyIsMock(),
+    reloadlyMock: extra.reloadlyMock ?? marzPayClient.marzPayIsMock(),
+    marzPayMock: extra.marzPayMock ?? extra.reloadlyMock ?? marzPayClient.marzPayIsMock(),
     pricing: extra.pricing,
     alreadyCompleted: extra.alreadyCompleted || false,
     serviceType: extra.serviceType || receipt?.customerType || (row.operator_id === 'LIGHT' ? 'PREPAID' : null),
@@ -1088,8 +919,8 @@ function formatPurchase(row, extra = {}) {
 export default {
   listProviders,
   listOperators,
-  getReloadlyTopupLimits,
-  getReloadlyDataAvailability,
+  getTopupLimits,
+  getDataAvailability,
   listDataBundles,
   listBillers,
   listBillBouquets,

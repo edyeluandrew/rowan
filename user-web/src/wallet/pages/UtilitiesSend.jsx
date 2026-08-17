@@ -31,7 +31,7 @@ export default function UtilitiesSend() {
     return null
   }
 
-  const useMockPath = mockPurchaseAllowed && quote.reloadlyMock
+  const useMockPath = mockPurchaseAllowed && (quote.reloadlyMock || quote.marzPayMock)
 
   const finishPurchase = async (paymentTxHash) => {
     const result = await completeUtilityPurchase({
@@ -137,7 +137,7 @@ export default function UtilitiesSend() {
       {useMockPath && (
         <div className="bg-rowan-mint border border-rowan-green/30 rounded-xl p-4 mt-4">
           <p className="text-rowan-text text-xs">
-            Staging mock — skips on-chain USDC. Reloadly sandbox mock will simulate the top-up.
+            Staging mock — skips on-chain USDC. MarzPay mock will simulate the top-up.
           </p>
         </div>
       )}

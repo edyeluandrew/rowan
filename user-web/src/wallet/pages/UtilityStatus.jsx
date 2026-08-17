@@ -3,7 +3,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { CheckCircle2, ChevronLeft, XCircle, Hash, Clock, ExternalLink, Loader2 } from 'lucide-react'
 import Button from '../components/ui/Button'
 import { maskPhoneNumber } from '../utils/crypto'
-import { labelsFor, getUtilityType, billSandboxFallbackNote } from '../utils/utilityLabels'
+import { labelsFor, getUtilityType } from '../utils/utilityLabels'
 import { CURRENT_NETWORK } from '../utils/constants'
 import { resolveFiatCurrency, getElectricityTokenLabel } from '../utils/country'
 import useUserCountry from '../hooks/useUserCountry'
@@ -60,9 +60,9 @@ export default function UtilityStatus() {
 
   useEffect(() => {
     if (!id || !isPrepaidBillPayment(data)) return
-    const hasReloadlyUnits = purchase?.electricityUnitsSource === 'reloadly' && purchase?.electricityUnits
+    const hasUnits = Boolean(purchase?.electricityUnits)
     const status = resolveStatus(purchase, data)
-    if (hasReloadlyUnits && status === 'COMPLETED') return
+    if (hasUnits && status === 'COMPLETED') return
 
     let cancelled = false
     setDeliveryLoading(true)
@@ -153,7 +153,7 @@ export default function UtilityStatus() {
   const electricityToken = purchase?.electricityToken || data.electricityToken
   const electricityUnits = purchase?.electricityUnits || data.electricityUnits
   const subscriberName = purchase?.subscriberName || data.subscriberName || billLookup?.customerName
-  const unitsFromReloadly = (purchase?.electricityUnitsSource || data.electricityUnitsSource) === 'reloadly'
+  const unitsFromProvider = Boolean(purchase?.electricityUnits || data.electricityUnits)
   const isPrepaidBill = isPrepaidBillPayment(data)
   const explorerUrl = paymentTxHash
     ? `${CURRENT_NETWORK.explorerUrl}/tx/${paymentTxHash}`
@@ -209,18 +209,18 @@ export default function UtilityStatus() {
         {isPrepaidBill && deliveryLoading && !electricityUnits && (
           <div className="flex items-center justify-center gap-2 mt-4 text-rowan-muted text-sm">
             <Loader2 size={16} className="animate-spin" />
-            Fetching units from {operatorName || 'provider'} via Reloadly…
+            Fetching units from {operatorName || 'provider'}…
           </div>
         )}
-        {isPrepaidBill && unitsFromReloadly && electricityUnits && (
+        {isPrepaidBill && unitsFromProvider && electricityUnits && (
           <div className="mt-4">
             <p className="text-rowan-green text-xl font-bold tabular-nums">{electricityUnits}</p>
-            <p className="text-rowan-muted text-xs mt-1">Confirmed by Reloadly{operatorName ? ` / ${operatorName}` : ''}</p>
+            <p className="text-rowan-muted text-xs mt-1">Confirmed{operatorName ? ` / ${operatorName}` : ''}</p>
           </div>
         )}
         {isPrepaidBill && processing && !electricityUnits && !deliveryLoading && (
           <p className="text-rowan-muted text-xs mt-4 px-2">
-            Units and {tokenLabel.toLowerCase()} will appear here once Reloadly confirms with the provider (usually within a minute).
+            Units and {tokenLabel.toLowerCase()} will appear here once the provider confirms (usually within a minute).
           </p>
         )}
         {isPrepaidBill && electricityToken && (
@@ -230,7 +230,7 @@ export default function UtilityStatus() {
               {electricityToken}
             </p>
             <p className="text-rowan-muted text-xs mt-2">
-              From Reloadly{operatorName ? ` / ${operatorName}` : ''} — enter on your meter keypad. Your provider may also send by SMS.
+              Enter on your meter keypad. Your provider may also send by SMS.
             </p>
           </div>
         )}
@@ -248,15 +248,7 @@ export default function UtilityStatus() {
         {retryError && (
           <p className="text-rowan-red text-sm mt-2">{retryError}</p>
         )}
-        {data.billSettlementFallback && completed && (
-          <p className="text-rowan-yellow text-xs mt-3 px-2 leading-relaxed">
-            {billSandboxFallbackNote({
-              operatorName,
-              countryCode: billCountry,
-            })}
-          </p>
-        )}
-        {data.reloadlyMock && completed && (
+        {(data.reloadlyMock || data.marzPayMock) && completed && (
           <p className="text-rowan-muted text-xs mt-3">{labels.mockNote}</p>
         )}
       </div>

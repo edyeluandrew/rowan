@@ -160,6 +160,7 @@ async function createBuyQuoteFromFiat({
   const { PAYMENT_SIDES, PAYMENT_PROVIDERS } = await import('./payments/paymentConstants.js');
   const countryCode = paymentRouter.networkToCountryCode(network);
   const marzOnramp = countryCode
+    && paymentRouter.getProviderChain(countryCode, PAYMENT_SIDES.ONRAMP).includes(PAYMENT_PROVIDERS.MARZ_PAY)
     && marzPayProvider.isAvailable(countryCode, PAYMENT_SIDES.ONRAMP)
     && marzPayProvider.amountInRange(fiatAmount);
 
