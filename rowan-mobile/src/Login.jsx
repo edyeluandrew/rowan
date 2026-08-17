@@ -1,36 +1,73 @@
 /**
  * Login.jsx — unified entry point.
  *
- * Default view: wallet onboarding (create/import wallet).
+ * Default view: an auto-playing story carousel of what Rowan does, over the
+ * wallet onboarding CTAs (create/import wallet).
  * Bottom link: "OTC Trader? Sign In" → switches to trader email/password form.
  *
  * No role selector dropdown — the mode is determined by the user's action.
  */
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Star, Lock, Smartphone, ArrowRight } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { loginTrader as apiLoginTrader } from './trader/api/auth';
 import { getSecure } from './shared/utils/storage';
 import { formatAddress } from './wallet/utils/format';
 import WalletTwoFactorLoginModal from './wallet/pages/WalletTwoFactorLoginModal';
+import RowanLogo from './components/RowanLogo';
+import MapInflowVisual from './components/story/MapInflowVisual';
+import CashoutVisual from './components/story/CashoutVisual';
+import ScanReceiveVisual from './components/story/ScanReceiveVisual';
+import BillsVisual from './components/story/BillsVisual';
 
 const SLIDES = [
-  { Icon: Star, title: 'Your Stellar Wallet', desc: 'Send, receive, and cash out XLM directly from your phone.' },
-  { Icon: Lock, title: 'Secure by Design', desc: 'Private keys stored in hardware-encrypted secure storage.' },
-  { Icon: Smartphone, title: 'Mobile Money Cashout', desc: 'Convert XLM to mobile money in minutes via matched OTC traders.' },
+  {
+    Visual: MapInflowVisual,
+    title: 'USDC lands in Uganda',
+    desc: 'Family and clients send you dollars from anywhere. They arrive in seconds, not days.',
+  },
+  {
+    Visual: CashoutVisual,
+    title: 'Cash out to mobile money',
+    desc: 'Turn USDC into MTN MoMo or Airtel Money through escrow-protected traders.',
+  },
+  {
+    Visual: ScanReceiveVisual,
+    title: 'Get paid with a scan',
+    desc: 'Show your code, they scan, and the money is in your wallet before they walk away.',
+  },
+  {
+    Visual: BillsVisual,
+    title: 'Pay bills and buy airtime',
+    desc: 'UMEME, water, data and airtime — straight from your USDC balance.',
+  },
 ];
+
+const SLIDE_MS = 6500;
+const SWIPE_PX = 45;
+
+async function tapFeedback() {
+  try {
+    const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
+    await Haptics.impact({ style: ImpactStyle.Light });
+  } catch {
+    /* haptics not available on web */
+  }
+}
 
 export default function Login() {
   const { loginAsTrader, loginWithWallet, setWalletAuthAfter2FA } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState('wallet'); // 'wallet' | 'trader'
   const [slide, setSlide] = useState(0);
+  const [back, setBack] = useState(false);
   const [storedPublicKey, setStoredPublicKey] = useState(null);
   const [walletLoading, setWalletLoading] = useState(false);
   const [walletError, setWalletError] = useState(null);
   const [show2faModal, setShow2faModal] = useState(false);
   const [tempUserId, setTempUserId] = useState(null);
+  const touchStartX = useRef(null);
 
   // Trader form state
   const [email, setEmail] = useState('');
@@ -51,6 +88,33 @@ export default function Login() {
       }
     })();
   }, []);
+
+  const goTo = useCallback(
+    (next, viaGesture) => {
+      setBack(next < slide);
+      setSlide((next + SLIDES.length) % SLIDES.length);
+      if (viaGesture) tapFeedback();
+    },
+    [slide],
+  );
+
+  useEffect(() => {
+    if (mode !== 'wallet' || show2faModal) return undefined;
+    const id = window.setTimeout(() => goTo(slide + 1), SLIDE_MS);
+    return () => window.clearTimeout(id);
+  }, [slide, mode, show2faModal, goTo]);
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const delta = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(delta) < SWIPE_PX) return;
+    goTo(delta < 0 ? slide + 1 : slide - 1, true);
+  };
 
   const handleOpenWallet = async () => {
     setWalletLoading(true);
@@ -126,8 +190,8 @@ export default function Login() {
   /* ── TRADER MODE ── */
   if (mode === 'trader') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-6 bg-rowan-bg">
-        <h1 className="text-rowan-yellow text-4xl font-bold tracking-widest">ROWAN</h1>
+      <div className="flex flex-col items-center justify-center min-h-[100dvh] px-6 bg-rowan-bg safe-top safe-bottom">
+        <RowanLogo size={40} />
         <p className="text-rowan-muted text-sm mt-2">OTC Trader Portal</p>
 
         <form onSubmit={handleTraderLogin} className="mt-12 w-full max-w-sm">
@@ -138,7 +202,7 @@ export default function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="bg-rowan-surface border border-rowan-border text-rowan-text rounded-xl px-4 py-3.5 w-full text-base focus:outline-none focus:border-rowan-yellow transition-colors mb-3 placeholder-rowan-muted min-h-11"
+            className="bg-rowan-surface border border-rowan-border text-rowan-text rounded-xl px-4 py-3.5 w-full text-base focus:outline-none focus:border-rowan-green transition-colors mb-3 placeholder-rowan-muted min-h-11"
           />
           <div className="relative mb-4">
             <input
@@ -148,7 +212,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="bg-rowan-surface border border-rowan-border text-rowan-text rounded-xl px-4 py-3.5 w-full text-base focus:outline-none focus:border-rowan-yellow transition-colors pr-14 placeholder-rowan-muted min-h-11"
+              className="bg-rowan-surface border border-rowan-border text-rowan-text rounded-xl px-4 py-3.5 w-full text-base focus:outline-none focus:border-rowan-green transition-colors pr-14 placeholder-rowan-muted min-h-11"
             />
             <button
               type="button"
@@ -162,7 +226,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center justify-center gap-2 font-bold rounded-xl py-4 w-full text-base bg-rowan-yellow text-rowan-bg transition-opacity disabled:opacity-50 min-h-11"
+            className="flex items-center justify-center gap-2 font-bold rounded-xl py-4 w-full text-base bg-rowan-green text-white transition-opacity disabled:opacity-50 min-h-11"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
@@ -172,7 +236,7 @@ export default function Login() {
           <button
             type="button"
             onClick={() => navigate('/trader/forgot-password')}
-            className="block w-full text-center text-rowan-muted text-xs mt-3 hover:text-rowan-yellow transition-colors min-h-9"
+            className="block w-full text-center text-rowan-muted text-xs mt-3 min-h-9"
           >
             Forgot Password?
           </button>
@@ -180,18 +244,12 @@ export default function Login() {
 
         <p className="text-rowan-muted text-sm mt-6">
           {"Don't have a trader account? "}
-          <button
-            onClick={() => navigate('/trader/signup')}
-            className="text-rowan-yellow font-medium"
-          >
+          <button onClick={() => navigate('/trader/signup')} className="text-rowan-green font-medium">
             Sign Up
           </button>
         </p>
 
-        <button
-          onClick={() => setMode('wallet')}
-          className="text-rowan-muted text-xs mt-8 underline min-h-9"
-        >
+        <button onClick={() => setMode('wallet')} className="text-rowan-muted text-xs mt-8 underline min-h-9">
           ← Back to Wallet
         </button>
       </div>
@@ -200,80 +258,114 @@ export default function Login() {
 
   /* ── WALLET MODE (default) ── */
   const current = SLIDES[slide];
+  const Visual = current.Visual;
+
   return (
-    <div className="bg-rowan-bg min-h-screen flex flex-col items-center justify-between px-6 py-12">
-      {/* Slide */}
-      <div className="flex-1 flex flex-col items-center justify-center text-center max-w-xs">
-        <div className="w-20 h-20 rounded-full bg-rowan-yellow/10 flex items-center justify-center mb-6">
-          <current.Icon size={40} className="text-rowan-yellow" />
-        </div>
-        <h2 className="text-rowan-text text-xl font-bold">{current.title}</h2>
-        <p className="text-rowan-muted text-sm mt-3">{current.desc}</p>
+    <div className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-rowan-bg">
+      {/* Ambient brand wash */}
+      <div
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_50%_at_50%_0%,rgba(18,184,26,0.13),transparent_60%),radial-gradient(ellipse_70%_40%_at_50%_100%,rgba(18,184,26,0.07),transparent_55%)]"
+        aria-hidden="true"
+      />
 
-        {/* Dots */}
-        <div className="flex gap-2 mt-6">
-          {SLIDES.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setSlide(i)}
-              className={`w-2.5 h-2.5 rounded-full transition-colors ${
-                i === slide ? 'bg-rowan-yellow' : 'bg-rowan-border'
-              }`}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="w-full max-w-sm space-y-3">
-        {slide < SLIDES.length - 1 ? (
-          <button
-            onClick={() => setSlide((s) => s + 1)}
-            className="flex items-center justify-center gap-2 font-bold rounded-xl py-4 w-full text-base bg-rowan-yellow text-rowan-bg min-h-11"
-          >
-            Next <ArrowRight size={18} />
-          </button>
-        ) : storedPublicKey ? (
-          <>
-            <button
-              onClick={handleOpenWallet}
-              disabled={walletLoading}
-              className="flex items-center justify-center gap-2 font-bold rounded-xl py-4 w-full text-base bg-rowan-yellow text-rowan-bg min-h-11 disabled:opacity-50"
-            >
-              {walletLoading ? 'Opening wallet...' : 'Open my wallet'}
-            </button>
-            <p className="text-rowan-muted text-xs text-center">
-              {formatAddress(storedPublicKey)}
-            </p>
-            <button
-              onClick={() => navigate('/wallet-setup')}
-              disabled={walletLoading}
-              className="w-full text-center text-rowan-muted text-sm min-h-11"
-            >
-              Set up a different wallet
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={() => navigate('/wallet-setup')}
-            className="flex items-center justify-center gap-2 font-bold rounded-xl py-4 w-full text-base bg-rowan-yellow text-rowan-bg min-h-11"
-          >
-            Get Started
-          </button>
-        )}
-
-        {slide === SLIDES.length - 1 && walletError && (
-          <p className="text-rowan-red text-sm text-center">{walletError}</p>
-        )}
-
-        {slide === SLIDES.length - 1 && (
+      <div className="relative flex min-h-[100dvh] flex-col px-5 pb-5 safe-top safe-bottom">
+        {/* Header */}
+        <div className="flex items-center justify-between pt-3">
+          <RowanLogo size={28} />
           <button
             onClick={() => setMode('trader')}
-            className="w-full text-center text-rowan-muted text-xs mt-4 min-h-9"
+            className="rounded-full border border-rowan-border bg-rowan-surface px-3 py-1.5 text-[11px] font-semibold text-rowan-muted min-h-9"
           >
-            OTC Trader? <span className="text-rowan-yellow underline">Sign In</span>
+            OTC Trader
           </button>
-        )}
+        </div>
+
+        {/* Story progress */}
+        <div className="mt-4 flex gap-1.5" role="tablist" aria-label="Product tour">
+          {SLIDES.map((s, i) => (
+            <button
+              key={s.title}
+              role="tab"
+              aria-selected={i === slide}
+              aria-label={s.title}
+              onClick={() => goTo(i, true)}
+              className="flex-1 py-2"
+            >
+              <span className="ob-progress-track block">
+                <span
+                  key={`${i}-${slide}`}
+                  className={`ob-progress-fill ${
+                    i === slide ? 'is-live' : i < slide ? 'is-done' : 'is-idle'
+                  }`}
+                  style={i === slide ? { '--ob-duration': `${SLIDE_MS}ms` } : undefined}
+                />
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Slide */}
+        <div
+          className="scrollbar-hide flex min-h-0 flex-1 flex-col justify-center overflow-y-auto"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div key={slide} className={`ob-slide${back ? ' is-back' : ''}`}>
+            <div className="flex min-h-[236px] items-center justify-center py-3">
+              <Visual />
+            </div>
+
+            <div className="ob-copy mt-5 text-center">
+              <h1 className="text-[26px] font-bold leading-tight tracking-tight text-rowan-text">
+                {current.title}
+              </h1>
+              <p className="mx-auto mt-2.5 max-w-[19rem] text-sm leading-relaxed text-rowan-muted">
+                {current.desc}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-6 w-full space-y-3">
+          {storedPublicKey ? (
+            <>
+              <button
+                onClick={handleOpenWallet}
+                disabled={walletLoading}
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-rowan-green py-4 text-base font-bold text-white shadow-[0_10px_24px_rgba(18,184,26,0.28)] transition-transform active:scale-[0.98] disabled:opacity-50"
+              >
+                {walletLoading ? 'Opening wallet…' : 'Open my wallet'}
+                {!walletLoading && <ArrowRight size={18} />}
+              </button>
+              <p className="text-center text-xs text-rowan-muted tabular-nums">
+                {formatAddress(storedPublicKey)}
+              </p>
+              <button
+                onClick={() => navigate('/wallet-setup')}
+                disabled={walletLoading}
+                className="min-h-11 w-full text-center text-sm text-rowan-muted"
+              >
+                Set up a different wallet
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => navigate('/wallet-setup')}
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-rowan-green py-4 text-base font-bold text-white shadow-[0_10px_24px_rgba(18,184,26,0.28)] transition-transform active:scale-[0.98]"
+              >
+                Get started <ArrowRight size={18} />
+              </button>
+              <p className="text-center text-[11px] leading-relaxed text-rowan-muted">
+                Non-custodial · your keys stay on this device
+              </p>
+            </>
+          )}
+
+          {walletError && <p className="text-center text-sm text-rowan-red">{walletError}</p>}
+          <LegalLinks className="pt-1" />
+        </div>
       </div>
 
       <WalletTwoFactorLoginModal
@@ -283,5 +375,15 @@ export default function Login() {
         onCancel={handle2faCancel}
       />
     </div>
+  );
+}
+
+function LegalLinks({ className = '' }) {
+  return (
+    <p className={`text-center text-[11px] text-rowan-muted leading-relaxed ${className}`}>
+      <Link to="/legal/terms" className="underline">Terms of Service</Link>
+      {' · '}
+      <Link to="/legal/privacy" className="underline">Privacy Policy</Link>
+    </p>
   );
 }
