@@ -131,6 +131,7 @@ export function resolvePaymentPlan({ countryCode, side, preferProvider }) {
     fallbackChain: available.slice(1),
     unavailable,
     hasAutomatedRail: available.some((p) => p.automated),
+    hasP2pFallback: available.some((p) => p.id === PAYMENT_PROVIDERS.P2P_TRADER),
   };
 }
 

@@ -85,6 +85,17 @@ export function isAutomatedOfframp(tx) {
   return true
 }
 
+/** Uganda buy via MarzPay Collect Money — user approves a phone prompt, no trader. */
+export function isAutomatedOnramp(tx) {
+  if (!tx || !isBuyOrder(tx)) return false
+  const provider = getPayoutProvider(tx)
+  if (AUTOMATED_OFFRAMP_PROVIDERS.includes(provider)) return true
+  if (provider === 'p2p_trader') return false
+  if (isManualP2pTransaction(tx)) return false
+  if (tx.traderId ?? tx.trader_id) return false
+  return true
+}
+
 export function getTransactionStatusTimestamps(tx) {
   if (!tx) return {}
 

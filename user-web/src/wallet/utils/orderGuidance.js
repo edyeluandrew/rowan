@@ -4,7 +4,7 @@
  */
 
 import { BUY_STATE_SUBTITLES, STATE_SUBTITLES } from './constants'
-import { isAutomatedOfframp, isBuyOrder } from './transactions'
+import { isAutomatedOfframp, isAutomatedOnramp, isBuyOrder } from './transactions'
 
 /**
  * @returns {{
@@ -32,13 +32,16 @@ export function getOrderGuidance(transaction, {
 
   const isBuy = isBuyHint ?? isBuyOrder(transaction)
   const automatedSell = !isBuy && isAutomatedOfframp(transaction)
+  const automatedBuy = isBuy && isAutomatedOnramp(transaction)
   const state = transaction.state
 
   if (state === 'QUOTE_CONFIRMED' || state === 'QUOTE_REQUESTED') {
     return {
       title: isBuy ? 'Starting your buy…' : 'Send USDC to escrow',
       body: isBuy
-        ? 'We are preparing your order. This usually takes a few seconds.'
+        ? automatedBuy
+          ? 'We are sending a payment prompt to your phone. This usually takes a few seconds.'
+          : 'We are preparing your order. This usually takes a few seconds.'
         : automatedSell
           ? 'Finish sending USDC from your wallet if you have not already. Funds stay in escrow until mobile money lands on your phone.'
           : 'Finish sending USDC from your wallet if you have not already. Funds stay in escrow until you confirm MoMo.',
@@ -47,6 +50,14 @@ export function getOrderGuidance(transaction, {
   }
 
   if (state === 'ESCROW_LOCKED') {
+    if (automatedBuy) {
+      return {
+        title: 'Approve on your phone',
+        body: 'Check your phone for an MTN or Airtel prompt. Approve it to pay. USDC arrives after we receive the payment.',
+        tip: 'You do not send to a trader. Tap refresh if the prompt is slow.',
+        urgency: 'soon',
+      }
+    }
     if (isBuy) {
       return {
         title: 'Your turn: send mobile money',
@@ -72,6 +83,14 @@ export function getOrderGuidance(transaction, {
   }
 
   if (state === 'TRADER_MATCHED') {
+    if (automatedBuy) {
+      return {
+        title: 'Approve on your phone',
+        body: 'Check your phone for an MTN or Airtel prompt. Approve it to pay. USDC arrives after we receive the payment.',
+        tip: 'Tap refresh if the prompt is slow. You do not wait on a trader.',
+        urgency: 'soon',
+      }
+    }
     if (paymentExpired) {
       return {
         title: 'Payment window expired',
@@ -113,6 +132,14 @@ export function getOrderGuidance(transaction, {
   }
 
   if (state === 'FIAT_PAYOUT_SUBMITTED') {
+    if (automatedBuy) {
+      return {
+        title: 'Approve on your phone',
+        body: 'A payment prompt was sent to your number. Approve it on MTN or Airtel. We send USDC when the collection succeeds.',
+        tip: 'Tap refresh if status has not updated yet.',
+        urgency: 'soon',
+      }
+    }
     if (isBuy) {
       return {
         title: 'Waiting for the trader',
@@ -141,6 +168,13 @@ export function getOrderGuidance(transaction, {
   }
 
   if (state === 'USER_CONFIRMATION_PENDING') {
+    if (automatedBuy) {
+      return {
+        title: 'Sending USDC',
+        body: 'Payment received. We are sending USDC to your wallet.',
+        urgency: 'normal',
+      }
+    }
     if (isBuy) {
       return {
         title: 'Releasing your USDC…',

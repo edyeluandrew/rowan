@@ -71,6 +71,8 @@ async function persistBuyQuote({
   phoneHash,
   computed,
   preferredPayoutSettingId,
+  payoutPhone = null,
+  payoutName = null,
 }) {
   const {
     fiatCurrency,
@@ -95,9 +97,9 @@ async function persistBuyQuote({
         rate_ugx, fee_ugx, status, path_xlm_needed, path_usdc_received, quote_source,
         rate_source, quote_warning, fx_source, fx_rate, fx_currency, fx_warning,
         fiat_rate_source, fx_provider, fx_fetched_at, fx_age_seconds,
-        preferred_payout_setting_id, order_side)
+        preferred_payout_setting_id, order_side, payout_phone, payout_name)
      VALUES ($1, 0, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'PENDING', 0, $14, 'buy-fiat',
-             $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, 'BUY')
+             $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, 'BUY', $26, $27)
      RETURNING *`,
     [
       userId,
@@ -125,6 +127,8 @@ async function persistBuyQuote({
       fiatFx.fxFetchedAt ? new Date(fiatFx.fxFetchedAt) : null,
       fiatFx.fxAgeSeconds,
       preferredPayoutSettingId,
+      payoutPhone,
+      payoutName,
     ]
   );
 
@@ -145,9 +149,44 @@ async function createBuyQuoteFromFiat({
   network,
   phoneHash,
   payoutSettingId = null,
+  payoutPhone = null,
+  payoutName = null,
 }) {
   let resolvedPayoutSettingId = payoutSettingId || null;
   let traderName = null;
+
+  const paymentRouter = (await import('./payments/paymentRouter.js')).default;
+  const marzPayProvider = (await import('./payments/providers/marzPayProvider.js')).default;
+  const { PAYMENT_SIDES, PAYMENT_PROVIDERS } = await import('./payments/paymentConstants.js');
+  const countryCode = paymentRouter.networkToCountryCode(network);
+  const marzOnramp = countryCode
+    && marzPayProvider.isAvailable(countryCode, PAYMENT_SIDES.ONRAMP)
+    && marzPayProvider.amountInRange(fiatAmount);
+
+  if (!resolvedPayoutSettingId && marzOnramp) {
+    const computed = await computeBuyQuoteFromFiat(fiatAmount, network);
+    if (computed.usdcAmount < 0.01) {
+      const err = new Error('Amount too small to buy USDC');
+      err.statusCode = 400;
+      err.code = 'AMOUNT_BELOW_MIN';
+      throw err;
+    }
+    const quote = await persistBuyQuote({
+      userId,
+      network,
+      phoneHash,
+      computed,
+      preferredPayoutSettingId: null,
+      payoutPhone,
+      payoutName,
+    });
+    return {
+      ...quote,
+      expressTraderName: null,
+      automated: true,
+      payoutProvider: PAYMENT_PROVIDERS.MARZ_PAY,
+    };
+  }
 
   if (!resolvedPayoutSettingId) {
     const fiatCurrency = quoteEngine.networkToFiat(network);
@@ -200,6 +239,8 @@ async function createBuyQuoteFromFiat({
     phoneHash,
     computed,
     preferredPayoutSettingId: resolvedPayoutSettingId,
+    payoutPhone,
+    payoutName,
   });
 
   if (!traderName) {
@@ -212,7 +253,7 @@ async function createBuyQuoteFromFiat({
     traderName = nameRes.rows[0]?.name || null;
   }
 
-  return { ...quote, expressTraderName: traderName };
+  return { ...quote, expressTraderName: traderName, automated: false, payoutProvider: null };
 }
 
 async function getBuyQuoteById(quoteId, userId) {

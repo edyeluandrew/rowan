@@ -234,10 +234,17 @@ const config = {
     webhookSecret: process.env.MARZPAY_WEBHOOK_SECRET || '',
     webhookUrl: process.env.MARZPAY_WEBHOOK_URL || '',
     settlementStellarAddress: process.env.MARZPAY_SETTLEMENT_STELLAR || '',
+    settlementSecret: process.env.MARZPAY_SETTLEMENT_SECRET || '',
     feeStellarAddress: process.env.MARZPAY_FEE_STELLAR
       || process.env.UTILITY_USDC_PUBLIC_KEY
       || '',
     offrampCountries: (process.env.MARZPAY_OFFRAMP_COUNTRIES || 'UG')
+      .split(',')
+      .map((c) => c.trim().toUpperCase())
+      .filter(Boolean),
+    onrampCountries: (process.env.MARZPAY_ONRAMP_COUNTRIES
+      || process.env.MARZPAY_OFFRAMP_COUNTRIES
+      || 'UG')
       .split(',')
       .map((c) => c.trim().toUpperCase())
       .filter(Boolean),

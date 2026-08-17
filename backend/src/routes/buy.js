@@ -43,7 +43,7 @@ router.post(
   enforceKycTransactionLimits('onramp'),
   async (req, res, next) => {
     try {
-      const { fiatAmount, network, phoneHash, payoutSettingId } = req.body;
+      const { fiatAmount, network, phoneHash, payoutSettingId, payoutPhone, payoutName } = req.body;
       const fiatNum = typeof fiatAmount === 'string' ? parseFloat(fiatAmount) : fiatAmount;
 
       const activeOrder = await db.query(
@@ -79,8 +79,8 @@ router.post(
       });
 
       const networkLimits = await payoutSettingsService.getActiveBuyNetworkLimits(network, fiatCurrency);
-      const yellowAvailable = paymentPlan?.hasAutomatedRail;
-      if (!networkLimits.hasTraders && !yellowAvailable) {
+      const automatedAvailable = paymentPlan?.hasAutomatedRail;
+      if (!networkLimits.hasTraders && !automatedAvailable) {
         return res.status(503).json({
           error: 'No traders selling USDC on this network right now.',
           code: 'NO_BUY_TRADERS',
@@ -88,6 +88,12 @@ router.post(
             countryCode: paymentPlan.countryCode,
             unavailable: paymentPlan.unavailable,
           } : null,
+        });
+      }
+      if (automatedAvailable && !payoutSettingId && !payoutPhone) {
+        return res.status(400).json({
+          error: 'Enter the mobile money number that will pay for this buy.',
+          code: 'PAYOUT_PHONE_REQUIRED',
         });
       }
       if (networkLimits.maxFiat != null && fiatNum > networkLimits.maxFiat) {
@@ -103,6 +109,8 @@ router.post(
         network,
         phoneHash,
         payoutSettingId: payoutSettingId || null,
+        payoutPhone: payoutPhone || null,
+        payoutName: payoutName || null,
       });
 
       res.json({
@@ -117,6 +125,8 @@ router.post(
         expiresAt: quote.expires_at,
         payoutSettingId: quote.preferred_payout_setting_id,
         traderName: quote.expressTraderName || null,
+        automated: Boolean(quote.automated),
+        payoutProvider: quote.payoutProvider || null,
         orderSide: 'BUY',
         express: !payoutSettingId,
         paymentPlan: paymentPlan ? {
@@ -235,8 +245,9 @@ router.get('/status/:id', authUser, cashoutStatusLimiter, async (req, res, next)
       stellar_deposit_tx: tx.stellar_deposit_tx,
       stellar_release_tx: tx.stellar_release_tx,
       preferred_payout_setting_id: tx.preferred_payout_setting_id,
-      selection_method: 'manual',
+      selection_method: tx.payout_provider === 'marz_pay' ? 'auto' : 'manual',
       payout_reference: tx.payout_reference,
+      payout_provider: tx.payout_provider || null,
       created_at: tx.created_at,
     });
   } catch (err) {

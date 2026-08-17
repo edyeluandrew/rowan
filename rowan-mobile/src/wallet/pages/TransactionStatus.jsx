@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ChevronLeft, PartyPopper, RotateCcw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace, Lock } from 'lucide-react'
+import { ChevronLeft, PartyPopper, RotateCcw, RefreshCw, XCircle, ShieldCheck, FileText, Clock, Fingerprint, ScanFace, Lock } from 'lucide-react'
 import { getTransactionStatus, confirmReceipt, openDispute, cancelOrder } from '../api/cashout'
 import { submitBuyPayment } from '../api/buy'
 import PaymentDetailsCard from '../components/chat/PaymentDetailsCard'
@@ -19,11 +19,11 @@ import Button from '../components/ui/Button'
 import OrderShortId from '../components/ui/OrderShortId'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import useBiometrics from '../hooks/useBiometrics'
-import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder, isAutomatedOfframp } from '../utils/transactions'
+import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder, isAutomatedOfframp, isAutomatedOnramp } from '../utils/transactions'
 import { STATE_SUBTITLES } from '../utils/constants'
 import { getOrderGuidance } from '../utils/orderGuidance'
 import { mapApiError } from '../utils/apiErrors'
-import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine, getSellProgressSubtitle } from '../utils/p2pFormat'
+import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine, getSellProgressSubtitle, getBuyProgressSubtitle, isAutomatedPayoutPending } from '../utils/p2pFormat'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
 const POLL_INTERVAL = 3000 // Poll every 3 seconds while waiting
@@ -64,6 +64,7 @@ export default function TransactionStatus() {
   const [buyPaymentRef, setBuyPaymentRef] = useState('')
   const [submittingBuyPayment, setSubmittingBuyPayment] = useState(false)
   const [buyPaymentError, setBuyPaymentError] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
   const INITIAL_WAIT_MS = 3000 // Escrow + swap can take several seconds on testnet
@@ -193,12 +194,14 @@ export default function TransactionStatus() {
   const paymentExpired = transaction?.state === 'TRADER_MATCHED'
     && !!transaction?.paymentExpiresAt
     && paymentCountdown.isExpired
-  const canShowCancel = transaction?.state === 'TRADER_MATCHED' && !paymentWindowClosing && !paymentExpired
-
-  const showDisputeAction = ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
-    || appealWindowOpen
   const isBuy = isBuyOrder(transaction) || navOrderSide === 'BUY'
   const isAutomatedSell = !isBuy && isAutomatedOfframp(transaction)
+  const isAutomatedBuy = isBuy && isAutomatedOnramp(transaction)
+  const canShowCancel = transaction?.state === 'TRADER_MATCHED' && !paymentWindowClosing && !paymentExpired && !isAutomatedBuy
+  const showDisputeAction = (isAutomatedBuy
+    ? Boolean(appealWindowOpen)
+    : (['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state) || appealWindowOpen)
+  )
   const guidance = transaction && !isTerminal
     ? getOrderGuidance(transaction, {
       isBuy,
@@ -499,15 +502,44 @@ export default function TransactionStatus() {
 
       {transaction && !isTerminal && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 mb-4 text-center">
-          <p className="text-rowan-text text-sm font-semibold">{getStatusLabel(transaction.state, { automated: isAutomatedSell })}</p>
-          {(getSellProgressSubtitle(transaction) || STATE_SUBTITLES[transaction.state]) && (
+          <p className="text-rowan-text text-sm font-semibold">{getStatusLabel(transaction.state, { automated: isAutomatedSell, onramp: isAutomatedBuy })}</p>
+          {(getBuyProgressSubtitle(transaction) || getSellProgressSubtitle(transaction) || STATE_SUBTITLES[transaction.state]) && (
             <p className="text-rowan-muted text-xs mt-1">
-              {getSellProgressSubtitle(transaction) || STATE_SUBTITLES[transaction.state]}
+              {getBuyProgressSubtitle(transaction) || getSellProgressSubtitle(transaction) || STATE_SUBTITLES[transaction.state]}
             </p>
           )}
           <div className="mt-2 flex justify-center">
             <OrderShortId transactionId={activeTxId} />
           </div>
+          {Boolean(transaction && isAutomatedPayoutPending(transaction)) && (
+            <div className="mt-3 flex flex-col items-center gap-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (refreshing || !statusId) return
+                  setRefreshing(true)
+                  try {
+                    const data = await getTransactionStatus(statusId)
+                    setTransaction(normalizeWalletTransaction(
+                      navOrderSide && !data.order_side ? { ...data, order_side: navOrderSide } : data
+                    ))
+                  } catch (err) {
+                    setError(mapApiError(err, 'Could not refresh status'))
+                  } finally {
+                    setRefreshing(false)
+                  }
+                }}
+                disabled={refreshing}
+                className="inline-flex items-center justify-center gap-2 text-rowan-yellow text-xs font-medium border border-rowan-yellow/40 rounded-full px-4 py-2 min-h-9 disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+                {refreshing ? 'Refreshing…' : 'Refresh status'}
+              </button>
+              <p className="text-rowan-muted text-[11px]">
+                {isAutomatedBuy ? 'Tap if the prompt status has not updated yet' : 'Tap if payout status has not updated yet'}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -560,14 +592,14 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {transaction?.state === 'TRADER_MATCHED' && transaction.paymentExpiresAt && (
+      {transaction?.state === 'TRADER_MATCHED' && transaction.paymentExpiresAt && !isAutomatedBuy && (
         <PaymentWindowCountdown
           expiresAt={transaction.paymentExpiresAt}
           orderSide={isBuy ? 'BUY' : 'SELL'}
         />
       )}
 
-      {isBuy && transaction?.state === 'TRADER_MATCHED' && (
+      {isBuy && !isAutomatedBuy && transaction?.state === 'TRADER_MATCHED' && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 my-4 text-center">
           <p className="text-rowan-text text-sm font-semibold">Waiting for trader to lock USDC</p>
           <p className="text-rowan-muted text-xs mt-2">
@@ -576,7 +608,16 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {isBuy && transaction?.state === 'ESCROW_LOCKED' && (
+      {isAutomatedBuy && ['TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED'].includes(transaction?.state) && (
+        <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 my-4 text-center">
+          <p className="text-rowan-text text-sm font-semibold">Approve on your phone</p>
+          <p className="text-rowan-muted text-xs mt-2">
+            Check for an MTN or Airtel prompt. Approve it to pay. USDC arrives after we receive the payment.
+          </p>
+        </div>
+      )}
+
+      {isBuy && !isAutomatedBuy && transaction?.state === 'ESCROW_LOCKED' && (
         <div className="bg-rowan-surface border-2 border-rowan-yellow/50 rounded-xl p-4 my-4 space-y-4 mb-28">
           <p className="text-rowan-yellow text-sm font-semibold text-center">
             Your turn: send mobile money
@@ -604,7 +645,7 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {isBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
+      {isBuy && !isAutomatedBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
         <div className="bg-rowan-surface rounded-xl p-4 my-4 text-center">
           <p className="text-rowan-text text-sm font-medium">Fiat marked as sent</p>
           <p className="text-rowan-muted text-xs mt-2">
@@ -613,10 +654,17 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {isBuy && transaction?.state === 'USER_CONFIRMATION_PENDING' && (
+      {isBuy && !isAutomatedBuy && transaction?.state === 'USER_CONFIRMATION_PENDING' && (
         <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-4 my-4 text-center">
           <p className="text-rowan-green text-sm font-medium">Trader confirmed MoMo</p>
           <p className="text-rowan-muted text-xs mt-2">Releasing USDC to your wallet…</p>
+        </div>
+      )}
+
+      {isAutomatedBuy && transaction?.state === 'USER_CONFIRMATION_PENDING' && (
+        <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-4 my-4 text-center">
+          <p className="text-rowan-green text-sm font-medium">Sending USDC</p>
+          <p className="text-rowan-muted text-xs mt-2">Payment received. We are sending USDC to your wallet.</p>
         </div>
       )}
 
@@ -729,7 +777,7 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {transaction?.state === 'TRADER_MATCHED' && paymentWindowClosing && (
+      {transaction?.state === 'TRADER_MATCHED' && paymentWindowClosing && !isAutomatedBuy && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl px-4 py-3 my-4">
           <p className="text-rowan-yellow text-xs text-center">
             Last 2 minutes — cancel is closed. Stay on this screen; we will update automatically.
@@ -818,7 +866,7 @@ export default function TransactionStatus() {
       )}
 
       {/* Buy: sticky I have sent fiat — always visible while paying */}
-      {isBuy && transaction?.state === 'ESCROW_LOCKED' && (
+      {isBuy && !isAutomatedBuy && transaction?.state === 'ESCROW_LOCKED' && (
         <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-rowan-bg/95 border-t border-rowan-yellow/40 backdrop-blur-sm safe-area-pb">
           <Button
             loading={submittingBuyPayment}

@@ -52,8 +52,7 @@ const ACTIONS = [
     key: 'buy',
     label: 'Buy',
     Icon: ArrowDownToLine,
-    path: '/wallet/p2p',
-    state: { tab: 'buy' },
+    path: '/wallet/buy',
     needsOrderLock: true,
   },
   {

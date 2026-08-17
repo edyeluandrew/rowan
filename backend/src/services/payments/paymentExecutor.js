@@ -105,6 +105,11 @@ async function tryMarzPayOfframp(transaction) {
     logger.info(`[PaymentExecutor] MarzPay amount out of range for tx ${transaction.id}`);
     return false;
   }
+  const covered = await marzPayProvider.canCoverAmount(transaction.fiat_amount);
+  if (!covered) {
+    logger.warn(`[PaymentExecutor] MarzPay skip tx ${transaction.id}: UGX wallet cannot cover ${transaction.fiat_amount}`);
+    return false;
+  }
 
   let payoutResult;
   try {
@@ -225,13 +230,7 @@ export async function settleOfframpPayout(transactionId) {
     (provider) => provider.id === PAYMENT_PROVIDERS.MARZ_PAY && !provider.unavailable
   );
   if (marzAvailable) {
-    logger.error(`[PaymentExecutor] MarzPay did not pay tx ${transactionId}; skipping P2P trader fallback`);
-    notificationService.notifyUser(transaction.user_id, 'aggregator_payout_failed', {
-      transactionId: transaction.id,
-      state: transaction.state,
-      message: 'We could not send mobile money yet. Stay on this screen — we will refund if it does not go through.',
-    }).catch(() => {});
-    return { rail: PAYMENT_PROVIDERS.MARZ_PAY, automated: true, failed: true };
+    logger.warn(`[PaymentExecutor] MarzPay did not pay tx ${transactionId}; falling back to P2P trader`);
   }
 
   logger.info(`[PaymentExecutor] Matching P2P trader for tx ${transactionId}`);

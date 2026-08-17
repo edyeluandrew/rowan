@@ -43,6 +43,7 @@ router.get('/providers/status', (_req, res) => {
         mockMode: marzPayProvider.marzPayIsMock(),
         configured: Boolean(mz.apiKey && mz.apiSecret),
         offrampCountries: mz.offrampCountries || [],
+        onrampCountries: mz.onrampCountries || [],
         settlementConfigured: Boolean(mz.settlementStellarAddress),
         webhookSigning: Boolean(mz.webhookSecret),
       },

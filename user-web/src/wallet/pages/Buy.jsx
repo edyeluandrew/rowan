@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, UserCheck, Zap } from 'lucide-react'
 import useActiveTransaction from '../hooks/useActiveTransaction'
@@ -9,8 +9,10 @@ import { getBuyQuote } from '../api/buy'
 import { hashPhoneNumber } from '../utils/crypto'
 import { NETWORKS } from '../utils/constants'
 import { formatUsdcRateLine } from '../utils/p2pFormat'
+import { getNetworksForCountry, getDialCodeForCountry } from '../utils/country'
 import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
+import PhoneInput from '../components/cashout/PhoneInput'
 import Button from '../components/ui/Button'
 import PaymentMethodPill from '../components/ui/PaymentMethodPill'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
@@ -48,18 +50,31 @@ export default function Buy() {
 
   const adNetwork = presetNetwork || selectedAd?.network || null
   const payoutSettingId = presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
-  // ExpressMatch = sheet already picked a trader; treat as locked manual. Loose express = old full-page flow.
+  const isAutomated = !payoutSettingId
   const isExpress = Boolean(expressFlag && !payoutSettingId)
-  const networkLocked = !!adNetwork && (!isExpress || expressMatch)
+  const networkLocked = !!adNetwork && (!isAutomated || expressMatch)
 
   const [fiatAmount, setFiatAmount] = useState(prefillFiat ? String(prefillFiat) : '')
   const [network, setNetwork] = useState(adNetwork)
+  const [phone, setPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  const countryNetworks = useMemo(
+    () => Object.keys(getNetworksForCountry(country)),
+    [country]
+  )
 
   useEffect(() => {
     if (adNetwork) setNetwork(adNetwork)
   }, [adNetwork])
+
+  useEffect(() => {
+    if (adNetwork) return
+    if (countryNetworks.length > 0) {
+      setNetwork((prev) => (countryNetworks.includes(prev) ? prev : countryNetworks[0]))
+    }
+  }, [country, countryNetworks, adNetwork])
 
   useEffect(() => {
     if (!activeLoading && activeTransaction?.id) {
@@ -69,7 +84,7 @@ export default function Buy() {
 
   const netFiat = parseFloat(fiatAmount) || 0
   const currency = network ? NETWORKS[network]?.currency : userFiat
-  const minNetFiat = selectedAd?.minAmount ?? null
+  const minNetFiat = isAutomated ? 500 : (selectedAd?.minAmount ?? null)
   const maxNetFiat = selectedAd?.maxAmount ?? null
   const traderRate = selectedAd?.ratePerUsdc != null ? Number(selectedAd.ratePerUsdc) : null
   const availableUsdc = selectedAd?.availableUsdc ?? selectedAd?.available_usdc
@@ -84,6 +99,7 @@ export default function Buy() {
       : maxNetFiat ?? maxFiatFromUsdc
   const belowMin = minNetFiat != null && netFiat > 0 && netFiat < minNetFiat
   const exceedsMax = effectiveMaxFiat != null && netFiat > effectiveMaxFiat
+  const phoneOk = !isAutomated || phone.replace(/\D/g, '').length >= 9
 
   const usdcToFiat = traderRate && traderRate > 0
     ? traderRate
@@ -96,7 +112,8 @@ export default function Buy() {
   const canProceed =
     network &&
     netFiat > 0 &&
-    (isExpress || traderRate) &&
+    (isAutomated || traderRate) &&
+    phoneOk &&
     !belowMin &&
     !exceedsMax &&
     !loading &&
@@ -109,17 +126,30 @@ export default function Buy() {
     try {
       const snap = await refreshRates()
       const health = getRatesHealth(snap?.rates, snap?.fetchedAt, snap?.error)
-      if (!health.ok && isExpress && !traderRate) {
+      if (!health.ok && isAutomated && !traderRate) {
         setError(health.message)
         return
       }
 
-      const phoneHash = await hashPhoneNumber('buy-placeholder')
+      let payoutPhone
+      let phoneHash
+      if (isAutomated) {
+        const networkConfig = NETWORKS[network]
+        const derivedCountryCode = networkConfig?.country || country
+        const dialCode = getDialCodeForCountry(derivedCountryCode).replace(/\D/g, '')
+        const cleanPhone = phone.replace(/\D/g, '')
+        payoutPhone = `${dialCode}${cleanPhone.replace(/^0/, '')}`
+        phoneHash = await hashPhoneNumber(payoutPhone)
+      } else {
+        phoneHash = await hashPhoneNumber('buy-placeholder')
+      }
+
       const quote = await getBuyQuote({
         fiatAmount: netFiat,
         network,
         phoneHash,
-        payoutSettingId: isExpress ? undefined : payoutSettingId,
+        payoutSettingId: isAutomated ? undefined : payoutSettingId,
+        payoutPhone,
       })
       navigate('/wallet/buy/confirm', {
         state: {
@@ -129,8 +159,9 @@ export default function Buy() {
           },
           network,
           traderName: presetTraderName || selectedAd?.traderName || quote.traderName,
-          selectedAd: isExpress ? null : selectedAd,
+          selectedAd: isAutomated ? null : selectedAd,
           express: isExpress,
+          automated: Boolean(quote.automated || isAutomated),
           liveUsdcToFiat: health.ok ? health.usdcToFiat : traderRate,
           rateSnapshotAt: snap?.fetchedAt || Date.now(),
         },
@@ -151,21 +182,23 @@ export default function Buy() {
         <h1 className="text-rowan-text text-lg font-bold">Buy USDC</h1>
       </div>
 
-      {expressMatch && (
+      {isAutomated && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
+          <p className="text-rowan-text text-sm font-medium">Pay from your phone</p>
+          <p className="text-rowan-muted text-xs mt-1">
+            We send an MTN or Airtel prompt. Approve it to buy USDC. No trader.
+          </p>
+        </div>
+      )}
+
+      {expressMatch && !isAutomated && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">
           <Zap size={20} className="text-rowan-gold shrink-0 mt-0.5" />
           <p className="text-rowan-text text-sm font-medium">Express match</p>
         </div>
       )}
 
-      {isExpress && (
-        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">
-          <Zap size={20} className="text-rowan-gold shrink-0 mt-0.5" />
-          <p className="text-rowan-text text-sm font-medium">Express buy</p>
-        </div>
-      )}
-
-      {!isExpress && (presetTraderName || selectedAd?.traderName) && (
+      {!isAutomated && (presetTraderName || selectedAd?.traderName) && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4 flex items-start gap-3">
           <UserCheck size={20} className="text-rowan-yellow shrink-0 mt-0.5" />
           <div>
@@ -197,7 +230,7 @@ export default function Buy() {
         maxFiat={effectiveMaxFiat}
       />
 
-      {!isExpress && !traderRate && (
+      {!isAutomated && !traderRate && (
         <p className="text-rowan-red text-xs mt-2 text-center">
           This trader has not set a USDC price. Choose another ad in the marketplace.
         </p>
@@ -218,7 +251,17 @@ export default function Buy() {
         )}
       </div>
 
-      {belowMin && <p className="text-rowan-red text-xs mt-2 text-center">Amount below trader minimum</p>}
+      {isAutomated && (
+        <div className="mt-6">
+          <PhoneInput phone={phone} onPhoneChange={setPhone} network={network} />
+        </div>
+      )}
+
+      {belowMin && (
+        <p className="text-rowan-red text-xs mt-2 text-center">
+          {isAutomated ? 'Minimum is 500 UGX' : 'Amount below trader minimum'}
+        </p>
+      )}
       {exceedsMax && (
         <p className="text-rowan-red text-xs mt-2 text-center">Amount above trader limit</p>
       )}

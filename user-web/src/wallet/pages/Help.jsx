@@ -43,7 +43,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Where is my mobile money?',
-    a: 'Cash-out sends MoMo to your phone automatically. Check your MTN or Airtel SMS. If nothing arrives after a few minutes, open a dispute from the order screen. Buy orders still go through a trader.',
+    a: 'Cash-out sends MoMo to your phone automatically. Check your MTN or Airtel SMS. If nothing arrives after a few minutes, open a dispute from the order screen. Buy sends a prompt to your phone — approve it, then USDC arrives.',
   },
   {
     q: 'I confirmed too early',
@@ -318,7 +318,7 @@ export default function Help() {
           </li>
           <li className="flex gap-2">
             <span className="text-rowan-yellow shrink-0">•</span>
-            Sends mobile money to your phone for cash-out. Buys still match a verified trader.
+            Sends mobile money to your phone for cash-out. Buy sends a prompt to your phone — approve it to receive USDC.
           </li>
           <li className="flex gap-2">
             <span className="text-rowan-yellow shrink-0">•</span>
@@ -352,9 +352,9 @@ export default function Help() {
           <p className="text-rowan-text text-sm font-semibold">Buy</p>
         </div>
         <ol className="space-y-2 text-rowan-muted text-xs leading-relaxed list-decimal list-inside">
-          <li>Pick a trader ad and follow the quote</li>
-          <li>Pay the trader via mobile money as instructed</li>
-          <li>Trader verifies payment, then USDC arrives in your wallet</li>
+          <li>Enter your amount and mobile money number</li>
+          <li>Approve the MTN or Airtel prompt on your phone</li>
+          <li>USDC arrives in your wallet after we receive the payment</li>
         </ol>
       </section>
 

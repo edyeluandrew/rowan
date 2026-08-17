@@ -2,9 +2,10 @@ import { Router } from 'express';
 import logger from '../../utils/logger.js';
 import db from '../../db/index.js';
 import marzPayProvider from '../../services/payments/providers/marzPayProvider.js';
-import { getSendMoney, marzPayIsMock } from '../../services/utilities/marzPayClient.js';
+import { getSendMoney, getCollectMoney, marzPayIsMock } from '../../services/utilities/marzPayClient.js';
 import escrowController from '../../services/escrowController.js';
 import notificationService from '../../services/notificationService.js';
+import stateMachine from '../../services/transactionStateMachine.js';
 
 const router = Router();
 
@@ -35,12 +36,14 @@ function statusOf(event) {
   ).toLowerCase();
 }
 
-async function independentlyConfirm(providerUuid, ourRef) {
+async function independentlyConfirm(kind, providerUuid, ourRef) {
   if (marzPayIsMock()) return true;
   const id = providerUuid || ourRef;
   if (!id) return false;
   try {
-    const body = await getSendMoney(id);
+    const body = kind === 'collection'
+      ? await getCollectMoney(id)
+      : await getSendMoney(id);
     const status = String(
       body?.data?.transaction?.status
       || body?.data?.status
@@ -49,14 +52,14 @@ async function independentlyConfirm(providerUuid, ourRef) {
     ).toLowerCase();
     return ['completed', 'success', 'successful'].includes(status);
   } catch (err) {
-    logger.warn('[MarzPayWebhook] status poll failed', { id, message: err.message });
+    logger.warn('[MarzPayWebhook] status poll failed', { kind, id, message: err.message });
     return false;
   }
 }
 
 /**
  * POST /api/v1/webhooks/marzpay
- * Disbursement callbacks. Collections are ignored in this phase.
+ * Disbursement (cash-out) and collection (buy) callbacks.
  */
 router.post('/marzpay', async (req, res) => {
   const rawBody = req.rawBody
@@ -73,12 +76,9 @@ router.post('/marzpay', async (req, res) => {
   const eventType = eventTypeOf(event);
   const referenceId = extractReference(event);
   const providerUuid = extractProviderUuid(event);
+  const isCollection = eventType.startsWith('collection.');
 
   logger.info('[MarzPayWebhook] received', { eventType, referenceId, providerUuid });
-
-  if (eventType.startsWith('collection.')) {
-    return res.json({ status: 'ok', received: true, eventType, ignored: 'onramp_not_enabled' });
-  }
 
   if (!referenceId && !providerUuid) {
     return res.json({ status: 'ok', received: true, eventType, note: 'no reference' });
@@ -86,7 +86,7 @@ router.post('/marzpay', async (req, res) => {
 
   try {
     const txResult = await db.query(
-      `SELECT id, state, user_id, payout_provider, stellar_release_tx
+      `SELECT id, state, user_id, payout_provider, stellar_release_tx, order_side
        FROM transactions
        WHERE payout_provider = 'marz_pay'
          AND (aggregator_ref = $1 OR payout_reference = $2 OR aggregator_ref = $2 OR payout_reference = $1)
@@ -101,9 +101,52 @@ router.post('/marzpay', async (req, res) => {
     }
 
     const failed = eventType === 'disbursement.failed'
+      || eventType === 'collection.failed'
       || ['failed', 'cancelled', 'canceled'].includes(statusOf(event));
     const completed = eventType === 'disbursement.completed'
+      || eventType === 'collection.completed'
       || ['completed', 'success', 'successful'].includes(statusOf(event));
+
+    if (isCollection || tx.order_side === 'BUY') {
+      if (failed && ['FIAT_PAYOUT_SUBMITTED', 'TRADER_MATCHED', 'USER_CONFIRMATION_PENDING'].includes(tx.state)) {
+        await stateMachine.transition(tx.id, tx.state, 'FAILED', {
+          failure_reason: 'MarzPay collection failed',
+        });
+        notificationService.notifyUser(tx.user_id, 'aggregator_collection_failed', {
+          transactionId: tx.id,
+          provider: 'marz_pay',
+          message: 'The mobile money prompt was not completed. No USDC was sent. You can try again.',
+        }).catch(() => {});
+        logger.info('[MarzPayWebhook] collection failed', { transactionId: tx.id });
+        return res.json({ status: 'ok', received: true, eventType, transactionId: tx.id, failed: true });
+      }
+
+      if (completed && !tx.stellar_release_tx) {
+        const confirmed = await independentlyConfirm('collection', providerUuid, referenceId);
+        if (!confirmed) {
+          logger.warn('[MarzPayWebhook] collection completed event but status poll did not confirm', {
+            transactionId: tx.id,
+          });
+          return res.status(503).json({ error: 'Status not independently confirmed' });
+        }
+        await escrowController.completeMarzPayBuy(tx.id);
+        notificationService.notifyUser(tx.user_id, 'buy_complete', {
+          transactionId: tx.id,
+          provider: 'marz_pay',
+          message: 'Payment received. USDC is on the way to your wallet.',
+        }).catch(() => {});
+        logger.info('[MarzPayWebhook] collection completed and USDC released', { transactionId: tx.id });
+      }
+
+      return res.json({
+        status: 'ok',
+        received: true,
+        eventType,
+        referenceId,
+        transactionId: tx.id,
+        transactionState: tx.state,
+      });
+    }
 
     if (failed && ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'ESCROW_LOCKED'].includes(tx.state)) {
       const refund = await escrowController.refundOrphanTransaction(
@@ -123,7 +166,7 @@ router.post('/marzpay', async (req, res) => {
     }
 
     if (completed && !tx.stellar_release_tx) {
-      const confirmed = await independentlyConfirm(providerUuid, referenceId);
+      const confirmed = await independentlyConfirm('disbursement', providerUuid, referenceId);
       if (!confirmed) {
         logger.warn('[MarzPayWebhook] completed event but status poll did not confirm', {
           transactionId: tx.id,
@@ -136,7 +179,7 @@ router.post('/marzpay', async (req, res) => {
       notificationService.notifyUser(tx.user_id, 'aggregator_payout_delivered', {
         transactionId: tx.id,
         provider: 'marz_pay',
-        message: 'Your mobile money was sent. USDC has been settled with MarzPay.',
+        message: 'Your mobile money was sent.',
       }).catch(() => {});
 
       notificationService.createNotification(
@@ -144,7 +187,7 @@ router.post('/marzpay', async (req, res) => {
         'user',
         'aggregator_payout_delivered',
         'Payment sent',
-        'MarzPay confirmed your cash-out. The USDC has been settled.',
+        'MarzPay confirmed your cash-out.',
         tx.id
       ).catch(() => {});
 

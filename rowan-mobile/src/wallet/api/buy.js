@@ -1,12 +1,14 @@
 import client from './client'
 
-export function getBuyQuote({ fiatAmount, network, phoneHash, payoutSettingId }) {
+export function getBuyQuote({ fiatAmount, network, phoneHash, payoutSettingId, payoutPhone, payoutName }) {
   const body = {
     fiatAmount: Number(fiatAmount),
     network,
     phoneHash,
   }
   if (payoutSettingId) body.payoutSettingId = payoutSettingId
+  if (payoutPhone) body.payoutPhone = payoutPhone
+  if (payoutName) body.payoutName = payoutName
   return client.post('/api/v1/buy/quote', body).then((res) => res.data)
 }
 

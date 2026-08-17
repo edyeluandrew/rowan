@@ -237,6 +237,59 @@ function mockResponse(path, method, body) {
     };
   }
 
+  if (path === '/balance' && method === 'GET') {
+    return {
+      status: 'success',
+      data: {
+        account: {
+          balance: { formatted: '1,000,000.00', raw: 1000000, currency: 'UGX' },
+          available_balance: { formatted: '1,000,000.00', raw: 1000000, currency: 'UGX' },
+          status: { mode: 'sandbox', account_status: 'active' },
+        },
+      },
+      _mock: true,
+    };
+  }
+
+  if (path === '/collect-money' && method === 'POST') {
+    const ref = body?.reference || crypto.randomUUID();
+    const amount = Number(body?.amount) || 1000;
+    return {
+      status: 'success',
+      message: 'Collection initiated successfully.',
+      data: {
+        transaction: {
+          uuid: crypto.randomUUID(),
+          reference: ref,
+          status: 'processing',
+          provider_reference: null,
+        },
+        collection: {
+          amount: { raw: amount, formatted: amount.toLocaleString(), currency: 'UGX' },
+          provider: 'mtn',
+          phone_number: body?.phone_number,
+          mode: 'sandbox',
+        },
+      },
+      _mock: true,
+    };
+  }
+
+  if (path.startsWith('/collect-money/') && method === 'GET') {
+    const ref = path.split('/').pop();
+    return {
+      status: 'success',
+      data: {
+        transaction: {
+          uuid: ref,
+          reference: ref,
+          status: 'completed',
+        },
+      },
+      _mock: true,
+    };
+  }
+
   if (path.startsWith('/send-money/') && method === 'GET') {
     const ref = path.split('/').pop();
     return {
@@ -728,6 +781,50 @@ export async function getSendMoney(uuid) {
   return marzRequest(`/send-money/${encodeURIComponent(uuid)}`);
 }
 
+export async function collectMoney({
+  amount,
+  phoneNumber,
+  country = 'UG',
+  reference,
+  description,
+  callbackUrl,
+  metadata,
+}) {
+  const payload = {
+    amount: String(Math.round(Number(amount))),
+    phone_number: formatMarzPhone(phoneNumber),
+    country: String(country || 'UG').toUpperCase(),
+    reference: marzPayReference(reference),
+    ...(description ? { description: String(description).slice(0, 255) } : {}),
+    ...(callbackUrl ? { callback_url: String(callbackUrl).slice(0, 255) } : {}),
+    ...(metadata ? { metadata } : {}),
+  };
+
+  logger.info('[MarzPay] collectMoney', {
+    reference: payload.reference,
+    amount: payload.amount,
+    country: payload.country,
+    mock: marzPayIsMock(),
+  });
+
+  return marzFormRequest('/collect-money', payload);
+}
+
+export async function getCollectMoney(uuid) {
+  return marzRequest(`/collect-money/${encodeURIComponent(uuid)}`);
+}
+
+export async function getWalletBalance() {
+  return marzRequest('/balance');
+}
+
+export function parseAvailableBalance(body) {
+  const account = body?.data?.account || body?.account || {};
+  const raw = account.available_balance?.raw ?? account.balance?.raw ?? 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /**
  * HMAC-SHA256 over `{timestamp}.{rawBody}` when signing is enabled in the MarzPay dashboard.
  * Unsigned callbacks are accepted only in mock mode.
@@ -803,6 +900,10 @@ export default {
   waitForBillSettlement,
   sendMoney,
   getSendMoney,
+  collectMoney,
+  getCollectMoney,
+  getWalletBalance,
+  parseAvailableBalance,
   marzPayReference,
   verifyWebhookSignature,
   servicesToBillers,

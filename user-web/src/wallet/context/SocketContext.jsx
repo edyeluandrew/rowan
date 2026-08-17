@@ -56,10 +56,14 @@ export function SocketProvider({ children }) {
     })
     socket.on('trader_matched', (data) => {
       playNotification()
+      const provider = String(data?.provider || data?.payout_provider || data?.payoutProvider || '').toLowerCase()
+      const automated = ['marz_pay', 'yellow_pay', 'kotani_pay'].includes(provider)
       scheduleLocalNotification({
         id: Date.now() + 2,
-        title: 'Trader matched',
-        body: 'A trader is handling your order. Tap to open it.',
+        title: automated ? 'Approve on your phone' : 'Trader matched',
+        body: automated
+          ? 'Check your phone for an MTN or Airtel prompt. Tap to open the order.'
+          : 'A trader is handling your order. Tap to open it.',
         data: buildLocalNotificationExtra('TRADER_MATCHED', data),
       })
     })

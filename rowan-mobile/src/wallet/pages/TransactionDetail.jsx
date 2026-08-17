@@ -19,7 +19,7 @@ import OrderShortId from '../components/ui/OrderShortId'
 import useJoinOrder from '../hooks/useJoinOrder'
 import { formatCurrency, getTraderDisplayName } from '../utils/p2pFormat'
 import { formatDateTime, formatAddress } from '../utils/format'
-import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder, isAutomatedOfframp } from '../utils/transactions'
+import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder, isAutomatedOfframp, isAutomatedOnramp } from '../utils/transactions'
 import { NETWORKS, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
 
 export default function TransactionDetail() {
@@ -93,6 +93,7 @@ export default function TransactionDetail() {
   const isComplete = tx?.state === 'COMPLETE'
   const isBuy = isBuyOrder(tx)
   const isAutomatedSell = !isBuy && isAutomatedOfframp(tx)
+  const isAutomatedBuy = isBuy && isAutomatedOnramp(tx)
 
   // Active orders use TransactionStatus (has buy "I have sent fiat" / sell confirm)
   useEffect(() => {
@@ -261,7 +262,7 @@ export default function TransactionDetail() {
         </div>
       )}
 
-      {isBuy && tx.state === 'FIAT_PAYOUT_SUBMITTED' && (
+      {isBuy && !isAutomatedBuy && tx.state === 'FIAT_PAYOUT_SUBMITTED' && (
         <div className="bg-rowan-surface rounded-xl p-4 mb-4 text-center">
           <p className="text-rowan-text text-sm font-medium">Waiting for trader to confirm MoMo</p>
           <p className="text-rowan-muted text-xs mt-2">Then escrow releases USDC to your wallet.</p>

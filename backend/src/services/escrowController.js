@@ -16,6 +16,7 @@ import stateMachine from './transactionStateMachine.js';
 import auditLogService from './auditLogService.js';
 import notificationService from './notificationService.js';
 import logger from '../utils/logger.js';
+import marzPayProvider from './payments/providers/marzPayProvider.js';
 
 /**
  * Verify an incoming deposit against a locked quote.
@@ -1281,6 +1282,129 @@ async function releaseToUser(transactionId) {
   }
 }
 
+function inventoryKeypair() {
+  const secret = marzPayProvider.getInventorySecret();
+  if (!secret) return null;
+  return StellarSdk.Keypair.fromSecret(secret);
+}
+
+/**
+ * After MarzPay collection.completed: send USDC from Rowan inventory to the buyer.
+ * Collected UGX stays in the MarzPay wallet for later cash-outs.
+ */
+async function completeMarzPayBuy(transactionId) {
+  const lockKey = `lock:release-user:${transactionId}`;
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', config.platform.redisLockTtlReleaseSeconds, 'NX');
+  if (!lockAcquired) {
+    logger.warn(`[Escrow] MarzPay buy release lock held for tx ${transactionId}`);
+    return null;
+  }
+
+  try {
+    const txResult = await db.query(
+      `SELECT t.*, u.stellar_address AS user_stellar
+       FROM transactions t
+       JOIN users u ON u.id = t.user_id
+       WHERE t.id = $1 AND t.order_side = 'BUY' AND t.payout_provider = 'marz_pay'
+         AND t.state IN ('FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING', 'RELEASE_BLOCKED')`,
+      [transactionId]
+    );
+    const transaction = txResult.rows[0];
+    if (!transaction) throw new Error('MarzPay buy transaction not found or wrong state');
+
+    if (transaction.stellar_release_tx) return transaction.stellar_release_tx;
+    if (!transaction.user_stellar) {
+      throw new Error(`User ${transaction.user_id} has no stellar address`);
+    }
+
+    if (transaction.state === 'FIAT_PAYOUT_SUBMITTED') {
+      const moved = await stateMachine.transition(
+        transactionId,
+        'FIAT_PAYOUT_SUBMITTED',
+        'USER_CONFIRMATION_PENDING',
+        {}
+      );
+      if (!moved) throw new Error('Could not move MarzPay buy to USER_CONFIRMATION_PENDING');
+      transaction.state = 'USER_CONFIRMATION_PENDING';
+    }
+
+    if (marzPayProvider.marzPayIsMock()) {
+      const mockHash = `mock-marz-buy-${transactionId.slice(0, 8)}`;
+      const appealExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await stateMachine.transition(transactionId, transaction.state, 'COMPLETE', {
+        stellar_release_tx: mockHash,
+        appeal_expires_at: appealExpiresAt,
+      });
+      notificationService.notifyUser(transaction.user_id, 'buy_complete', {
+        transactionId,
+        usdcAmount: transaction.usdc_amount,
+        stellarReleaseTx: mockHash,
+      }).catch(() => {});
+      return mockHash;
+    }
+
+    const userAccount = await horizon.loadAccount(transaction.user_stellar);
+    const hasTrustline = userAccount.balances.some(
+      (b) => b.asset_code === USDC_ASSET.code && b.asset_issuer === USDC_ASSET.issuer
+    );
+    if (!hasTrustline) {
+      if (transaction.state !== 'RELEASE_BLOCKED') {
+        await stateMachine.transition(transactionId, transaction.state, 'RELEASE_BLOCKED', {
+          failure_reason: 'User missing USDC trustline',
+        });
+      }
+      return null;
+    }
+
+    const usdcDecimal = Number(transaction.usdc_amount);
+    if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
+      throw new Error(`Invalid USDC amount: ${transaction.usdc_amount}`);
+    }
+
+    const keypair = inventoryKeypair();
+    if (!keypair) {
+      throw new Error('MarzPay buy inventory secret is not configured');
+    }
+
+    const sourceAccount = await horizon.loadAccount(keypair.publicKey());
+    const stellarTx = new StellarSdk.TransactionBuilder(sourceAccount, {
+      fee: config.stellarMaxFee,
+      networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: transaction.user_stellar,
+          asset: USDC_ASSET,
+          amount: usdcDecimal.toFixed(7),
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    stellarTx.sign(keypair);
+    const result = await horizon.submitTransaction(stellarTx);
+
+    const appealExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await stateMachine.transition(transactionId, transaction.state, 'COMPLETE', {
+      stellar_release_tx: result.hash,
+      appeal_expires_at: appealExpiresAt,
+    });
+
+    notificationService.notifyUser(transaction.user_id, 'buy_complete', {
+      transactionId,
+      usdcAmount: transaction.usdc_amount,
+      stellarReleaseTx: result.hash,
+    }).catch(() => {});
+
+    logger.info(`[Escrow] Released ${usdcDecimal} USDC from inventory for MarzPay buy ${transactionId}`, {
+      hash: result.hash,
+    });
+    return result.hash;
+  } finally {
+    setTimeout(() => redis.del(lockKey), config.platform.redisLockCleanupDelayMs);
+  }
+}
+
 /**
  * Trader locks USDC in escrow for a BUY order (Horizon watcher or manual verify).
  */
@@ -2356,6 +2480,7 @@ export default {
   sendUsdcToAggregatorEscrow,
   releaseToSettlement,
   releaseToMarzPaySettlement,
+  completeMarzPayBuy,
   releaseAfterUserConfirmation,
   releaseToUser,
   retryReleaseBlocked,

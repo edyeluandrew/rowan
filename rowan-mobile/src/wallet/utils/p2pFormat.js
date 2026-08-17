@@ -1,6 +1,6 @@
 import { formatCurrency } from './format'
 import { NETWORKS } from './constants'
-import { isAutomatedOfframp, isBuyOrder } from './transactions'
+import { isAutomatedOfframp, isAutomatedOnramp, isBuyOrder } from './transactions'
 
 /** Human readable transaction status — never show raw state enums in UI */
 export const USER_STATUS_LABELS = {
@@ -25,8 +25,15 @@ const AUTOMATED_STATUS_LABELS = {
   USER_CONFIRMATION_PENDING: 'Finishing payout',
 }
 
+const AUTOMATED_ONRAMP_STATUS_LABELS = {
+  TRADER_MATCHED: 'Approve on your phone',
+  FIAT_PAYOUT_SUBMITTED: 'Approve on your phone',
+  USER_CONFIRMATION_PENDING: 'Sending USDC',
+}
+
 export function getStatusLabel(state, options = {}) {
   if (!state) return 'Processing'
+  if (options.onramp && AUTOMATED_ONRAMP_STATUS_LABELS[state]) return AUTOMATED_ONRAMP_STATUS_LABELS[state]
   if (options.automated && AUTOMATED_STATUS_LABELS[state]) return AUTOMATED_STATUS_LABELS[state]
   return USER_STATUS_LABELS[state] || 'Processing'
 }
@@ -95,10 +102,26 @@ export function getSellProgressSubtitle(tx) {
   return null
 }
 
-/** Sell order waiting on automated rail (not P2P trader match). */
+/** Context-aware buy progress copy (P2P vs Collect Money). */
+export function getBuyProgressSubtitle(tx) {
+  if (!tx || !isBuyOrder(tx) || !isAutomatedOnramp(tx)) return null
+  const state = tx.state
+  if (state === 'TRADER_MATCHED' || state === 'FIAT_PAYOUT_SUBMITTED') {
+    return 'Approve the MTN or Airtel prompt'
+  }
+  if (state === 'USER_CONFIRMATION_PENDING') return 'Sending USDC to your wallet'
+  return null
+}
+
+/** Automated rail waiting on MarzPay (cash-out send or buy collect). */
 export function isAutomatedPayoutPending(tx) {
-  if (!isAutomatedOfframp(tx)) return false
-  return ['ESCROW_LOCKED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(tx.state)
+  if (isAutomatedOfframp(tx)) {
+    return ['ESCROW_LOCKED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(tx.state)
+  }
+  if (isAutomatedOnramp(tx)) {
+    return ['TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(tx.state)
+  }
+  return false
 }
 
 /** e.g. "Joined Jun 2024" */

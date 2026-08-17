@@ -16,7 +16,7 @@ import { createSubmitGuard } from '../utils/submitGuard'
 export default function BuyConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { quote, traderName, selectedAd, express, liveUsdcToFiat: liveAtQuote } = location.state || {}
+  const { quote, traderName, selectedAd, express, automated, liveUsdcToFiat: liveAtQuote } = location.state || {}
   const [expired, setExpired] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -28,11 +28,12 @@ export default function BuyConfirm() {
     error && /trustline|USDC/i.test(error)
 
   if (!quote) {
-    navigate('/wallet/p2p', { replace: true, state: { tab: 'buy' } })
+    navigate('/wallet/buy', { replace: true })
     return null
   }
 
-  const chosenTrader = traderName || selectedAd?.traderName || quote.traderName
+  const isAutomated = Boolean(automated || quote.automated)
+  const chosenTrader = isAutomated ? null : (traderName || selectedAd?.traderName || quote.traderName)
   const rateLine = quote.fiatCurrency && quote.userRate
     ? formatLockedRateLine(quote.fiatCurrency, quote.userRate)
     : null
@@ -83,7 +84,16 @@ export default function BuyConfirm() {
         <h1 className="text-rowan-text text-lg font-bold">Confirm Buy</h1>
       </div>
 
-      {express && (
+      {isAutomated && (
+        <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
+          <p className="text-rowan-text text-sm font-medium">Approve the MTN or Airtel prompt</p>
+          <p className="text-rowan-muted text-xs mt-1">
+            After you confirm, we send a payment request to your phone. Approve it to buy USDC. No trader.
+          </p>
+        </div>
+      )}
+
+      {express && !isAutomated && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm font-medium">Express match</p>
         </div>
@@ -139,7 +149,7 @@ export default function BuyConfirm() {
             <Button
               className="mt-3"
               variant="ghost"
-              onClick={() => navigate('/wallet/p2p', { replace: true, state: { tab: 'buy' } })}
+              onClick={() => navigate(isAutomated ? '/wallet/buy' : '/wallet/p2p', { replace: true, state: isAutomated ? undefined : { tab: 'buy' } })}
             >
               Get a new quote
             </Button>
@@ -153,7 +163,7 @@ export default function BuyConfirm() {
         loading={loading}
         onClick={handleConfirm}
       >
-        {expired ? 'Quote expired' : loading ? 'Starting order…' : 'Confirm & start order'}
+        {expired ? 'Quote expired' : loading ? 'Starting order…' : isAutomated ? 'Confirm & pay from phone' : 'Confirm & start order'}
       </Button>
     </div>
   )
