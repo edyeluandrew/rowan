@@ -10,6 +10,7 @@ import useSocketHook from '../hooks/useSocket'
 // import TransactionStateTracker from '../components/cashout/TransactionStateTracker'
 import PaymentWindowCountdown from '../components/cashout/PaymentWindowCountdown'
 import OrderGuidanceCard from '../components/cashout/OrderGuidanceCard'
+import TradeNowHero from '../components/cashout/TradeNowHero'
 import OrderChat from '../components/chat/OrderChat'
 import ReviewModal from '../components/reviews/ReviewModal'
 import { getReviewStatus } from '../api/reviews'
@@ -23,7 +24,7 @@ import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder, isAutom
 import { STATE_SUBTITLES } from '../utils/constants'
 import { getOrderGuidance } from '../utils/orderGuidance'
 import { mapApiError } from '../utils/apiErrors'
-import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine, getSellProgressSubtitle, getBuyProgressSubtitle, isAutomatedPayoutPending } from '../utils/p2pFormat'
+import { formatCurrency, getStatusLabel, getNetworkLabel, getTraderDisplayName, formatLockedRateLine, getSellProgressSubtitle, getBuyProgressSubtitle, isAutomatedPayoutPending, getSellTradeHero } from '../utils/p2pFormat'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
 const POLL_INTERVAL = 3000 // Poll every 3 seconds while waiting
@@ -51,7 +52,7 @@ export default function TransactionStatus() {
   const [verifyError, setVerifyError] = useState(null)
 
   const { lockRequired } = useBiometricLock()
-  const { authenticate, biometricType } = useBiometrics()
+  const { authenticate, biometricType, isAvailable, isEnabled } = useBiometrics()
   const biometricLabel = biometricType === 'FACE_ID' ? 'Face ID' : 'Fingerprint'
   const BiometricIcon = biometricType === 'FACE_ID' ? ScanFace : Fingerprint
 
@@ -65,6 +66,7 @@ export default function TransactionStatus() {
   const [submittingBuyPayment, setSubmittingBuyPayment] = useState(false)
   const [buyPaymentError, setBuyPaymentError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [copiedAmount, setCopiedAmount] = useState(false)
 
   const MAX_RETRIES_ON_404 = 40 // ~2 minutes (40 × 3 seconds)
   const INITIAL_WAIT_MS = 3000 // Escrow + swap can take several seconds on testnet
@@ -118,7 +120,7 @@ export default function TransactionStatus() {
             retryCountRef.current += 1
             setRetryCount(retryCountRef.current)
             if (retryCountRef.current >= MAX_RETRIES_ON_404) {
-              setError('Transaction confirmation timeout — check your history or contact support')
+              setError('We could not find this order yet. Check History, or start a new cash-out.')
               setLoading(false)
             } else {
               setIsWaiting(true)
@@ -210,6 +212,13 @@ export default function TransactionStatus() {
       appealWindowOpen,
     })
     : null
+  const sellHero = !isBuy && transaction && !isTerminal
+    ? getSellTradeHero(transaction, { networkLabel: getNetworkLabel(transaction.network) })
+    : null
+  const sellConfirmStep = !isBuy && ['FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'].includes(transaction?.state)
+  const showSellGuidanceCard = Boolean(guidance)
+    && (!sellHero || guidance.urgency === 'soon' || guidance.urgency === 'critical')
+    && !sellConfirmStep
   // Dispute quick-action when wait depends on user (payout states), not cancel-waiting
   const canDisputeFromGuidance = showDisputeAction && (
     transaction?.state === 'FIAT_PAYOUT_SUBMITTED'
@@ -264,7 +273,7 @@ export default function TransactionStatus() {
 
   const handleConfirmReceipt = async () => {
     // If biometric lock is enabled, require verification first
-    if (lockRequired) {
+    if (lockRequired || isEnabled || isAvailable) {
       setShowVerifyModal(true)
       return
     }
@@ -380,11 +389,11 @@ export default function TransactionStatus() {
     if (!transaction) return ''
     switch (transaction.state) {
       case 'COMPLETE':
-        return 'Transaction complete. Check your mobile money account for the partner payout.'
+        return 'Done. Check your phone for the exact amount.'
       case 'REFUNDED':
-        return 'Your USDC has been safely returned to your wallet. No funds were lost — you can try again whenever you\u0027re ready.'
+        return 'Your USDC is back in your wallet. Nothing was lost — you can cash out again.'
       case 'FAILED':
-        return 'This transaction has failed. Please contact support if you need assistance.'
+        return 'This order failed. If USDC is not back in your wallet, email support@rowanpay.app with your order ID.'
       default:
         return ''
     }
@@ -440,13 +449,12 @@ export default function TransactionStatus() {
           <div className="animate-pulse mb-4">
             <Clock size={40} className="text-rowan-yellow mx-auto" />
           </div>
-          <p className="text-rowan-text text-sm font-medium mb-2">Waiting for confirmation...</p>
+          <p className="text-rowan-text text-sm font-medium mb-2">Holding your USDC…</p>
           <p className="text-rowan-muted text-xs mb-4">
-            Your transaction has been broadcast. The network is confirming it now.
-            {stellarTxHash && <> Tx: {stellarTxHash.slice(0, 16)}...</>}
+            Next we’ll find a trader to send the exact amount to your phone.
           </p>
           <p className="text-rowan-muted text-xs mt-2">
-            This usually takes 10-60 seconds
+            This usually takes under a minute
           </p>
         </div>
       </div>
@@ -482,8 +490,31 @@ export default function TransactionStatus() {
         <button onClick={() => navigate('/wallet/home')} className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center">
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">Your order</h1>
+        <h1 className="text-rowan-text text-lg font-bold">{sellHero ? sellHero.title : 'Your order'}</h1>
       </div>
+
+      {sellHero && (
+        <TradeNowHero
+          step={sellHero.step}
+          title={sellHero.title}
+          amountLabel={sellHero.amountLabel}
+          amountCaption={sellHero.amountCaption}
+          copied={copiedAmount}
+          onCopyAmount={sellHero.copyFiat ? () => {
+            const raw = transaction.fiatAmount ?? transaction.fiat_amount
+            if (raw == null) return
+            navigator.clipboard.writeText(String(raw)).then(() => {
+              setCopiedAmount(true)
+              setTimeout(() => setCopiedAmount(false), 2000)
+            }).catch(() => {})
+          } : undefined}
+        />
+      )}
+      {sellHero && activeTxId && (
+        <div className="flex justify-center -mt-2 mb-4">
+          <OrderShortId transactionId={activeTxId} />
+        </div>
+      )}
 
       {isTerminal && (
         <div className="flex flex-col items-center py-6 animate-scale-in">
@@ -500,7 +531,7 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {transaction && !isTerminal && (
+      {transaction && !isTerminal && !sellHero && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl px-4 py-3 mb-4 text-center">
           <p className="text-rowan-text text-sm font-semibold">{getStatusLabel(transaction.state, { automated: isAutomatedSell, onramp: isAutomatedBuy })}</p>
           {(getBuyProgressSubtitle(transaction) || getSellProgressSubtitle(transaction) || STATE_SUBTITLES[transaction.state]) && (
@@ -543,7 +574,7 @@ export default function TransactionStatus() {
         </div>
       )}
 
-      {guidance && (
+      {showSellGuidanceCard && (
         <OrderGuidanceCard
           guidance={guidance}
           canCancel={canShowCancel}
@@ -578,17 +609,9 @@ export default function TransactionStatus() {
         />
       )} */}
 
-      {transaction && (
-        <div
-          className={`rounded-xl p-3 my-4 border ${
-            isBuy
-              ? 'bg-rowan-yellow/10 border-rowan-yellow/30'
-              : 'bg-rowan-green/10 border-rowan-green/30'
-          }`}
-        >
-          <p className={`text-sm font-semibold ${isBuy ? 'text-rowan-yellow' : 'text-rowan-green'}`}>
-            {isBuy ? 'You are buying USDC' : 'You are selling USDC'}
-          </p>
+      {transaction && isBuy && (
+        <div className="rounded-xl p-3 my-4 border bg-rowan-yellow/10 border-rowan-yellow/30">
+          <p className="text-sm font-semibold text-rowan-yellow">You are buying USDC</p>
         </div>
       )}
 
@@ -695,7 +718,7 @@ export default function TransactionStatus() {
               className="text-rowan-red border-rowan-red w-full"
               onClick={() => setShowDisputeModal(true)}
             >
-              I did not receive it — dispute
+              I did not receive it — or the amount was wrong
             </Button>
           )}
         </div>
@@ -706,7 +729,7 @@ export default function TransactionStatus() {
         <div className="bg-rowan-green/10 border-2 border-rowan-green/40 rounded-xl p-4 my-4 space-y-4">
           <div className="text-center">
             <p className="text-rowan-green text-sm font-semibold">
-              Trader says they sent your mobile money
+              Trader says they sent your money
             </p>
             <p className="text-rowan-text text-sm font-medium mt-2">
               {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} via {getNetworkLabel(transaction.network)}
@@ -717,7 +740,7 @@ export default function TransactionStatus() {
               </p>
             )}
             <p className="text-rowan-muted text-xs mt-2">
-              Check your MoMo balance. If it arrived, confirm below to release USDC to the trader.
+              Check your balance. If this exact amount arrived, tap I got it.
             </p>
           </div>
           <Button
@@ -725,14 +748,14 @@ export default function TransactionStatus() {
             size="lg"
             onClick={() => setShowConfirmModal(true)}
           >
-            I have received fiat
+            I got it
           </Button>
           <Button
             variant="ghost"
             className="text-rowan-red border-rowan-red w-full"
             onClick={() => setShowDisputeModal(true)}
           >
-            I did not receive it — dispute
+            I did not receive it — or the amount was wrong
           </Button>
         </div>
       )}
@@ -752,7 +775,7 @@ export default function TransactionStatus() {
             size="lg"
             onClick={() => setShowConfirmModal(true)}
           >
-            I have received fiat
+            I got it
           </Button>
           {showDisputeAction && (
             <Button
@@ -920,12 +943,12 @@ export default function TransactionStatus() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-9 h-1 bg-rowan-border rounded-full mx-auto mb-6" />
-            <h3 className="text-rowan-text font-bold text-lg">Confirm Receipt</h3>
+            <h3 className="text-rowan-text font-bold text-lg">Did you get the money?</h3>
             <p className="text-rowan-muted text-sm mt-3 mb-4">
-              Only continue if the money is already in your mobile money account.
+              Only continue if the exact amount is already in your mobile money account.
             </p>
             <p className="text-rowan-yellow text-sm font-semibold mb-4">
-              Once confirmed, escrowed USDC will be released to the trader.
+              After you tap yes, USDC is released to the trader.
             </p>
             {confirmError && (
               <p className="text-rowan-red text-sm mb-4">{confirmError}</p>
@@ -937,7 +960,7 @@ export default function TransactionStatus() {
                 loading={confirming}
                 onClick={handleConfirmReceipt}
               >
-                Confirm and Release
+                Yes, I got it
               </Button>
               <Button
                 variant="ghost"
@@ -961,7 +984,7 @@ export default function TransactionStatus() {
             <div className="w-9 h-1 bg-rowan-border rounded-full mx-auto mb-6" />
             <h3 className="text-rowan-text font-bold text-lg">Report Missing Payment</h3>
             <p className="text-rowan-muted text-sm mt-3 mb-4">
-              Only open a dispute if the money has not arrived in your mobile money account.
+              Only open a dispute if the money has not arrived, or the amount is wrong.
             </p>
             <p className="text-rowan-muted text-sm mb-4">
               An admin will review the trader's reference and transaction details.

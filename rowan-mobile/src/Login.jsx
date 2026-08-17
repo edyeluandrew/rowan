@@ -252,6 +252,7 @@ export default function Login() {
         <button onClick={() => setMode('wallet')} className="text-rowan-muted text-xs mt-8 underline min-h-9">
           ← Back to Wallet
         </button>
+        <LegalLinks className="mt-6" />
       </div>
     );
   }

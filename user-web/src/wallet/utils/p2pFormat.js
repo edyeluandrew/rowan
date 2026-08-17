@@ -6,10 +6,10 @@ import { isAutomatedOfframp, isAutomatedOnramp, isBuyOrder } from './transaction
 export const USER_STATUS_LABELS = {
   QUOTE_REQUESTED: 'Getting your rate...',
   QUOTE_CONFIRMED: 'Rate confirmed',
-  ESCROW_LOCKED: 'Funds secured',
-  TRADER_MATCHED: 'Trader found',
-  FIAT_PAYOUT_SUBMITTED: 'Payment sent to you',
-  USER_CONFIRMATION_PENDING: 'Confirm your payment',
+  ESCROW_LOCKED: 'Waiting for a trader',
+  TRADER_MATCHED: 'Waiting for mobile money',
+  FIAT_PAYOUT_SUBMITTED: 'Check your phone',
+  USER_CONFIRMATION_PENDING: 'Did you get it?',
   COMPLETE: 'Done!',
   DISPUTE_OPENED: 'Under review',
   DISPUTE_RELEASE_PENDING: 'Under review',
@@ -105,13 +105,13 @@ export function getSellProgressSubtitle(tx) {
   }
 
   const traderId = tx.traderId ?? tx.trader_id
-  if (state === 'ESCROW_LOCKED' && !traderId) return 'Finding a trader for your cash out'
+  if (state === 'ESCROW_LOCKED' && !traderId) return 'A trader will send the exact amount to your phone'
   if (state === 'TRADER_MATCHED') {
     return tx.matchedAt || tx.matched_at
-      ? 'Trader accepted — waiting for mobile money'
+      ? 'Watch your phone for the exact amount'
       : 'A trader is reviewing your request'
   }
-  if (state === 'FIAT_PAYOUT_SUBMITTED') return 'Check your phone — confirm when MoMo arrives'
+  if (state === 'FIAT_PAYOUT_SUBMITTED') return 'If the money arrived, tap I got it'
   return null
 }
 
@@ -204,6 +204,77 @@ export function formatMessageTime(isoString) {
 
 export function getNetworkLabel(networkKey) {
   return NETWORKS[networkKey]?.label || 'Mobile Money'
+}
+
+/** Sell cash-out hero: one step, one amount, no jargon. */
+export function getSellTradeHero(transaction, { networkLabel } = {}) {
+  if (!transaction || isBuyOrder(transaction)) return null
+  const state = transaction.state
+  if (['COMPLETE', 'REFUNDED', 'FAILED', 'DISPUTE_OPENED', 'RELEASE_BLOCKED'].includes(state)) {
+    return null
+  }
+  const amountLabel = formatCurrency(
+    transaction.fiatAmount ?? transaction.fiat_amount,
+    transaction.fiatCurrency || transaction.fiat_currency || transaction.currency || 'UGX'
+  )
+  const network = networkLabel || 'mobile money'
+  const automated = isAutomatedOfframp(transaction)
+
+  if (state === 'QUOTE_REQUESTED' || state === 'QUOTE_CONFIRMED') {
+    return {
+      step: 1,
+      title: 'Send this USDC',
+      amountLabel,
+      amountCaption: `You'll receive this exact amount on ${network}`,
+      copyFiat: true,
+    }
+  }
+  if (state === 'ESCROW_LOCKED') {
+    if (automated) {
+      return {
+        step: 2,
+        title: 'Sending to your phone',
+        amountLabel,
+        amountCaption: `Watch ${network} for this amount`,
+        copyFiat: true,
+      }
+    }
+    return {
+      step: 2,
+      title: 'Waiting for a trader',
+      amountLabel,
+      amountCaption: `They will send this exact amount to your ${network}`,
+      copyFiat: true,
+    }
+  }
+  if (state === 'TRADER_MATCHED') {
+    return {
+      step: 3,
+      title: 'Waiting for mobile money',
+      amountLabel,
+      amountCaption: `Check ${network} for this exact amount`,
+      copyFiat: true,
+    }
+  }
+  if (state === 'FIAT_PAYOUT_SUBMITTED' || state === 'USER_CONFIRMATION_PENDING') {
+    if (automated) {
+      return {
+        step: 3,
+        title: `Check your ${network}`,
+        amountLabel,
+        amountCaption: 'This amount should land on your phone',
+        copyFiat: true,
+      }
+    }
+    return {
+      step: 4,
+      title: `Check your ${network}`,
+      amountLabel,
+      amountCaption: 'If it arrived, tap I got it',
+      copyFiat: true,
+    }
+  }
+  return null
 }
 
 export function getTraderDisplayName(name) {

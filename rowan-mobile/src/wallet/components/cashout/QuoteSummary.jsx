@@ -76,12 +76,15 @@ export default function QuoteSummary({ quote, phone, requestedFiat }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mt-3">
-        <Hash size={12} className="text-rowan-muted" />
-        <span className="text-rowan-muted text-xs font-mono">
-          Quote: {quote.quoteId?.slice(0, 12)}...
-        </span>
-      </div>
+      <details className="mt-3">
+        <summary className="text-rowan-muted text-xs cursor-pointer">Need help? Technical details</summary>
+        <div className="flex items-center gap-1 mt-2">
+          <Hash size={12} className="text-rowan-muted" />
+          <span className="text-rowan-muted text-xs font-mono">
+            Quote: {quote.quoteId?.slice(0, 12)}...
+          </span>
+        </div>
+      </details>
     </div>
   )
 }

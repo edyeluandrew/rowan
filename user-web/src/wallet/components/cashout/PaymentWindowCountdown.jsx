@@ -30,7 +30,7 @@ export default function PaymentWindowCountdown({ expiresAt, orderSide = 'SELL' }
     ? 'Time window closing soon'
     : isBuy
       ? 'Waiting for trader to lock USDC'
-      : 'Awaiting payment from trader'
+      : 'Waiting for your mobile money'
 
   return (
     <div

@@ -13,6 +13,8 @@ export default function useBiometrics() {
 
   return {
     available,
+    isAvailable: available,
+    isEnabled: false,
     biometricType,
     authenticate,
     loading: false,

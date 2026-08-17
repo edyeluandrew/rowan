@@ -89,7 +89,7 @@ export default function CashoutConfirm() {
         <button onClick={() => navigate(-1)} className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center">
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">Confirm Quote</h1>
+        <h1 className="text-rowan-text text-lg font-bold">You'll receive</h1>
       </div>
 
       {chosenTrader && (
@@ -160,7 +160,7 @@ export default function CashoutConfirm() {
       {!expired && (
         <div className="mt-8">
           <Button onClick={handleConfirm} loading={checkingActive} disabled={checkingActive}>
-            Confirm and Proceed
+            Confirm and send USDC
           </Button>
         </div>
       )}

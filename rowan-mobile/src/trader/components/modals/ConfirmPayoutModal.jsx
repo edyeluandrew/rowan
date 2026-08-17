@@ -4,6 +4,7 @@ import { Check, ImagePlus, X } from 'lucide-react';
 import Button from '../ui/Button';
 import { submitPayoutSent } from '../../api/trader';
 import { formatCurrency } from '../../utils/format';
+import useBiometrics from '../../../wallet/hooks/useBiometrics';
 
 const PAYOUT_CONFIRM_REDIRECT_MS = 2000;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/jpg'];
@@ -17,6 +18,7 @@ export default function ConfirmPayoutModal({ open, request, onClose, onPayoutSub
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState(null);
   const fileRef = useRef(null);
+  const { authenticate, isAvailable, isEnabled } = useBiometrics();
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -46,6 +48,14 @@ export default function ConfirmPayoutModal({ open, request, onClose, onPayoutSub
     setSubmitting(true);
     setError(null);
     try {
+      if (isAvailable || isEnabled) {
+        const verified = await authenticate('Confirm you sent the exact mobile money amount');
+        if (!verified) {
+          setError('Verification cancelled');
+          setSubmitting(false);
+          return;
+        }
+      }
       await submitPayoutSent(request.id, reference.trim(), proofFile);
       if (onPayoutSubmitted) {
         onPayoutSubmitted(request.id);

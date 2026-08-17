@@ -340,41 +340,48 @@ export default function TransactionDetail() {
           value={network.label || tx.network}
         />
         <DetailRow
-          label="Transaction ID"
+          label="Order ID"
           value={tx.id}
           copyable
           copied={copied === 'id'}
           onCopy={() => handleCopy(tx.id, 'id')}
         />
-        {tx.escrowAddress && (
-          <DetailRow
-            label="Escrow Address"
-            value={formatAddress(tx.escrowAddress)}
-            copyable
-            copied={copied === 'escrow'}
-            onCopy={() => handleCopy(tx.escrowAddress, 'escrow')}
-          />
-        )}
-        {tx.memo && (
-          <DetailRow label="Memo" value={tx.memo} />
-        )}
-        {tx.stellar_release_tx && (
-          <DetailRow
-            label="Stellar Release TX"
-            value={formatAddress(tx.stellar_release_tx)}
-            copyable
-            copied={copied === 'release'}
-            onCopy={() => handleCopy(tx.stellar_release_tx, 'release')}
-          />
-        )}
-        {tx.stellarTxHash && (
-          <DetailRow
-            label="Stellar TX"
-            value={formatAddress(tx.stellarTxHash)}
-            copyable
-            copied={copied === 'stellar'}
-            onCopy={() => handleCopy(tx.stellarTxHash, 'stellar')}
-          />
+        {(tx.escrowAddress || tx.memo || tx.stellar_release_tx || tx.stellarTxHash) && (
+          <details className="pt-1">
+            <summary className="text-rowan-muted text-xs cursor-pointer">Technical details</summary>
+            <div className="space-y-3 mt-3">
+              {tx.escrowAddress && (
+                <DetailRow
+                  label="Escrow Address"
+                  value={formatAddress(tx.escrowAddress)}
+                  copyable
+                  copied={copied === 'escrow'}
+                  onCopy={() => handleCopy(tx.escrowAddress, 'escrow')}
+                />
+              )}
+              {tx.memo && (
+                <DetailRow label="Memo" value={tx.memo} />
+              )}
+              {tx.stellar_release_tx && (
+                <DetailRow
+                  label="Stellar Release TX"
+                  value={formatAddress(tx.stellar_release_tx)}
+                  copyable
+                  copied={copied === 'release'}
+                  onCopy={() => handleCopy(tx.stellar_release_tx, 'release')}
+                />
+              )}
+              {tx.stellarTxHash && (
+                <DetailRow
+                  label="Stellar TX"
+                  value={formatAddress(tx.stellarTxHash)}
+                  copyable
+                  copied={copied === 'stellar'}
+                  onCopy={() => handleCopy(tx.stellarTxHash, 'stellar')}
+                />
+              )}
+            </div>
+          </details>
         )}
       </div>
 

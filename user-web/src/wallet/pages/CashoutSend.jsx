@@ -7,10 +7,12 @@ import { getSecure } from '../utils/storage'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import CountdownTimer from '../components/ui/CountdownTimer'
 import QuoteSummary from '../components/cashout/QuoteSummary'
+import TradeNowHero from '../components/cashout/TradeNowHero'
 import Button from '../components/ui/Button'
 import { mapApiError } from '../utils/apiErrors'
 import { createSubmitGuard } from '../utils/submitGuard'
 import { getHorizonUrl } from '../../shared/utils/config'
+import { formatCurrency } from '../utils/p2pFormat'
 
 export default function CashoutSend() {
   const navigate = useNavigate()
@@ -110,8 +112,15 @@ export default function CashoutSend() {
         >
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">Send USDC</h1>
+        <h1 className="text-rowan-text text-lg font-bold">Send this USDC</h1>
       </div>
+
+      <TradeNowHero
+        step={1}
+        title="Send this USDC"
+        amountLabel={`${Number(quote.usdcAmount ?? quote.usdc_amount ?? 0).toFixed(4)} USDC`}
+        amountCaption={`You'll receive ${formatCurrency(quote.fiatAmount ?? quote.requestedFiatAmount, quote.fiatCurrency)}`}
+      />
 
       <div className="flex items-center justify-between mb-1 bg-rowan-surface rounded-lg p-3 border border-rowan-border">
         <div className="flex items-center gap-2">
@@ -132,7 +141,7 @@ export default function CashoutSend() {
       <div className="bg-rowan-surface rounded-xl p-4 mt-4 flex items-start gap-3">
         <ShieldCheck size={20} className="text-rowan-green shrink-0 mt-0.5" />
         <p className="text-rowan-muted text-xs">
-          Your USDC is sent to escrow and held until mobile money arrives on your phone.
+          Your USDC is held until the exact mobile money amount arrives on your phone.
           If payment is not completed in time, your USDC is refunded automatically.
           Tap send once — do not double-send while this page says Sending…
         </p>
@@ -144,7 +153,7 @@ export default function CashoutSend() {
             <AlertTriangle size={18} className="text-rowan-yellow" />
             <p className="text-rowan-yellow font-bold text-sm">Quote Expired</p>
           </div>
-          <p className="text-rowan-muted text-xs mb-3">This quote is no longer valid. Please request a new one.</p>
+          <p className="text-rowan-muted text-xs mb-3">This quote expired. Nothing was taken. Get a new one.</p>
           <Button onClick={handleGetNewQuote}>Get New Quote</Button>
         </div>
       )}
@@ -159,7 +168,7 @@ export default function CashoutSend() {
       {!quoteExpired && (
         <div className="mt-8">
           <Button onClick={handleSendNow} loading={loading} disabled={loading}>
-            {loading ? 'Sending… please wait' : 'Send USDC'}
+            {loading ? 'Sending… please wait' : 'Send this USDC'}
           </Button>
         </div>
       )}

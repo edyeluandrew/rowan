@@ -37,14 +37,12 @@ export function getOrderGuidance(transaction, {
 
   if (state === 'QUOTE_CONFIRMED' || state === 'QUOTE_REQUESTED') {
     return {
-      title: isBuy ? 'Starting your buy…' : 'Send USDC to escrow',
+      title: isBuy ? 'Starting your buy…' : 'Send this USDC',
       body: isBuy
         ? automatedBuy
           ? 'We are sending a payment prompt to your phone. This usually takes a few seconds.'
           : 'We are preparing your order. This usually takes a few seconds.'
-        : automatedSell
-          ? 'Finish sending USDC from your wallet if you have not already. Funds stay in escrow until mobile money lands on your phone.'
-          : 'Finish sending USDC from your wallet if you have not already. Funds stay in escrow until you confirm MoMo.',
+        : 'Tap send once. After that, a trader sends the exact mobile money amount to your phone.',
       urgency: 'normal',
     }
   }
@@ -75,9 +73,9 @@ export function getOrderGuidance(transaction, {
       }
     }
     return {
-      title: 'Matching you with a trader',
-      body: 'Your USDC is locked in escrow. We are finding a verified trader for your payout.',
-      tip: 'This usually takes under a few minutes when traders are online.',
+      title: 'Waiting for a trader',
+      body: 'Your USDC is held safely. A trader will send the exact amount to your phone.',
+      tip: 'This usually takes a few minutes when traders are online.',
       urgency: 'normal',
     }
   }
@@ -124,8 +122,8 @@ export function getOrderGuidance(transaction, {
     }
     return {
       title: 'Waiting for mobile money',
-      body: 'A trader has your order. Watch for MoMo, then come back here to confirm receipt.',
-      tip: 'You can cancel (and get USDC refunded) while the payment window still has more than 2 minutes left.',
+      body: 'Watch your phone. The trader must send the exact amount shown — nothing deducted.',
+      tip: 'You can cancel (and get USDC back) while more than 2 minutes remain.',
       urgency: 'normal',
       showCancelHint: true,
     }
@@ -159,9 +157,9 @@ export function getOrderGuidance(transaction, {
       }
     }
     return {
-      title: 'Check your mobile money',
-      body: 'The trader says they sent MoMo. Confirm only after the money is in your account — that releases USDC from escrow.',
-      tip: 'If MoMo did not arrive, dispute instead of confirming.',
+      title: 'Check your phone',
+      body: 'The trader says they sent it. Confirm only after the money is in your account.',
+      tip: 'If it did not arrive, dispute — do not tap I got it.',
       urgency: 'soon',
       showDisputeHint: true,
     }
@@ -191,8 +189,8 @@ export function getOrderGuidance(transaction, {
       }
     }
     return {
-      title: 'Confirm your receipt',
-      body: 'Tap “I have received fiat” if MoMo arrived. Raise a dispute if it did not.',
+      title: 'Did you get it?',
+      body: 'Tap “I got it” if the money arrived. Raise a dispute if it did not.',
       urgency: 'soon',
       showDisputeHint: true,
     }

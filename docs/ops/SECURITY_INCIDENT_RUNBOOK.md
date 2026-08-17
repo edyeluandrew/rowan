@@ -18,11 +18,12 @@
 
 ## JWT / session limitations (current)
 
-Rowan **does not** implement full server-side session revocation today:
+Rowan **does** denylist JWTs on logout (`POST /api/v1/auth/logout`, Redis `jwt:deny:*` until the token's original expiry).
 
-- JWTs remain valid until expiry (`JWT_ADMIN_EXPIRES_IN` — default 1h in production).
-- Admin logout is client-side (drop token); no server revoke endpoint.
+Still:
+
 - Disabled accounts (`is_active = false`) are blocked on **next authenticated request**.
+- If Redis is down, denylist lookup fails open (token still works until expiry) — rotate `JWT_SECRET` in a serious incident.
 
 Plan incident response accordingly — **disable account + rotate JWT secret** forces re-login for all admins.
 

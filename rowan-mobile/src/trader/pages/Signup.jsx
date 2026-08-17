@@ -107,6 +107,11 @@ export default function Signup() {
           Sign In
         </Link>
       </p>
+      <p className="text-center text-[11px] text-rowan-muted leading-relaxed mt-6">
+        <Link to="/legal/terms" className="underline">Terms of Service</Link>
+        {' · '}
+        <Link to="/legal/privacy" className="underline">Privacy Policy</Link>
+      </p>
 
       <p className="text-rowan-muted/40 text-[10px] mt-8">
         v{import.meta.env.VITE_APP_VERSION || '1.0.0'} MVP

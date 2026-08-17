@@ -3,6 +3,7 @@
  */
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { setClientToken, onLogout } from '../shared/api/client';
+import client from '../shared/api/client';
 import {
   getSecure, setSecure, removeSecure, initStorage, getPreference, setPreference,
 } from '../shared/utils/storage';
@@ -164,6 +165,11 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
+    try {
+      await client.post('/api/v1/auth/logout');
+    } catch {
+      /* still clear local session */
+    }
     await removeSecure('rowan_token');
     await removeSecure('rowan_user');
     setClientToken(null);

@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { useNavigate } from 'react-router-dom';
 import { loginTrader } from '../api/auth';
 import { setClientToken } from '../api/client';
+import client from '../api/client';
 import {
   getSecure, setSecure, clearAllSecure,
 } from '../utils/storage';
@@ -55,6 +56,11 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
+    try {
+      await client.post('/api/v1/auth/logout');
+    } catch {
+      /* still clear local session */
+    }
     await clearAllSecure();
     await clearPreferences();
     setClientToken(null);

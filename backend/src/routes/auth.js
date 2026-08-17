@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { signToken, authAdmin, authTrader } from '../middleware/auth.js';
+import { signToken, authAdmin, authTrader, extractToken } from '../middleware/auth.js';
+import { denyToken } from '../services/tokenDenylist.js';
+import jwt from 'jsonwebtoken';
+import config from '../config/index.js';
 import { validate } from '../middleware/validate.js';
 import { adminLoginLimiter, twoFactorVerifyLimiter, sensitiveActionLimiter } from '../middleware/rateLimits.js';
 import { packTotpSecret, verifyTotpFromStored, upgradeTotpSecretIfPlaintext } from '../utils/totpSecret.js';
@@ -244,6 +247,23 @@ router.post(
     }
   }
 );
+
+/**
+ * POST /api/v1/auth/logout
+ * Kill this JWT immediately (denylist until it would have expired).
+ */
+router.post('/logout', async (req, res) => {
+  const token = extractToken(req);
+  if (token) {
+    try {
+      const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] });
+      await denyToken(token, payload.exp);
+    } catch {
+      /* already invalid */
+    }
+  }
+  res.json({ ok: true });
+});
 
 /**
  * POST /api/v1/auth/admin/login

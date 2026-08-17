@@ -4,6 +4,7 @@ import kycTierService from '../services/kyc/kycTierService.js';
 import logger from '../utils/logger.js';
 import db from '../db/index.js';
 import quoteEngine from '../services/quoteEngine.js';
+import { isDenied } from '../services/tokenDenylist.js';
 
 /**
  * Authenticate wallet users via JWT.
@@ -19,8 +20,9 @@ export function authUser(req, res, next) {
     req.userId = payload.sub;
     req.deviceId = payload.deviceId;
     ensureActiveAccount('user', payload.sub)
-      .then((active) => {
+      .then(async (active) => {
         if (!active) return res.status(403).json({ error: 'Account disabled' });
+        if (await isDenied(token)) return res.status(401).json({ error: 'Session ended' });
         next();
       })
       .catch(() => res.status(500).json({ error: 'Authentication check failed' }));
@@ -47,8 +49,9 @@ export function authTrader(req, res, next) {
     req.traderId = payload.sub;
     req.deviceId = payload.deviceId;
     ensureActiveTrader(payload.sub)
-      .then((active) => {
+      .then(async (active) => {
         if (!active) return res.status(403).json({ error: 'Account disabled or suspended' });
+        if (await isDenied(token)) return res.status(401).json({ error: 'Session ended' });
         next();
       })
       .catch(() => res.status(500).json({ error: 'Authentication check failed' }));
@@ -69,8 +72,9 @@ export function authAdmin(req, res, next) {
     if (payload.role !== 'admin') return res.status(403).json({ error: 'Not an admin token' });
     req.adminId = payload.sub;
     ensureActiveAccount('admin', payload.sub)
-      .then((active) => {
+      .then(async (active) => {
         if (!active) return res.status(403).json({ error: 'Admin account disabled' });
+        if (await isDenied(token)) return res.status(401).json({ error: 'Session ended' });
         next();
       })
       .catch(() => res.status(500).json({ error: 'Authentication check failed' }));
@@ -160,3 +164,5 @@ function extractToken(req) {
   if (auth && auth.startsWith('Bearer ')) return auth.slice(7);
   return null;
 }
+
+export { extractToken };

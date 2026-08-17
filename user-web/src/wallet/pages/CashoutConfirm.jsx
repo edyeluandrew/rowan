@@ -89,7 +89,7 @@ export default function CashoutConfirm() {
         <button onClick={() => navigate(-1)} className="text-rowan-muted min-h-11 min-w-11 flex items-center justify-center">
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-rowan-text text-lg font-bold">Confirm Quote</h1>
+        <h1 className="text-rowan-text text-lg font-bold">You'll receive</h1>
       </div>
 
       {chosenTrader && (
@@ -139,7 +139,7 @@ export default function CashoutConfirm() {
             <AlertTriangle size={18} className="text-rowan-yellow" />
             <p className="text-rowan-yellow font-bold text-sm">Quote Expired</p>
           </div>
-          <p className="text-rowan-muted text-xs mb-3">This quote is no longer valid. Please request a new one.</p>
+          <p className="text-rowan-muted text-xs mb-3">This quote expired. Nothing was taken. Get a new one.</p>
           <Button onClick={() => navigate('/wallet/cashout', { replace: true })}>
             Get New Quote
           </Button>
@@ -160,7 +160,7 @@ export default function CashoutConfirm() {
       {!expired && (
         <div className="mt-8">
           <Button onClick={handleConfirm} loading={checkingActive} disabled={checkingActive}>
-            Confirm and Proceed
+            Confirm and send USDC
           </Button>
         </div>
       )}
