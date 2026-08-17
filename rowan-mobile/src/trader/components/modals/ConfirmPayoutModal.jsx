@@ -79,11 +79,11 @@ export default function ConfirmPayoutModal({ open, request, onClose, onPayoutSub
           <>
             <h3 className="text-rowan-text font-bold text-lg">Confirm fiat sent</h3>
             <p className="text-rowan-muted text-sm mt-3 mb-4">
-              Confirm you sent exactly{' '}
+              Confirm you sent{' '}
               <span className="text-rowan-green font-bold">
                 {formatCurrency(request.fiat_amount, request.fiat_currency)}
               </span>{' '}
-              mobile money (not USDC) via {request.network} to the customer. Do not deduct fees from this amount.
+              mobile money (not USDC) via {request.network} to the customer.
             </p>
 
             <div className="mb-4">

@@ -37,11 +37,6 @@ const config = {
   // Platform
   platform: {
     feePercent: parseFloat(process.env.PLATFORM_FEE_PERCENT) || 1,
-    // P2P cash-out fee USDC lands here (falls back to MarzPay / utility fee wallet).
-    feeStellarAddress: process.env.PLATFORM_FEE_STELLAR
-      || process.env.MARZPAY_FEE_STELLAR
-      || process.env.UTILITY_USDC_PUBLIC_KEY
-      || '',
     spreadPercent: parseFloat(process.env.PLATFORM_SPREAD_PERCENT) || 1.25,
     maxSlippagePercent: parseFloat(process.env.MAX_SLIPPAGE_PERCENT) || 5,
     quoteTtlSeconds: parseInt(process.env.QUOTE_TTL_SECONDS, 10) || 360,

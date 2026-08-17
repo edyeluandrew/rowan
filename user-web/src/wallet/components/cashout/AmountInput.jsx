@@ -11,8 +11,7 @@ export default function AmountInput({
   cryptoEstimate,
   cryptoLabel = 'USDC',
   fiatSubLabel,
-  platformFeeFiat,
-  feeHint,
+  platformFeeFiat: _platformFeeFiat,
   maxFiat: _maxFiat,
 }) {
   const handleChange = (e) => {
@@ -49,13 +48,6 @@ export default function AmountInput({
         </p>
         <p className="text-rowan-muted text-sm">{estimateCaption}</p>
       </div>
-      {feeHint ? (
-        <p className="text-rowan-muted text-xs mt-3 text-center">{feeHint}</p>
-      ) : Number(platformFeeFiat) > 0 && currency ? (
-        <p className="text-rowan-muted text-xs mt-3 text-center">
-          Rowan fee {Number(platformFeeFiat).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
-        </p>
-      ) : null}
     </div>
   )
 }

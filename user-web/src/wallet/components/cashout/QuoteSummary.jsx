@@ -25,10 +25,6 @@ export default function QuoteSummary({ quote, phone, requestedFiat }) {
   const payoutMethod = paymentPlan?.primary?.automated
     ? `${paymentPlan.primary.label}${paymentPlan.primary.mock ? ' (sandbox)' : ''}`
     : paymentPlan?.fallbackChain?.[0]?.label || null
-  const feeUsdc = quote.platformFeeUsdc != null ? Number(quote.platformFeeUsdc) : null
-  const feeLabel = feeUsdc != null
-    ? `${feeUsdc.toFixed(4)} USDC`
-    : `${quote.platformFee ? Number(quote.platformFee).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '0'} ${currency}`
 
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-2xl p-5">
@@ -53,7 +49,7 @@ export default function QuoteSummary({ quote, phone, requestedFiat }) {
           <Smartphone size={20} className="text-rowan-green" />
         </div>
         <div>
-          <p className="text-rowan-muted text-xs">You receive (exact)</p>
+          <p className="text-rowan-muted text-xs">You receive</p>
           <p className="text-rowan-green text-2xl font-bold tabular-nums">
             {Number(displayFiat).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
           </p>
@@ -62,12 +58,7 @@ export default function QuoteSummary({ quote, phone, requestedFiat }) {
 
       <div className="border-t border-rowan-border mt-4 pt-4 space-y-2">
         <DetailRow label="Rate" value={rateLabel} />
-        <DetailRow label="Rowan fee" value={feeLabel} />
-        {feeUsdc != null && (
-          <p className="text-rowan-muted text-[11px] leading-snug">
-            Included in the USDC you send. The trader pays you the full {currency} above — nothing is deducted from it.
-          </p>
-        )}
+        <DetailRow label="Platform fee" value={`${quote.platformFee ? Number(quote.platformFee).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '0'} ${currency}`} />
         <DetailRow label="Network" value={network.label || quote.network} />
         {payoutMethod && <DetailRow label="Payout via" value={payoutMethod} />}
         <DetailRow label="Estimated delivery" value={ESTIMATED_DELIVERY} />

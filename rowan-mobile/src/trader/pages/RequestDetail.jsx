@@ -555,7 +555,7 @@ export default function RequestDetail() {
             </span>
           </div>
         )}
-        {tx.fee && isBuyOrder && (
+        {tx.fee && (
           <div className="flex justify-between">
             <span className="text-rowan-muted text-xs">Fee</span>
             <span className="text-rowan-muted text-sm">
@@ -592,13 +592,12 @@ export default function RequestDetail() {
             Your turn: send mobile money
           </h3>
           <p className="text-rowan-muted text-xs mb-3">
-            Do not send USDC. Pay the exact fiat amount below — do not deduct fees.
-            Your profit is in the USDC you receive. Then tap <strong className="text-rowan-text">I have sent fiat</strong>.
+            Do not send USDC. Pay fiat to the customer below, then tap <strong className="text-rowan-text">I have sent fiat</strong>.
           </p>
           <div className="space-y-3">
             <div>
               <p className="text-rowan-muted text-xs mb-1">
-                Send exactly {formatCurrency(tx.fiat_amount, tx.fiat_currency)} via {network.label || tx.network} to:
+                Send {formatCurrency(tx.fiat_amount, tx.fiat_currency)} via {network.label || tx.network} to:
               </p>
             </div>
             <div className="bg-rowan-bg rounded-lg p-3 space-y-2">

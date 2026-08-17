@@ -268,13 +268,6 @@ router.post(
         fiatAmount: quote.fiat_amount,
         fiatCurrency: quote.fiat_currency,
         platformFee: quote.platform_fee,
-        platformFeeUsdc: (() => {
-          const isTraderAd = quote.rate_source === 'TRADER_AD' || quote.fiat_rate_source === 'TRADER_AD';
-          const deposit = Number(quote.usdc_deposit_amount);
-          const traderUsdc = Number(quote.path_usdc_received);
-          if (!isTraderAd || !Number.isFinite(deposit) || !Number.isFinite(traderUsdc)) return null;
-          return Number(Math.max(0, deposit - traderUsdc).toFixed(7));
-        })(),
         expiresAt: quote.expires_at,
         requestedFiatAmount: hasFiat ? fiatNum : null,
         network,
