@@ -46,13 +46,14 @@ export default function BuyConfirm() {
     try {
       const snap = await refreshRates()
       const health = getRatesHealth(snap?.rates, snap?.fetchedAt, snap?.error)
+      const traderPriced = quote.rateSource === 'TRADER_AD' || quote.fiatRateSource === 'TRADER_AD'
       if (!health.ok && express) {
         setError(health.message)
         submitGuard.release()
         setLoading(false)
         return
       }
-      if (health.ok) {
+      if (health.ok && !traderPriced) {
         const refRate = liveAtQuote ?? quote.userRate
         const drift = checkRateDrift(refRate, health.usdcToFiat)
         if (drift?.drifted) {

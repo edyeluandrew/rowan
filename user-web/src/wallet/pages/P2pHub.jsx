@@ -7,11 +7,12 @@ import TraderGroupCard from '../components/marketplace/TraderGroupCard'
 import NetworkPickSheet from '../components/marketplace/NetworkPickSheet'
 import ExpressSheet from '../components/marketplace/ExpressSheet'
 import MarketplaceSkeleton from '../components/marketplace/MarketplaceSkeleton'
+import MarketplaceEmpty from '../components/marketplace/MarketplaceEmpty'
 import useRates from '../hooks/useRates'
 import useWallet from '../hooks/useWallet'
 import useUserCountry from '../hooks/useUserCountry'
 import { getNetworksForCountry } from '../utils/country'
-import { NETWORKS } from '../utils/constants'
+import { NETWORKS, QUOTE_REFRESH_INTERVAL } from '../utils/constants'
 import Button from '../components/ui/Button'
 import client from '../api/client'
 
@@ -57,15 +58,18 @@ export default function P2pHub() {
   const loadAds = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
     else setLoading(true)
-    setError(null)
+    if (!isRefresh) setError(null)
     try {
       const params = { currency: fiatCurrency }
       if (network) params.network = network
       if (debouncedMinAmount) params.minAmount = parseFloat(debouncedMinAmount)
       const res = tab === 'buy' ? await listBuyAds(params) : await listTraderAds(params)
       setTraders(res.traders || [])
+      setError(null)
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not load traders. Please try again.')
+      if (!isRefresh) {
+        setError(err.response?.data?.error || 'Could not load traders. Please try again.')
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -83,6 +87,8 @@ export default function P2pHub() {
 
   useEffect(() => {
     loadAds()
+    const id = setInterval(() => loadAds(true), QUOTE_REFRESH_INTERVAL)
+    return () => clearInterval(id)
   }, [loadAds])
 
   const buildAdFromOffer = (offer, trader) => ({
@@ -259,16 +265,15 @@ export default function P2pHub() {
           )}
 
           {!loading && !error && traders.length === 0 && (
-            <div className="bg-rowan-surface border border-rowan-border rounded-xl p-8 text-center">
-              <p className="text-rowan-text text-sm font-medium">No traders available right now.</p>
-              <p className="text-rowan-muted text-xs mt-2">
-                Try another payment method or check back soon.
-              </p>
-              <Button className="mt-4" variant="ghost" onClick={() => loadAds(true)}>
-                <RefreshCw size={16} />
-                Refresh
-              </Button>
-            </div>
+            <MarketplaceEmpty
+              tab={tab}
+              filtered={Boolean(network || debouncedMinAmount)}
+              onRefresh={() => loadAds(true)}
+              onClearFilters={() => {
+                setNetwork(null)
+                setMinAmount('')
+              }}
+            />
           )}
 
           {!loading && !error && traders.length > 0 && (

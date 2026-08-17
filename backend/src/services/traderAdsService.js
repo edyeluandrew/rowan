@@ -184,7 +184,9 @@ function groupAdsByTrader(ads, { isBuy = false } = {}) {
       maxAmount: maxs.length ? Math.max(...maxs) : null,
       totalAvailableFloat: floats.length ? floats.reduce((a, b) => a + b, 0) : null,
       totalAvailableUsdc: usdcs.length ? usdcs.reduce((a, b) => a + b, 0) : null,
-      bestRatePerUsdc: rates.length ? Math.max(...rates) : null,
+      bestRatePerUsdc: rates.length
+        ? (isBuy ? Math.min(...rates) : Math.max(...rates))
+        : null,
       offers: group.offers.sort((a, b) => (a.network || '').localeCompare(b.network || '')),
     };
   });

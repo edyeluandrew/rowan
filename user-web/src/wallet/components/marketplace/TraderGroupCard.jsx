@@ -32,15 +32,16 @@ export default function TraderGroupCard({
   const primaryNetwork = offers[0]?.network
   const currency = trader.currency || offers[0]?.currency
 
-  const rateLine = isBuy
-    ? formatUsdcRateLine(currency, trader.bestRatePerUsdc)
-    : formatUsdcRateLine(currency, usdcToFiat)
+  const displayRate = Number(trader.bestRatePerUsdc) > 0
+    ? Number(trader.bestRatePerUsdc)
+    : (Number(usdcToFiat) > 0 ? Number(usdcToFiat) : null)
+  const rateLine = formatUsdcRateLine(currency, displayRate)
 
   const estimateUsdc = walletBalance != null && Number(walletBalance) > 0
     ? Math.min(Number(walletBalance), ESTIMATE_USDC)
     : ESTIMATE_USDC
-  const estimateFiat = !isBuy && usdcToFiat
-    ? estimateMaxNetFiatFromUsdc(estimateUsdc, usdcToFiat)
+  const estimateFiat = !isBuy && displayRate
+    ? estimateMaxNetFiatFromUsdc(estimateUsdc, displayRate)
     : null
   const estimateLine = formatUsdcSellEstimateLine(estimateUsdc, estimateFiat, currency)
 

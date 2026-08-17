@@ -589,12 +589,48 @@ async function discoverPathForUsdcTarget(usdcTargetForPath, fiatCurrency, capRef
 /**
  * Fiat-anchored USDC quote: user specifies net MoMo payout; they send USDC to escrow.
  * No XLM path discovery — stablecoin in, mobile money out.
+ * When ratePerUsdc is set (trader cash-out ad), uses the trader's posted price.
  */
-async function computeQuoteFromTargetFiatUsdc(targetNetFiat, network) {
+async function getTraderAdRatePerUsdc(payoutSettingId) {
+  if (!payoutSettingId) return null;
+  const result = await db.query(
+    `SELECT rate_per_usdc FROM trader_payout_settings WHERE id = $1 AND is_active = TRUE`,
+    [payoutSettingId]
+  );
+  const rate = parseFloat(result.rows[0]?.rate_per_usdc);
+  return Number.isFinite(rate) && rate > 0 ? rate : null;
+}
+
+function traderAdFiatFx(usdcToFiat, fiatCurrency) {
+  return {
+    rate: usdcToFiat,
+    fxSource: 'trader_ad',
+    fxCurrency: fiatCurrency,
+    fxWarning: null,
+    fiatRateSource: 'TRADER_AD',
+    fxProvider: 'trader_ad',
+    fxFetchedAt: new Date().toISOString(),
+    fxAgeSeconds: 0,
+  };
+}
+
+async function computeQuoteFromTargetFiatUsdc(targetNetFiat, network, { ratePerUsdc = null } = {}) {
   const fiatCurrency = networkToFiat(network);
-  const fiatFx = await fxService.assertFiatFxAvailableForQuote(fiatCurrency);
-  const usdcToFiat = fiatFx.rate;
   const fiatAmountNum = normalizeLockedFiatAmount(targetNetFiat, fiatCurrency);
+
+  let usdcToFiat;
+  let fiatFx;
+  let rateSource;
+
+  if (ratePerUsdc != null && Number(ratePerUsdc) > 0) {
+    usdcToFiat = Number(ratePerUsdc);
+    rateSource = 'TRADER_AD';
+    fiatFx = traderAdFiatFx(usdcToFiat, fiatCurrency);
+  } else {
+    fiatFx = await fxService.assertFiatFxAvailableForQuote(fiatCurrency);
+    usdcToFiat = fiatFx.rate;
+    rateSource = 'LIVE';
+  }
 
   const spreadMultiplierUser = 1 - (spreadPercent / 100);
   const feeMultiplier = 1 - (feePercent / 100);
@@ -613,7 +649,8 @@ async function computeQuoteFromTargetFiatUsdc(targetNetFiat, network) {
 
   logger.info(
     `[QuoteEngine] USDC-anchored quote: netFiat=${fiatAmountNum} ${fiatCurrency}, ` +
-    `send ${usdcDepositAmount} USDC → trader ${usdcForTrader} USDC`
+    `send ${usdcDepositAmount} USDC → trader ${usdcForTrader} USDC` +
+    (rateSource === 'TRADER_AD' ? ` (trader rate ${usdcToFiat})` : '')
   );
 
   return {
@@ -626,7 +663,7 @@ async function computeQuoteFromTargetFiatUsdc(targetNetFiat, network) {
       path: [],
       source: 'usdc-direct',
     },
-    rateSource: 'LIVE',
+    rateSource,
     quoteWarning: null,
     userRateAfterSpread,
     fiatAmountNum,
@@ -715,7 +752,10 @@ async function createQuoteFromFiat({
   payoutName,
   payoutSettingId = null,
 }) {
-  const computed = await computeQuoteFromTargetFiatUsdc(targetNetFiat, network);
+  const traderRate = await getTraderAdRatePerUsdc(payoutSettingId);
+  const computed = await computeQuoteFromTargetFiatUsdc(targetNetFiat, network, {
+    ratePerUsdc: traderRate,
+  });
   const usdcDeposit = Math.ceil(computed.usdcDepositAmount * 1e7) / 1e7;
 
   if (usdcDeposit < config.platform.minUsdcAmount) {

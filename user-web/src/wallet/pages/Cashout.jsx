@@ -21,6 +21,7 @@ import Button from '../components/ui/Button'
 import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 import { mapApiError } from '../utils/apiErrors'
 import { getRatesHealth } from '../utils/quoteSafety'
+import { formatUsdcRateLine } from '../utils/p2pFormat'
 
 export default function Cashout() {
   const navigate = useNavigate()
@@ -98,7 +99,8 @@ export default function Cashout() {
   const rateValue = selectedRate?.rate || 0
   const currency = network ? NETWORKS[network]?.currency : userFiat
 
-  const usdcToFiatRate = rates?.usdcToFiat || 0
+  const usdcToFiatRate = Number(selectedAd?.ratePerUsdc || selectedAd?.rate_per_usdc || rates?.usdcToFiat || 0)
+  const traderRateLine = formatUsdcRateLine(currency, selectedAd?.ratePerUsdc ?? selectedAd?.rate_per_usdc)
 
   const walletMaxNetFiat = useMemo(() => {
     if (!usdcToFiatRate || usdcBalance == null) return null
@@ -236,9 +238,14 @@ export default function Cashout() {
       {(selectedAd || presetTraderName) && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4 flex items-start gap-3">
           <UserCheck size={18} className="text-rowan-yellow shrink-0 mt-0.5" />
-          <p className="text-rowan-text text-sm font-medium">
-            Trading with {presetTraderName || selectedAd?.traderName || 'selected trader'}
-          </p>
+          <div>
+            <p className="text-rowan-text text-sm font-medium">
+              Trading with {presetTraderName || selectedAd?.traderName || 'selected trader'}
+            </p>
+            {traderRateLine && (
+              <p className="text-rowan-yellow text-xs font-medium mt-1">{traderRateLine}</p>
+            )}
+          </div>
         </div>
       )}
 

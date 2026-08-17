@@ -149,7 +149,7 @@ export default function PayoutSettings() {
       setError('USDC inventory must be greater than 0');
       return;
     }
-    if (isBuyAd && (!formData.rate_per_usdc || parseFloat(formData.rate_per_usdc) <= 0)) {
+    if ((!formData.rate_per_usdc || parseFloat(formData.rate_per_usdc) <= 0)) {
       setError('USDC price is required (fiat per 1 USDC)');
       return;
     }
@@ -357,25 +357,23 @@ export default function PayoutSettings() {
               </p>
             </div>
 
-            {tabConfig.ad_side === 'USER_BUY' && (
-              <div>
-                <label className="block text-sm text-gray-300 mb-1">
-                  USDC price ({formData.currency || 'fiat'} per 1 USDC) *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.rate_per_usdc}
-                  onChange={(e) => setFormData({ ...formData, rate_per_usdc: e.target.value })}
-                  placeholder="e.g. 3728"
-                  className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  Shown to customers in the wallet marketplace (e.g. 1 USDC ≈ 3,728 UGX)
-                </p>
-              </div>
-            )}
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">
+                USDC price ({formData.currency || 'fiat'} per 1 USDC) *
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.rate_per_usdc}
+                onChange={(e) => setFormData({ ...formData, rate_per_usdc: e.target.value })}
+                placeholder="e.g. 3728"
+                className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Shown to customers in the wallet marketplace (e.g. 1 USDC ≈ 3,728 UGX)
+              </p>
+            </div>
 
             <div className="flex gap-3 pt-4">
               <button
@@ -448,7 +446,7 @@ export default function PayoutSettings() {
                   </div>
                 </div>
 
-                {isBuy && setting.rate_per_usdc && (
+                {setting.rate_per_usdc && (
                   <p className="text-sm text-yellow-400 mb-3">
                     1 USDC ≈ {Number(setting.rate_per_usdc).toLocaleString()} {setting.currency}
                   </p>

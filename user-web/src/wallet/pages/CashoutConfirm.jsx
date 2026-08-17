@@ -43,17 +43,20 @@ export default function CashoutConfirm() {
     try {
       const snap = await refreshRates()
       const health = getRatesHealth(snap?.rates, snap?.fetchedAt, snap?.error)
-      if (!health.ok) {
+      const traderPriced = quote.rateSource === 'TRADER_AD' || quote.fiatRateSource === 'TRADER_AD'
+      if (!health.ok && !traderPriced) {
         setActiveError(health.message)
         submitGuard.release()
         return
       }
-      const refRate = liveAtQuote ?? quote.userRate
-      const drift = checkRateDrift(refRate, health.usdcToFiat)
-      if (drift?.drifted) {
-        setActiveError(drift.message)
-        submitGuard.release()
-        return
+      if (health.ok && !traderPriced) {
+        const refRate = liveAtQuote ?? quote.userRate
+        const drift = checkRateDrift(refRate, health.usdcToFiat)
+        if (drift?.drifted) {
+          setActiveError(drift.message)
+          submitGuard.release()
+          return
+        }
       }
 
       const data = await getActiveTransaction()

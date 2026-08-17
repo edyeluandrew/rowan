@@ -117,8 +117,8 @@ class PayoutSettingsService {
       err.status = 400;
       throw err;
     }
-    if (isBuyAd && (rate_per_usdc == null || rate_per_usdc === '' || Number(rate_per_usdc) <= 0)) {
-      const err = new Error('rate_per_usdc is required for buy ads');
+    if (rate_per_usdc == null || rate_per_usdc === '' || Number(rate_per_usdc) <= 0) {
+      const err = new Error('rate_per_usdc is required (fiat per 1 USDC)');
       err.status = 400;
       throw err;
     }
