@@ -8,7 +8,7 @@ export const SITE_NAME = 'Rowan'
 
 export const DEFAULT_TITLE = 'Rowan | Mobile Money & Digital Asset Infrastructure'
 export const DEFAULT_DESCRIPTION =
-  'Send and receive USDC, cash out to mobile money, and pay airtime, data, and bills. All in one Rowan wallet.'
+  'Buy and sell USDC with local traders, and pay airtime, data, and bills from one Rowan wallet.'
 
 export const OG_IMAGE_PATH = '/og-image.png'
 export const OG_IMAGE_URL = `${SITE_URL}${OG_IMAGE_PATH}`
@@ -23,6 +23,17 @@ export const NOINDEX_PATH_PREFIXES = [
   '/register',
   '/wallet-2fa-verify',
 ]
+
+export const LEGAL_PAGES = {
+  '/legal/terms': {
+    title: 'Terms of Service | Rowan',
+    description: 'Rowan user terms for the wallet, P2P buy and sell, and utility payments.',
+  },
+  '/legal/privacy': {
+    title: 'Privacy Policy | Rowan',
+    description: 'How Rowan collects, uses, and shares personal data.',
+  },
+}
 
 export function organizationJsonLd() {
   return {

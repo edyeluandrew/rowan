@@ -127,7 +127,7 @@ export default function Login() {
 
                   <Reveal delay={140}>
                     <p className="mt-4 max-w-lg text-base sm:text-lg text-rowan-muted font-sans leading-relaxed">
-                      Send and receive USDC, cash out to MTN or Airtel, and spend on airtime, data and bills.
+                      Buy and sell USDC with local traders on MTN or Airtel, and spend on airtime, data and bills.
                       Escrow protected, in one wallet.
                     </p>
                   </Reveal>

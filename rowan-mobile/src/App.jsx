@@ -14,6 +14,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth, ROLE_WALLET, ROLE_TRADER } from './context/AuthContext';
 import SplashScreen from './SplashScreen';
 import Login from './Login';
+import LegalDoc from './pages/LegalDoc';
 
 /* ── Wallet pre-auth pages (onboarding / wallet creation) ── */
 import WalletSetup from './wallet/pages/WalletSetup';
@@ -110,6 +111,8 @@ export default function App() {
             : <Navigate to="/" replace />
         }
       />
+
+      <Route path="/legal/:doc" element={<LegalDoc />} />
 
       {/* ── Catch-all ── */}
       <Route

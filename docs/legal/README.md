@@ -6,12 +6,23 @@ Document control
 Operator: Beta Tech Labs Company Limited
 Product: Rowan wallet and related applications
 Primary market: Republic of Uganda
+Public site: https://rowanpay.app
+Support: support@rowanpay.app
 Status of this pack: Working templates for product and partnership use
-Last revision: August 2026
+Last revision: 17 August 2026
+
+Launch mode (product fact, not a licence claim)
+
+Uganda: buy and sell USDC are peer-to-peer (independent traders). Airtime, data, Yaka, and supported bills are fulfilled by a third-party utility partner (MarzPay). Rowan does not currently offer customer-facing collect/send of mobile money for conversion. The service may still run on Stellar testnet; label test value honestly.
 
 Important notice
 
-These documents are drafts prepared for internal alignment and commercial discussion. They are not final legal advice and must be reviewed by qualified Uganda counsel (and local counsel in any additional market) before publication to users, signature with partners, or reliance for banking, licensing, or regulatory purposes. Bracketed fields such as [DATE] and [CONTACT] must be completed before use.
+These documents are drafts prepared for internal alignment and commercial discussion. They are not final legal advice and must be reviewed by qualified Uganda counsel (and local counsel in any additional market) before reliance for banking, licensing, or regulatory purposes. Bracketed fields such as [ADDRESS] and the Terms liability cap must be completed before treating the pack as final.
+
+User-facing Terms of Service and Privacy Policy (documents 3 and 4) are published in the applications and at:
+
+https://rowanpay.app/legal/terms
+https://rowanpay.app/legal/privacy
 
 Document set
 
@@ -31,10 +42,10 @@ Document set
 
 Recommended use
 
-User-facing: publish Terms of Service and Privacy Policy in the applications and on the website before open signup on mainnet; require acceptance at registration.
+User-facing: keep Terms and Privacy live in the apps and on the website; require acknowledgement at registration. Re-issue after counsel review before open mainnet signup.
 
-Partner-facing: non-disclosure agreement if needed, then Partner Integration Agreement with completed schedules for application programming interface details and fees.
+Partner-facing: non-disclosure agreement if needed, then Partner Integration Agreement with completed schedules for application programming interface details and fees. For the current utility partner, Schedule A should list bills and airtime only unless collect/send is contracted.
 
-Internal: adopt the AML and CFT Policy by director resolution and name a compliance contact before material transaction volume.
+Internal: adopt the AML and CFT Policy by director resolution and name a compliance contact before material transaction volume. Obtain counsel advice on Personal Data Protection Office registration timing.
 
-Related engineering and product material remains under the project documentation tree (compliance roadmap, pilot checklists, operations runbooks) and does not replace this pack.
+Related engineering and product material remains under the project documentation tree (including ops runbooks) and does not replace this pack. Historical integration notes (for example unused rails) are not customer terms.

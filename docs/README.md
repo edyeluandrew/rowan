@@ -2,7 +2,7 @@
 
 **Purpose:** Single map of everything needed before mainnet.  
 **Rule:** Stay on **testnet** until [MAINNET_CUTOVER_CHECKLIST](./ops/MAINNET_CUTOVER_CHECKLIST.md) is fully signed off.  
-**Last updated:** 2026-07-14
+**Last updated:** 2026-08-17
 
 ---
 
@@ -13,6 +13,8 @@
 | Testnet demo | **YES** | [PILOT_GO_NO_GO](./ops/PILOT_GO_NO_GO_CHECKLIST.md) |
 | Private real-money pilot | **NO** | Same + partner/legal |
 | Mainnet / public launch | **NO** | [MAINNET_CUTOVER](./ops/MAINNET_CUTOVER_CHECKLIST.md) |
+
+**Uganda launch mode:** P2P traders for buy/sell USDC; MarzPay for airtime, data, and bills. Collect/Send is not a customer path. Terms and Privacy: [legal/](./legal/README.md) (also at `/legal/terms` and `/legal/privacy` on the public site).
 
 **Active harden plan:** [STELLAR_STRENGTHEN_TRACKER](./ops/STELLAR_STRENGTHEN_TRACKER.md)  
 **Open work before flip:** [PRE_MAINNET_HARDENING_BACKLOG](./ops/PRE_MAINNET_HARDENING_BACKLOG.md)

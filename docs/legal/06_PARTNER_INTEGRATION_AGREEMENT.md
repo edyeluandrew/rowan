@@ -78,15 +78,18 @@ This Agreement is governed by the laws of the Republic of Uganda. The courts of 
 
 Schedule A. Application programming interface and operations (to complete with Partner)
 
+Current Uganda utility launch (illustrative — complete with the live Partner). Rowan uses the Partner for airtime, data, Yaka / electricity, water, and other supported bill payments. Users pay in USDC on Rowan; the Partner fulfils in UGX or tokens from Rowan’s prefunded Partner wallet. Collect and send (customer mobile money collection or disbursement for USDC conversion) are out of scope unless the parties add them in writing.
+
 Sandbox base address: ______________________________
 Production base address: ______________________________
 Authentication method: ______________________________
-Products enabled: ______________________________
+Products enabled: airtime / data / bills (list billers) ______________________________
 Biller or operator coverage and service levels: ______________________________
 Webhooks, signatures, and retry policy: ______________________________
 Status and error codes; idempotency: ______________________________
 Support contacts and severity response times: ______________________________
 Change management process: ______________________________
+Prefunded float currency and top-up method: ______________________________
 
 Schedule B. Fees (to complete with Partner quote)
 

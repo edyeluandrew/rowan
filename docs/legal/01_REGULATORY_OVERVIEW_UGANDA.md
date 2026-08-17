@@ -2,7 +2,7 @@ BETA TECH LABS COMPANY LIMITED
 ROWAN — REGULATORY OVERVIEW (UGANDA)
 
 Document type: Internal reference
-Version: 0.1 Draft
+Version: 0.2 Draft
 Date: August 2026
 Classification: Internal
 
@@ -10,9 +10,11 @@ This note maps regulatory themes for Rowan in Uganda. It is not legal advice. Co
 
 1. Product description
 
-Rowan, operated by Beta Tech Labs Company Limited, is software that enables users to hold digital assets (including Stellar USDC), transfer them on supported networks, convert to and from local currency through peer-to-peer traders, and purchase utilities such as airtime and data through third-party providers.
+Rowan, operated by Beta Tech Labs Company Limited, is software that enables users to hold digital assets (including Stellar USDC), transfer them on supported networks, convert to and from local currency through independent peer-to-peer traders, and purchase utilities such as airtime, data, Yaka, and supported bills through third-party providers.
 
-At launch the company does not hold itself out as a bank, a deposit-taking institution, or a licensed mobile money operator. Local currency movement may be executed by licensed third parties (mobile network operators, payment service providers, or integration partners). Rowan must not claim third-party licences as its own.
+Uganda launch mode (current). Buy and sell USDC are peer-to-peer only: traders hold both UGX (mobile money) and USDC. Rowan does not itself collect or disburse customer mobile money for conversion. Utility purchases are paid in USDC by the user and fulfilled in UGX or tokens by a licensed partner (MarzPay for Uganda airtime, data, and bills). Automated MarzPay collect/send for buy/sell is not a current customer path.
+
+At launch the company does not hold itself out as a bank, a deposit-taking institution, or a licensed mobile money operator. Local currency movement is executed by licensed third parties (mobile network operators, payment service providers, or integration partners) or by independent traders using their own wallets. Rowan must not claim third-party licences as its own.
 
 2. Principal themes and bodies (indicative)
 

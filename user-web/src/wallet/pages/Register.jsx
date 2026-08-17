@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getSecure } from '../../shared/utils/storage'
 import { getDialCodeForCountry } from '../utils/country'
@@ -123,6 +123,13 @@ export default function Register() {
       </div>
 
       {error && <p className="text-rowan-red text-sm mt-4 font-sans">{error}</p>}
+
+      <p className="mt-5 text-xs text-rowan-muted font-sans leading-relaxed">
+        By finishing setup you agree to the{' '}
+        <Link to="/legal/terms" className="text-rowan-green underline">Terms of Service</Link>
+        {' '}and{' '}
+        <Link to="/legal/privacy" className="text-rowan-green underline">Privacy Policy</Link>.
+      </p>
 
       <div className="mt-7">
         <Button onClick={handleRegister} loading={loading} disabled={phone.length < 7}>

@@ -4,6 +4,7 @@ import {
   UserCircle, Shield, Copy, CopyCheck, LogOut, Volume2, VolumeX,
   Vibrate, ShieldCheck, Clock, Fingerprint, Bell, ChevronRight, Lock, Globe,
   HelpCircle,
+  FileText,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import useWallet from '../hooks/useWallet'
@@ -205,6 +206,28 @@ export default function Profile() {
               <span className="text-rowan-text text-sm block">Help</span>
               <span className="text-rowan-muted text-xs">Pilot guide · WhatsApp · Email</span>
             </div>
+          </div>
+          <ChevronRight size={16} className="text-rowan-muted" />
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/legal/terms')}
+          className="flex items-center justify-between w-full px-4 py-3 min-h-11"
+        >
+          <div className="flex items-center gap-3">
+            <FileText size={18} className="text-rowan-muted" />
+            <span className="text-rowan-text text-sm">Terms of Service</span>
+          </div>
+          <ChevronRight size={16} className="text-rowan-muted" />
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/legal/privacy')}
+          className="flex items-center justify-between w-full px-4 py-3 min-h-11"
+        >
+          <div className="flex items-center gap-3">
+            <FileText size={18} className="text-rowan-muted" />
+            <span className="text-rowan-text text-sm">Privacy Policy</span>
           </div>
           <ChevronRight size={16} className="text-rowan-muted" />
         </button>

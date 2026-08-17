@@ -7,18 +7,24 @@
 
 ## WHO THIS IS FOR
 
-This agreement is between you — an independent mobile money trader — and Rowan, a platform that connects people who want to convert cryptocurrency (USDC) to mobile money. By accepting this agreement, you confirm that you understand the rules below and agree to follow them.
+This agreement is between you — an independent mobile money trader — and Rowan, a platform that matches people who want to buy or sell USDC against Uganda mobile money. By accepting this agreement, you confirm that you understand the rules below and agree to follow them.
 
 ---
 
 ## 1. YOUR ROLE
 
-You are an **independent OTC liquidity provider**. When Rowan matches you with a cash-out request:
+You are an **independent OTC liquidity provider**. You hold your own UGX (mobile money) and USDC. Rowan does not fund your MoMo wallet.
 
-1. You will receive a notification with the amount and mobile money network.
-2. You **accept or decline** the request within the allowed time.
-3. If you accept, you send the mobile money amount to the recipient's phone number.
-4. Once confirmed, Rowan releases the USDC to your Stellar wallet.
+**Sell (user cashes out USDC):**
+1. You receive a match with the amount and mobile money network.
+2. You **accept or decline** within the allowed time.
+3. If you accept, you send the quoted mobile money to the user's number.
+4. Confirm only after the transfer is true. Rowan then releases USDC to your Stellar wallet.
+
+**Buy (user buys USDC):**
+1. You receive a match. The user sends mobile money to your number as instructed.
+2. Confirm receipt only after the money has arrived.
+3. USDC is then released to the user from escrow.
 
 You are **not** an employee, agent, or partner of Rowan. You operate your own float, at your own risk.
 
@@ -30,21 +36,19 @@ Before you can receive your first match, you must:
 
 - [x] Provide a **valid government-issued ID** (national ID or passport).
 - [x] Verify ownership of at least **one mobile money account** via OTP.
-- [x] Show proof of **Binance P2P trading history** (screenshot of your profile stats).
+- [x] Provide any **peer-to-peer trading history** Rowan requests during onboarding (for example a Binance P2P screenshot).
 - [x] Have a funded **Stellar wallet** with a USDC trustline.
-- [x] Declare your **available fiat float** honestly.
+- [x] Declare your **available fiat and USDC float** honestly.
 
 ---
 
 ## 3. HOW YOU EARN
 
-For each completed transaction:
+Your earn rate is the rate shown in the application for that order (or in a written schedule from Rowan). User-facing quotes may include a Rowan spread that is separate from your earnings.
 
-- You buy USDC at the **wholesale rate** set by Rowan.
-- You send fiat at the **payout amount** shown in the request.
-- The difference between the wholesale rate and the user-facing rate is Rowan's spread. Your margin comes from acquiring USDC below your wholesale rate (e.g., through Binance P2P or OTC channels).
+On sell orders you send UGX and receive USDC. On buy orders you receive UGX and release USDC. Keep enough float on both sides for the ads you post.
 
-Rowan does **not** charge you a fee per transaction. Your cost is the USDC you acquire; your revenue is the wholesale USDC you receive.
+You are solely responsible for tax on your earnings.
 
 ---
 
@@ -112,8 +116,10 @@ If a user claims they did not receive mobile money:
 Rowan stores:
 - Your name, email, and phone hash (not the actual phone number).
 - Your government ID (front, back) and selfie — used only for verification.
-- Your Binance P2P profile screenshot — used only for verification.
+- Any trading-history evidence you upload — used only for verification.
 - Your Stellar wallet address and transaction history on the platform.
+
+User telephone numbers shared for a job are confidential. Use them only to complete that order. Do not spam users or take trades off-platform to avoid escrow.
 
 Rowan does **not** sell your data. Documents are stored in a private, encrypted bucket and are accessible only to Rowan administrators during verification and dispute resolution.
 
@@ -149,5 +155,5 @@ By clicking **"I Accept"** or calling the confirmation endpoint, you confirm tha
 ---
 
 **Version:** v1.0  
-**Last Updated:** 2025-01-01  
-**Questions?** Contact Rowan support through the platform.
+**Last Updated:** 2026-08-17  
+**Questions?** Contact support@rowanpay.app or Rowan support in the trader app.

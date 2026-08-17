@@ -2,8 +2,9 @@ BETA TECH LABS COMPANY LIMITED
 ROWAN PEER-TO-PEER TRADER AGREEMENT
 
 Status: Draft template
-Version: 0.1
+Version: 0.2
 Date: August 2026
+Last updated: 17 August 2026
 
 Parties
 
@@ -17,11 +18,15 @@ Effective date: the date the Platform approves the Trader account on Rowan.
 
 1. Role of the Trader
 
-The Trader provides liquidity and local payment fulfilment for Rowan peer-to-peer cash-out and buy orders in supported corridors, initially Uganda mobile money on networks supported by the product. The Trader is an independent contractor and not an employee, partner, or general agent of the Platform. The Trader has no authority to bind the Platform except as expressly authorised in writing.
+The Trader provides liquidity and local payment fulfilment for Rowan peer-to-peer buy and sell (cash-out) orders in supported corridors, initially Uganda mobile money on networks supported by the product (for example MTN and Airtel).
+
+On a sell order, the user locks USDC in escrow and the Trader sends the quoted mobile money amount to the user’s number, then confirms only after the transfer is true. On a buy order, the user sends mobile money to the Trader as instructed and the Trader releases USDC after confirming receipt.
+
+The Trader is an independent contractor and not an employee, partner, or general agent of the Platform. The Trader has no authority to bind the Platform except as expressly authorised in writing. The Trader operates their own mobile money float and USDC inventory at their own risk. Rowan does not prefund the Trader’s UGX wallet.
 
 2. Eligibility
 
-The Trader must complete Platform onboarding and any identity or business verification requested by the Platform; maintain accurate telephone numbers, mobile money wallets, and banking details; maintain sufficient float in the form the product requires; and must not be restricted under applicable sanctions lists or Platform policies.
+The Trader must complete Platform onboarding and any identity or business verification requested by the Platform (which may include government identity documents, mobile money ownership checks, and, where requested, evidence of prior peer-to-peer trading history); maintain accurate telephone numbers, mobile money wallets, and Stellar details; maintain sufficient float in both local currency and USDC for the ads or availability the Trader posts; and must not be restricted under applicable sanctions lists or Platform policies.
 
 3. Operational standards
 
@@ -43,7 +48,7 @@ The Trader must not process orders for customers the Trader knows or suspects ar
 
 7. Confidentiality and personal data
 
-User telephone numbers and details disclosed for a job are confidential and may be used only for that fulfilment. Bulk export, marketing spam, and offline sharing of user data are prohibited.
+User telephone numbers and order details disclosed for a job are confidential and may be used only to complete that fulfilment. The Trader must not store user numbers for marketing, spam users, share lists offline, or contact users off-platform to circumvent escrow. After the order is complete or cancelled, the Trader must not reuse the number except as needed for a bona fide dispute on that same order.
 
 8. Prohibited conduct
 

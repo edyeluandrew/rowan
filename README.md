@@ -1,31 +1,34 @@
-# Rowan: Stellar Liquidity Bridge
+# Rowan
 
-**Rowan** is a peer-to-peer crypto-to-fiat liquidity bridge connecting Stellar blockchain with mobile money networks (M-Pesa, MTN, Airtel) across East Africa.
+**Rowan** is a Stellar USDC wallet for Uganda: peer-to-peer buy and sell against mobile money, plus airtime, data, and bills. Operated by Beta Tech Labs. Public site: [rowanpay.app](https://rowanpay.app).
 
-![Status](https://img.shields.io/badge/status-production-brightgreen)
+![Status](https://img.shields.io/badge/status-testnet-yellow)
 ![Node.js](https://img.shields.io/badge/node.js-v18+-green)
 ![License](https://img.shields.io/badge/license-proprietary-blue)
+
+**Network:** Stellar testnet until [docs/ops/MAINNET_CUTOVER_CHECKLIST.md](docs/ops/MAINNET_CUTOVER_CHECKLIST.md) is signed off.  
+**Legal:** [Terms](https://rowanpay.app/legal/terms) · [Privacy](https://rowanpay.app/legal/privacy) · pack in [docs/legal/](docs/legal/README.md)
 
 ---
 
 ## Overview
 
-Rowan enables users to convert XLM (Stellar Lumens) to local fiat currency (UGX, KES, TZS) through a trusted network of OTC traders. The platform uses:
+Users hold Circle USDC on Stellar. Keys stay on the device. In Uganda today:
 
-- **Stellar escrow mechanics** for trustless XLM locking
-- **Real-time fraud monitoring** with KYC-tiered limits
-- **Smart matching algorithm** to find the best available trader
-- **Mobile-first architecture** for accessibility in emerging markets
+- **Buy / Sell USDC** — independent P2P traders (MTN / Airtel). Escrow holds USDC until the mobile-money leg is confirmed.
+- **Airtime, data, Yaka, bills** — paid in USDC, fulfilled by a utility partner (MarzPay) from Rowan’s prefunded UGX wallet.
+- **Collect / Send money** via that partner is not a customer path until float can support it.
+
+Rowan is not a bank and does not claim a payment-institution licence.
 
 ### Key Features
 
-✅ **SEP-10 Web Auth** — Zero-password Stellar wallet login  
-✅ **Real-time rates** — Live DEX pricing via Horizon  
-✅ **Dual-sided escrow** — XLM locked until fiat confirmed  
-✅ **Trader verification** — KYC + Binance P2P history validation  
-✅ **Dispute resolution** — Secure refund mechanism  
-✅ **Multi-currency** — UGX, KES, TZS support  
-✅ **Admin dashboard** — System oversight and configuration  
+- **SEP-10 wallet login** — no password; keys never uploaded
+- **P2P marketplace** — trader ads, escrow, disputes
+- **Utilities** — airtime, data, supported Uganda bills
+- **KYC-tiered limits** and fraud monitoring
+- **Trader app** — onboarding, float, fulfilment
+- **Admin dashboard** — ops and configuration
 
 ---
 
@@ -49,11 +52,11 @@ cd rowan
 cd backend
 npm install
 
-# Install frontend dependencies (wallet app)
-cd ../frontend
+# Install user wallet (web)
+cd ../user-web
 npm install
 
-# Install trader app dependencies
+# Install mobile wallet + trader app
 cd ../rowan-mobile
 npm install
 
@@ -106,11 +109,11 @@ USDC_TO_KES=130
 USDC_TO_TZS=2500
 ```
 
-**frontend/.env:**
+**user-web/.env** (and similarly `rowan-mobile/.env`):
 ```bash
 VITE_API_URL=https://your-api-domain.com
 VITE_STELLAR_NETWORK=testnet
-VITE_HOME_DOMAIN=your-frontend-domain.com
+VITE_STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
 ```
 
 ### Running Locally
@@ -120,11 +123,11 @@ VITE_HOME_DOMAIN=your-frontend-domain.com
 cd backend
 npm run dev  # Starts on http://localhost:4000
 
-# Terminal 2: Wallet Frontend
-cd frontend
-npm run dev  # Starts on http://localhost:5173
+# Terminal 2: User wallet (web)
+cd user-web
+npm run dev  # Starts on http://localhost:5176
 
-# Terminal 3: Trader App
+# Terminal 3: Mobile wallet + trader app
 cd rowan-mobile
 npm run dev  # Starts on http://localhost:5175
 
@@ -275,22 +278,21 @@ Please ensure:
 
 ## Support
 
-- **Documentation**: See `/docs` folder
-- **Issues**: GitHub Issues (check existing issues first)
-- **Security**: Email security@rowan.dev (do not open public security issues)
-- **Community**: Join our Discord (link TBD)
+- **Users:** [support@rowanpay.app](mailto:support@rowanpay.app)
+- **Terms / Privacy:** https://rowanpay.app/legal/terms · https://rowanpay.app/legal/privacy
+- **Documentation:** [docs/](docs/README.md) (ops, legal, runbooks)
+- **Issues:** GitHub Issues (check existing issues first)
+- **Security:** email support@rowanpay.app with subject `Security` (do not open public security issues)
 
 ---
 
 ## Roadmap
 
-- [ ] Live XLM/fiat rates from CoinGecko API
-- [ ] Dispute resolution UI improvements
-- [ ] Mobile app hardening (biometric auth, secure storage)
-- [ ] Advanced analytics dashboard
-- [ ] Mainnet support
-- [ ] Additional African networks (Orange Money, Vodafone)
-- [ ] Stablecoin support (USDC Stellar)
+- [ ] Recruit and keep live P2P traders (overlapping MTN + Airtel hours)
+- [ ] Counsel review of Terms, Privacy, and PDPO registration before open mainnet
+- [ ] Stellar mainnet cutover (see ops checklist)
+- [ ] Collect / Send money only if UGX float can survive a normal cash-out day
+- [ ] Additional corridors beyond Uganda
 
 ---
 
@@ -319,8 +321,9 @@ This project is proprietary. All rights reserved.
 
 ---
 
-**Last Updated**: May 3, 2026  
-**Version**: 1.0.0  
-**Status**: Production
+**Last Updated**: 17 August 2026  
+**Status**: Testnet / Uganda P2P + utilities
+
+For the latest info, visit: https://github.com/edyeluandrew/rowan
 
 For the latest info, visit: https://github.com/edyeluandrew/rowan

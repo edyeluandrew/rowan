@@ -8,6 +8,7 @@ import { useAuth, ROLE_WALLET } from './context/AuthContext'
 import SplashScreen from './SplashScreen'
 import Login from './Login'
 import NotFound from './pages/NotFound'
+import LegalDoc from './pages/LegalDoc'
 import SeoManager from './seo/SeoManager'
 import WalletSetup from './wallet/pages/WalletSetup'
 import CreateWallet from './wallet/pages/CreateWallet'
@@ -61,6 +62,8 @@ export default function App() {
               : <Login />
           }
         />
+
+        <Route path="/legal/:doc" element={<LegalDoc />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>

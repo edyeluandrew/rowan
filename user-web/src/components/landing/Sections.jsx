@@ -19,6 +19,7 @@ import {
   Wallet,
   Zap,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import Reveal from './Reveal'
 import RowanLogo from '../RowanLogo'
 import ReceivePeerVisual from '../ReceivePeerVisual'
@@ -367,11 +368,11 @@ const FAQS = [
   },
   {
     q: 'How fast is a cash-out to mobile money?',
-    a: 'Most payouts land in a few minutes once the trader confirms. Your funds stay in escrow until that happens.',
+    a: 'A local trader sends mobile money to your number. Most payouts land in a few minutes once they confirm. Confirm in the app only after the money arrives — your USDC stays in escrow until then.',
   },
   {
     q: 'What does it cost?',
-    a: 'You see one all-in quote before you confirm: the rate, the partner spread and a small Rowan fee. No surprises after the fact.',
+    a: 'Buy and sell show one all-in quote before you confirm. Airtime and data are typically face value. Yaka and bills include a partner fulfilment fee plus a small Rowan service fee, both shown before you pay.',
   },
   {
     q: 'What happens if a trade goes wrong?',
@@ -446,8 +447,7 @@ export function SiteFooter() {
           <div className="lg:col-span-2">
             <RowanLogo size={38} />
             <p className="mt-3 max-w-sm text-sm text-rowan-muted font-sans leading-relaxed">
-              Payment and liquidity infrastructure for Africa. Send and receive USDC, cash out to mobile money,
-              and pay airtime, data and bills in one wallet.
+              Hold USDC, buy and sell with local traders, and pay airtime, data and bills in one wallet.
             </p>
             <p className="mt-4 inline-flex items-center gap-1.5 text-xs text-rowan-muted font-sans">
               <Clock size={13} className="text-rowan-green" aria-hidden="true" />
@@ -466,8 +466,18 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h2 className="text-xs uppercase tracking-[0.14em] text-rowan-text font-semibold font-sans">Support</h2>
+            <h2 className="text-xs uppercase tracking-[0.14em] text-rowan-text font-semibold font-sans">Legal & support</h2>
             <ul className="mt-3 space-y-2 list-none p-0 m-0">
+              <li>
+                <Link to="/legal/terms" className="text-sm text-rowan-muted hover:text-rowan-text font-sans">
+                  Terms of Service
+                </Link>
+              </li>
+              <li>
+                <Link to="/legal/privacy" className="text-sm text-rowan-muted hover:text-rowan-text font-sans">
+                  Privacy Policy
+                </Link>
+              </li>
               <li><a href="#faq" className="text-sm text-rowan-muted hover:text-rowan-text font-sans">FAQ</a></li>
               <li>
                 <a href="mailto:support@rowanpay.app" className="text-sm text-rowan-muted hover:text-rowan-text font-sans">

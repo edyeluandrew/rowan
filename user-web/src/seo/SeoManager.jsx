@@ -4,7 +4,7 @@
  */
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import { NOINDEX_PATH_PREFIXES, SITE_URL, DEFAULT_TITLE } from './site'
+import { NOINDEX_PATH_PREFIXES, SITE_URL, DEFAULT_TITLE, LEGAL_PAGES } from './site'
 
 function pathShouldNoIndex(pathname) {
   return NOINDEX_PATH_PREFIXES.some(
@@ -50,6 +50,15 @@ export default function SeoManager() {
       document.title = DEFAULT_TITLE
       upsertMeta('name', 'robots', 'index, follow, max-image-preview:large')
       upsertLink('canonical', `${SITE_URL}/`)
+      return undefined
+    }
+
+    const legal = LEGAL_PAGES[pathname]
+    if (legal) {
+      document.title = legal.title
+      upsertMeta('name', 'robots', 'index, follow')
+      upsertMeta('name', 'description', legal.description)
+      upsertLink('canonical', `${SITE_URL}${pathname}`)
       return undefined
     }
 

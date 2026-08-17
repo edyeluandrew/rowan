@@ -6,9 +6,10 @@ Casual-user wallet on the browser — same API as the mobile app (**not** the tr
 
 - Create / import Stellar wallet (SEP-10 auth)
 - Home (USDC balance)
-- P2P Buy / Sell + Express
-- Cashout & buy confirm flows
+- P2P Buy / Sell (trader marketplace + escrow)
+- Airtime, data, Yaka and bills (MarzPay)
 - History, disputes, profile
+- Public [Terms](/legal/terms) and [Privacy](/legal/privacy)
 
 ## Run locally
 

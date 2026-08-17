@@ -72,10 +72,14 @@ Rowan is currently **testnet demo-ready only**. Do **not** cut over to mainnet u
 
 ### Legal / compliance
 
-- [ ] Legal/compliance review complete for jurisdiction(s) (Kenya first recommended)
-- [ ] Partner agreements signed (manual mobile money model)
+- [ ] Uganda counsel review of Terms, Privacy, trader agreement, and AML policy ([docs/legal/](../legal/README.md))
+- [ ] Registered office and liability cap filled in published Terms / Privacy
+- [ ] PDPO registration timing confirmed with counsel
+- [ ] Terms and Privacy live at `/legal/terms` and `/legal/privacy` (already drafted for testnet)
+- [ ] Partner agreements signed for live rails (utility partner for bills/airtime; P2P traders under trader agreement)
 - [ ] KYC/limits policy approved for mainnet / pilot volume
 - [ ] Pilot caps (per-tx / daily) written and enforced
+- [ ] Do not market Rowan as a licensed payment institution unless counsel confirms that status
 
 ### Orphan / recovery
 

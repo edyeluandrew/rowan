@@ -22,6 +22,7 @@ import {
   Lock,
   ExternalLink,
   KeyRound,
+  FileText,
 } from 'lucide-react'
 import { SUPPORT_EMAIL, SUPPORT_WHATSAPP, whatsappSupportUrl, mailtoSupportUrl } from '../utils/support'
 import { CURRENT_NETWORK, NETWORKS, COUNTRY_CODES, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
@@ -220,6 +221,20 @@ export default function Help() {
           icon={<Lock size={18} />}
           label="Two-factor auth"
           onClick={() => navigate('/wallet/security/2fa')}
+        />
+      </section>
+
+      <section className="bg-rowan-surface rounded-xl divide-y divide-rowan-border mb-4 overflow-hidden">
+        <p className="px-4 pt-3 pb-2 text-rowan-muted text-[10px] uppercase tracking-wider">Legal</p>
+        <HelpLink
+          icon={<FileText size={18} />}
+          label="Terms of Service"
+          onClick={() => navigate('/legal/terms')}
+        />
+        <HelpLink
+          icon={<FileText size={18} />}
+          label="Privacy Policy"
+          onClick={() => navigate('/legal/privacy')}
         />
       </section>
 
