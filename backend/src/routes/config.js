@@ -78,6 +78,10 @@ router.get('/cashout-limits', async (req, res, next) => {
       },
       // Slippage protection
       slippagePercent: config.platform.quoteSlippagePercent,
+      p2pRateBand: {
+        maxPremiumPercent: config.platform.p2pRateMaxPremiumPercent,
+        maxDiscountPercent: config.platform.p2pRateMaxDiscountPercent,
+      },
       // Marketplace: typical end-to-end trade duration (system estimate)
       tradeTiming: (() => {
         const acceptSec = config.platform.traderAcceptTimeoutSeconds;

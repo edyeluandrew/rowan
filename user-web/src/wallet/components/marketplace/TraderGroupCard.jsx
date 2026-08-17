@@ -3,6 +3,7 @@ import {
   formatCurrency,
   formatPercent,
   formatUsdcRateLine,
+  formatUsdcRateVsMarket,
   formatMemberSince,
   formatTradeCount,
   formatUsdcSellEstimateLine,
@@ -36,6 +37,9 @@ export default function TraderGroupCard({
     ? Number(trader.bestRatePerUsdc)
     : (Number(usdcToFiat) > 0 ? Number(usdcToFiat) : null)
   const rateLine = formatUsdcRateLine(currency, displayRate)
+  const vsMarketLine = Number(trader.bestRatePerUsdc) > 0
+    ? formatUsdcRateVsMarket(currency, trader.bestRatePerUsdc, usdcToFiat)
+    : null
 
   const estimateUsdc = walletBalance != null && Number(walletBalance) > 0
     ? Math.min(Number(walletBalance), ESTIMATE_USDC)
@@ -93,6 +97,9 @@ export default function TraderGroupCard({
 
           {rateLine && (
             <p className="text-rowan-green text-sm font-medium mt-1">{rateLine}</p>
+          )}
+          {vsMarketLine && (
+            <p className="text-rowan-muted text-xs mt-0.5">{vsMarketLine}</p>
           )}
           {!isBuy && estimateLine && (
             <p className="text-rowan-text text-xs mt-1">{estimateLine} <span className="text-rowan-muted">(estimate)</span></p>

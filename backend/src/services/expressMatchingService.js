@@ -5,6 +5,7 @@ import buyQuoteEngine from './buyQuoteEngine.js';
 import traderStatsService from './traderStatsService.js';
 import { getTraderUsdcTrustlineStatus } from './traderStellarService.js';
 import { fiatToUgx } from '../utils/financial.js';
+import { getBandForCurrency, isWithinBand } from './traderRateBand.js';
 
 const { feePercent, spreadPercent, quoteSlippagePercent } = config.platform;
 
@@ -154,7 +155,7 @@ async function findBestSellAdForExpress({
   const result = await db.query(
     `SELECT ps.id AS payout_setting_id, ps.trader_id, t.name AS trader_name,
             t.trust_score, t.stellar_address, t.last_seen_at,
-            ps.network, ps.currency, ps.min_amount, ps.max_amount,
+            ps.network, ps.currency, ps.min_amount, ps.max_amount, ps.rate_per_usdc,
             (ps.available_float - ps.reserved_float) AS net_float,
             (SELECT COUNT(*)::int FROM transactions tx
                WHERE tx.trader_id = t.id
@@ -174,7 +175,10 @@ async function findBestSellAdForExpress({
   }
 
   const ranked = [];
+  const band = await getBandForCurrency(currency);
   for (const row of result.rows) {
+    const postedRate = row.rate_per_usdc != null ? parseFloat(row.rate_per_usdc) : null;
+    if (band && Number.isFinite(postedRate) && postedRate > 0 && !isWithinBand(postedRate, band)) continue;
     const trustStatus = await getTraderUsdcTrustlineStatus(row.stellar_address);
     if (!trustStatus.hasTrustline) continue;
     const candidate = await enrichCandidate(row, { priceEdge: 0.55 });
@@ -256,9 +260,16 @@ async function findBestBuyAdRanked({
     throw err;
   }
 
+  const band = await getBandForCurrency(currency);
   const rates = result.rows
     .map((r) => parseFloat(r.rate_per_usdc))
-    .filter((r) => Number.isFinite(r) && r > 0);
+    .filter((r) => Number.isFinite(r) && r > 0 && (!band || isWithinBand(r, band)));
+  if (rates.length === 0) {
+    const err = new Error('No traders available to sell USDC for this amount right now.');
+    err.statusCode = 503;
+    err.code = 'NO_BUY_TRADERS';
+    throw err;
+  }
   const minRate = Math.min(...rates);
   const maxRate = Math.max(...rates);
   const rateSpan = Math.max(0.0001, maxRate - minRate);
@@ -266,6 +277,7 @@ async function findBestBuyAdRanked({
   const ranked = [];
   for (const row of result.rows) {
     const rate = parseFloat(row.rate_per_usdc);
+    if (band && !isWithinBand(rate, band)) continue;
     const usdcNeeded = (fiat * feeMul * spreadMul) / rate;
     if (parseFloat(row.net_usdc) < usdcNeeded) continue;
 

@@ -6,6 +6,7 @@
 import db from '../db/index.js';
 import countryService from './countries/countryService.js';
 import logger from '../utils/logger.js';
+import { assertRateWithinMarketBand } from './traderRateBand.js';
 
 const MOBILE_NETWORK_ALIASES = {
   M_PESA_KE: 'MPESA_KE',
@@ -120,8 +121,10 @@ class PayoutSettingsService {
     if (rate_per_usdc == null || rate_per_usdc === '' || Number(rate_per_usdc) <= 0) {
       const err = new Error('rate_per_usdc is required (fiat per 1 USDC)');
       err.status = 400;
+      err.statusCode = 400;
       throw err;
     }
+    await assertRateWithinMarketBand(rate_per_usdc, currency);
     if (!isBuyAd && available_float === undefined) {
       const err = new Error('available_float is required for sell ads');
       err.status = 400;
@@ -270,8 +273,13 @@ class PayoutSettingsService {
     if (data.rate_per_usdc !== undefined && data.rate_per_usdc !== null && data.rate_per_usdc <= 0) {
       const err = new Error('rate_per_usdc must be greater than 0');
       err.status = 400;
+      err.statusCode = 400;
       throw err;
     }
+
+    const nextRate = data.rate_per_usdc !== undefined ? data.rate_per_usdc : existing.rate_per_usdc;
+    const nextCurrency = data.currency !== undefined ? data.currency : existing.currency;
+    await assertRateWithinMarketBand(nextRate, nextCurrency);
 
     if (data.spread_percent !== undefined && data.spread_percent !== null && (data.spread_percent < 0 || data.spread_percent > 100)) {
       const err = new Error('spread_percent must be between 0 and 100');

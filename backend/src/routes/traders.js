@@ -4,6 +4,7 @@ import db from '../db/index.js';
 import traderAdsService from '../services/traderAdsService.js';
 import traderStatsService from '../services/traderStatsService.js';
 import reviewService from '../services/reviewService.js';
+import { filterAdsByMarketBand } from '../services/traderRateBand.js';
 
 const router = Router();
 
@@ -118,7 +119,7 @@ router.get('/:id/profile', authUser, async (req, res, next) => {
         reviews,
         isBlocked: blockedResult.rows.length > 0,
         ...online,
-        ads: adsResult.rows.map((a) => ({
+        ads: await filterAdsByMarketBand(adsResult.rows.map((a) => ({
           payoutSettingId: a.id,
           network: a.network,
           currency: a.currency,
@@ -128,7 +129,7 @@ router.get('/:id/profile', authUser, async (req, res, next) => {
           ratePerUsdc: a.rate_per_usdc != null ? parseFloat(a.rate_per_usdc) : null,
           availableFloat: a.ad_side === 'USER_SELL' ? parseFloat(a.net_float) : undefined,
           availableUsdc: a.ad_side === 'USER_BUY' ? parseFloat(a.net_usdc) : undefined,
-        })),
+        }))),
       },
     });
   } catch (err) {

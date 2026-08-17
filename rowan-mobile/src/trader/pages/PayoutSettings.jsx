@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, AlertCircle } from 'lucide-react';
 import payoutSettingsAPI from '../api/payoutSettings';
+import client from '../api/client';
 
 const NETWORK_OPTIONS = [
   { value: 'MTN_UG', label: 'MTN MoMo (Uganda)' },
@@ -20,6 +21,17 @@ const AD_TABS = {
   sell: { ad_side: 'USER_SELL', label: 'Cash-out', floatLabel: 'MoMo float', floatKey: 'available_float', floatUnit: 'currency' },
   buy: { ad_side: 'USER_BUY', label: 'Sell USDC', floatLabel: 'USDC inventory', floatKey: 'available_usdc', floatUnit: 'USDC' },
 };
+
+function formatBandHint(band) {
+  if (!band) return 'Shown to customers in the wallet marketplace.';
+  const fmt = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return `Market ${fmt(band.marketRate)} ${band.currency}. Allowed ${fmt(band.minRate)}–${fmt(band.maxRate)} (±${band.maxPremiumPercent}%).`;
+}
+
+function formatBandError(band) {
+  const fmt = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return `USDC price must be between ${fmt(band.minRate)} and ${fmt(band.maxRate)} ${band.currency} (market ${fmt(band.marketRate)} ±${band.maxPremiumPercent}%).`;
+}
 
 function getEmptyFormData(adSide = 'USER_SELL') {
   return {
@@ -47,6 +59,7 @@ export default function PayoutSettings() {
   const [formData, setFormData] = useState(getEmptyFormData());
   const [submitting, setSubmitting] = useState(false);
   const [duplicateSetting, setDuplicateSetting] = useState(null);
+  const [marketBand, setMarketBand] = useState(null);
 
   const tabConfig = AD_TABS[tab];
   const filteredSettings = settings.filter((s) => (s.ad_side || 'USER_SELL') === tabConfig.ad_side);
@@ -54,6 +67,20 @@ export default function PayoutSettings() {
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  useEffect(() => {
+    if (!showForm) return undefined;
+    const currency = formData.currency || 'UGX';
+    let cancelled = false;
+    client.get('/api/v1/rates/current', { params: { currency } })
+      .then((res) => {
+        if (!cancelled) setMarketBand(res.data?.p2pRateBand || null);
+      })
+      .catch(() => {
+        if (!cancelled) setMarketBand(null);
+      });
+    return () => { cancelled = true; };
+  }, [formData.currency, showForm]);
 
   async function fetchSettings() {
     try {
@@ -151,6 +178,11 @@ export default function PayoutSettings() {
     }
     if ((!formData.rate_per_usdc || parseFloat(formData.rate_per_usdc) <= 0)) {
       setError('USDC price is required (fiat per 1 USDC)');
+      return;
+    }
+    const rateNum = parseFloat(formData.rate_per_usdc);
+    if (marketBand && (rateNum < marketBand.minRate || rateNum > marketBand.maxRate)) {
+      setError(formatBandError(marketBand));
       return;
     }
 
@@ -367,11 +399,11 @@ export default function PayoutSettings() {
                 min="0"
                 value={formData.rate_per_usdc}
                 onChange={(e) => setFormData({ ...formData, rate_per_usdc: e.target.value })}
-                placeholder="e.g. 3728"
+                placeholder={marketBand ? String(Math.round(marketBand.marketRate)) : 'e.g. 3728'}
                 className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
               />
               <p className="text-xs text-gray-400 mt-1">
-                Shown to customers in the wallet marketplace (e.g. 1 USDC ≈ 3,728 UGX)
+                {formatBandHint(marketBand)}
               </p>
             </div>
 

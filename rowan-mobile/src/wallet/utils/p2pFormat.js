@@ -79,6 +79,19 @@ export function formatUsdcRateLine(currency, ratePerUsdc) {
   return `1 USDC ≈ ${currency} ${formatted}`
 }
 
+/** e.g. "Ref UGX 3,720 · +1.6%" */
+export function formatUsdcRateVsMarket(currency, traderRate, marketRate) {
+  const trader = Number(traderRate)
+  const market = Number(marketRate)
+  if (!currency || !Number.isFinite(trader) || trader <= 0 || !Number.isFinite(market) || market <= 0) {
+    return null
+  }
+  const pct = ((trader - market) / market) * 100
+  const marketFmt = market.toLocaleString('en-US', { maximumFractionDigits: 0 })
+  const sign = pct > 0 ? '+' : ''
+  return `Ref ${currency} ${marketFmt} · ${sign}${pct.toFixed(1)}%`
+}
+
 /** Context-aware sell progress copy (P2P vs automated rail). */
 export function getSellProgressSubtitle(tx) {
   if (!tx || isBuyOrder(tx)) return null

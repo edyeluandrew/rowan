@@ -1,6 +1,7 @@
 import db from '../db/index.js';
 import traderStatsService from './traderStatsService.js';
 import { assertTraderCanReceiveUsdc, getTraderUsdcTrustlineStatus } from './traderStellarService.js';
+import { assertPostedRateWithinBand, filterAdsByMarketBand, getBandForCurrency, isWithinBand } from './traderRateBand.js';
 
 const ACTIVE_ORDER_STATES = ['TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'];
 
@@ -125,7 +126,7 @@ async function listAds({
     })
   )).filter(Boolean);
 
-  return { ads, page: Math.max(1, page), limit: Math.min(limit, 50) };
+  return { ads: await filterAdsByMarketBand(ads), page: Math.max(1, page), limit: Math.min(limit, 50) };
 }
 
 /**
@@ -298,6 +299,7 @@ async function validateAdForQuote(payoutSettingId, { network, currency, fiatAmou
     err.statusCode = 409;
     throw err;
   }
+  await assertPostedRateWithinBand(row.rate_per_usdc, currency);
   await assertTraderCanReceiveUsdc(row.stellar_address);
   return row;
 }
@@ -417,7 +419,7 @@ async function listBuyAds({
     })
   )).filter(Boolean);
 
-  return { ads, page: Math.max(1, page), limit: Math.min(limit, 50) };
+  return { ads: await filterAdsByMarketBand(ads), page: Math.max(1, page), limit: Math.min(limit, 50) };
 }
 
 /**
@@ -480,10 +482,12 @@ async function findBestBuyAdForExpress({
 
   const feeMul = 1 - (Number(feePercent) / 100);
   const spreadMul = 1 - (Number(spreadPercent) / 100);
+  const band = await getBandForCurrency(currency);
 
   for (const row of result.rows) {
     const rate = parseFloat(row.rate_per_usdc);
     if (!rate || rate <= 0) continue;
+    if (band && !isWithinBand(rate, band)) continue;
     const usdcNeeded = (fiat * feeMul * spreadMul) / rate;
     if (parseFloat(row.net_usdc) < usdcNeeded) continue;
 
@@ -549,6 +553,7 @@ async function validateBuyAdForQuote(payoutSettingId, { network, currency, fiatA
     err.code = 'TRADER_RATE_REQUIRED';
     throw err;
   }
+  await assertPostedRateWithinBand(row.rate_per_usdc, currency);
   const fiat = parseFloat(fiatAmount);
   if (fiat < parseFloat(row.min_amount) || fiat > parseFloat(row.max_amount)) {
     const err = new Error(`Amount must be between ${row.min_amount} and ${row.max_amount} ${currency}`);

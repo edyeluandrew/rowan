@@ -55,6 +55,9 @@ const config = {
     usdcAmountMismatchTolerance: parseFloat(process.env.USDC_AMOUNT_MISMATCH_TOLERANCE) || 0.0000001,
     // [PHASE 1] Unified slippage tolerance (quote + execution use same value)
     quoteSlippagePercent: parseFloat(process.env.QUOTE_SLIPPAGE_PERCENT) || 0.3,
+    // P2P trader USDC price vs live FX (ExchangeRate-API). ±3% blocks 4000 UGX when market is ~3720.
+    p2pRateMaxPremiumPercent: parseFloat(process.env.P2P_RATE_MAX_PREMIUM_PERCENT) || 3,
+    p2pRateMaxDiscountPercent: parseFloat(process.env.P2P_RATE_MAX_DISCOUNT_PERCENT) || 3,
     // [PHASE 4] Redis lock TTLs for distributed lock protection
     redisLockTtlDepositSeconds: parseInt(process.env.REDIS_LOCK_DEPOSIT_TTL_SECONDS, 10) || 120,
     redisLockTtlReleaseSeconds: parseInt(process.env.REDIS_LOCK_RELEASE_TTL_SECONDS, 10) || 60,

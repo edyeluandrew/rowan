@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import quoteEngine from '../services/quoteEngine.js';
 import fxService from '../services/fxService.js';
+import { buildBand } from '../services/traderRateBand.js';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.get('/current', async (req, res, next) => {
     // [PHASE 2 UPGRADE] Use legacy rate endpoint (indicative only)
     const rate = await quoteEngine.getLegacyXlmRate(currency);
     const fiatFx = await fxService.getUsdcToFiat(currency);
+    const p2pRateBand = fiatFx.rate != null ? buildBand(fiatFx.rate, currency) : null;
 
     res.json({
       currency,
@@ -36,6 +38,7 @@ router.get('/current', async (req, res, next) => {
       fxFetchedAt: fiatFx.fxFetchedAt,
       fxWarning: fiatFx.fxWarning,
       fiatRateSource: fiatFx.fiatRateSource,
+      p2pRateBand,
       disclaimer: 'Indicative rate only. Request a quote for a locked rate.',
       timestamp: new Date().toISOString(),
     });
