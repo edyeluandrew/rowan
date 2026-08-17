@@ -77,6 +77,7 @@ router.get('/cashout-limits', async (req, res, next) => {
         stellarTx: 30, // Hardcoded in Stellar SDK
       },
       // Slippage protection
+      feePercent: config.platform.feePercent,
       slippagePercent: config.platform.quoteSlippagePercent,
       p2pRateBand: {
         maxPremiumPercent: config.platform.p2pRateMaxPremiumPercent,

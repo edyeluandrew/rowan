@@ -28,11 +28,11 @@ export function estimateMaxNetFiat(xlmBalance, xlmRate, feePercent = 1, spreadPe
   return gross * (1 - spreadPercent / 100) * (1 - feePercent / 100)
 }
 
-/** Conservative max net fiat cash-out from USDC balance. */
-export function estimateMaxNetFiatFromUsdc(usdcBalance, usdcToFiatRate, feePercent = 1, spreadPercent = 1.25) {
+/** Conservative max net fiat cash-out from USDC balance (P2P: trader price + Rowan fee paid in extra USDC). */
+export function estimateMaxNetFiatFromUsdc(usdcBalance, usdcToFiatRate, feePercent = 1, spreadPercent = 0) {
   const gross = usdcToFiat(usdcBalance, usdcToFiatRate)
   if (gross == null) return null
-  return gross * (1 - spreadPercent / 100) * (1 - feePercent / 100)
+  return gross / (1 + spreadPercent / 100) / (1 + feePercent / 100)
 }
 
 export function formatFiatAmount(amount, currency, options = {}) {

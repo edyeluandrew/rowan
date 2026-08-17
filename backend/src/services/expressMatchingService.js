@@ -7,7 +7,7 @@ import { getTraderUsdcTrustlineStatus } from './traderStellarService.js';
 import { fiatToUgx } from '../utils/financial.js';
 import { getBandForCurrency, isWithinBand } from './traderRateBand.js';
 
-const { feePercent, spreadPercent, quoteSlippagePercent } = config.platform;
+const { feePercent } = config.platform;
 
 /**
  * Composite Express score (higher = better for the user).
@@ -90,13 +90,9 @@ async function estimateFiatFromUsdcSell(usdcAmount, network) {
   const fiatCurrency = quoteEngine.networkToFiat(network);
   const fx = await (await import('./fxService.js')).default.assertFiatFxAvailableForQuote(fiatCurrency);
   const rate = fx.rate;
-  const feeMul = 1 - (feePercent / 100);
-  const spreadMul = 1 - (spreadPercent / 100);
-  const slippageMul = 1 + ((quoteSlippagePercent || 0) / 100);
-  const usdcForTrader = Number(usdcAmount) / slippageMul;
-  const grossFiat = usdcForTrader * rate * spreadMul;
-  const platformFee = grossFiat * (1 - feeMul);
-  const netFiat = grossFiat * feeMul;
+  const feeMul = 1 + (feePercent / 100);
+  const netFiat = Number(usdcAmount) * rate / feeMul;
+  const platformFee = netFiat * (feePercent / 100);
 
   return {
     fiatCurrency,
@@ -107,7 +103,7 @@ async function estimateFiatFromUsdcSell(usdcAmount, network) {
     platformFeeFiat: fiatCurrency === 'KES'
       ? parseFloat(platformFee.toFixed(2))
       : Math.round(platformFee),
-    userRate: rate * spreadMul * feeMul,
+    userRate: rate,
     rateSource: 'LIVE',
   };
 }
@@ -213,7 +209,6 @@ async function findBestBuyAdRanked({
   }
 
   const feeMul = 1 - (feePercent / 100);
-  const spreadMul = 1 - (spreadPercent / 100);
   const params = [network.toUpperCase(), currency.toUpperCase(), fiat];
   const conditions = [
     `ps.is_active = TRUE`,
@@ -278,7 +273,7 @@ async function findBestBuyAdRanked({
   for (const row of result.rows) {
     const rate = parseFloat(row.rate_per_usdc);
     if (band && !isWithinBand(rate, band)) continue;
-    const usdcNeeded = (fiat * feeMul * spreadMul) / rate;
+    const usdcNeeded = (fiat * feeMul) / rate;
     if (parseFloat(row.net_usdc) < usdcNeeded) continue;
 
     const trustStatus = await getTraderUsdcTrustlineStatus(row.stellar_address);

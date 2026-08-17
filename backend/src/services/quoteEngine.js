@@ -178,6 +178,10 @@ async function getMarketMakerRate() {
 
 const { quoteTtlSeconds, feePercent, spreadPercent, rateCacheTtlSeconds } = config.platform;
 
+function roundUsdc(n) {
+  return Math.round(Number(n) * 1e7) / 1e7;
+}
+
 /**
  * [PHASE 2] Compute the XLM→USDC rate from a real strict-receive path.
  * This is the NEW source of truth for XLM pricing in quotes.
@@ -632,17 +636,32 @@ async function computeQuoteFromTargetFiatUsdc(targetNetFiat, network, { ratePerU
     rateSource = 'LIVE';
   }
 
-  const spreadMultiplierUser = 1 - (spreadPercent / 100);
-  const feeMultiplier = 1 - (feePercent / 100);
-  const grossFiatBeforeSpread = fiatAmountNum / (feeMultiplier * spreadMultiplierUser);
-  const usdcForTrader = grossFiatBeforeSpread / usdcToFiat;
+  let usdcForTrader;
+  let usdcDepositAmount;
+  let userRateAfterSpread;
+  let grossFiatActual;
+  let platformFeeNum;
 
-  const slippageMultiplier = 1 + (config.platform.quoteSlippagePercent / 100);
-  const usdcDepositAmount = usdcForTrader * slippageMultiplier;
-
-  const userRateAfterSpread = usdcToFiat * spreadMultiplierUser;
-  const grossFiatActual = usdcForTrader * usdcToFiat * spreadMultiplierUser;
-  const platformFeeNum = parseFloat(Math.max(0, grossFiatActual - fiatAmountNum).toFixed(2));
+  if (rateSource === 'TRADER_AD') {
+    // Binance P2P: the UGX entered is exactly what the user receives and the
+    // trader sends. Trader margin is their posted rate. Rowan fee is extra USDC.
+    usdcForTrader = roundUsdc(fiatAmountNum / usdcToFiat);
+    platformFeeNum = parseFloat((fiatAmountNum * (feePercent / 100)).toFixed(2));
+    const platformFeeUsdc = roundUsdc(platformFeeNum / usdcToFiat);
+    usdcDepositAmount = roundUsdc(usdcForTrader + platformFeeUsdc);
+    userRateAfterSpread = usdcToFiat;
+    grossFiatActual = fiatAmountNum + platformFeeNum;
+  } else {
+    const feeMultiplier = 1 - (feePercent / 100);
+    const spreadMultiplierUser = 1 - (spreadPercent / 100);
+    const grossFiatBeforeSpread = fiatAmountNum / (feeMultiplier * spreadMultiplierUser);
+    usdcForTrader = grossFiatBeforeSpread / usdcToFiat;
+    const slippageMultiplier = 1 + (config.platform.quoteSlippagePercent / 100);
+    usdcDepositAmount = usdcForTrader * slippageMultiplier;
+    userRateAfterSpread = usdcToFiat * spreadMultiplierUser;
+    grossFiatActual = usdcForTrader * usdcToFiat * spreadMultiplierUser;
+    platformFeeNum = parseFloat(Math.max(0, grossFiatActual - fiatAmountNum).toFixed(2));
+  }
 
   const rateUgx = Math.round(usdcToFiat);
   const feeUgx = Math.round(fiatToUgxRate(platformFeeNum, fiatCurrency));

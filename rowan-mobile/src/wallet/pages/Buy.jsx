@@ -19,15 +19,14 @@ import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 import { mapApiError } from '../utils/apiErrors'
 import { getRatesHealth } from '../utils/quoteSafety'
 
-/** Match backend buy quote fee/spread for indicative USDC estimate */
+/** Match backend P2P buy quote: trader price + 1% Rowan fee (no extra spread). */
 const FEE_FACTOR = 0.99
-const SPREAD_FACTOR = 0.99
 
 function estimateUsdcFromFiat(fiatAmount, usdcToFiat) {
   if (!Number.isFinite(fiatAmount) || fiatAmount <= 0 || !Number.isFinite(usdcToFiat) || usdcToFiat <= 0) {
     return 0
   }
-  return (fiatAmount * FEE_FACTOR * SPREAD_FACTOR) / usdcToFiat
+  return (fiatAmount * FEE_FACTOR) / usdcToFiat
 }
 
 export default function Buy() {
@@ -98,7 +97,7 @@ export default function Buy() {
   const liveUsdcToFiat = rates?.usdcToFiat != null ? Number(rates.usdcToFiat) : null
   const maxFiatFromUsdc =
     traderRate && availableUsdc
-      ? Math.floor(Number(availableUsdc) * traderRate * FEE_FACTOR * SPREAD_FACTOR)
+      ? Math.floor(Number(availableUsdc) * traderRate * FEE_FACTOR)
       : null
   const effectiveMaxFiat =
     maxNetFiat != null && maxFiatFromUsdc != null

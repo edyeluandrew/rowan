@@ -46,11 +46,13 @@ async function computeBuyQuoteFromFiat(fiatAmount, network, { ratePerUsdc = null
     rateSource = 'LIVE';
   }
 
-  const spreadMultiplierUser = 1 - (spreadPercent / 100);
   const feeMultiplier = 1 - (feePercent / 100);
+  const spreadMultiplierUser = rateSource === 'TRADER_AD' ? 1 : (1 - (spreadPercent / 100));
   const usdcAmount = (fiatAmountNum * spreadMultiplierUser * feeMultiplier) / usdcToFiat;
   const platformFeeNum = fiatAmountNum * (feePercent / 100);
-  const userRateAfterSpread = fiatAmountNum / usdcAmount;
+  const userRateAfterSpread = rateSource === 'TRADER_AD'
+    ? usdcToFiat
+    : fiatAmountNum / usdcAmount;
 
   return {
     fiatCurrency,

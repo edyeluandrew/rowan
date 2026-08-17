@@ -617,9 +617,11 @@ async function releaseToTrader(transactionId) {
 
   try {
     const txResult = await db.query(
-      `SELECT t.*, tr.stellar_address as trader_stellar
+      `SELECT t.*, tr.stellar_address as trader_stellar,
+              q.usdc_deposit_amount AS quote_usdc_deposit_amount
        FROM transactions t
        JOIN traders tr ON tr.id = t.trader_id
+       LEFT JOIN quotes q ON q.id = t.quote_id
        WHERE t.id = $1 AND t.state IN ('USER_CONFIRMATION_PENDING', 'DISPUTE_RELEASE_PENDING', 'RELEASE_BLOCKED')`,
       [transactionId]
     );
@@ -703,21 +705,44 @@ async function releaseToTrader(transactionId) {
     if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
       throw new Error(`Invalid USDC amount for release: ${transaction.usdc_amount}`);
     }
-    logger.info(`[Escrow] Converting usdc_amount for release: ${transaction.usdc_amount} → ${usdcDecimal} USDC`);
+    const feeSplit = splitP2pUsdcRelease(transaction.quote_usdc_deposit_amount, usdcDecimal);
+    const feeAddress = String(config.platform.feeStellarAddress || '').trim();
+    const sendFee = Number(feeSplit.fee) > 0
+      && feeAddress
+      && feeAddress !== transaction.trader_stellar
+      && feeAddress !== config.stellar.escrowPublicKey;
+    logger.info(
+      `[Escrow] P2P release: trader ${feeSplit.trader} USDC` +
+      (sendFee ? `, Rowan fee ${feeSplit.fee} USDC` : '')
+    );
 
-    const tx = new StellarSdk.TransactionBuilder(escrowAccount, {
+    const builder = new StellarSdk.TransactionBuilder(escrowAccount, {
       fee: config.stellarMaxFee,
       networkPassphrase,
-    })
-      .addOperation(
+    }).addOperation(
+      StellarSdk.Operation.payment({
+        destination: transaction.trader_stellar,
+        asset: USDC_ASSET,
+        amount: feeSplit.trader,
+      })
+    );
+
+    if (sendFee) {
+      builder.addOperation(
         StellarSdk.Operation.payment({
-          destination: transaction.trader_stellar,
+          destination: feeAddress,
           asset: USDC_ASSET,
-          amount: usdcDecimal.toFixed(7),
+          amount: feeSplit.fee,
         })
-      )
-      .setTimeout(30)
-      .build();
+      );
+    } else if (Number(feeSplit.fee) > 0) {
+      logger.warn(
+        `[Escrow] Platform fee ${feeSplit.fee} USDC left in escrow for tx ${transactionId} ` +
+        `(set PLATFORM_FEE_STELLAR or MARZPAY_FEE_STELLAR)`
+      );
+    }
+
+    const tx = builder.setTimeout(30).build();
 
     tx.sign(escrowKeypair);
     const result = await horizon.submitTransaction(tx);
@@ -777,6 +802,7 @@ async function releaseToTrader(transactionId) {
         trader_id: transaction.trader_id,
         payout_setting_id: transaction.payout_setting_id,
         usdc_amount: transaction.usdc_amount,
+        platform_fee_usdc: sendFee ? feeSplit.fee : '0',
         fiat_amount: transaction.fiat_amount,
         fiat_currency: transaction.fiat_currency,
         from_state: transaction.state,
@@ -796,7 +822,11 @@ async function releaseToTrader(transactionId) {
       [ugxEquivalent, transaction.trader_id]
     );
 
-    logger.info(`[Escrow] Released ${transaction.usdc_amount} USDC to trader — tx: ${result.hash}`);
+    logger.info(
+      `[Escrow] Released ${feeSplit.trader} USDC to trader` +
+      (sendFee ? ` and ${feeSplit.fee} USDC Rowan fee` : '') +
+      ` — tx: ${result.hash}`
+    );
 
     // Run trader health check after each completed release
     fraudMonitor.checkTraderHealth(transaction.trader_id).catch((err) => {
@@ -849,6 +879,23 @@ async function completeAggregatorOfframp(transactionId) {
   });
 
   return settlementHash;
+}
+
+function splitP2pUsdcRelease(depositAmount, traderAmount) {
+  const trader = Number(traderAmount);
+  const deposit = Number(depositAmount);
+  if (!Number.isFinite(trader) || trader <= 0) {
+    throw new Error(`Invalid USDC amount for release: ${traderAmount}`);
+  }
+  let fee = 0;
+  if (Number.isFinite(deposit) && deposit > trader) {
+    fee = Math.floor((deposit - trader) * 1e7) / 1e7;
+  }
+  if (fee < 0.0000001) fee = 0;
+  return {
+    trader: trader.toFixed(7),
+    fee: fee.toFixed(7),
+  };
 }
 
 function splitUsdcForMarzPay(usdcAmount, feeFiat, netFiat) {

@@ -134,7 +134,7 @@ export default function BuyConfirm() {
           </span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-rowan-muted">Platform fee</span>
+          <span className="text-rowan-muted">Rowan fee</span>
           <span className="text-rowan-text">{Number(quote.platformFee).toLocaleString()} {quote.fiatCurrency}</span>
         </div>
       </div>
