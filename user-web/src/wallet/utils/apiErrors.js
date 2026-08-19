@@ -32,7 +32,7 @@ const MESSAGE_SNIPPETS = [
   [/quote expired/i, 'This quote expired. Get a new quote and try again.'],
   [/active.?order/i, 'You already have an open trade. Finish or cancel it before starting another.'],
   [/insufficient/i, 'Not enough USDC for this amount. Top up or lower the amount.'],
-  [/trustline/i, 'Enable the USDC trustline on your wallet first, then try again.'],
+  [/trustline/i, 'Your wallet is still being prepared. Wait a few seconds, then try again.'],
   [/memo/i, 'Payment memo is wrong or missing. Use the exact memo from the quote screen.'],
   [/no traders/i, 'No traders available right now. Try again later or another network.'],
   [/cancelled by buyer/i, 'This order was cancelled.'],

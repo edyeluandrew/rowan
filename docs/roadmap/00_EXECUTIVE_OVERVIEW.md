@@ -70,7 +70,6 @@ Phase 2C adds virtual USD cards. Phase 3 adds cross-chain and B2B treasury.
 | Competitor | Their strength | Rowan differentiation |
 |------------|----------------|----------------------|
 | **Kotani Pay** | Stellar-native MoMo rails, brand recognition | Hold-and-spend utilities; verified trader escrow; admin audit trail |
-| **Pretium** | East Africa off-ramp focus | USDC savings + bill pay without leaving app |
 | **Yellow Card** | Licensed crypto exchange + B2B API | Consumer UX layer on top; P2P + aggregator hybrid |
 | **Transak / Ramp** | Global embedded ramps | Africa-native: local ID, MoMo, airtime, Swahili-ready UX |
 

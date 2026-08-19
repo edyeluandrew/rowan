@@ -83,7 +83,7 @@ export default function CreateWallet() {
       {CURRENT_NETWORK.isTest && testUsdcReady === false && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm">
-            Wallet is set up. Tap &quot;Get free test USDC&quot; on Home if your balance is still empty.
+            Wallet is set up. Test USDC is added automatically.
           </p>
         </div>
       )}

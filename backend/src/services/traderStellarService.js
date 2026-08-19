@@ -52,8 +52,7 @@ export async function assertTraderCanReceiveUsdc(stellarAddress) {
   if (status.hasTrustline) return status;
 
   const err = new Error(
-    'Your Stellar wallet must have a USDC trustline before you can accept cash-out requests. ' +
-    'Add the USDC trustline in Wallet settings, then try again.'
+    'Your wallet is still being prepared. Wait a few seconds, then try again.'
   );
   err.statusCode = 400;
   err.code = status.reason || 'NO_USDC_TRUSTLINE';

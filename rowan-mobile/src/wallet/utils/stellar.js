@@ -8,8 +8,7 @@ import {
   Horizon,
 } from '@stellar/stellar-sdk'
 import { CURRENT_NETWORK, STELLAR_TX_TIMEOUT_SECONDS, USDC_ISSUERS, TESTNET_AUTO_USDC_AMOUNT, TESTNET_MIN_USDC_FOR_SKIP } from './constants'
-import { fundWithFriendbot } from './friendbot'
-import { requestBackendTestnetUsdc } from '../api/testnet'
+import { requestBackendActivateAccount, requestBackendTestnetUsdc } from '../api/testnet'
 
 const networkKey = import.meta.env.VITE_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet'
 
@@ -221,12 +220,31 @@ export async function addUsdcTrustline(sourceSecretKey, horizonUrl) {
   return submitTransaction(signedXdr, horizonUrl)
 }
 
-const FRIENDBOT_SETTLE_MS = 2000
-const MIN_XLM_FOR_TRUSTLINE = 1
+const ACTIVATION_SETTLE_MS = 1500
+const ACTIVATION_POLLS = 8
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+async function waitForTrustline(publicKey, horizonUrl) {
+  let balances = await loadAccountBalances(publicKey, horizonUrl)
+  for (let i = 0; i < ACTIVATION_POLLS && !balances.hasUsdcTrustline; i += 1) {
+    await sleep(ACTIVATION_SETTLE_MS)
+    balances = await loadAccountBalances(publicKey, horizonUrl)
+  }
+  return balances
+}
+
+async function signAndSubmitSponsoredXdr(xdr, secretKey, horizonUrl) {
+  const tx = TransactionBuilder.fromXDR(xdr, CURRENT_NETWORK.passphrase)
+  tx.sign(Keypair.fromSecret(secretKey))
+  return submitTransaction(tx.toXDR(), horizonUrl)
+}
 
 /**
- * Fund testnet XLM (if needed) and add the USDC trustline automatically.
- * Idempotent — safe on create, import, and app start for legacy wallets.
+ * Activate the Stellar account and open USDC. Rowan sponsors the reserve XLM
+ * so it is not withdrawable. Idempotent — safe on create, import, and app start.
  */
 export async function provisionUsdcWallet({ secretKey, publicKey, horizonUrl }) {
   if (!secretKey || !publicKey) {
@@ -234,25 +252,33 @@ export async function provisionUsdcWallet({ secretKey, publicKey, horizonUrl }) 
   }
 
   let balances = await loadAccountBalances(publicKey, horizonUrl)
-  let funded = balances.xlm >= MIN_XLM_FOR_TRUSTLINE
+  if (balances.hasUsdcTrustline) {
+    return { funded: true, trustlineCreated: false }
+  }
 
-  if (CURRENT_NETWORK.friendbotUrl && balances.xlm < MIN_XLM_FOR_TRUSTLINE) {
-    await fundWithFriendbot(publicKey)
-    await new Promise((r) => setTimeout(r, FRIENDBOT_SETTLE_MS))
-    balances = await loadAccountBalances(publicKey, horizonUrl)
-    funded = balances.xlm >= MIN_XLM_FOR_TRUSTLINE
+  if (CURRENT_NETWORK.isTest) {
+    const activation = await requestBackendActivateAccount(publicKey)
+    if (activation?.xdr) {
+      await signAndSubmitSponsoredXdr(activation.xdr, secretKey, horizonUrl)
+      balances = await waitForTrustline(publicKey, horizonUrl)
+      if (balances.hasUsdcTrustline) {
+        return { funded: true, trustlineCreated: true, sponsored: true }
+      }
+    } else {
+      balances = await loadAccountBalances(publicKey, horizonUrl)
+    }
   }
 
   if (balances.hasUsdcTrustline) {
-    return { funded, trustlineCreated: false }
+    return { funded: true, trustlineCreated: false }
   }
 
-  if (balances.xlm < MIN_XLM_FOR_TRUSTLINE) {
+  if (balances.xlm < 1) {
     return { funded: false, trustlineCreated: false, skipped: 'account_not_funded' }
   }
 
   await addUsdcTrustline(secretKey, horizonUrl)
-  return { funded, trustlineCreated: true }
+  return { funded: true, trustlineCreated: true }
 }
 
 /**
@@ -272,7 +298,11 @@ export async function fundTestUsdcWallet({
   }
 
   const provision = await provisionUsdcWallet({ secretKey, publicKey, horizonUrl })
-  const balances = await loadAccountBalances(publicKey, horizonUrl)
+  let balances = await loadAccountBalances(publicKey, horizonUrl)
+  if (!balances.hasUsdcTrustline) {
+    await new Promise((r) => setTimeout(r, ACTIVATION_SETTLE_MS))
+    balances = await loadAccountBalances(publicKey, horizonUrl)
+  }
 
   if (balances.usdc >= TESTNET_MIN_USDC_FOR_SKIP) {
     return {

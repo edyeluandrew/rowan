@@ -1,20 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Share2, Copy, CopyCheck, Coins, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Share2, Copy, CopyCheck, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import QRCodeDisplay from '../components/wallet/QRCodeDisplay'
 import AddressDisplay from '../components/wallet/AddressDisplay'
-import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 import Button from '../components/ui/Button'
 import { CURRENT_NETWORK, COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants'
-import { fundWithFriendbot } from '../utils/friendbot'
 
 const POLL_MS = 5000
 
 export default function ReceiveXlm() {
   const navigate = useNavigate()
-  const { publicKey, balance, usdcBalance, refresh } = useWallet()
-  const [friendbotState, setFriendbotState] = useState('idle')
+  const { publicKey, usdcBalance, refresh } = useWallet()
   const [shareError, setShareError] = useState(null)
   const [copyState, setCopyState] = useState('idle')
   const [depositBanner, setDepositBanner] = useState(null)
@@ -87,18 +84,6 @@ export default function ReceiveXlm() {
     }
   }
 
-  const handleFriendbot = async () => {
-    if (!publicKey || !CURRENT_NETWORK.friendbotUrl) return
-    setFriendbotState('loading')
-    try {
-      await fundWithFriendbot(publicKey)
-      setFriendbotState('success')
-      refresh()
-    } catch {
-      setFriendbotState('error')
-    }
-  }
-
   if (!publicKey) {
     return (
       <div className="bg-rowan-bg min-h-screen px-4 pt-4 pb-8">
@@ -145,8 +130,6 @@ export default function ReceiveXlm() {
           <RefreshCw size={18} />
         </button>
       </div>
-
-      <UsdcTrustlineSetup onEnabled={refresh} />
 
       {depositBanner && (
         <div className="bg-rowan-green/10 border border-rowan-green/35 rounded-xl p-4 mb-4 flex gap-3">
@@ -220,22 +203,6 @@ export default function ReceiveXlm() {
           </p>
         </div>
       </div>
-
-      {CURRENT_NETWORK.isTest && (balance == null || parseFloat(balance) < 1) && (
-        <button
-          onClick={handleFriendbot}
-          disabled={friendbotState === 'loading' || friendbotState === 'success'}
-          className="w-full flex items-center justify-center gap-2 bg-rowan-surface border border-rowan-yellow/30 rounded-xl px-4 py-3 min-h-11 disabled:opacity-50"
-        >
-          <Coins size={16} className="text-rowan-yellow" />
-          <span className="text-rowan-yellow text-sm font-medium">
-            {friendbotState === 'loading' && 'Setting up network fees...'}
-            {friendbotState === 'success' && 'Network fees ready'}
-            {friendbotState === 'error' && 'Failed — tap to retry'}
-            {friendbotState === 'idle' && 'Set up network fees (testnet)'}
-          </span>
-        </button>
-      )}
     </div>
   )
 }

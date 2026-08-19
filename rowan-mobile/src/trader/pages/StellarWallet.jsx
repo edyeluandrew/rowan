@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, Globe, Copy, CopyCheck, Wallet, TrendingUp,
-  RefreshCw, Coins, ArrowRightLeft, Plus, KeyRound,
+  RefreshCw, ArrowRightLeft, Plus, KeyRound,
 } from 'lucide-react';
 import { getWallet } from '../api/wallet';
 import WalletTransactionRow from '../components/wallet/WalletTransactionRow';
@@ -20,7 +20,7 @@ export default function StellarWallet() {
   const {
     keypair, publicKey: walletPublicKey, xlmBalance, usdcBalance: walletUsdc,
     hasUsdcTrustline, loading: walletLoading, activeAction, isActionBusy, error: walletError,
-    refresh, createWallet, importWallet, fundTestnet, enableUsdc, swapToUsdc,
+    refresh, createWallet, importWallet, swapToUsdc,
     setLinkedAddress, linkedAddress,
   } = useTraderWallet();
   const [serverWallet, setServerWallet] = useState(null);
@@ -192,87 +192,35 @@ export default function StellarWallet() {
               </div>
             </div>
 
-            {CURRENT_NETWORK.isTest && (
-              <div className="space-y-3">
-                {(xlmBalance == null || xlmBalance < 1) && (
-                  <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
-                    <p className="text-rowan-text text-sm font-medium">Top up network fees</p>
-                    <p className="text-rowan-muted text-xs mt-1">
-                      USDC is enabled automatically. Retry if testnet XLM is still missing.
-                    </p>
-                    <Button
-                      loading={isActionBusy(WALLET_ACTIONS.FUND)}
-                      disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.FUND)}
-                      variant="ghost"
-                      size="sm"
-                      className="w-full border border-rowan-border mt-3"
-                      onClick={() => runAction('Network fees ready', fundTestnet)}
-                    >
-                      Retry network setup
-                    </Button>
-                  </div>
-                )}
-
-                {hasUsdcTrustline === false && (
-                  <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
-                    <p className="text-rowan-text text-sm font-medium">Finishing USDC setup</p>
-                    <p className="text-rowan-muted text-xs mt-1">Trustline setup runs automatically when you create a wallet.</p>
-                    <Button
-                      loading={isActionBusy(WALLET_ACTIONS.ENABLE_USDC)}
-                      disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.ENABLE_USDC)}
-                      size="sm"
-                      className="w-full mt-3"
-                      onClick={() => runAction('USDC ready', enableUsdc)}
-                    >
-                      <Coins size={14} className="inline mr-1" />
-                      Retry USDC setup
-                    </Button>
-                  </div>
-                )}
-
-                {hasUsdcTrustline && (
-                  <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 space-y-2">
-                    <p className="text-rowan-text text-sm font-medium">Get test USDC</p>
-                    <p className="text-rowan-muted text-xs flex items-center gap-1">
-                      <ArrowRightLeft size={12} />
-                      Swap testnet XLM to USDC on the DEX
-                    </p>
-                    <input
-                      type="number"
-                      min="0.1"
-                      step="0.1"
-                      max="1000"
-                      value={swapAmount}
-                      onChange={(e) => setSwapAmount(e.target.value)}
-                      disabled={anyActionRunning}
-                      className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text text-sm disabled:opacity-50"
-                    />
-                    <p className="text-rowan-muted text-[10px]">Start small (e.g. 10–50 USDC). Large swaps need more XLM.</p>
-                    <Button
-                      loading={isActionBusy(WALLET_ACTIONS.SWAP)}
-                      disabled={(anyActionRunning && !isActionBusy(WALLET_ACTIONS.SWAP)) || !swapAmount || Number(swapAmount) <= 0}
-                      variant="ghost"
-                      size="sm"
-                      className="w-full border border-rowan-border"
-                      onClick={() => runAction('Swap complete', () => swapToUsdc(Number(swapAmount)))}
-                    >
-                      Swap for {swapAmount} USDC
-                    </Button>
-                  </div>
-                )}
+            {CURRENT_NETWORK.isTest && hasUsdcTrustline && (
+              <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 space-y-2">
+                <p className="text-rowan-text text-sm font-medium">Get test USDC</p>
+                <p className="text-rowan-muted text-xs flex items-center gap-1">
+                  <ArrowRightLeft size={12} />
+                  Swap testnet XLM to USDC on the DEX
+                </p>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  max="1000"
+                  value={swapAmount}
+                  onChange={(e) => setSwapAmount(e.target.value)}
+                  disabled={anyActionRunning}
+                  className="w-full bg-rowan-bg border border-rowan-border rounded-lg px-3 py-2 text-rowan-text text-sm disabled:opacity-50"
+                />
+                <p className="text-rowan-muted text-[10px]">Start small (e.g. 10–50 USDC). Large swaps need more XLM.</p>
+                <Button
+                  loading={isActionBusy(WALLET_ACTIONS.SWAP)}
+                  disabled={(anyActionRunning && !isActionBusy(WALLET_ACTIONS.SWAP)) || !swapAmount || Number(swapAmount) <= 0}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full border border-rowan-border"
+                  onClick={() => runAction('Swap complete', () => swapToUsdc(Number(swapAmount)))}
+                >
+                  Swap for {swapAmount} USDC
+                </Button>
               </div>
-            )}
-
-            {!CURRENT_NETWORK.isTest && hasUsdcTrustline === false && (
-              <Button
-                loading={isActionBusy(WALLET_ACTIONS.ENABLE_USDC)}
-                disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.ENABLE_USDC)}
-                size="sm"
-                className="w-full"
-                onClick={() => runAction('USDC ready', enableUsdc)}
-              >
-                Retry USDC setup
-              </Button>
             )}
 
             <button

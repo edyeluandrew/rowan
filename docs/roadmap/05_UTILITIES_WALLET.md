@@ -125,7 +125,7 @@ Get Ugandan counsel opinion before displaying APY. May require different product
 
 ---
 
-## Differentiation vs Kotani/Pretium
+## Differentiation vs single-rail off-ramps
 
 | They | Rowan |
 |------|-------|

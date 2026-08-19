@@ -38,8 +38,10 @@ const config = {
   platform: {
     feePercent: parseFloat(process.env.PLATFORM_FEE_PERCENT) || 1,
     // P2P cash-out fee USDC lands here (falls back to MarzPay / utility fee wallet).
-    feeStellarAddress: process.env.PLATFORM_FEE_STELLAR
+    feeStellarAddress: process.env.PLATFORM_FEE_PUBLIC_KEY
+      || process.env.PLATFORM_FEE_STELLAR
       || process.env.MARZPAY_FEE_STELLAR
+      || process.env.UTILITY_TREASURY_PUBLIC_KEY
       || process.env.UTILITY_USDC_PUBLIC_KEY
       || '',
     spreadPercent: parseFloat(process.env.PLATFORM_SPREAD_PERCENT) || 1.25,
@@ -90,12 +92,20 @@ const config = {
     testnetRecoveryWalletPublicKey: process.env.TESTNET_RECOVERY_WALLET_PUBLIC_KEY,
   },
 
-  // Testnet pilot: auto-fund new wallets with starter USDC (direct payment from faucet wallet)
+  // Ops wallet: sponsors new-account + USDC reserves (not withdrawable by the user)
+  // and sends testnet starter USDC. Prefer WALLET_ACTIVATION_*; old faucet names still work.
   testnetFaucet: {
-    secretKey: process.env.TESTNET_FAUCET_SECRET_KEY || null,
-    amount: parseFloat(process.env.TESTNET_FAUCET_USDC_AMOUNT) || 100,
-    minBalanceToSkip: parseFloat(process.env.TESTNET_FAUCET_MIN_BALANCE) || 1,
-    cooldownSeconds: parseInt(process.env.TESTNET_FAUCET_COOLDOWN_SECONDS, 10) || 7200,
+    secretKey: process.env.WALLET_ACTIVATION_SECRET_KEY
+      || process.env.TESTNET_FAUCET_SECRET_KEY
+      || null,
+    publicKey: process.env.WALLET_ACTIVATION_PUBLIC_KEY
+      || process.env.TESTNET_FAUCET_PUBLIC_KEY
+      || '',
+    amount: parseFloat(process.env.TESTNET_USDC_AMOUNT || process.env.TESTNET_FAUCET_USDC_AMOUNT) || 100,
+    minBalanceToSkip: parseFloat(process.env.TESTNET_USDC_MIN_BALANCE || process.env.TESTNET_FAUCET_MIN_BALANCE) || 1,
+    cooldownSeconds: parseInt(process.env.TESTNET_USDC_COOLDOWN_SECONDS || process.env.TESTNET_FAUCET_COOLDOWN_SECONDS, 10) || 7200,
+    // Native XLM left on the user account for network fees only (not the locked reserve).
+    feePadXlm: parseFloat(process.env.WALLET_ACTIVATION_FEE_PAD_XLM) || 0.05,
   },
 
   // USDC issuers (Stellar)
@@ -210,7 +220,9 @@ const config = {
     quoteTtlSeconds: parseInt(process.env.UTILITY_QUOTE_TTL_SECONDS, 10) || 300,
     minFiatAmount: parseFloat(process.env.UTILITY_MIN_FIAT_AMOUNT) || 1000,
     maxFiatAmount: parseFloat(process.env.UTILITY_MAX_FIAT_AMOUNT) || 500000,
-    treasuryPublicKey: process.env.UTILITY_USDC_PUBLIC_KEY || process.env.ESCROW_PUBLIC_KEY,
+    treasuryPublicKey: process.env.UTILITY_TREASURY_PUBLIC_KEY
+      || process.env.UTILITY_USDC_PUBLIC_KEY
+      || process.env.ESCROW_PUBLIC_KEY,
     allowMockPurchase: process.env.UTILITY_ALLOW_MOCK_PURCHASE === 'true',
   },
 
@@ -229,7 +241,10 @@ const config = {
     webhookUrl: process.env.MARZPAY_WEBHOOK_URL || '',
     settlementStellarAddress: process.env.MARZPAY_SETTLEMENT_STELLAR || '',
     settlementSecret: process.env.MARZPAY_SETTLEMENT_SECRET || '',
-    feeStellarAddress: process.env.MARZPAY_FEE_STELLAR
+    feeStellarAddress: process.env.PLATFORM_FEE_PUBLIC_KEY
+      || process.env.PLATFORM_FEE_STELLAR
+      || process.env.MARZPAY_FEE_STELLAR
+      || process.env.UTILITY_TREASURY_PUBLIC_KEY
       || process.env.UTILITY_USDC_PUBLIC_KEY
       || '',
     offrampCountries: (process.env.MARZPAY_OFFRAMP_COUNTRIES || 'UG')

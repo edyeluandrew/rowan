@@ -96,11 +96,14 @@ export default function useWallet() {
         const kp = JSON.parse(stored)
         if (!kp.secretKey || kp.publicKey !== keypair.publicKey) return
 
-        await provisionUsdcWallet({
+        const result = await provisionUsdcWallet({
           secretKey: kp.secretKey,
           publicKey: kp.publicKey,
           horizonUrl,
         })
+        if (result?.skipped === 'account_not_funded') {
+          provisionAttempted.current = null
+        }
         if (!cancelled) await fetchBalance()
       } catch {
         provisionAttempted.current = null

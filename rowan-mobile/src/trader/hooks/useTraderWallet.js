@@ -87,11 +87,14 @@ export default function useTraderWallet() {
     ;(async () => {
       try {
         if (!keypair.secretKey) return
-        await provisionUsdcWallet({
+        const result = await provisionUsdcWallet({
           secretKey: keypair.secretKey,
           publicKey: keypair.publicKey,
           horizonUrl,
         })
+        if (result?.skipped === 'account_not_funded') {
+          provisionAttempted.current = null
+        }
         if (!cancelled) await refresh()
       } catch {
         provisionAttempted.current = null

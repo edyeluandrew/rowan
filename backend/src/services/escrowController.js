@@ -738,7 +738,7 @@ async function releaseToTrader(transactionId) {
     } else if (Number(feeSplit.fee) > 0) {
       logger.warn(
         `[Escrow] Platform fee ${feeSplit.fee} USDC left in escrow for tx ${transactionId} ` +
-        `(set PLATFORM_FEE_STELLAR or MARZPAY_FEE_STELLAR)`
+        `(set PLATFORM_FEE_PUBLIC_KEY)`
       );
     }
 

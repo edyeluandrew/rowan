@@ -44,7 +44,7 @@
 | Flutterwave as crypto ramp | Account freeze risk |
 | Build custom KYC from scratch | Smile ID faster + compliant |
 | Transak/Ramp white-label | Less differentiation in Africa |
-| Skip utilities, only off-ramp | Commodity product vs Pretium/Kotani |
+| Skip utilities, only off-ramp | Commodity product vs single-rail off-ramps |
 
 ---
 

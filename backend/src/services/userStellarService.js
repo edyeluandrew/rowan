@@ -40,7 +40,7 @@ export async function assertUserCanReceiveUsdc(stellarAddress) {
   if (status.hasTrustline) return status;
 
   const err = new Error(
-    'Your wallet needs a USDC trustline before you can buy USDC. Add USDC in wallet settings, then try again.'
+    'Your wallet is still being prepared. Wait a few seconds, then try again.'
   );
   err.statusCode = 400;
   err.code = status.reason || 'NO_USDC_TRUSTLINE';
