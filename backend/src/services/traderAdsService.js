@@ -70,6 +70,7 @@ async function listAds({
       t.trust_score,
       t.created_at AS member_since,
       t.last_seen_at,
+      t.last_active_at,
       t.max_concurrent_orders,
       ps.network,
       ps.currency,
@@ -199,7 +200,7 @@ function groupAdsByTrader(ads, { isBuy = false } = {}) {
 async function getAdById(payoutSettingId) {
   const result = await db.query(
     `SELECT ps.*, t.name AS trader_name, t.trust_score, t.verification_status, t.status,
-            t.stellar_address, t.last_seen_at, t.max_concurrent_orders
+            t.stellar_address, t.last_seen_at, t.last_active_at, t.max_concurrent_orders
      FROM trader_payout_settings ps
      JOIN traders t ON t.id = ps.trader_id
      WHERE ps.id = $1 AND ps.is_active = TRUE`,
@@ -365,6 +366,7 @@ async function listBuyAds({
       t.trust_score,
       t.created_at AS member_since,
       t.last_seen_at,
+      t.last_active_at,
       ps.network,
       ps.currency,
       ps.country,

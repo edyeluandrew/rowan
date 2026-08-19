@@ -38,6 +38,7 @@ export default function P2pHub() {
   const [error, setError] = useState(null)
   const [network, setNetwork] = useState(null)
   const [minAmount, setMinAmount] = useState('')
+  const [debouncedMinAmount, setDebouncedMinAmount] = useState('')
   const touchStartY = useRef(0)
   const pulling = useRef(false)
 
@@ -51,14 +52,19 @@ export default function P2pHub() {
     setNetwork(null)
   }, [country, tab])
 
-  const loadAds = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true)
-    else setLoading(true)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedMinAmount(minAmount), 400)
+    return () => clearTimeout(timer)
+  }, [minAmount])
+
+  const loadAds = useCallback(async (isRefresh = false, { silent = false } = {}) => {
+    if (isRefresh && !silent) setRefreshing(true)
+    else if (!isRefresh) setLoading(true)
     if (!isRefresh) setError(null)
     try {
       const params = { currency: fiatCurrency }
       if (network) params.network = network
-      if (minAmount) params.minAmount = parseFloat(minAmount)
+      if (debouncedMinAmount) params.minAmount = parseFloat(debouncedMinAmount)
       const res = tab === 'buy' ? await listBuyAds(params) : await listTraderAds(params)
       setTraders(res.traders || [])
       setError(null)
@@ -70,7 +76,7 @@ export default function P2pHub() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [network, minAmount, fiatCurrency, tab])
+  }, [network, debouncedMinAmount, fiatCurrency, tab])
 
   useEffect(() => {
     client.get('/api/v1/config/cashout-limits')
@@ -83,7 +89,7 @@ export default function P2pHub() {
 
   useEffect(() => {
     loadAds()
-    const id = setInterval(() => loadAds(true), QUOTE_REFRESH_INTERVAL)
+    const id = setInterval(() => loadAds(true, { silent: true }), QUOTE_REFRESH_INTERVAL)
     return () => clearInterval(id)
   }, [loadAds])
 

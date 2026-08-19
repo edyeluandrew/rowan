@@ -150,7 +150,7 @@ async function findBestSellAdForExpress({
 
   const result = await db.query(
     `SELECT ps.id AS payout_setting_id, ps.trader_id, t.name AS trader_name,
-            t.trust_score, t.stellar_address, t.last_seen_at,
+            t.trust_score, t.stellar_address, t.last_seen_at, t.last_active_at,
             ps.network, ps.currency, ps.min_amount, ps.max_amount, ps.rate_per_usdc,
             (ps.available_float - ps.reserved_float) AS net_float,
             (SELECT COUNT(*)::int FROM transactions tx
@@ -235,7 +235,7 @@ async function findBestBuyAdRanked({
 
   const result = await db.query(
     `SELECT ps.id AS payout_setting_id, ps.trader_id, t.name AS trader_name,
-            t.trust_score, t.stellar_address, t.last_seen_at,
+            t.trust_score, t.stellar_address, t.last_seen_at, t.last_active_at,
             ps.network, ps.currency, ps.min_amount, ps.max_amount, ps.rate_per_usdc,
             (ps.available_usdc - ps.reserved_usdc) AS net_usdc,
             (SELECT COUNT(*)::int FROM transactions tx

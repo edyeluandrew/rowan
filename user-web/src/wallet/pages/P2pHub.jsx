@@ -55,9 +55,9 @@ export default function P2pHub() {
     return () => clearTimeout(timer)
   }, [minAmount])
 
-  const loadAds = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true)
-    else setLoading(true)
+  const loadAds = useCallback(async (isRefresh = false, { silent = false } = {}) => {
+    if (isRefresh && !silent) setRefreshing(true)
+    else if (!isRefresh) setLoading(true)
     if (!isRefresh) setError(null)
     try {
       const params = { currency: fiatCurrency }
@@ -87,7 +87,7 @@ export default function P2pHub() {
 
   useEffect(() => {
     loadAds()
-    const id = setInterval(() => loadAds(true), QUOTE_REFRESH_INTERVAL)
+    const id = setInterval(() => loadAds(true, { silent: true }), QUOTE_REFRESH_INTERVAL)
     return () => clearInterval(id)
   }, [loadAds])
 

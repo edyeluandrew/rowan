@@ -81,7 +81,7 @@ router.get('/:id/profile', authUser, async (req, res, next) => {
   try {
     const traderId = req.params.id;
     const traderResult = await db.query(
-      `SELECT id, name, trust_score, verification_status, created_at, last_seen_at
+      `SELECT id, name, trust_score, verification_status, created_at, last_seen_at, last_active_at
        FROM traders WHERE id = $1 AND status = 'ACTIVE'`,
       [traderId]
     );

@@ -5,6 +5,7 @@ import logger from '../utils/logger.js';
 import db from '../db/index.js';
 import quoteEngine from '../services/quoteEngine.js';
 import { isDenied } from '../services/tokenDenylist.js';
+import { touchTraderPresence } from '../utils/traderOnline.js';
 
 /**
  * Authenticate wallet users via JWT.
@@ -53,6 +54,7 @@ export function authTrader(req, res, next) {
         if (!active) return res.status(403).json({ error: 'Account disabled or suspended' });
         if (await isDenied(token)) return res.status(401).json({ error: 'Session ended' });
         next();
+        touchTraderPresence(payload.sub);
       })
       .catch(() => res.status(500).json({ error: 'Authentication check failed' }));
   } catch (err) {

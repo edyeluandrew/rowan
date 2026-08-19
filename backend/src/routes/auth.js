@@ -995,7 +995,7 @@ router.post(
       
       // Update trader last active
       await db.query(
-        `UPDATE traders SET last_active_at = NOW(), is_active = TRUE WHERE id = $1`,
+        `UPDATE traders SET last_active_at = NOW(), last_seen_at = NOW(), is_active = TRUE WHERE id = $1`,
         [traderId]
       );
 

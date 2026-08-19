@@ -88,7 +88,7 @@ async function getRecentReviews(traderId, limit = 10) {
 }
 
 function enrichOnlineStatus(traderRow) {
-  const lastSeenAt = traderRow.last_seen_at || null;
+  const lastSeenAt = traderRow.last_seen_at || traderRow.last_active_at || null;
   return {
     lastSeenAt,
     isOnline: isTraderOnline(lastSeenAt),
