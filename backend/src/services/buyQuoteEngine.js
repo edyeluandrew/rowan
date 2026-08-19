@@ -206,7 +206,7 @@ async function createBuyQuoteFromFiat({
 
   const adRateResult = await db.query(
     `SELECT rate_per_usdc FROM trader_payout_settings
-     WHERE id = $1 AND is_active = TRUE AND ad_side = 'USER_BUY'`,
+     WHERE id = $1 AND is_active = TRUE`,
     [resolvedPayoutSettingId]
   );
   const ratePerUsdc = adRateResult.rows[0]?.rate_per_usdc != null

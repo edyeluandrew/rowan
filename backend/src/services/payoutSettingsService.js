@@ -40,10 +40,11 @@ class PayoutSettingsService {
     if (!stellarAddress) return { created: 0, updated: 0 };
 
     const trust = await getTraderUsdcTrustlineStatus(stellarAddress);
-    const usdc = trust.hasTrustline ? Math.max(0, Number(trust.balance) || 0) : 0;
+    const usdc = Number(trust.balance) > 0 ? Number(trust.balance) : 0;
 
     const sellRes = await db.query(
       `SELECT country, network, currency, min_amount, max_amount,
+              available_float, reserved_float,
               rate_per_usdc, spread_percent, fee_percent
        FROM trader_payout_settings
        WHERE trader_id = $1
@@ -62,8 +63,13 @@ class PayoutSettingsService {
          WHERE trader_id = $1 AND network = $2 AND currency = $3 AND ad_side = 'USER_BUY'`,
         [traderId, sell.network, sell.currency]
       );
-      const listed = Math.max(usdc, parseFloat(existing.rows[0]?.reserved_usdc || 0));
+      const rate = parseFloat(sell.rate_per_usdc);
+      const netFloat = parseFloat(sell.available_float || 0) - parseFloat(sell.reserved_float || 0);
+      const fromFloat = rate > 0 && netFloat > 0 ? netFloat / rate : 0;
+      const reserved = parseFloat(existing.rows[0]?.reserved_usdc || 0);
+      const listed = Math.max(usdc, fromFloat, reserved);
       if (existing.rows[0]) {
+        if (listed <= 0) continue;
         await db.query(
           `UPDATE trader_payout_settings
            SET available_usdc = $1, is_active = TRUE, updated_at = NOW()
@@ -96,6 +102,13 @@ class PayoutSettingsService {
         created += 1;
       } catch (err) {
         if (err.code !== '23505') throw err;
+        await db.query(
+          `UPDATE trader_payout_settings
+           SET available_usdc = $1, is_active = TRUE, updated_at = NOW()
+           WHERE trader_id = $2 AND network = $3 AND currency = $4 AND ad_side = 'USER_BUY'`,
+          [listed, traderId, sell.network, sell.currency]
+        );
+        updated += 1;
       }
     }
     if (created || updated) {
@@ -773,6 +786,18 @@ class PayoutSettingsService {
       const err = new Error('USDC amount must be greater than 0');
       err.status = 400;
       throw err;
+    }
+    const side = await db.query(
+      `SELECT ad_side FROM trader_payout_settings WHERE id = $1`,
+      [payoutSettingId]
+    );
+    if (!side.rows[0]) {
+      const err = new Error('Insufficient USDC float to reserve');
+      err.status = 409;
+      throw err;
+    }
+    if (side.rows[0].ad_side !== 'USER_BUY') {
+      return { id: payoutSettingId, skipped: true };
     }
     const result = await db.query(
       `UPDATE trader_payout_settings

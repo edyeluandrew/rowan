@@ -60,12 +60,18 @@ async function matchBuyTrader(transactionId) {
          AND t.verification_status = 'VERIFIED'
          AND t.stellar_address IS NOT NULL
          AND ps.is_active = TRUE
-         AND ps.ad_side = 'USER_BUY'
          AND ps.id = $1
          AND ps.network = $2::mobile_network
          AND ps.currency = $3
          AND $4 BETWEEN ps.min_amount AND ps.max_amount
-         AND (ps.available_usdc - ps.reserved_usdc) >= $5
+         AND (
+           (ps.ad_side = 'USER_BUY' AND (ps.available_usdc - COALESCE(ps.reserved_usdc, 0)) >= $5)
+           OR (
+             ps.ad_side = 'USER_SELL'
+             AND ps.rate_per_usdc > 0
+             AND ((ps.available_float - COALESCE(ps.reserved_float, 0)) / ps.rate_per_usdc) >= $5
+           )
+         )
          AND (t.daily_volume + $6) <= t.daily_limit_ugx
          AND (SELECT COUNT(*) FROM transactions tx
                 WHERE tx.trader_id = t.id

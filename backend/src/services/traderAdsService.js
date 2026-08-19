@@ -326,13 +326,30 @@ async function listBuyAds({
   const params = [];
   const conditions = [
     `ps.is_active = TRUE`,
-    `ps.ad_side = 'USER_BUY'`,
     `t.status = 'ACTIVE'`,
     `t.verification_status = 'VERIFIED'`,
     `t.stellar_address IS NOT NULL`,
-    `(ps.available_usdc - ps.reserved_usdc) > 0`,
     `ps.rate_per_usdc IS NOT NULL`,
     `ps.rate_per_usdc > 0`,
+    `(
+       (
+         ps.ad_side = 'USER_BUY'
+         AND (ps.available_usdc - COALESCE(ps.reserved_usdc, 0)) > 0
+       )
+       OR (
+         ps.ad_side = 'USER_SELL'
+         AND (ps.available_float - COALESCE(ps.reserved_float, 0)) > 0
+         AND NOT EXISTS (
+           SELECT 1 FROM trader_payout_settings b
+           WHERE b.trader_id = ps.trader_id
+             AND b.network = ps.network
+             AND b.currency = ps.currency
+             AND b.ad_side = 'USER_BUY'
+             AND b.is_active = TRUE
+             AND (b.available_usdc - COALESCE(b.reserved_usdc, 0)) > 0
+         )
+       )
+     )`,
     `(SELECT COUNT(*) FROM transactions tx
         WHERE tx.trader_id = t.id
           AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[]))
@@ -378,9 +395,13 @@ async function listBuyAds({
       ps.country,
       ps.min_amount,
       ps.max_amount,
+      ps.ad_side,
       ps.available_usdc,
       ps.reserved_usdc,
-      (ps.available_usdc - ps.reserved_usdc) AS net_usdc_float,
+      ps.available_float,
+      ps.reserved_float,
+      (ps.available_usdc - COALESCE(ps.reserved_usdc, 0)) AS net_usdc_float,
+      (ps.available_float - COALESCE(ps.reserved_float, 0)) AS net_float,
       ps.rate_per_usdc,
       t.stellar_address,
       (SELECT COUNT(*)::int FROM transactions tx
@@ -389,7 +410,14 @@ async function listBuyAds({
     FROM trader_payout_settings ps
     JOIN traders t ON t.id = ps.trader_id
     WHERE ${conditions.join(' AND ')}
-    ORDER BY t.trust_score DESC, net_usdc_float DESC
+    ORDER BY t.trust_score DESC,
+             GREATEST(
+               COALESCE((ps.available_usdc - COALESCE(ps.reserved_usdc, 0)), 0),
+               CASE WHEN ps.rate_per_usdc > 0
+                 THEN (ps.available_float - COALESCE(ps.reserved_float, 0)) / ps.rate_per_usdc
+                 ELSE 0
+               END
+             ) DESC
     LIMIT $${params.length - 1} OFFSET $${params.length}
   `;
 
@@ -397,7 +425,14 @@ async function listBuyAds({
   const ads = (await Promise.all(
     result.rows.map(async (row) => {
       const trustStatus = await getTraderUsdcTrustlineStatus(row.stellar_address);
-      if (!trustStatus.hasTrustline) return null;
+      if (!trustStatus.hasTrustline && trustStatus.reason !== 'HORIZON_ERROR') return null;
+      const rate = row.rate_per_usdc != null ? parseFloat(row.rate_per_usdc) : null;
+      const fromUsdc = parseFloat(row.net_usdc_float);
+      const fromFloat = rate > 0 ? parseFloat(row.net_float || 0) / rate : 0;
+      const availableUsdc = row.ad_side === 'USER_BUY'
+        ? fromUsdc
+        : (Number.isFinite(fromUsdc) && fromUsdc > 0 ? fromUsdc : fromFloat);
+      if (!Number.isFinite(availableUsdc) || availableUsdc <= 0) return null;
       const stats = await traderStatsService.getTraderStats(row.trader_id);
       const online = traderStatsService.enrichOnlineStatus(row);
       return {
@@ -411,8 +446,8 @@ async function listBuyAds({
         country: row.country,
         minAmount: parseFloat(row.min_amount),
         maxAmount: parseFloat(row.max_amount),
-        availableUsdc: parseFloat(row.net_usdc_float),
-        ratePerUsdc: row.rate_per_usdc != null ? parseFloat(row.rate_per_usdc) : null,
+        availableUsdc,
+        ratePerUsdc: rate,
         adSide: 'USER_BUY',
         completionRate: stats.completionRate,
         completedOrders: stats.completedOrders,
@@ -523,7 +558,7 @@ async function validateBuyAdForQuote(payoutSettingId, { network, currency, fiatA
                  AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_orders
      FROM trader_payout_settings ps
      JOIN traders t ON t.id = ps.trader_id
-     WHERE ps.id = $1 AND ps.is_active = TRUE AND ps.ad_side = 'USER_BUY'`,
+     WHERE ps.id = $1 AND ps.is_active = TRUE`,
     [payoutSettingId]
   );
   const row = result.rows[0];
@@ -566,7 +601,12 @@ async function validateBuyAdForQuote(payoutSettingId, { network, currency, fiatA
     err.statusCode = 400;
     throw err;
   }
-  const netUsdc = parseFloat(row.available_usdc) - parseFloat(row.reserved_usdc || 0);
+  const rate = parseFloat(row.rate_per_usdc);
+  const netUsdc = row.ad_side === 'USER_BUY'
+    ? parseFloat(row.available_usdc) - parseFloat(row.reserved_usdc || 0)
+    : (rate > 0
+      ? (parseFloat(row.available_float || 0) - parseFloat(row.reserved_float || 0)) / rate
+      : 0);
   if (netUsdc < parseFloat(usdcAmount)) {
     const err = new Error('Trader does not have enough USDC for this amount');
     err.statusCode = 409;
