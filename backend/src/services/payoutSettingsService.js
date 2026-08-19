@@ -7,6 +7,7 @@ import db from '../db/index.js';
 import countryService from './countries/countryService.js';
 import logger from '../utils/logger.js';
 import { assertRateWithinMarketBand } from './traderRateBand.js';
+import { getTraderUsdcTrustlineStatus } from './traderStellarService.js';
 
 const MOBILE_NETWORK_ALIASES = {
   M_PESA_KE: 'MPESA_KE',
@@ -24,8 +25,114 @@ class PayoutSettingsService {
   /**
    * Get all payout settings for a trader
    */
+  /**
+   * Cash-out ads (USER_SELL) do not appear on Buy. Copy them to USER_BUY
+   * and set inventory from the trader's on-chain USDC so one online trader
+   * can take both sides without a second ad form.
+   */
+  async ensureBuyAdsFromCashoutAds(traderId) {
+    if (!traderId) return { created: 0, updated: 0 };
+    const traderRes = await db.query(
+      `SELECT stellar_address FROM traders WHERE id = $1`,
+      [traderId]
+    );
+    const stellarAddress = traderRes.rows[0]?.stellar_address;
+    if (!stellarAddress) return { created: 0, updated: 0 };
+
+    const trust = await getTraderUsdcTrustlineStatus(stellarAddress);
+    const usdc = trust.hasTrustline ? Math.max(0, Number(trust.balance) || 0) : 0;
+
+    const sellRes = await db.query(
+      `SELECT country, network, currency, min_amount, max_amount,
+              rate_per_usdc, spread_percent, fee_percent
+       FROM trader_payout_settings
+       WHERE trader_id = $1
+         AND ad_side = 'USER_SELL'
+         AND is_active = TRUE
+         AND rate_per_usdc IS NOT NULL
+         AND rate_per_usdc > 0`,
+      [traderId]
+    );
+
+    let created = 0;
+    let updated = 0;
+    for (const sell of sellRes.rows) {
+      const existing = await db.query(
+        `SELECT id, reserved_usdc FROM trader_payout_settings
+         WHERE trader_id = $1 AND network = $2 AND currency = $3 AND ad_side = 'USER_BUY'`,
+        [traderId, sell.network, sell.currency]
+      );
+      const listed = Math.max(usdc, parseFloat(existing.rows[0]?.reserved_usdc || 0));
+      if (existing.rows[0]) {
+        await db.query(
+          `UPDATE trader_payout_settings
+           SET available_usdc = $1, is_active = TRUE, updated_at = NOW()
+           WHERE id = $2`,
+          [listed, existing.rows[0].id]
+        );
+        updated += 1;
+        continue;
+      }
+      if (listed <= 0) continue;
+      try {
+        await db.query(
+          `INSERT INTO trader_payout_settings
+           (trader_id, country, network, currency, min_amount, max_amount, available_float,
+            available_usdc, ad_side, rate_per_usdc, spread_percent, fee_percent, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, 'USER_BUY', $8, $9, $10, TRUE)`,
+          [
+            traderId,
+            sell.country,
+            sell.network,
+            sell.currency,
+            sell.min_amount,
+            sell.max_amount,
+            listed,
+            sell.rate_per_usdc,
+            sell.spread_percent,
+            sell.fee_percent,
+          ]
+        );
+        created += 1;
+      } catch (err) {
+        if (err.code !== '23505') throw err;
+      }
+    }
+    if (created || updated) {
+      logger.info(
+        `[PayoutSettings] Mirrored cash-out ads to Buy for trader ${traderId} (${created} new, ${updated} updated, ${usdc.toFixed(4)} USDC)`
+      );
+    }
+    return { created, updated, usdc };
+  }
+
+  async syncBuyAdsForMarketplace({ currency = null } = {}) {
+    const result = await db.query(
+      `SELECT DISTINCT t.id
+       FROM traders t
+       JOIN trader_payout_settings ps ON ps.trader_id = t.id
+       WHERE t.status = 'ACTIVE'
+         AND t.verification_status = 'VERIFIED'
+         AND t.stellar_address IS NOT NULL
+         AND ps.ad_side = 'USER_SELL'
+         AND ps.is_active = TRUE
+         AND ($1::text IS NULL OR ps.currency = $1)`,
+      [currency ? String(currency).toUpperCase() : null]
+    );
+    for (const row of result.rows) {
+      try {
+        await this.ensureBuyAdsFromCashoutAds(row.id);
+      } catch (err) {
+        logger.warn(`[PayoutSettings] Buy-ad sync failed for ${row.id}: ${err.message}`);
+      }
+    }
+  }
+
   async getPayoutSettingsByTrader(traderId) {
     try {
+      await this.ensureBuyAdsFromCashoutAds(traderId).catch((err) => {
+        logger.warn(`[PayoutSettings] Buy-ad sync skipped: ${err.message}`);
+      });
       const result = await db.query(
         `SELECT 
            id, trader_id, country, network, currency,
@@ -181,6 +288,11 @@ class PayoutSettingsService {
         ]
       );
       logger.info(`Created payout setting for trader ${traderId}: ${network} ${currency}`);
+      if (!isBuyAd) {
+        this.ensureBuyAdsFromCashoutAds(traderId).catch((err) => {
+          logger.warn(`[PayoutSettings] Buy-ad sync after create skipped: ${err.message}`);
+        });
+      }
       return result.rows[0];
     } catch (err) {
       if (err.code === '23505') {
@@ -307,6 +419,9 @@ class PayoutSettingsService {
 
       const result = await db.query(query, values);
       logger.info(`Updated payout setting ${id} for trader ${traderId}`);
+      this.ensureBuyAdsFromCashoutAds(traderId).catch((err) => {
+        logger.warn(`[PayoutSettings] Buy-ad sync after update skipped: ${err.message}`);
+      });
       return result.rows[0];
     } catch (err) {
       logger.error('PayoutSettingsService.updatePayoutSetting', err);

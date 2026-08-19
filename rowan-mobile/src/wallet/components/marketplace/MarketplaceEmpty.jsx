@@ -35,8 +35,8 @@ export default function MarketplaceEmpty({ tab = 'buy', filtered = false, onRefr
       <Store size={28} className="text-rowan-muted mx-auto mb-3" />
       <p className="text-rowan-text text-sm font-medium">No traders online yet</p>
       <p className="text-rowan-muted text-xs mt-2 leading-relaxed">
-        {side} USDC uses local MTN and Airtel traders. The list is empty while we onboard them — this is not a failed load.
-        Airtime, data and bills from Home still work.
+        {side} USDC uses local MTN and Airtel traders. Buy needs a trader with USDC to sell;
+        Sell needs a trader with mobile-money float. Airtime, data and bills from Home still work.
       </p>
       <Button className="mt-4" variant="ghost" onClick={onRefresh}>
         <RefreshCw size={16} />

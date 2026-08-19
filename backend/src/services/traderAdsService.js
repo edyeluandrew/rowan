@@ -1,5 +1,7 @@
 import db from '../db/index.js';
 import traderStatsService from './traderStatsService.js';
+import payoutSettingsService from './payoutSettingsService.js';
+import logger from '../utils/logger.js';
 import { assertTraderCanReceiveUsdc, getTraderUsdcTrustlineStatus } from './traderStellarService.js';
 import { assertPostedRateWithinBand, filterAdsByMarketBand, getBandForCurrency, isWithinBand } from './traderRateBand.js';
 
@@ -317,6 +319,10 @@ async function listBuyAds({
   page = 1,
   limit = 20,
 } = {}) {
+  await payoutSettingsService.syncBuyAdsForMarketplace({ currency }).catch((err) => {
+    logger.warn(`[Ads] Buy-ad sync skipped: ${err.message}`);
+  });
+
   const params = [];
   const conditions = [
     `ps.is_active = TRUE`,
