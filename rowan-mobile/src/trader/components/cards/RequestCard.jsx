@@ -16,10 +16,9 @@ export default function RequestCard({ request, onRemove }) {
   const handleAccept = async () => {
     setAccepting(true);
     try {
-      const response = await acceptRequest(request.id);
-      // Accept successful - navigate to detail page to show full payout info
-      // The detail page will fetch the latest request data
-      navigate(`/trader/requests/${request.id}`);
+      const isBuy = (request.order_side || request.orderSide) === 'BUY';
+      await acceptRequest(request.id);
+      navigate(`/trader/requests/${request.id}`, { state: { autoLock: isBuy } });
     } catch (err) {
       // Only remove from list if request actually expired/can't be accepted
       // Don't remove on temporary network errors
@@ -82,26 +81,29 @@ export default function RequestCard({ request, onRemove }) {
         </div>
         <div className="text-rowan-muted text-xs">
           {(request.order_side || request.orderSide) === 'BUY'
-            ? 'Customer buying USDC — you lock USDC'
-            : 'Customer selling USDC — you send fiat'}
-          {' · '}
-          {Number(request.usdc_amount || 0).toFixed(2)} USDC
+            ? `You will lock ${Number(request.usdc_amount || 0).toFixed(2)} USDC`
+            : 'Customer USDC is in escrow'}
         </div>
       </div>
 
       {/* Row 3: Payout details (masked before accept) */}
       <div className="mt-3 bg-rowan-bg rounded px-3 py-2">
-        <p className="text-rowan-muted text-xs mb-1">Send to</p>
+        <p className="text-rowan-muted text-xs mb-1">
+          {(request.order_side || request.orderSide) === 'BUY' ? 'You receive MoMo' : 'Send to'}
+        </p>
         <p className="text-rowan-text text-sm font-medium">
           {request.payout_phone_masked || 'Phone hidden'}
         </p>
         <p className="text-rowan-muted text-xs mt-1">Recipient details shown after you accept</p>
       </div>
 
-      {/* Row 4: USDC locked */}
+      {/* Row 4: USDC */}
       <div className="mt-3">
         <span className="inline-flex items-center gap-1.5 border border-rowan-yellow rounded px-3 py-1.5 text-rowan-yellow text-sm font-bold">
-          <LockKeyhole size={14} className="inline" /> {formatCurrency(request.usdc_amount, 'USDC')} IN ESCROW
+          <LockKeyhole size={14} className="inline" />{' '}
+          {(request.order_side || request.orderSide) === 'BUY'
+            ? `${formatCurrency(request.usdc_amount, 'USDC')} TO LOCK`
+            : `${formatCurrency(request.usdc_amount, 'USDC')} IN ESCROW`}
         </span>
       </div>
 
@@ -117,7 +119,7 @@ export default function RequestCard({ request, onRemove }) {
             onClick={handleAccept}
             className="px-5"
           >
-            Accept
+            {(request.order_side || request.orderSide) === 'BUY' ? 'Accept & lock' : 'Accept'}
           </Button>
           <Button
             variant="ghost"

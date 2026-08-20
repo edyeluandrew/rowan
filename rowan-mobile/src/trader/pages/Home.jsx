@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Zap, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +14,7 @@ import FloatHealthBanner from '../components/home/FloatHealthBanner';
 import NotificationBadge from '../components/notifications/NotificationBadge';
 import { formatCurrency } from '../utils/format';
 import { CURRENCY_FLAGS } from '../utils/constants';
+import { useTraderWallet } from '../context/TraderWalletContext';
 
 export default function Home() {
   const { trader } = useAuth();
@@ -21,6 +22,7 @@ export default function Home() {
   const { active } = useRequests();
   const { floatHealth } = useFloatHealth();
   const { unreadCount } = useNotifications();
+  const { usdcBalance, publicKey } = useTraderWallet();
   const navigate = useNavigate();
   const [showFloat, setShowFloat] = useState(false);
 
@@ -53,6 +55,24 @@ export default function Home() {
           <ConnectionDot />
         </div>
       </div>
+
+      {/* Rowan wallet */}
+      <button
+        type="button"
+        onClick={() => navigate('/trader/wallet')}
+        className="w-full text-left bg-rowan-surface border border-rowan-border rounded-md p-4 mb-4"
+      >
+        <div className="flex justify-between items-center">
+          <span className="text-rowan-muted text-xs uppercase tracking-wider">Rowan wallet</span>
+          <span className="text-rowan-yellow text-xs">Add USDC</span>
+        </div>
+        <p className="text-rowan-text text-2xl font-bold tabular-nums mt-1">
+          {usdcBalance != null ? `${Number(usdcBalance).toFixed(2)} USDC` : '—'}
+        </p>
+        {publicKey && (
+          <p className="text-rowan-muted text-[10px] font-mono mt-1 truncate">{publicKey}</p>
+        )}
+      </button>
 
       {/* Float Health Warning */}
       {floatHealth && <FloatHealthBanner health={floatHealth} />}

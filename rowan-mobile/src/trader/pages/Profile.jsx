@@ -124,9 +124,9 @@ export default function Profile() {
 
       {/* USDC Wallet */}
       <div className="bg-rowan-surface rounded-xl p-4 mb-4">
-        <h3 className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Your USDC wallet address</h3>
+        <h3 className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Rowan wallet</h3>
         <p className="text-rowan-muted text-[10px] mb-2">
-          Escrow releases your USDC here after sell-order customers confirm MoMo.
+          Your trading USDC lives here. Buy locks come from this wallet. Sell payouts land here.
         </p>
         <div className="flex items-center gap-2">
           <span className="text-rowan-text text-xs font-mono flex-1 break-all">
@@ -153,7 +153,7 @@ export default function Profile() {
       {/* Navigation Links */}
       <div className="bg-rowan-surface rounded-xl mb-4 divide-y divide-rowan-border">
         {[
-          { to: '/trader/wallet', icon: Globe, label: 'Rowan Wallet', sub: 'Your USDC address · fund & swap' },
+          { to: '/trader/wallet', icon: Globe, label: 'Rowan Wallet', sub: 'USDC balance · add funds' },
           { to: '/trader/sla', icon: Timer, label: 'SLA Performance', sub: 'Payout targets' },
           { to: '/trader/performance/networks', icon: BarChart3, label: 'Network Performance', sub: 'Stats by network' },
           { to: '/trader/earnings', icon: TrendingUp, label: 'Earnings', sub: 'Breakdown & history' },

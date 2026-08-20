@@ -38,6 +38,46 @@ export function getStatusLabel(state, options = {}) {
   return USER_STATUS_LABELS[state] || 'Processing'
 }
 
+/** Window expiry / cancel with nothing stuck in escrow — not a “contact support” failure. */
+export function isCleanOrderClose(tx) {
+  if (!tx) return false
+  const reason = String(tx.failureReason ?? tx.failure_reason ?? '').toLowerCase()
+  if (/payment window expired|cancelled by buyer|no trader available|order closed/.test(reason)) {
+    return true
+  }
+  if (tx.state === 'FAILED' && !(tx.stellarDepositTx || tx.stellar_deposit_tx)) {
+    return true
+  }
+  return false
+}
+
+/** Copy for COMPLETE / REFUNDED / FAILED on the order screen. */
+export function getTerminalOrderMessage(tx) {
+  if (!tx) return ''
+  const buy = isBuyOrder(tx)
+
+  if (tx.state === 'COMPLETE') {
+    return buy ? 'Done. Check your wallet for USDC.' : 'Done. Check your phone for the exact amount.'
+  }
+
+  if (tx.state === 'REFUNDED') {
+    return buy
+      ? 'Time ran out. This order is closed. Start a new buy when you want.'
+      : 'Your USDC is back in your wallet. This order is closed. Sell again when you want.'
+  }
+
+  if (tx.state === 'FAILED') {
+    if (isCleanOrderClose(tx)) {
+      return buy
+        ? 'Time ran out. No USDC left your wallet. This order is closed — start a new buy when you want.'
+        : 'This order closed. Nothing was taken from your wallet. Sell again when you want.'
+    }
+    return 'This order failed. If USDC is not back in your wallet, email support@rowanpay.app with your order ID.'
+  }
+
+  return ''
+}
+
 /** e.g. 98.5% */
 export function formatPercent(value) {
   if (value == null || !Number.isFinite(Number(value))) return null

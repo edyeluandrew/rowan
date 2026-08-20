@@ -1,6 +1,6 @@
 import { LockKeyhole, ChevronLeft, Copy, CopyCheck } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { getRequest, confirmRequest, confirmFiatReceived, verifyUsdcLock, acceptRequest } from '../api/trader';
 import { useSocket } from '../context/SocketContext';
 import { useRequests } from '../hooks/useRequests';
@@ -88,6 +88,8 @@ function SlaCountdown({ expiresAt }) {
 export default function RequestDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const autoLock = Boolean(location.state?.autoLock);
   const { on, off } = useSocket();
   const { refresh } = useRequests();
 
@@ -103,6 +105,7 @@ export default function RequestDetail() {
   const [verifyingUsdc, setVerifyingUsdc] = useState(false);
   const [usdcVerifyMsg, setUsdcVerifyMsg] = useState(null);
   const [accepting, setAccepting] = useState(false);
+  const [showManualSend, setShowManualSend] = useState(false);
 
   const fetchTx = useCallback(async () => {
     try {
@@ -229,6 +232,7 @@ export default function RequestDetail() {
   const isBuyOrder = isBuyOrderEarly;
   const isPayoutStep = !isBuyOrder && ['TRADER_MATCHED'].includes(txState);
   const isBuyLockStep = isBuyOrder && txState === 'TRADER_MATCHED' && !!tx.matched_at;
+  const isBuyNeedsAccept = isBuyOrder && txState === 'TRADER_MATCHED' && !tx.matched_at;
   const isBuyConfirmStep = isBuyOrder && txState === 'FIAT_PAYOUT_SUBMITTED';
   const isBuyWaitingCustomer = isBuyOrder && txState === 'ESCROW_LOCKED';
   const isAwaitingConfirmation = step === 2;
@@ -298,8 +302,8 @@ export default function RequestDetail() {
         </p>
         <p className="text-rowan-muted text-xs mt-1">
           {isBuyOrder
-            ? 'You lock USDC in escrow. Customer sends you mobile money. Then you confirm MoMo → USDC goes to them.'
-            : 'Customer USDC is already in escrow. You send them mobile money (fiat). When they confirm → escrow releases USDC to your Rowan wallet.'}
+            ? 'Accept locks USDC from your Rowan wallet. Customer then sends you mobile money. You confirm MoMo → USDC goes to them.'
+            : 'Customer USDC is already in escrow. You send them mobile money. When they confirm → USDC lands in your Rowan wallet.'}
         </p>
       </div>
 
@@ -308,9 +312,9 @@ export default function RequestDetail() {
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-3 mb-4 flex items-center gap-2">
           <LockKeyhole size={20} className="text-rowan-yellow" />
           <div>
-            <span className="text-rowan-yellow text-xs font-medium">Your turn: lock USDC in escrow</span>
+            <span className="text-rowan-yellow text-xs font-medium">Lock USDC from your Rowan wallet</span>
             <p className="text-rowan-muted text-[10px] mt-0.5">
-              Send USDC from your Rowan wallet (not fiat yet).
+              One tap. No copy-paste.
             </p>
           </div>
         </div>
@@ -368,21 +372,55 @@ export default function RequestDetail() {
         </div>
       )}
 
+      {isBuyNeedsAccept && (
+        <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 mb-4 space-y-3">
+          <h3 className="text-rowan-yellow text-xs font-semibold uppercase">Accept this buy</h3>
+          <p className="text-rowan-muted text-xs">
+            One tap accepts the order and locks{' '}
+            <strong className="text-rowan-text">{Number(tx.usdc_amount).toFixed(4)} USDC</strong> from your Rowan wallet.
+          </p>
+          <Button
+            loading={accepting}
+            size="lg"
+            onClick={async () => {
+              setAccepting(true);
+              try {
+                await acceptRequest(tx.id);
+                await fetchTx();
+                refresh();
+                navigate(`/trader/requests/${tx.id}`, { replace: true, state: { autoLock: true } });
+              } catch (err) {
+                alert(err.response?.data?.error || err.message || 'Could not accept');
+              } finally {
+                setAccepting(false);
+              }
+            }}
+          >
+            Accept & lock {Number(tx.usdc_amount || 0).toFixed(4)} USDC
+          </Button>
+        </div>
+      )}
+
       {/* Buy order actions — above chat so trader sees next step immediately */}
       {isBuyLockStep && (
         <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 mb-4 space-y-3">
-          <h3 className="text-rowan-yellow text-xs font-semibold uppercase">Step 1: Lock USDC in escrow</h3>
+          <h3 className="text-rowan-yellow text-xs font-semibold uppercase">Lock USDC</h3>
           <p className="text-rowan-muted text-xs">
-            Send exactly <strong className="text-rowan-text">{Number(tx.usdc_amount).toFixed(4)} USDC</strong> from your <strong className="text-rowan-text">Rowan wallet</strong> below — no Freighter or external app needed.
+            Rowan will send <strong className="text-rowan-text">{Number(tx.usdc_amount).toFixed(4)} USDC</strong> from your wallet into escrow.
           </p>
           <LockUsdcButton
             tx={tx}
+            autoSend={autoLock}
+            onProfileLinked={async () => {
+              await fetchTx();
+              refresh();
+            }}
             onLocked={async () => {
               setUsdcVerifyMsg(null);
               try {
                 const result = await verifyUsdcLock(tx.id);
                 if (result.status === 'locked' || result.status === 'already_locked') {
-                  setUsdcVerifyMsg({ type: 'ok', text: 'USDC locked! Customer can now pay you.' });
+                  setUsdcVerifyMsg({ type: 'ok', text: 'USDC locked. Waiting for the customer to send MoMo.' });
                   await fetchTx();
                   refresh();
                 } else if (result.status === 'wrong_sender') {
@@ -390,76 +428,86 @@ export default function RequestDetail() {
                 } else {
                   setUsdcVerifyMsg({
                     type: 'ok',
-                    text: 'USDC sent! Wait ~30 seconds, then tap "I\'ve sent USDC — check now" if it does not update automatically.',
+                    text: 'USDC sent. This screen updates when escrow confirms — or tap Check now.',
                   });
                 }
               } catch (err) {
-                setUsdcVerifyMsg({ type: 'error', text: err.response?.data?.error || 'Sent — tap check now below' });
+                setUsdcVerifyMsg({ type: 'error', text: err.response?.data?.error || 'Sent — tap Check now' });
               }
             }}
             onError={(msg) => setUsdcVerifyMsg({ type: 'error', text: msg })}
           />
-          <p className="text-rowan-muted text-[10px] text-center">— or send manually —</p>
-          <p className="text-rowan-text text-xs font-mono break-all bg-rowan-bg rounded-lg p-2">{tx.escrow_address || 'Escrow address'}</p>
-          <p className="text-rowan-muted text-xs">Memo: <span className="text-rowan-text font-mono">{tx.escrow_memo}</span></p>
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex-1 border border-rowan-border"
-              onClick={() => {
-                navigator.clipboard.writeText(tx.escrow_address || '');
-                alert('Escrow address copied');
-              }}
-            >
-              Copy address
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex-1 border border-rowan-border"
-              onClick={() => {
-                navigator.clipboard.writeText(tx.escrow_memo || '');
-                alert('Memo copied');
-              }}
-            >
-              Copy memo
-            </Button>
-          </div>
           {usdcVerifyMsg && (
             <p className={`text-xs ${usdcVerifyMsg.type === 'error' ? 'text-rowan-red' : 'text-rowan-green'}`}>
               {usdcVerifyMsg.text}
             </p>
           )}
-          <Button
-            loading={verifyingUsdc}
-            variant="ghost"
-            size="lg"
-            className="border border-rowan-border"
-            onClick={async () => {
-              setVerifyingUsdc(true);
-              setUsdcVerifyMsg(null);
-              try {
-                const result = await verifyUsdcLock(tx.id);
-                if (result.status === 'locked' || result.status === 'already_locked') {
-                  setUsdcVerifyMsg({ type: 'ok', text: 'USDC locked! Customer can now pay you.' });
-                  await fetchTx();
-                  refresh();
-                } else {
-                  setUsdcVerifyMsg({
-                    type: 'error',
-                    text: result.message || 'Payment not found yet — wait 30s and try again.',
-                  });
-                }
-              } catch (err) {
-                setUsdcVerifyMsg({ type: 'error', text: err.response?.data?.error || 'Could not verify USDC' });
-              } finally {
-                setVerifyingUsdc(false);
-              }
-            }}
+          <button
+            type="button"
+            onClick={() => setShowManualSend((v) => !v)}
+            className="text-rowan-muted text-[11px] underline w-full text-center"
           >
-            I&apos;ve sent USDC — check now
-          </Button>
+            {showManualSend ? 'Hide manual send' : 'Send from another wallet'}
+          </button>
+          {showManualSend && (
+            <div className="space-y-2 pt-1">
+              <p className="text-rowan-text text-xs font-mono break-all bg-rowan-bg rounded-lg p-2">{tx.escrow_address || 'Escrow address'}</p>
+              <p className="text-rowan-muted text-xs">Memo: <span className="text-rowan-text font-mono">{tx.escrow_memo}</span></p>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex-1 border border-rowan-border"
+                  onClick={() => {
+                    navigator.clipboard.writeText(tx.escrow_address || '');
+                    alert('Escrow address copied');
+                  }}
+                >
+                  Copy address
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex-1 border border-rowan-border"
+                  onClick={() => {
+                    navigator.clipboard.writeText(tx.escrow_memo || '');
+                    alert('Memo copied');
+                  }}
+                >
+                  Copy memo
+                </Button>
+              </div>
+              <Button
+                loading={verifyingUsdc}
+                variant="ghost"
+                size="lg"
+                className="border border-rowan-border"
+                onClick={async () => {
+                  setVerifyingUsdc(true);
+                  setUsdcVerifyMsg(null);
+                  try {
+                    const result = await verifyUsdcLock(tx.id);
+                    if (result.status === 'locked' || result.status === 'already_locked') {
+                      setUsdcVerifyMsg({ type: 'ok', text: 'USDC locked. Waiting for the customer to send MoMo.' });
+                      await fetchTx();
+                      refresh();
+                    } else {
+                      setUsdcVerifyMsg({
+                        type: 'error',
+                        text: result.message || 'Payment not found yet — wait 30s and try again.',
+                      });
+                    }
+                  } catch (err) {
+                    setUsdcVerifyMsg({ type: 'error', text: err.response?.data?.error || 'Could not verify USDC' });
+                  } finally {
+                    setVerifyingUsdc(false);
+                  }
+                }}
+              >
+                Check now
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

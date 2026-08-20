@@ -1,26 +1,54 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../ui/Button';
-import useTraderWallet from '../../hooks/useTraderWallet';
-import { buildAndSignUsdcPayment, submitTransaction } from '../../../wallet/utils/stellar';
-import { verifyUsdcLock } from '../../api/trader';
+import { useTraderWallet } from '../../context/TraderWalletContext';
+import { lockUsdcToEscrow } from '../../utils/lockUsdc';
+import { verifyWalletAddress } from '../../api/wallet';
 
 /**
- * Send USDC to escrow from the trader's Rowan wallet (no external wallet).
+ * Lock USDC into escrow from the trader's single Rowan wallet.
  */
-export default function LockUsdcButton({ tx, onLocked, onError }) {
+export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked, autoSend = false }) {
   const navigate = useNavigate();
-  const { keypair, publicKey, usdcBalance, isReady, refresh } = useTraderWallet();
+  const { keypair, publicKey, usdcBalance, isReady, refresh, setLinkedAddress, ensureWallet } = useTraderWallet();
   const [sending, setSending] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const autoSent = useRef(false);
   const escrowAddress = tx?.escrow_address || '';
   const memo = tx?.escrow_memo || '';
   const usdcAmount = Number(tx?.usdc_amount || 0);
-  const linkedAddress = tx?.trader_stellar_address || tx?.stellar_address || publicKey || '';
+  const profileAddress = tx?.trader_stellar_address || tx?.stellar_address || '';
+  const addressMismatch = !!(keypair?.publicKey && profileAddress && keypair.publicKey !== profileAddress);
   const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL;
+  const canSend = isReady && !addressMismatch && Number(usdcBalance || 0) >= usdcAmount && !!escrowAddress && !!memo;
+
+  const handleLinkThisWallet = async () => {
+    if (!keypair?.publicKey) return;
+    try {
+      setLinking(true);
+      await verifyWalletAddress(keypair.publicKey);
+      setLinkedAddress(keypair.publicKey);
+      await onProfileLinked?.();
+    } catch (err) {
+      onError?.(err.response?.data?.error || err.message || 'Could not link this wallet');
+    } finally {
+      setLinking(false);
+    }
+  };
 
   const handleSend = async () => {
     if (!keypair?.secretKey) {
-      onError?.('Set up your Rowan wallet first — Profile → Stellar Wallet');
+      try {
+        await ensureWallet();
+      } catch {
+        onError?.('Could not set up your Rowan wallet');
+        navigate('/trader/wallet');
+        return;
+      }
+    }
+    const secret = keypair?.secretKey;
+    if (!secret) {
+      onError?.('Set up your Rowan wallet first');
       navigate('/trader/wallet');
       return;
     }
@@ -29,60 +57,55 @@ export default function LockUsdcButton({ tx, onLocked, onError }) {
       navigate('/trader/wallet');
       return;
     }
-    if (linkedAddress && keypair.publicKey !== linkedAddress) {
-      onError?.('Your Rowan wallet address does not match your profile. Open Stellar Wallet to fix.');
-      navigate('/trader/wallet');
-      return;
-    }
-    if (!escrowAddress || !memo || !usdcAmount) {
-      onError?.('Missing escrow details for this order');
+    if (addressMismatch) {
+      await handleLinkThisWallet();
+      onError?.('Linked this phone wallet. Tap Lock USDC again.');
       return;
     }
     if (Number(usdcBalance || 0) < usdcAmount) {
-      onError?.(`Need ${usdcAmount.toFixed(4)} USDC in your Rowan wallet (you have ${Number(usdcBalance || 0).toFixed(4)}). Swap XLM → USDC in Stellar Wallet.`);
+      onError?.(`Need ${usdcAmount.toFixed(4)} USDC (you have ${Number(usdcBalance || 0).toFixed(4)}). Swap XLM → USDC in Rowan Wallet.`);
       navigate('/trader/wallet');
       return;
     }
 
     try {
       setSending(true);
-      const signed = await buildAndSignUsdcPayment({
-        sourceSecretKey: keypair.secretKey,
-        destinationAddress: escrowAddress,
+      const result = await lockUsdcToEscrow({
+        secretKey: secret,
+        escrowAddress,
         usdcAmount,
         memo,
         horizonUrl,
+        transactionId: tx.id,
       });
-      await submitTransaction(signed, horizonUrl);
       await refresh();
-
-      try {
-        const result = await verifyUsdcLock(tx.id);
-        if (result.status === 'locked' || result.status === 'already_locked') {
-          await onLocked?.(result);
-        } else if (result.status === 'wrong_sender') {
-          onError?.(result.message);
-        } else {
-          await onLocked?.({ pending: true, ...result });
-        }
-      } catch (err) {
-        await onLocked?.({ pending: true, error: err.response?.data?.error });
+      if (result.status === 'locked' || result.status === 'already_locked') {
+        await onLocked?.(result);
+      } else if (result.status === 'wrong_sender') {
+        onError?.(result.message);
+      } else {
+        await onLocked?.({ pending: true, ...result });
       }
     } catch (err) {
-      onError?.(err.message || 'Could not send USDC');
+      onError?.(err.response?.data?.error || err.message || 'Could not lock USDC');
     } finally {
       setSending(false);
     }
   };
 
-  if (!keypair) {
+  useEffect(() => {
+    if (!autoSend || autoSent.current || sending || !canSend) return;
+    autoSent.current = true;
+    handleSend();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when wallet is ready
+  }, [autoSend, canSend, sending]);
+
+  if (!keypair && !sending) {
     return (
       <div className="space-y-2">
-        <p className="text-rowan-muted text-xs text-center">
-          Create a Rowan wallet once — then fund, swap, and lock USDC here.
-        </p>
-        <Button size="lg" onClick={() => navigate('/trader/wallet')}>
-          Set up Rowan wallet
+        <p className="text-rowan-muted text-xs text-center">Setting up your Rowan wallet…</p>
+        <Button size="lg" onClick={() => ensureWallet().catch((err) => onError?.(err.message))}>
+          Create wallet
         </Button>
       </div>
     );
@@ -91,21 +114,23 @@ export default function LockUsdcButton({ tx, onLocked, onError }) {
   return (
     <div className="space-y-2">
       <div className="bg-rowan-bg rounded-lg p-2">
-        <p className="text-rowan-muted text-[10px] uppercase">Rowan wallet</p>
-        <p className="text-rowan-text text-xs font-mono break-all mt-1">{publicKey}</p>
+        <p className="text-rowan-muted text-[10px] uppercase">Your Rowan wallet</p>
         <p className="text-rowan-muted text-[10px] mt-1">
-          USDC: {Number(usdcBalance || 0).toFixed(4)} · need {usdcAmount.toFixed(4)}
+          USDC {Number(usdcBalance || 0).toFixed(4)} · lock {usdcAmount.toFixed(4)}
         </p>
       </div>
 
-      {!isReady && (
-        <Button variant="ghost" size="sm" className="w-full border border-rowan-border" onClick={() => navigate('/trader/wallet')}>
-          Enable USDC in Rowan wallet
-        </Button>
+      {addressMismatch && (
+        <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-lg p-3 space-y-2">
+          <p className="text-rowan-red text-xs">This phone wallet is not linked yet.</p>
+          <Button loading={linking} size="sm" className="w-full" onClick={handleLinkThisWallet}>
+            Use this wallet
+          </Button>
+        </div>
       )}
 
-      <Button loading={sending} size="lg" onClick={handleSend} disabled={!isReady || sending}>
-        Send USDC to escrow from Rowan
+      <Button loading={sending} size="lg" onClick={handleSend} disabled={sending || !isReady || addressMismatch}>
+        Lock {usdcAmount.toFixed(4)} USDC
       </Button>
 
       <button
@@ -113,7 +138,7 @@ export default function LockUsdcButton({ tx, onLocked, onError }) {
         onClick={() => navigate('/trader/wallet')}
         className="text-rowan-yellow text-xs underline w-full text-center"
       >
-        Manage wallet (fund / swap USDC)
+        Add USDC
       </button>
     </div>
   );

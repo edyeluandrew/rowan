@@ -4,13 +4,15 @@ import {
   ChevronLeft, Globe, Copy, CopyCheck, Wallet, TrendingUp,
   RefreshCw, ArrowRightLeft, Plus, KeyRound,
 } from 'lucide-react';
-import { getWallet } from '../api/wallet';
+import { getWallet, verifyWalletAddress } from '../api/wallet';
 import WalletTransactionRow from '../components/wallet/WalletTransactionRow';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
 import { COPY_FEEDBACK_TIMEOUT_MS } from '../utils/constants';
+import { formatAddress } from '../utils/format';
 import { useSocket } from '../context/SocketContext';
-import useTraderWallet, { WALLET_ACTIONS } from '../hooks/useTraderWallet';
+import { useTraderWallet } from '../context/TraderWalletContext';
+import { WALLET_ACTIONS } from '../hooks/useTraderWallet';
 import { CURRENT_NETWORK } from '../../wallet/utils/constants';
 import { isValidSecretKey } from '../../wallet/utils/stellar';
 
@@ -20,7 +22,7 @@ export default function StellarWallet() {
   const {
     keypair, publicKey: walletPublicKey, xlmBalance, usdcBalance: walletUsdc,
     hasUsdcTrustline, loading: walletLoading, activeAction, isActionBusy, error: walletError,
-    refresh, createWallet, importWallet, swapToUsdc,
+    refresh, createWallet, importWallet, swapToUsdc, ensureWallet,
     setLinkedAddress, linkedAddress,
   } = useTraderWallet();
   const [serverWallet, setServerWallet] = useState(null);
@@ -39,7 +41,6 @@ export default function StellarWallet() {
         const data = await getWallet();
         if (!cancelled) {
           setServerWallet(data);
-          setLinkedAddress(data.stellar_address || data.stellarAddress || null);
         }
       } catch {
         /* optional server metadata */
@@ -62,7 +63,7 @@ export default function StellarWallet() {
       off('tx_complete', refreshAll);
       off('tx_update', refreshAll);
     };
-  }, [on, off, refresh, setLinkedAddress]);
+  }, [on, off, refresh]);
 
   const publicKey = walletPublicKey || serverWallet?.stellar_address || '';
   const usdcBalance = walletUsdc ?? serverWallet?.usdc_balance ?? 0;
@@ -109,15 +110,15 @@ export default function StellarWallet() {
       <div className="px-4 mt-4 space-y-3">
         {!keypair ? (
           <div className="bg-rowan-surface border border-rowan-yellow/40 rounded-xl p-4 space-y-3">
-            <h2 className="text-rowan-yellow text-sm font-semibold">Set up your trader wallet</h2>
+            <h2 className="text-rowan-yellow text-sm font-semibold">Your Rowan wallet</h2>
             <p className="text-rowan-muted text-xs">
-              Everything happens here — fund with test XLM, swap to USDC, and lock escrow. No Freighter needed.
+              This is the only wallet for your trades. Rowan creates it on this phone and links it to your profile.
             </p>
             <Button
               loading={isActionBusy(WALLET_ACTIONS.CREATE)}
               disabled={anyActionRunning && !isActionBusy(WALLET_ACTIONS.CREATE)}
               size="lg"
-              onClick={() => runAction('Wallet created', createWallet)}
+              onClick={() => runAction('Wallet ready', ensureWallet)}
             >
               <Plus size={16} className="inline mr-1" />
               Create Rowan wallet
@@ -157,7 +158,7 @@ export default function StellarWallet() {
             <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
               <div className="flex items-center gap-2">
                 <KeyRound size={16} className="text-rowan-muted" />
-                <span className="text-rowan-muted text-xs uppercase tracking-wider">Your Rowan address</span>
+                <span className="text-rowan-muted text-xs uppercase tracking-wider">Your Rowan wallet</span>
               </div>
               <p className="text-rowan-text font-mono text-sm mt-2 break-all">{publicKey}</p>
               <button
@@ -168,9 +169,28 @@ export default function StellarWallet() {
                 {copied ? <><CopyCheck size={15} className="text-rowan-green" /><span className="text-rowan-green">Copied</span></> : <><Copy size={15} />Copy address</>}
               </button>
               {linkedAddress && linkedAddress !== publicKey && (
-                <p className="text-rowan-red text-xs mt-2">
-                  Profile linked to a different address — recreate wallet or re-import the matching key.
-                </p>
+                <div className="mt-3 bg-rowan-red/10 border border-rowan-red/30 rounded-lg p-3 space-y-2">
+                  <p className="text-rowan-red text-xs font-semibold">Profile is linked to a different address</p>
+                  <p className="text-rowan-muted text-[11px]">
+                    Profile: <span className="text-rowan-text font-mono">{formatAddress(linkedAddress)}</span>
+                    <br />
+                    This phone: <span className="text-rowan-text font-mono">{formatAddress(publicKey)}</span>
+                  </p>
+                  <p className="text-rowan-muted text-[11px]">
+                    Buy locks only count if USDC is sent from the profile address. Link this phone wallet, or import the profile secret key.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={anyActionRunning}
+                    onClick={() => runAction('Wallet linked to profile', async () => {
+                      await verifyWalletAddress(publicKey);
+                      setLinkedAddress(publicKey);
+                    })}
+                  >
+                    Use this phone wallet on my profile
+                  </Button>
+                </div>
               )}
             </div>
 

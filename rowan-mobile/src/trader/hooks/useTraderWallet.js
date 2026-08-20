@@ -10,7 +10,7 @@ import {
   keypairFromSecret,
 } from '../../wallet/utils/stellar'
 import { CURRENT_NETWORK } from '../../wallet/utils/constants'
-import { verifyWalletAddress } from '../api/wallet'
+import { getWallet, verifyWalletAddress } from '../api/wallet'
 
 export const TRADER_KEY_STORAGE = 'rowan_trader_stellar_keypair'
 
@@ -37,6 +37,7 @@ export default function useTraderWallet() {
   const [activeAction, setActiveAction] = useState(null)
   const [error, setError] = useState(null)
   const provisionAttempted = useRef(null)
+  const ensurePromise = useRef(null)
 
   const loadStoredKeypair = useCallback(async () => {
     const stored = await getSecure(TRADER_KEY_STORAGE)
@@ -109,6 +110,66 @@ export default function useTraderWallet() {
     setLinkedAddress(publicKey)
   }, [])
 
+  const persistAndFundWallet = useCallback(async (kp) => {
+    await setSecure(TRADER_KEY_STORAGE, JSON.stringify(kp))
+    try {
+      await syncLinkedAddress(kp.publicKey)
+    } catch {
+      setLinkedAddress(kp.publicKey)
+    }
+    if (CURRENT_NETWORK.isTest) {
+      await fundTestUsdcWallet({
+        secretKey: kp.secretKey,
+        publicKey: kp.publicKey,
+        horizonUrl,
+      })
+    } else {
+      await provisionUsdcWallet({
+        secretKey: kp.secretKey,
+        publicKey: kp.publicKey,
+        horizonUrl,
+      })
+    }
+    setKeypair(kp)
+    await refresh()
+    return kp
+  }, [horizonUrl, refresh, syncLinkedAddress])
+
+  /**
+   * One wallet for this trader on this phone.
+   * Creates it if missing, then links the profile address to it.
+   */
+  const ensureWallet = useCallback(async () => {
+    if (ensurePromise.current) return ensurePromise.current
+    ensurePromise.current = (async () => {
+      const existing = await loadStoredKeypair()
+      if (existing?.secretKey && existing?.publicKey) {
+        try {
+          await syncLinkedAddress(existing.publicKey)
+        } catch {
+          /* 409 if another trader owns it — UI can still import */
+        }
+        setKeypair(existing)
+        await refresh()
+        try {
+          const data = await getWallet()
+          if (data?.stellar_address) setLinkedAddress(data.stellar_address)
+        } catch {
+          /* profile fetch is optional */
+        }
+        return existing
+      }
+      const kp = generateKeypair()
+      return persistAndFundWallet(kp)
+    })()
+    try {
+      return await ensurePromise.current
+    } catch (err) {
+      ensurePromise.current = null
+      throw err
+    }
+  }, [loadStoredKeypair, persistAndFundWallet, refresh, syncLinkedAddress])
+
   const runWalletAction = useCallback(async (action, fn) => {
     if (activeAction) {
       throw new Error('Please wait for the current action to finish')
@@ -128,25 +189,8 @@ export default function useTraderWallet() {
 
   const createWallet = useCallback(async () => runWalletAction(WALLET_ACTIONS.CREATE, async () => {
     const kp = generateKeypair()
-    await setSecure(TRADER_KEY_STORAGE, JSON.stringify(kp))
-    await syncLinkedAddress(kp.publicKey)
-    if (CURRENT_NETWORK.isTest) {
-      await fundTestUsdcWallet({
-        secretKey: kp.secretKey,
-        publicKey: kp.publicKey,
-        horizonUrl,
-      })
-    } else {
-      await provisionUsdcWallet({
-        secretKey: kp.secretKey,
-        publicKey: kp.publicKey,
-        horizonUrl,
-      })
-    }
-    setKeypair(kp)
-    await refresh()
-    return kp
-  }), [horizonUrl, refresh, runWalletAction, syncLinkedAddress])
+    return persistAndFundWallet(kp)
+  }), [persistAndFundWallet, runWalletAction])
 
   const importWallet = useCallback(async (secretKey) => {
     const secret = secretKey.trim()
@@ -253,6 +297,7 @@ export default function useTraderWallet() {
     isReady: !!keypair?.secretKey && hasUsdcTrustline === true,
     isLinked,
     refresh,
+    ensureWallet,
     createWallet,
     importWallet,
     fundTestnet,

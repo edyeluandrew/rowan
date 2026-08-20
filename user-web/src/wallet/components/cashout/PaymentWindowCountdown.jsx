@@ -19,8 +19,8 @@ export default function PaymentWindowCountdown({ expiresAt, orderSide = 'SELL' }
         <p className="text-rowan-red text-sm font-semibold">Time window expired</p>
         <p className="text-rowan-muted text-xs mt-2">
           {isBuy
-            ? 'This order may be cancelled if the trader did not lock USDC in time.'
-            : 'Your USDC will be refunded if the trader did not send mobile money in time.'}
+            ? 'This order is closing. Nobody else will be matched. You can start a new buy if you want.'
+            : 'This order is closing. Your USDC will come back if it was locked. You can sell again if you want.'}
         </p>
       </div>
     )
@@ -55,8 +55,8 @@ export default function PaymentWindowCountdown({ expiresAt, orderSide = 'SELL' }
           <AlertTriangle size={14} className="text-rowan-red shrink-0 mt-0.5" />
           <p className="text-rowan-red text-xs max-w-xs">
             {isBuy
-              ? 'If USDC is not locked soon, this order may be reassigned or cancelled.'
-              : 'If mobile money does not arrive soon, your order may be refunded automatically.'}
+              ? 'If USDC is not locked soon, this order will close. We will not match you to another trader.'
+              : 'If mobile money does not arrive soon, this order will close and locked USDC will come back.'}
           </p>
         </div>
       )}

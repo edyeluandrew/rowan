@@ -25,6 +25,8 @@ export function normalizeWalletTransaction(tx) {
     usdcAmount: tx.usdcAmount ?? tx.usdc_amount,
     stellarDepositTx: tx.stellarDepositTx ?? tx.stellar_deposit_tx,
     stellarReleaseTx: tx.stellarReleaseTx ?? tx.stellar_release_tx,
+    stellarRefundTx: tx.stellarRefundTx ?? tx.stellar_refund_tx,
+    failureReason: tx.failureReason ?? tx.failure_reason,
     completedAt: tx.completedAt ?? tx.completed_at,
     failedAt: tx.failedAt ?? tx.failed_at,
     hasDispute: tx.hasDispute ?? !!tx.dispute_id,

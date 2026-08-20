@@ -35,6 +35,8 @@ import {
   getBuyProgressSubtitle,
   isAutomatedPayoutPending,
   getSellTradeHero,
+  getTerminalOrderMessage,
+  isCleanOrderClose,
 } from '../utils/p2pFormat'
 
 const TERMINAL_STATES = ['COMPLETE', 'REFUNDED', 'FAILED']
@@ -429,36 +431,27 @@ export default function TransactionStatus() {
     </button>
   )
 
-  const terminalMessage = () => {
-    if (!transaction) return ''
-    switch (transaction.state) {
-      case 'COMPLETE':
-        return 'Done. Check your phone for the exact amount.'
-      case 'REFUNDED':
-        return 'Your USDC is back in your wallet. Nothing was lost — you can cash out again.'
-      case 'FAILED':
-        return 'This order failed. If USDC is not back in your wallet, email support@rowanpay.app with your order ID.'
-      default:
-        return ''
-    }
-  }
+  const terminalMessage = () => getTerminalOrderMessage(transaction)
 
   const terminalIcon = () => {
     if (!transaction) return null
+    const softClose = transaction.state === 'REFUNDED' || isCleanOrderClose(transaction)
     switch (transaction.state) {
       case 'COMPLETE':
         return <PartyPopper size={48} className="text-rowan-green animate-scale-in" />
       case 'REFUNDED':
-        return (
-          <div className="flex flex-col items-center animate-scale-in">
-            <RotateCcw size={48} className="text-rowan-yellow" />
-            <div className="flex items-center gap-1 mt-3 bg-rowan-green/10 rounded-full px-3 py-1">
-              <ShieldCheck size={14} className="text-rowan-green" />
-              <span className="text-rowan-green text-xs font-medium">Funds safe</span>
-            </div>
-          </div>
-        )
       case 'FAILED':
+        if (softClose) {
+          return (
+            <div className="flex flex-col items-center animate-scale-in">
+              <RotateCcw size={48} className="text-rowan-yellow" />
+              <div className="flex items-center gap-1 mt-3 bg-rowan-green/10 rounded-full px-3 py-1">
+                <ShieldCheck size={14} className="text-rowan-green" />
+                <span className="text-rowan-green text-xs font-medium">Funds safe</span>
+              </div>
+            </div>
+          )
+        }
         return <XCircle size={48} className="text-rowan-red animate-scale-in" />
       default:
         return null
@@ -638,7 +631,7 @@ export default function TransactionStatus() {
         />
       )} */}
 
-      {transaction && isBuy && (
+      {transaction && isBuy && !isTerminal && (
         <div className="rounded-xl p-3 my-4 border bg-rowan-yellow/10 border-rowan-yellow/30">
           <p className="text-sm font-semibold text-rowan-yellow">You are buying USDC</p>
         </div>
@@ -906,12 +899,20 @@ export default function TransactionStatus() {
               <span className="text-rowan-text text-sm font-medium">View Receipt</span>
             </button>
           )}
-          {transaction.state === 'REFUNDED' && (
+          {transaction.state === 'REFUNDED' && !isBuy && (
             <button
               onClick={() => navigate('/wallet/cashout', { replace: true })}
               className="w-full text-rowan-yellow text-sm underline min-h-11"
             >
-              Try another cash out
+              Sell again
+            </button>
+          )}
+          {(transaction.state === 'REFUNDED' || isCleanOrderClose(transaction)) && isBuy && (
+            <button
+              onClick={() => navigate('/wallet/p2p', { replace: true })}
+              className="w-full text-rowan-yellow text-sm underline min-h-11"
+            >
+              Start a new buy
             </button>
           )}
         </div>

@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { getOnboardingStatus } from '../../api/onboarding';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import OnboardingWizard from './OnboardingWizard';
+import { TraderWalletProvider } from '../../context/TraderWalletContext';
 
 /**
  * OnboardingGate — layout route wrapper.
@@ -50,5 +51,9 @@ export default function OnboardingGate() {
     return <OnboardingWizard />;
   }
 
-  return <Outlet />;
+  return (
+    <TraderWalletProvider>
+      <Outlet />
+    </TraderWalletProvider>
+  );
 }
