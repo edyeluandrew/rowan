@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect } from 'react'
+import { useAuth } from '../../context/AuthContext'
 import useTraderWalletState from '../hooks/useTraderWallet'
 
 const TraderWalletContext = createContext(null)
@@ -8,12 +9,14 @@ const TraderWalletContext = createContext(null)
  * Auto-creates and links the profile address on first open.
  */
 export function TraderWalletProvider({ children }) {
-  const wallet = useTraderWalletState()
+  const { trader } = useAuth()
+  const traderId = trader?.id
+  const wallet = useTraderWalletState(traderId)
 
   useEffect(() => {
-    if (wallet.loading) return
+    if (wallet.loading || !traderId) return
     wallet.ensureWallet().catch(() => {})
-  }, [wallet.loading, wallet.ensureWallet])
+  }, [wallet.loading, wallet.ensureWallet, traderId])
 
   return (
     <TraderWalletContext.Provider value={wallet}>

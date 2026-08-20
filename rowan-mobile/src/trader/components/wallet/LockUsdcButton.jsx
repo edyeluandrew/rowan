@@ -10,7 +10,7 @@ import { verifyWalletAddress } from '../../api/wallet';
  */
 export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked, autoSend = false }) {
   const navigate = useNavigate();
-  const { keypair, publicKey, usdcBalance, isReady, refresh, setLinkedAddress, ensureWallet, linkedAddress, profileSyncing } = useTraderWallet();
+  const { keypair, publicKey, usdcBalance, isReady, refresh, setLinkedAddress, ensureWallet, linkedAddress, profileSyncing, replacedConflictingWallet } = useTraderWallet();
   const [sending, setSending] = useState(false);
   const [linking, setLinking] = useState(false);
   const autoSent = useRef(false);
@@ -39,7 +39,12 @@ export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked,
       await onProfileLinked?.();
       return true;
     } catch (err) {
-      onError?.(err.response?.data?.error || err.message || 'Could not link this wallet');
+      const taken = err.response?.status === 409;
+      onError?.(
+        taken
+          ? 'This phone wallet belongs to another trader account. Rowan will use a new wallet for this login.'
+          : (err.response?.data?.error || err.message || 'Could not link this wallet')
+      );
       return false;
     } finally {
       setLinking(false);
@@ -141,7 +146,13 @@ export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked,
         <p className="text-rowan-muted text-xs text-center">Linking this phone wallet…</p>
       )}
 
-      {addressMismatch && !linking && (
+      {replacedConflictingWallet && (
+        <p className="text-rowan-muted text-xs text-center">
+          This phone had a wallet for another trader account. This login has its own Rowan wallet — add USDC, then lock.
+        </p>
+      )}
+
+      {addressMismatch && !linking && !replacedConflictingWallet && (
         <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-lg p-3 space-y-2">
           <p className="text-rowan-red text-xs">This phone wallet is not linked yet.</p>
           <Button loading={linking} size="sm" className="w-full" onClick={handleLinkThisWallet}>

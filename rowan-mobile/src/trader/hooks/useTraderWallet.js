@@ -22,12 +22,32 @@ export const WALLET_ACTIONS = {
   SWAP: 'swap',
 }
 
+function isAddressTakenError(err) {
+  return err?.response?.status === 409
+}
+
+function parseStoredKeypair(raw) {
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+export function traderKeyStorageKey(traderId) {
+  return traderId ? `${TRADER_KEY_STORAGE}:${traderId}` : TRADER_KEY_STORAGE
+}
+
 /**
  * Trader's in-app Stellar wallet — create, fund, trustline, swap, send.
  * Keys stay on-device; public address is synced to the trader profile.
+ * Each trader login on this phone has its own key slot so one G… cannot be
+ * claimed by two accounts.
  */
-export default function useTraderWallet() {
+export default function useTraderWallet(traderId) {
   const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL
+  const storageKey = traderKeyStorageKey(traderId)
   const [keypair, setKeypair] = useState(null)
   const [linkedAddress, setLinkedAddress] = useState(null)
   const [xlmBalance, setXlmBalance] = useState(null)
@@ -35,20 +55,18 @@ export default function useTraderWallet() {
   const [hasUsdcTrustline, setHasUsdcTrustline] = useState(null)
   const [loading, setLoading] = useState(true)
   const [profileSyncing, setProfileSyncing] = useState(true)
+  const [replacedConflictingWallet, setReplacedConflictingWallet] = useState(false)
   const [activeAction, setActiveAction] = useState(null)
   const [error, setError] = useState(null)
   const provisionAttempted = useRef(null)
   const ensurePromise = useRef(null)
 
   const loadStoredKeypair = useCallback(async () => {
-    const stored = await getSecure(TRADER_KEY_STORAGE)
-    if (!stored) return null
-    try {
-      return JSON.parse(stored)
-    } catch {
-      return null
-    }
-  }, [])
+    const scoped = parseStoredKeypair(await getSecure(storageKey))
+    if (scoped?.secretKey && scoped?.publicKey) return scoped
+    if (!traderId) return null
+    return parseStoredKeypair(await getSecure(TRADER_KEY_STORAGE))
+  }, [storageKey, traderId])
 
   const refresh = useCallback(async () => {
     const kp = await loadStoredKeypair()
@@ -68,6 +86,12 @@ export default function useTraderWallet() {
       setError(err.message)
     }
   }, [horizonUrl, loadStoredKeypair])
+
+  useEffect(() => {
+    ensurePromise.current = null
+    setReplacedConflictingWallet(false)
+    setLinkedAddress(null)
+  }, [traderId])
 
   useEffect(() => {
     let cancelled = false
@@ -112,12 +136,8 @@ export default function useTraderWallet() {
   }, [])
 
   const persistAndFundWallet = useCallback(async (kp) => {
-    await setSecure(TRADER_KEY_STORAGE, JSON.stringify(kp))
-    try {
-      await syncLinkedAddress(kp.publicKey)
-    } catch {
-      setLinkedAddress(kp.publicKey)
-    }
+    await setSecure(storageKey, JSON.stringify(kp))
+    await syncLinkedAddress(kp.publicKey)
     if (CURRENT_NETWORK.isTest) {
       await fundTestUsdcWallet({
         secretKey: kp.secretKey,
@@ -134,13 +154,16 @@ export default function useTraderWallet() {
     setKeypair(kp)
     await refresh()
     return kp
-  }, [horizonUrl, refresh, syncLinkedAddress])
+  }, [horizonUrl, refresh, storageKey, syncLinkedAddress])
 
   /**
    * One wallet for this trader on this phone.
    * Creates it if missing, then links the profile address to it.
+   * If this phone's keys already belong to another trader login, leave those
+   * keys alone and create a new wallet for this account.
    */
   const ensureWallet = useCallback(async () => {
+    if (!traderId) return null
     if (ensurePromise.current) return ensurePromise.current
     ensurePromise.current = (async () => {
       setProfileSyncing(true)
@@ -149,17 +172,26 @@ export default function useTraderWallet() {
         if (existing?.secretKey && existing?.publicKey) {
           try {
             await syncLinkedAddress(existing.publicKey)
-          } catch {
+            await setSecure(storageKey, JSON.stringify(existing))
+            setKeypair(existing)
+            await refresh()
+            return existing
+          } catch (err) {
+            if (isAddressTakenError(err)) {
+              setReplacedConflictingWallet(true)
+              const kp = generateKeypair()
+              return persistAndFundWallet(kp)
+            }
             try {
               const data = await getWallet()
               if (data?.stellar_address) setLinkedAddress(data.stellar_address)
             } catch {
               /* profile fetch is optional */
             }
+            setKeypair(existing)
+            await refresh()
+            return existing
           }
-          setKeypair(existing)
-          await refresh()
-          return existing
         }
         const kp = generateKeypair()
         return persistAndFundWallet(kp)
@@ -174,7 +206,7 @@ export default function useTraderWallet() {
       setProfileSyncing(false)
       throw err
     }
-  }, [loadStoredKeypair, persistAndFundWallet, refresh, syncLinkedAddress])
+  }, [loadStoredKeypair, persistAndFundWallet, refresh, storageKey, syncLinkedAddress, traderId])
 
   const runWalletAction = useCallback(async (action, fn) => {
     if (activeAction) {
@@ -206,7 +238,7 @@ export default function useTraderWallet() {
     return runWalletAction(WALLET_ACTIONS.IMPORT, async () => {
       const kpObj = keypairFromSecret(secret)
       const kp = { publicKey: kpObj.publicKey(), secretKey: secret }
-      await setSecure(TRADER_KEY_STORAGE, JSON.stringify(kp))
+      await setSecure(storageKey, JSON.stringify(kp))
       await syncLinkedAddress(kp.publicKey)
       if (CURRENT_NETWORK.isTest) {
         await fundTestUsdcWallet({
@@ -225,7 +257,7 @@ export default function useTraderWallet() {
       await refresh()
       return kp
     })
-  }, [horizonUrl, refresh, runWalletAction, syncLinkedAddress])
+  }, [horizonUrl, refresh, runWalletAction, storageKey, syncLinkedAddress])
 
   const fundTestnet = useCallback(async () => {
     if (!keypair?.publicKey) throw new Error('Create a Rowan wallet first')
@@ -297,6 +329,7 @@ export default function useTraderWallet() {
     hasUsdcTrustline,
     loading,
     profileSyncing,
+    replacedConflictingWallet,
     activeAction,
     isActionBusy,
     busy: !!activeAction,

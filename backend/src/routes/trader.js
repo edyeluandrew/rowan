@@ -726,6 +726,14 @@ router.post('/wallet/verify', authTrader, async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid Stellar address. Must start with G and be 56 characters.' });
     }
 
+    const current = await db.query(
+      `SELECT stellar_address FROM traders WHERE id = $1`,
+      [req.traderId]
+    );
+    if (current.rows[0]?.stellar_address === stellarAddress) {
+      return res.json({ success: true, stellar_address: stellarAddress, alreadyLinked: true });
+    }
+
     // Check uniqueness
     const existing = await db.query(
       `SELECT id FROM traders WHERE stellar_address = $1 AND id != $2`,
