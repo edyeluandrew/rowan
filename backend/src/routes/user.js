@@ -1296,9 +1296,12 @@ router.post('/transactions/:id/cancel', authUser, sensitiveActionLimiter, async 
     const refundResult = await escrowController.refundOrphanTransaction(transactionId, 'Cancelled by buyer');
 
     const chatService = (await import('../services/chatService.js')).default;
+    const closedUnfunded = refundResult?.status === 'closed' || refundResult?.status === 'skipped';
     chatService.sendSystemMessage(
       transactionId,
-      'Order was cancelled by the buyer. XLM has been refunded.'
+      closedUnfunded
+        ? 'Order was cancelled by the buyer. No USDC was locked, so nothing was moved on-chain.'
+        : 'Order was cancelled by the buyer. Locked funds are being returned to the locker.'
     ).catch(() => {});
 
     const fresh = await db.query(`SELECT state FROM transactions WHERE id = $1`, [transactionId]);
@@ -1329,7 +1332,9 @@ router.post('/transactions/:id/cancel', authUser, sensitiveActionLimiter, async 
 
     res.json({
       status: finalState,
-      message: 'Order cancelled. Refund is being processed.',
+      message: closedUnfunded
+        ? 'Order cancelled. You can start a new trade.'
+        : 'Order cancelled. Refund is being processed.',
       transactionId,
       refundStatus: refundResult?.status || 'pending',
     });

@@ -1352,6 +1352,13 @@ async function handleTraderUsdcDeposit({ memo, amount, sourceAccount, txHash }) 
     [paymentExpiresAt, row.tx_id]
   );
 
+  const { default: jobQueue } = await import('./jobQueue.js');
+  await jobQueue.enqueuePayoutTimeout(
+    row.tx_id,
+    row.trader_id,
+    config.platform.paymentWindowSeconds
+  );
+
   notificationService.notifyUser(row.user_id, 'usdc_locked', {
     transactionId: row.tx_id,
     state: 'ESCROW_LOCKED',
@@ -1840,19 +1847,185 @@ async function refundToUser(transactionId, { adminId = null, retry = false } = {
   }
 }
 
+const AUTO_REFUND_BLOCKED_STATES = new Set([
+  'FIAT_PAYOUT_SUBMITTED',
+  'USER_CONFIRMATION_PENDING',
+  'DISPUTE_OPENED',
+  'DISPUTE_REFUND_PENDING',
+  'DISPUTE_RELEASE_PENDING',
+  'RELEASE_BLOCKED',
+  'COMPLETE',
+  'REFUNDED',
+]);
+
+function hasOnChainEscrowFunds(tx) {
+  return !!(tx.stellar_deposit_tx || tx.stellar_swap_tx);
+}
+
+function lockerForTransaction(tx) {
+  if (tx.order_side === 'BUY') {
+    return { role: 'trader', stellar: tx.trader_stellar };
+  }
+  return { role: 'user', stellar: tx.user_stellar };
+}
+
+async function notifyOrderTerminal(tx, { state, userMessage, traderMessage }) {
+  notificationService.notifyUser(tx.user_id, 'tx_update', {
+    transactionId: tx.id,
+    id: tx.id,
+    state,
+    message: userMessage,
+  }).catch(() => {});
+  notificationService.createNotification(
+    tx.user_id,
+    'user',
+    'transaction_update',
+    state === 'REFUNDED' ? 'USDC returned' : 'Order closed',
+    userMessage,
+    tx.id
+  ).catch(() => {});
+
+  if (!tx.trader_id) return;
+
+  notificationService.notifyTraderUpdate(tx.trader_id, 'transaction_update', {
+    transactionId: tx.id,
+    id: tx.id,
+    state,
+    message: traderMessage,
+  }).catch(() => {});
+  notificationService.createNotification(
+    tx.trader_id,
+    'trader',
+    'transaction_update',
+    state === 'REFUNDED' ? 'USDC returned' : 'Order closed',
+    traderMessage,
+    tx.id
+  ).catch(() => {});
+}
+
+/**
+ * Close an order with no on-chain escrow funds. Does not move USDC/XLM.
+ * FAILED (and REFUNDED) are not active-order states, so both sides can trade again.
+ */
+async function closeExpiredUnfundedOrder(tx, reason) {
+  await releaseMatchFloatForTransaction(tx);
+
+  if (tx.state !== 'FAILED' && stateMachine.isValidTransition(tx.state, 'FAILED')) {
+    const moved = await stateMachine.transition(tx.id, tx.state, 'FAILED', {
+      failure_reason: reason,
+    });
+    if (!moved && tx.state !== 'FAILED') {
+      return { status: 'skipped', reason: 'state_changed' };
+    }
+  }
+
+  await auditLogService.log({
+    actor_role: 'system',
+    action: 'payment_window_closed_unfunded',
+    resource_type: 'transaction',
+    resource_id: tx.id,
+    new_value: { state: 'FAILED' },
+    metadata: { reason, order_side: tx.order_side, stellar_deposit_tx: tx.stellar_deposit_tx },
+  });
+
+  logger.info(`[Escrow] Closed unfunded tx ${tx.id} (${tx.order_side || 'SELL'}) — ${reason}`);
+  return { status: 'closed', moved: false, state: 'FAILED' };
+}
+
+/**
+ * Payment-window expiry for P2P:
+ *   - No USDC in escrow → close FAILED, no chain move
+ *   - USDC in escrow, other leg never marked paid → refund the locker
+ *   - Fiat/USDC already claimed sent → skip (dispute/admin)
+ */
+async function settleExpiredPaymentWindow(transactionId, reason = 'Payment window expired') {
+  const lockKey = `lock:expire-window:${transactionId}`;
+  const lockAcquired = await redis.set(lockKey, '1', 'EX', 60, 'NX');
+  if (!lockAcquired) {
+    return { status: 'skipped', reason: 'lock_held' };
+  }
+
+  try {
+    const txResult = await db.query(
+      `SELECT t.*, u.stellar_address AS user_stellar, tr.stellar_address AS trader_stellar
+       FROM transactions t
+       JOIN users u ON u.id = t.user_id
+       LEFT JOIN traders tr ON tr.id = t.trader_id
+       WHERE t.id = $1`,
+      [transactionId]
+    );
+    const tx = txResult.rows[0];
+    if (!tx) throw new Error(`Transaction ${transactionId} not found`);
+
+    if (tx.payout_provider === 'marz_pay') {
+      return { status: 'skipped', reason: 'marz_pay' };
+    }
+    if (tx.dispute_id || AUTO_REFUND_BLOCKED_STATES.has(tx.state) || tx.fiat_payout_submitted_at) {
+      return { status: 'skipped', reason: 'claimed_or_terminal' };
+    }
+    if (tx.payment_expires_at && new Date(tx.payment_expires_at) > new Date()) {
+      return { status: 'skipped', reason: 'window_open' };
+    }
+
+    if (!hasOnChainEscrowFunds(tx) && tx.order_side === 'BUY' && tx.state === 'TRADER_MATCHED' && tx.trader_id) {
+      try {
+        const synced = await syncBuyUsdcLock(tx.id, tx.trader_id);
+        if (synced?.status === 'locked' || synced?.status === 'already_locked') {
+          logger.info(`[Escrow] Buy tx ${tx.id} USDC arrived as lock window ended — not closing`);
+          return { status: 'skipped', reason: 'usdc_lock_detected' };
+        }
+      } catch (err) {
+        logger.warn(`[Escrow] Buy expire Horizon check failed for tx ${tx.id}: ${err.message}`);
+      }
+    }
+
+    if (!hasOnChainEscrowFunds(tx)) {
+      const closed = await closeExpiredUnfundedOrder(tx, reason);
+      if (closed.status === 'closed') {
+        await notifyOrderTerminal(tx, {
+          state: 'FAILED',
+          userMessage: 'The payment window ended before USDC was locked. No funds moved. You can start a new trade.',
+          traderMessage: 'The payment window ended before USDC was locked. No funds moved. You can take a new order.',
+        });
+      }
+      return closed;
+    }
+
+    const refundResult = await refundOrphanTransaction(transactionId, reason);
+    if (refundResult.status === 'refunded') {
+      const locker = lockerForTransaction(tx);
+      await notifyOrderTerminal(tx, {
+        state: 'REFUNDED',
+        userMessage: locker.role === 'user'
+          ? 'The payment window ended. Your USDC was returned. You can start a new trade.'
+          : 'The payment window ended. The trader’s USDC was returned. You can start a new trade.',
+        traderMessage: locker.role === 'trader'
+          ? 'The payment window ended. Your USDC was returned to your Stellar wallet. You can take a new order.'
+          : 'The payment window ended. The buyer’s USDC was returned. You can take a new order.',
+      });
+    }
+    return refundResult;
+  } finally {
+    await redis.del(lockKey);
+  }
+}
+
 /**
  * [PHASE 2H] Orphan / auto-refund handler.
  * Branching:
  *   1. Post-swap (XLM deposit → USDC held, stellar_swap_tx set) → USDC→XLM path payment
- *   2. USDC-native cash-out (usdc_amount > 0, no swap) → direct USDC payment
- *   3. Pre-swap XLM deposit (xlm_amount > 0) → direct XLM payment
+ *   2. USDC-native (stellar_deposit_tx set) → return USDC to the locker
+ *      (user on sell/cash-out, trader on buy)
+ *   3. Pre-swap XLM deposit → direct XLM payment
+ *   4. No on-chain lock → close FAILED (do not send quote usdc_amount from escrow)
  * Does NOT mark REFUNDED unless on-chain refund succeeds.
  */
 async function refundOrphanTransaction(transactionId, reason) {
   const txResult = await db.query(
-    `SELECT t.*, u.stellar_address AS user_stellar
+    `SELECT t.*, u.stellar_address AS user_stellar, tr.stellar_address AS trader_stellar
      FROM transactions t
      JOIN users u ON u.id = t.user_id
+     LEFT JOIN traders tr ON tr.id = t.trader_id
      WHERE t.id = $1`,
     [transactionId]
   );
@@ -1871,21 +2044,29 @@ async function refundOrphanTransaction(transactionId, reason) {
   if (tx.dispute_id) {
     return { status: 'skipped', reason: 'dispute_open' };
   }
+  if (tx.fiat_payout_submitted_at || AUTO_REFUND_BLOCKED_STATES.has(tx.state)) {
+    return { status: 'skipped', reason: 'claimed_or_terminal' };
+  }
 
   await releaseMatchFloatForTransaction(tx);
+
+  if (!hasOnChainEscrowFunds(tx)) {
+    return closeExpiredUnfundedOrder(tx, reason);
+  }
 
   const usdcDecimal = Number(tx.usdc_amount);
   const xlmDecimal = Number(tx.xlm_amount);
   const hasSwap = !!(tx.stellar_swap_tx);
+  const locker = lockerForTransaction(tx);
 
   // Legacy path: user deposited XLM, escrow swapped to USDC — return XLM via path payment
   if (hasSwap && Number.isFinite(usdcDecimal) && usdcDecimal > 0) {
     return refundOrphanPostSwap(tx, reason);
   }
 
-  // USDC-native cash-out: user deposited USDC (xlm_amount is typically 0)
-  if (Number.isFinite(usdcDecimal) && usdcDecimal > 0) {
-    return refundOrphanUsdc(tx, reason);
+  // USDC in escrow: return to whoever locked it
+  if (tx.stellar_deposit_tx && Number.isFinite(usdcDecimal) && usdcDecimal > 0) {
+    return refundOrphanUsdc(tx, reason, locker.stellar, locker.role);
   }
 
   // Pre-swap: user deposited XLM, never swapped
@@ -1999,10 +2180,11 @@ async function refundOrphanPostSwap(tx, reason) {
 }
 
 /**
- * Direct USDC refund for native USDC cash-outs (no XLM deposit / swap).
- * Mirrors dispute refundToUser asset choice; records REFUNDED only after submit.
+ * Direct USDC refund for native USDC cash-outs / buy locks (no XLM swap).
+ * Destination is the locker: user on sell, trader on buy.
+ * Records REFUNDED only after submit.
  */
-async function refundOrphanUsdc(tx, reason) {
+async function refundOrphanUsdc(tx, reason, destinationStellar = tx.user_stellar, lockerRole = 'user') {
   const usdcDecimal = Number(tx.usdc_amount);
   if (!Number.isFinite(usdcDecimal) || usdcDecimal <= 0) {
     await auditLogService.log({
@@ -2015,9 +2197,10 @@ async function refundOrphanUsdc(tx, reason) {
     return { status: 'failed', code: 'INVALID_USDC_AMOUNT' };
   }
 
-  if (!tx.user_stellar) {
+  if (!destinationStellar) {
+    const code = lockerRole === 'trader' ? 'TRADER_MISSING_STELLAR_ADDRESS' : 'USER_MISSING_STELLAR_ADDRESS';
     await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [
-      'ORPHAN_USDC_REFUND_BLOCKED: USER_MISSING_STELLAR_ADDRESS',
+      `ORPHAN_USDC_REFUND_BLOCKED: ${code}`,
       tx.id,
     ]);
     await auditLogService.log({
@@ -2025,15 +2208,16 @@ async function refundOrphanUsdc(tx, reason) {
       action: 'orphan_refund_failed',
       resource_type: 'transaction',
       resource_id: tx.id,
-      metadata: { reason, code: 'USER_MISSING_STELLAR_ADDRESS', asset: 'USDC' },
+      metadata: { reason, code, asset: 'USDC', locker: lockerRole },
     });
-    return { status: 'blocked', code: 'USER_MISSING_STELLAR_ADDRESS' };
+    return { status: 'blocked', code };
   }
 
-  const hasTrustline = await userHasUsdcTrustline(tx.user_stellar);
+  const hasTrustline = await userHasUsdcTrustline(destinationStellar);
   if (!hasTrustline) {
+    const code = lockerRole === 'trader' ? 'TRADER_MISSING_USDC_TRUSTLINE' : 'USER_MISSING_USDC_TRUSTLINE';
     await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [
-      'ORPHAN_USDC_REFUND_BLOCKED: USER_MISSING_USDC_TRUSTLINE',
+      `ORPHAN_USDC_REFUND_BLOCKED: ${code}`,
       tx.id,
     ]);
     await auditLogService.log({
@@ -2043,19 +2227,20 @@ async function refundOrphanUsdc(tx, reason) {
       resource_id: tx.id,
       metadata: {
         reason,
-        code: 'USER_MISSING_USDC_TRUSTLINE',
+        code,
         asset: 'USDC',
-        user_stellar: tx.user_stellar,
+        locker: lockerRole,
+        destination_stellar: destinationStellar,
       },
     });
     logger.warn(
-      `[Escrow] Orphan USDC refund blocked for tx ${tx.id}: no USDC trustline on ${tx.user_stellar}`
+      `[Escrow] Orphan USDC refund blocked for tx ${tx.id}: no USDC trustline on ${destinationStellar}`
     );
-    return { status: 'blocked', code: 'USER_MISSING_USDC_TRUSTLINE' };
+    return { status: 'blocked', code };
   }
 
   try {
-    const refundHash = await refundUsdc(tx.user_stellar, usdcDecimal, reason);
+    const refundHash = await refundUsdc(destinationStellar, usdcDecimal, reason);
     if (stateMachine.isValidTransition(tx.state, 'REFUNDED')) {
       await stateMachine.transition(tx.id, tx.state, 'REFUNDED', {
         stellar_refund_tx: refundHash,
@@ -2075,9 +2260,15 @@ async function refundOrphanUsdc(tx, reason) {
       resource_type: 'transaction',
       resource_id: tx.id,
       new_value: { state: 'REFUNDED', stellar_refund_tx: refundHash },
-      metadata: { reason, usdc_amount: usdcDecimal, asset: 'USDC' },
+      metadata: {
+        reason,
+        usdc_amount: usdcDecimal,
+        asset: 'USDC',
+        locker: lockerRole,
+        destination_stellar: destinationStellar,
+      },
     });
-    return { status: 'refunded', refundHash, asset: 'USDC' };
+    return { status: 'refunded', refundHash, asset: 'USDC', locker: lockerRole };
   } catch (err) {
     logger.error(`[Escrow] Orphan USDC refund failed for tx ${tx.id}:`, err.message);
     await db.query(`UPDATE transactions SET refund_error = $1 WHERE id = $2`, [
@@ -2369,6 +2560,7 @@ export default {
   refundUsdc,
   refundToUser,
   refundOrphanTransaction,
+  settleExpiredPaymentWindow,
   releaseMatchFloatForTransaction,
   restoreTraderFloat,
 };

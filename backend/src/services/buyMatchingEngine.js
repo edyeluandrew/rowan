@@ -210,6 +210,13 @@ async function acceptBuyRequest(transactionId, traderId) {
       [lockExpiresAt, transactionId]
     );
 
+    const { default: jobQueue } = await import('./jobQueue.js');
+    await jobQueue.enqueuePayoutTimeout(
+      transactionId,
+      traderId,
+      config.platform.paymentWindowSeconds
+    );
+
     const chatService = await getChatService();
     chatService.sendSystemMessage(
       transactionId,

@@ -369,14 +369,27 @@ async function handlePayoutTimeout(transactionId, traderId) {
   );
   const tx = result.rows[0];
   if (!tx) return;
-  if (tx.state !== 'TRADER_MATCHED' || tx.trader_id !== traderId) return;
-  if (!tx.matched_at || tx.fiat_payout_submitted_at) return;
+  if (tx.trader_id !== traderId) return;
+  if (tx.fiat_payout_submitted_at) return;
+
+  const escrowController = await getEscrowController();
+
+  // Buy: countdown end closes the order. No rematch. Refund trader if they locked USDC.
+  if (tx.order_side === 'BUY') {
+    const buyStates = new Set(['TRADER_MATCHED', 'ESCROW_LOCKED']);
+    if (!buyStates.has(tx.state)) return;
+    const reason = 'Payment window expired';
+    logger.warn(`[Job:rematch] Buy payment window expired for tx ${transactionId} (state=${tx.state}) — settling`);
+    await escrowController.settleExpiredPaymentWindow(transactionId, reason);
+    return;
+  }
+
+  if (tx.state !== 'TRADER_MATCHED') return;
+  if (!tx.matched_at) return;
 
   const maxAttempts = config.platform.traderRematchMaxAttempts;
   const countKey = REMATCH_COUNT_KEY(transactionId);
   const attemptCount = parseInt(await redis.get(countKey) || '0', 10);
-
-  const escrowController = await getEscrowController();
 
   if (attemptCount >= maxAttempts) {
     const reason = tx.preferred_payout_setting_id
@@ -467,7 +480,12 @@ async function scanPayoutTimeouts() {
      WHERE t.state = 'TRADER_MATCHED'
        AND t.matched_at IS NOT NULL
        AND t.fiat_payout_submitted_at IS NULL
-       AND t.matched_at < NOW() - INTERVAL '1 second' * $1`,
+       AND t.dispute_id IS NULL
+       AND COALESCE(t.payout_provider, '') <> 'marz_pay'
+       AND (
+         (t.payment_expires_at IS NOT NULL AND t.payment_expires_at < NOW())
+         OR (t.payment_expires_at IS NULL AND t.matched_at < NOW() - INTERVAL '1 second' * $1)
+       )`,
     [payoutTimeoutSeconds]
   );
   for (const row of stuck.rows) {
@@ -477,7 +495,28 @@ async function scanPayoutTimeouts() {
       logger.error(`[Job:payout-timeout-scan] Failed for tx ${row.id}:`, err.message);
     }
   }
-  return { scanned: stuck.rows.length };
+
+  const expiredBuyLocks = await db.query(
+    `SELECT t.id, t.trader_id
+     FROM transactions t
+     WHERE t.order_side = 'BUY'
+       AND t.state = 'ESCROW_LOCKED'
+       AND t.stellar_deposit_tx IS NOT NULL
+       AND t.fiat_payout_submitted_at IS NULL
+       AND t.dispute_id IS NULL
+       AND COALESCE(t.payout_provider, '') <> 'marz_pay'
+       AND t.payment_expires_at IS NOT NULL
+       AND t.payment_expires_at < NOW()`
+  );
+  for (const row of expiredBuyLocks.rows) {
+    try {
+      await handlePayoutTimeout(row.id, row.trader_id);
+    } catch (err) {
+      logger.error(`[Job:payout-timeout-scan] Failed buy-lock expire for tx ${row.id}:`, err.message);
+    }
+  }
+
+  return { scanned: stuck.rows.length, buyLocks: expiredBuyLocks.rows.length };
 }
 
 reMatchQueue.on('failed', (job, err) => {
@@ -559,12 +598,22 @@ orphanRecoveryQueue.process(async () => {
   for (const tx of stuckMatched.rows) {
     logger.warn(`[Job:orphan-recovery] TRADER_MATCHED orphan: tx ${tx.id} — unassigning and re-matching`);
     await escrowController.releaseMatchFloatForTransaction(tx);
-    await db.query(
-      `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL, payment_expires_at = NULL
-       WHERE id = $1 AND state = 'TRADER_MATCHED'`,
-      [tx.id]
-    );
-    await matchingEngine.matchTrader(tx.id);
+    if (tx.order_side === 'BUY') {
+      await db.query(
+        `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, trader_matched_at = NULL, payment_expires_at = NULL
+         WHERE id = $1 AND state = 'TRADER_MATCHED' AND order_side = 'BUY' AND matched_at IS NULL`,
+        [tx.id]
+      );
+      const { default: buyMatchingEngine } = await import('./buyMatchingEngine.js');
+      await buyMatchingEngine.matchBuyTrader(tx.id);
+    } else {
+      await db.query(
+        `UPDATE transactions SET trader_id = NULL, payout_setting_id = NULL, state = 'ESCROW_LOCKED', trader_matched_at = NULL, payment_expires_at = NULL
+         WHERE id = $1 AND state = 'TRADER_MATCHED'`,
+        [tx.id]
+      );
+      await matchingEngine.matchTrader(tx.id);
+    }
   }
 
   // 5. TRADER_MATCHED, accepted, but no MoMo payout → payout timeout re-match / refund
@@ -575,7 +624,12 @@ orphanRecoveryQueue.process(async () => {
      WHERE t.state = 'TRADER_MATCHED'
        AND t.matched_at IS NOT NULL
        AND t.fiat_payout_submitted_at IS NULL
-       AND t.matched_at < NOW() - INTERVAL '1 second' * $1`,
+       AND t.dispute_id IS NULL
+       AND COALESCE(t.payout_provider, '') <> 'marz_pay'
+       AND (
+         (t.payment_expires_at IS NOT NULL AND t.payment_expires_at < NOW())
+         OR (t.payment_expires_at IS NULL AND t.matched_at < NOW() - INTERVAL '1 second' * $1)
+       )`,
     [payoutTimeoutSeconds]
   );
   for (const tx of stuckPayout.rows) {
@@ -603,10 +657,19 @@ orphanRecoveryQueue.process(async () => {
     try {
       const result = await escrowController.refundOrphanTransaction(
         tx.id,
-        'Auto-refund: no trader available after swap'
+        tx.order_side === 'BUY'
+          ? 'Order closed: no trader available'
+          : 'Auto-refund: no trader available after swap'
       );
       if (result.status === 'refunded') {
         await notificationService.notifyRefund(tx.user_id, tx, 'No trader available — funds returned');
+      } else if (result.status === 'closed') {
+        await notificationService.notifyUser(tx.user_id, 'tx_update', {
+          transactionId: tx.id,
+          id: tx.id,
+          state: 'FAILED',
+          message: 'No trader was available. The order closed and no funds moved.',
+        });
       }
     } catch (err) {
       logger.error(`[Job:orphan-recovery] Refund failed for tx ${tx.id}:`, err.message);
@@ -621,6 +684,7 @@ orphanRecoveryQueue.process(async () => {
      JOIN users u ON u.id = t.user_id
      WHERE t.state = 'ESCROW_LOCKED'
        AND t.trader_id IS NULL
+       AND (t.order_side IS NULL OR t.order_side <> 'BUY')
        AND t.escrow_locked_at < NOW() - INTERVAL '1 minute' * $1`,
     [escrowStaleMinutes]
   );
@@ -658,8 +722,10 @@ const payoutTimeoutScanQueue = new Queue('payout-timeout-scan', defaultOpts);
 
 payoutTimeoutScanQueue.process(async () => {
   const result = await scanPayoutTimeouts();
-  if (result.scanned > 0) {
-    logger.info(`[Job:payout-timeout-scan] Handled ${result.scanned} stuck payout(s)`);
+  if (result.scanned > 0 || result.buyLocks > 0) {
+    logger.info(
+      `[Job:payout-timeout-scan] Handled ${result.scanned} stuck payout(s), ${result.buyLocks} expired buy lock(s)`
+    );
   }
   return result;
 });
