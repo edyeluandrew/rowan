@@ -34,6 +34,7 @@ export default function useTraderWallet() {
   const [usdcBalance, setUsdcBalance] = useState(null)
   const [hasUsdcTrustline, setHasUsdcTrustline] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [profileSyncing, setProfileSyncing] = useState(true)
   const [activeAction, setActiveAction] = useState(null)
   const [error, setError] = useState(null)
   const provisionAttempted = useRef(null)
@@ -142,30 +143,35 @@ export default function useTraderWallet() {
   const ensureWallet = useCallback(async () => {
     if (ensurePromise.current) return ensurePromise.current
     ensurePromise.current = (async () => {
-      const existing = await loadStoredKeypair()
-      if (existing?.secretKey && existing?.publicKey) {
-        try {
-          await syncLinkedAddress(existing.publicKey)
-        } catch {
-          /* 409 if another trader owns it — UI can still import */
+      setProfileSyncing(true)
+      try {
+        const existing = await loadStoredKeypair()
+        if (existing?.secretKey && existing?.publicKey) {
+          try {
+            await syncLinkedAddress(existing.publicKey)
+          } catch {
+            try {
+              const data = await getWallet()
+              if (data?.stellar_address) setLinkedAddress(data.stellar_address)
+            } catch {
+              /* profile fetch is optional */
+            }
+          }
+          setKeypair(existing)
+          await refresh()
+          return existing
         }
-        setKeypair(existing)
-        await refresh()
-        try {
-          const data = await getWallet()
-          if (data?.stellar_address) setLinkedAddress(data.stellar_address)
-        } catch {
-          /* profile fetch is optional */
-        }
-        return existing
+        const kp = generateKeypair()
+        return persistAndFundWallet(kp)
+      } finally {
+        setProfileSyncing(false)
       }
-      const kp = generateKeypair()
-      return persistAndFundWallet(kp)
     })()
     try {
       return await ensurePromise.current
     } catch (err) {
       ensurePromise.current = null
+      setProfileSyncing(false)
       throw err
     }
   }, [loadStoredKeypair, persistAndFundWallet, refresh, syncLinkedAddress])
@@ -290,6 +296,7 @@ export default function useTraderWallet() {
     usdcBalance,
     hasUsdcTrustline,
     loading,
+    profileSyncing,
     activeAction,
     isActionBusy,
     busy: !!activeAction,

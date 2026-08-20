@@ -10,27 +10,37 @@ import { verifyWalletAddress } from '../../api/wallet';
  */
 export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked, autoSend = false }) {
   const navigate = useNavigate();
-  const { keypair, publicKey, usdcBalance, isReady, refresh, setLinkedAddress, ensureWallet } = useTraderWallet();
+  const { keypair, publicKey, usdcBalance, isReady, refresh, setLinkedAddress, ensureWallet, linkedAddress, profileSyncing } = useTraderWallet();
   const [sending, setSending] = useState(false);
   const [linking, setLinking] = useState(false);
   const autoSent = useRef(false);
+  const autoLinked = useRef(false);
   const escrowAddress = tx?.escrow_address || '';
   const memo = tx?.escrow_memo || '';
   const usdcAmount = Number(tx?.usdc_amount || 0);
   const profileAddress = tx?.trader_stellar_address || tx?.stellar_address || '';
-  const addressMismatch = !!(keypair?.publicKey && profileAddress && keypair.publicKey !== profileAddress);
+  const profileLinked = !!(publicKey && linkedAddress === publicKey);
+  const addressMismatch = !!(
+    !profileSyncing &&
+    keypair?.publicKey &&
+    profileAddress &&
+    keypair.publicKey !== profileAddress &&
+    !profileLinked
+  );
   const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL;
-  const canSend = isReady && !addressMismatch && Number(usdcBalance || 0) >= usdcAmount && !!escrowAddress && !!memo;
+  const canSend = isReady && !profileSyncing && !addressMismatch && Number(usdcBalance || 0) >= usdcAmount && !!escrowAddress && !!memo;
 
   const handleLinkThisWallet = async () => {
-    if (!keypair?.publicKey) return;
+    if (!keypair?.publicKey) return false;
     try {
       setLinking(true);
       await verifyWalletAddress(keypair.publicKey);
       setLinkedAddress(keypair.publicKey);
       await onProfileLinked?.();
+      return true;
     } catch (err) {
       onError?.(err.response?.data?.error || err.message || 'Could not link this wallet');
+      return false;
     } finally {
       setLinking(false);
     }
@@ -58,9 +68,8 @@ export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked,
       return;
     }
     if (addressMismatch) {
-      await handleLinkThisWallet();
-      onError?.('Linked this phone wallet. Tap Lock USDC again.');
-      return;
+      const linked = await handleLinkThisWallet();
+      if (!linked) return;
     }
     if (Number(usdcBalance || 0) < usdcAmount) {
       onError?.(`Need ${usdcAmount.toFixed(4)} USDC (you have ${Number(usdcBalance || 0).toFixed(4)}). Swap XLM → USDC in Rowan Wallet.`);
@@ -94,6 +103,14 @@ export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked,
   };
 
   useEffect(() => {
+    if (autoLinked.current || linking || profileSyncing || !keypair?.publicKey || profileLinked) return;
+    if (!profileAddress || profileAddress === keypair.publicKey) return;
+    autoLinked.current = true;
+    handleLinkThisWallet();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keypair?.publicKey, profileAddress, profileLinked, linking, profileSyncing]);
+
+  useEffect(() => {
     if (!autoSend || autoSent.current || sending || !canSend) return;
     autoSent.current = true;
     handleSend();
@@ -120,7 +137,11 @@ export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked,
         </p>
       </div>
 
-      {addressMismatch && (
+      {(profileSyncing || linking) && !profileLinked && (
+        <p className="text-rowan-muted text-xs text-center">Linking this phone wallet…</p>
+      )}
+
+      {addressMismatch && !linking && (
         <div className="bg-rowan-red/10 border border-rowan-red/30 rounded-lg p-3 space-y-2">
           <p className="text-rowan-red text-xs">This phone wallet is not linked yet.</p>
           <Button loading={linking} size="sm" className="w-full" onClick={handleLinkThisWallet}>
@@ -129,7 +150,12 @@ export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked,
         </div>
       )}
 
-      <Button loading={sending} size="lg" onClick={handleSend} disabled={sending || !isReady || addressMismatch}>
+      <Button
+        loading={sending || linking || profileSyncing}
+        size="lg"
+        onClick={handleSend}
+        disabled={sending || linking || profileSyncing || !isReady}
+      >
         Lock {usdcAmount.toFixed(4)} USDC
       </Button>
 
