@@ -37,6 +37,7 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(null);         // 'user' | 'trader'
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionLocked, setSessionLocked] = useState(false);
 
   /* ── Warm up SecureStoragePlugin in background on app start (don't wait) ── */
   useEffect(() => {
@@ -52,6 +53,7 @@ export function AuthProvider({ children }) {
       setKeypair(null);
       setRole(null);
       setIsAuthenticated(false);
+      setSessionLocked(false);
     });
   }, []);
 
@@ -153,6 +155,7 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: account });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    setSessionLocked(false);
     await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
     return data;
   }, []);
@@ -202,8 +205,13 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: account });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    setSessionLocked(false);
     await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
     return data;
+  }, []);
+
+  const lockSession = useCallback(() => {
+    setSessionLocked(true);
   }, []);
 
   /* ═══════════════════════════════════════════════════════
@@ -271,6 +279,7 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: keypair?.publicKey });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    setSessionLocked(false);
     await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
   }, []);
 
@@ -297,6 +306,7 @@ export function AuthProvider({ children }) {
     setKeypair(null);
     setRole(null);
     setIsAuthenticated(false);
+    setSessionLocked(false);
   }, [role]);
 
   return (
@@ -310,6 +320,8 @@ export function AuthProvider({ children }) {
         role,
         isAuthenticated,
         isLoading,
+        sessionLocked,
+        lockSession,
         // Wallet auth
         registerWithWallet,
         loginWithWallet,

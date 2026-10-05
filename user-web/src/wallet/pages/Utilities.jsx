@@ -24,7 +24,7 @@ import UsdcTrustlineSetup from '../components/wallet/UsdcTrustlineSetup'
 
 const UTILITY_META = {
   airtime: {
-    subtitle: 'Pay with USDC — instant top-up',
+    subtitle: 'Pay with USDC. Instant top up',
     phoneHint: 'Phone number that receives the airtime credit',
     minLabel: 'Minimum airtime',
     maxLabel: 'Maximum airtime',
@@ -33,7 +33,7 @@ const UTILITY_META = {
     Icon: Signal,
   },
   data: {
-    subtitle: 'Pick a data plan — pay with USDC',
+    subtitle: 'Pick a data plan and pay with USDC',
     phoneHint: 'Phone number that receives the data bundle',
     minLabel: 'Minimum bundle',
     maxLabel: 'Maximum bundle',

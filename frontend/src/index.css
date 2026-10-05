@@ -3,5 +3,5 @@
 @tailwind utilities;
 
 * { -webkit-tap-highlight-color: transparent; }
-body { @apply bg-rowan-bg; margin: 0; }
+body { @apply bg-rowan-bg text-rowan-text; margin: 0; }
 

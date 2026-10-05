@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Fingerprint, ScanFace, ShieldCheck, Clock, CheckCircle, AlertCircle } from 'lucide-react'
-import useBiometrics from '../hooks/useBiometrics'
+import useBiometrics, { biometricLabel } from '../hooks/useBiometrics'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import Toggle from '../components/ui/Toggle'
 
@@ -20,7 +20,7 @@ export default function BiometricSetup() {
   const [selectedTimeout, setSelectedTimeout] = useState(timeout)
   const [statusMessage, setStatusMessage] = useState(null)
 
-  const biometricLabel = biometricType === 'FACE_ID' ? 'Face ID' : 'Fingerprint'
+  const label = biometricLabel(biometricType)
   const BiometricIcon = biometricType === 'FACE_ID' ? ScanFace : Fingerprint
   const isEnabled = lockRequired
 
@@ -36,12 +36,12 @@ export default function BiometricSetup() {
       if (!nextEnabled) {
         await disable()
         await disableLock()
-        setStatusMessage({ type: 'success', text: `${biometricLabel} unlock disabled` })
+        setStatusMessage({ type: 'success', text: `${label} unlock disabled` })
       } else {
         const verified = await enable()
         if (verified) {
           await enableLock(selectedTimeout)
-          setStatusMessage({ type: 'success', text: `${biometricLabel} unlock enabled` })
+          setStatusMessage({ type: 'success', text: `${label} unlock enabled` })
         } else {
           setStatusMessage({ type: 'error', text: 'Biometric verification cancelled' })
         }
@@ -112,7 +112,7 @@ export default function BiometricSetup() {
               <BiometricIcon size={20} className="text-rowan-yellow" />
               <div>
                 <p className="text-rowan-text text-sm font-medium">
-                  {biometricLabel} Unlock
+                  {label} Unlock
                 </p>
                 <p className="text-rowan-muted text-xs">
                   {isEnabled ? 'Enabled' : 'Disabled'}

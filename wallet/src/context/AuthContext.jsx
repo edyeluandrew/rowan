@@ -90,7 +90,7 @@ export function AuthProvider({ children }) {
       setIsAuthenticated(true)
       return result
     } catch (err) {
-      if (err.message?.includes('409') || err.message?.toLowerCase().includes('conflict')) {
+      if (err.status === 409 || /already registered/i.test(err.message || '')) {
         return loginWithWallet()
       }
       throw err

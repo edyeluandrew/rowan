@@ -31,7 +31,7 @@ export default function LegalDoc() {
 
   return (
     <main className="min-h-[100dvh] bg-rowan-bg text-rowan-text">
-      <header className="border-b border-rowan-border/70 bg-white/80">
+      <header className="border-b border-rowan-border/70 bg-rowan-bg/95">
         <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-5 py-3.5 sm:px-8">
           <Link
             to={home}

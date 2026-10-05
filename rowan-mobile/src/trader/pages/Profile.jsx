@@ -200,7 +200,7 @@ export default function Profile() {
             }`}
           >
             <div
-              className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform ${
+              className={`w-5 h-5 rounded-full bg-[#FFFFFF] absolute top-0.5 transition-transform ${
                 soundEnabled ? 'translate-x-5' : 'translate-x-0.5'
               }`}
             />
@@ -216,7 +216,7 @@ export default function Profile() {
             }`}
           >
             <div
-              className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform ${
+              className={`w-5 h-5 rounded-full bg-[#FFFFFF] absolute top-0.5 transition-transform ${
                 vibrationEnabled ? 'translate-x-5' : 'translate-x-0.5'
               }`}
             />

@@ -1,7 +1,7 @@
-import { ArrowDownToLine } from 'lucide-react'
+import { sanitizeAmount } from '../../utils/sanitizeAmount'
 
 /**
- * Fiat-first amount input with live crypto estimate below.
+ * Boxed amount field. Letters are ignored. A live estimate sits under the box.
  */
 export default function AmountInput({
   fiatAmount,
@@ -14,45 +14,48 @@ export default function AmountInput({
   platformFeeFiat,
   feeHint,
   maxFiat: _maxFiat,
+  label = 'Amount',
 }) {
   const handleChange = (e) => {
-    const val = e.target.value
-    if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
-      onFiatAmountChange(val)
-    }
+    onFiatAmountChange(sanitizeAmount(e.target.value, { decimals: 2 }))
   }
 
   const estimate = cryptoEstimate ?? xlmEstimate
-  const estimateDecimals = 4
-  const fiatCaption = fiatSubLabel ?? (currency || 'UGX')
+  const unit = fiatSubLabel || currency || 'UGX'
   const estimateCaption = cryptoEstimate != null ? cryptoLabel : 'USDC'
 
   return (
-    <div className="py-4">
-      <div className="text-center">
+    <div>
+      <label htmlFor="rowan-amount" className="mb-2 block text-xs font-medium uppercase tracking-wider text-rowan-muted">
+        {label}
+      </label>
+      <div className="flex min-h-14 items-center rounded-2xl border border-rowan-border bg-rowan-surface focus-within:border-rowan-yellow">
         <input
+          id="rowan-amount"
           type="text"
           inputMode="decimal"
+          autoComplete="off"
+          enterKeyHint="done"
           value={fiatAmount}
           onChange={handleChange}
           placeholder="0"
-          className="bg-transparent text-rowan-text text-5xl font-bold tabular-nums text-center w-full focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent px-4 py-3.5 text-2xl font-semibold tabular-nums text-rowan-text outline-none placeholder:text-rowan-muted/40"
         />
-        <p className="text-rowan-muted text-sm mt-1">{fiatCaption}</p>
+        <span className="pr-4 text-sm font-semibold text-rowan-muted">{unit}</span>
       </div>
 
-      <ArrowDownToLine size={20} className="text-rowan-muted mx-auto my-3" />
+      <p className="mt-3 text-sm text-rowan-muted">
+        About{' '}
+        <span className="font-semibold tabular-nums text-rowan-text">
+          {estimate > 0 ? Number(estimate).toFixed(4) : '—'}
+        </span>
+        {' '}{estimateCaption}
+      </p>
 
-      <div className="text-center">
-        <p className="text-rowan-yellow text-2xl font-bold tabular-nums">
-          {estimate > 0 ? Number(estimate).toFixed(estimateDecimals) : '—'}
-        </p>
-        <p className="text-rowan-muted text-sm">{estimateCaption}</p>
-      </div>
       {feeHint ? (
-        <p className="text-rowan-muted text-xs mt-3 text-center">{feeHint}</p>
+        <p className="mt-1 text-xs text-rowan-muted">{feeHint}</p>
       ) : Number(platformFeeFiat) > 0 && currency ? (
-        <p className="text-rowan-muted text-xs mt-3 text-center">
+        <p className="mt-1 text-xs text-rowan-muted">
           Rowan fee {Number(platformFeeFiat).toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}
         </p>
       ) : null}

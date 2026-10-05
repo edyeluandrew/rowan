@@ -321,7 +321,7 @@ function ToggleRow({ icon, label, enabled, onToggle }) {
         }`}
       >
         <span
-          className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+          className={`absolute top-0.5 w-5 h-5 rounded-full bg-[#FFFFFF] transition-transform ${
             enabled ? 'left-[22px]' : 'left-0.5'
           }`}
         />

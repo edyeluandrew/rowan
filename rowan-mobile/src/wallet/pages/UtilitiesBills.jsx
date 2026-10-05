@@ -246,7 +246,7 @@ export default function UtilitiesBills() {
   return (
     <div className="px-4 pb-8">
       <p className="text-rowan-muted text-xs mb-4">
-        Pay UMEME, water, and TV with USDC
+        Yaka electricity, water, TV, and the other bills available here
       </p>
 
       <UsdcTrustlineSetup compact />

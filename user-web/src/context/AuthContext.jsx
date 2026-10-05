@@ -24,6 +24,7 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionLocked, setSessionLocked] = useState(false);
 
   useEffect(() => {
     initStorage();
@@ -36,6 +37,7 @@ export function AuthProvider({ children }) {
       setKeypair(null);
       setRole(null);
       setIsAuthenticated(false);
+      setSessionLocked(false);
     });
   }, []);
 
@@ -107,6 +109,7 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: account });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    setSessionLocked(false);
     await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
     return data;
   }, []);
@@ -145,8 +148,13 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: account });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    setSessionLocked(false);
     await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
     return data;
+  }, []);
+
+  const lockSession = useCallback(() => {
+    setSessionLocked(true);
   }, []);
 
   const setWalletAuthAfter2FA = useCallback(async (nextToken, nextUser, nextKeypair) => {
@@ -161,6 +169,7 @@ export function AuthProvider({ children }) {
     setKeypair({ publicKey: nextKeypair?.publicKey });
     setRole(ROLE_WALLET);
     setIsAuthenticated(true);
+    setSessionLocked(false);
     await setPreference(WALLET_LAST_ACTIVE_KEY, String(Date.now()));
   }, []);
 
@@ -178,6 +187,7 @@ export function AuthProvider({ children }) {
     setKeypair(null);
     setRole(null);
     setIsAuthenticated(false);
+    setSessionLocked(false);
   }, []);
 
   return (
@@ -190,6 +200,8 @@ export function AuthProvider({ children }) {
         role,
         isAuthenticated,
         isLoading,
+        sessionLocked,
+        lockSession,
         registerWithWallet,
         loginWithWallet,
         setWalletAuthAfter2FA,

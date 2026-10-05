@@ -3,16 +3,23 @@ import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, Eye, EyeOff, TriangleAlert } from 'lucide-react'
 import { isValidSecretKey, keypairFromSecret, fundTestUsdcWallet } from '../utils/stellar'
 import { CURRENT_NETWORK } from '../utils/constants'
-import { setSecure } from '../utils/storage'
+import { getSecure, setSecure } from '../utils/storage'
+import { useAuth } from '../context/AuthContext'
+import { isMissingWalletAccount } from '../utils/apiErrors'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import WalletTwoFactorLoginModal from './WalletTwoFactorLoginModal'
 
 export default function ImportWallet() {
   const navigate = useNavigate()
+  const { loginWithWallet, setWalletAuthAfter2FA } = useAuth()
   const [secret, setSecret] = useState('')
   const [show, setShow] = useState(false)
   const [touched, setTouched] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [show2faModal, setShow2faModal] = useState(false)
+  const [tempUserId, setTempUserId] = useState(null)
 
   const valid = isValidSecretKey(secret)
 
@@ -22,6 +29,7 @@ export default function ImportWallet() {
   const handleImport = async () => {
     if (!valid) return
     setLoading(true)
+    setError(null)
     try {
       const kp = keypairFromSecret(secret)
       const keypairData = {
@@ -41,9 +49,39 @@ export default function ImportWallet() {
           /* can retry from Home */
         }
       }
-      navigate('/register')
-    } catch {
-      /* import failed — invalid key */
+      const response = await loginWithWallet()
+      if (response?.requiresTwoFactorVerification === true) {
+        setTempUserId(response.userId)
+        setShow2faModal(true)
+        setLoading(false)
+        return
+      }
+      navigate('/wallet/home', { replace: true })
+    } catch (err) {
+      if (isMissingWalletAccount(err)) {
+        navigate('/register', { replace: true })
+        return
+      }
+      setError(err?.message || 'Could not sign in with this wallet')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAfter2FA = async (verifyResponse) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const keypair = await getSecure('rowan_stellar_keypair')
+      const kpData = keypair ? JSON.parse(keypair) : null
+      await setWalletAuthAfter2FA(
+        verifyResponse.token,
+        verifyResponse.user || { id: tempUserId },
+        kpData,
+      )
+      navigate('/wallet/home', { replace: true })
+    } catch (err) {
+      setError(err?.message || 'Verification failed. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -78,6 +116,7 @@ export default function ImportWallet() {
       {touched && secret && !valid && (
         <p className="text-rowan-red text-xs mt-2">Invalid secret key format</p>
       )}
+      {error && <p className="text-rowan-red text-sm mt-3">{error}</p>}
 
       <div className="mt-6">
         <Button onClick={handleImport} disabled={!valid} loading={loading}>
@@ -91,6 +130,17 @@ export default function ImportWallet() {
           Your key is stored locally using hardware encryption. It is never sent to our servers
         </p>
       </div>
+
+      <WalletTwoFactorLoginModal
+        isVisible={show2faModal}
+        userId={tempUserId}
+        onSuccess={handleAfter2FA}
+        onCancel={() => {
+          setShow2faModal(false)
+          setTempUserId(null)
+          setError('Authentication cancelled. Please try again.')
+        }}
+      />
     </div>
   )
 }

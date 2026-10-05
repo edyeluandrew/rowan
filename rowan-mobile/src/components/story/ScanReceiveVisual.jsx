@@ -13,7 +13,7 @@ export default function ScanReceiveVisual() {
         {/* QR being scanned */}
         <div className="rounded-3xl bg-rowan-surface border border-rowan-border p-3.5 shadow-sm">
           <div className="relative mx-auto w-[136px]">
-            <div className="ob-scan-frame rounded-2xl bg-white p-2.5">
+            <div className="ob-scan-frame rounded-2xl bg-[#FFFFFF] p-2.5">
               <QRCode
                 value={DEMO_ADDRESS}
                 size={116}

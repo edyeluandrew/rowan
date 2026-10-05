@@ -92,7 +92,7 @@ export const API_TIMEOUT = 30000
 export const OTP_COOLDOWN_SECONDS = 60
 export const ESTIMATED_DELIVERY = 'Under 5 minutes'
 export const COPY_FEEDBACK_TIMEOUT_MS = 2000
-/** Sign the user out of the API session after this much idle time. Keys stay on device. */
+/** Pause the session after this much idle time and ask the person to sign in again. Keys stay on device. */
 export const WALLET_IDLE_TIMEOUT_MS = 5 * 60 * 1000
 export const WALLET_LAST_ACTIVE_KEY = 'rowan_wallet_last_active'
 export const WALLET_GEN_DELAY_MS = 1500
@@ -100,9 +100,9 @@ export const CLIPBOARD_AUTO_CLEAR_MS = 30000
 export const STELLAR_TX_TIMEOUT_SECONDS = 180
 
 /* ── Hex colours for contexts where Tailwind classes are unavailable ── */
-export const ROWAN_BG_HEX = '#000000'
+export const ROWAN_BG_HEX = '#0B0E11'
 export const ROWAN_YELLOW_HEX = '#F0B90B'
-export const QR_FG_HEX = ROWAN_BG_HEX
+export const QR_FG_HEX = '#181A20'
 export const QR_BG_HEX = '#FFFFFF'
 
 export const STATE_ORDER = [

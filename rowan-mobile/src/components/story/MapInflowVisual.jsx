@@ -109,7 +109,7 @@ export default function MapInflowVisual() {
                   textAnchor="middle"
                   fontSize="7"
                   fontWeight="700"
-                  fill="#000000"
+                  fill="#F0B90B"
                   fontFamily="system-ui,sans-serif"
                 >
                   $

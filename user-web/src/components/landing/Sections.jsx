@@ -58,7 +58,7 @@ const RAILS = [
 
 export function RailsStrip() {
   return (
-    <section aria-label="Supported rails" className="border-y border-rowan-border/70 bg-white/60 py-3.5">
+    <section aria-label="Supported rails" className="border-y border-rowan-border/70 bg-rowan-surface py-3.5">
       <div className="rails-marquee">
         <ul className="rails-track" aria-hidden="true">
           {[...RAILS, ...RAILS].map((rail, i) => (
@@ -214,7 +214,7 @@ export function BillsSection() {
   return (
     <section
       id="bills"
-      className="scroll-mt-24 py-16 sm:py-20 lg:py-24 bg-white/70 border-y border-rowan-border/70"
+      className="scroll-mt-24 py-16 sm:py-20 lg:py-24 bg-rowan-surface border-y border-rowan-border/70"
       aria-labelledby="bills-heading"
     >
       <div className="mx-auto w-full max-w-6xl px-5 sm:px-8 lg:px-12">
@@ -321,7 +321,7 @@ const CORRIDORS = [
 export function Coverage() {
   return (
     <section
-      className="py-16 sm:py-20 lg:py-24 bg-white/70 border-y border-rowan-border/70"
+      className="py-16 sm:py-20 lg:py-24 bg-rowan-surface border-y border-rowan-border/70"
       aria-labelledby="coverage-heading"
     >
       <div className="mx-auto w-full max-w-6xl px-5 sm:px-8 lg:px-12">
@@ -441,7 +441,7 @@ export function SiteFooter() {
   const year = new Date().getFullYear()
 
   return (
-    <footer className="border-t border-rowan-border/70 bg-white/70 pt-12 pb-8 safe-bottom">
+    <footer className="border-t border-rowan-border/70 bg-rowan-surface pt-12 pb-8 safe-bottom">
       <div className="mx-auto w-full max-w-6xl px-5 sm:px-8 lg:px-12">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-2">

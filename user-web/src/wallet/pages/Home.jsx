@@ -5,7 +5,8 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Clock,
-  Signal,
+  Receipt,
+  Smartphone,
   Star,
   AlertTriangle,
   Bell,
@@ -65,13 +66,39 @@ const ACTIONS = [
     needsOrderLock: true,
   },
   {
-    key: 'airtime',
-    label: 'Airtime',
-    Icon: Signal,
+    key: 'bills',
+    label: 'Pay Bills',
+    Icon: Receipt,
+    path: '/wallet/utilities/bills',
+    needsOrderLock: false,
+  },
+  {
+    key: 'topup',
+    label: 'Top up',
+    Icon: Smartphone,
     path: '/wallet/utilities/airtime',
     needsOrderLock: false,
   },
 ]
+
+function HomeAction({ action, disabled, onNavigate }) {
+  const { label, Icon, path, state } = action
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onNavigate(path, state ? { state } : undefined)}
+      className="group flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl px-1 py-2.5 disabled:opacity-40"
+    >
+      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green transition-colors group-hover:bg-rowan-mint group-active:scale-95">
+        <Icon size={20} strokeWidth={1.75} />
+      </span>
+      <span className="text-center text-xs font-medium text-rowan-text font-sans">
+        {label}
+      </span>
+    </button>
+  )
+}
 
 export default function Home() {
   const navigate = useNavigate()
@@ -132,7 +159,7 @@ export default function Home() {
       <div className="flex items-center justify-between mb-5 animate-rise-in">
         <div>
           <h1 className="font-serif text-2xl text-rowan-green leading-tight">Rowan</h1>
-          <p className="text-rowan-muted text-xs font-sans mt-0.5">Borderless value · local payouts</p>
+          <p className="text-rowan-muted text-xs font-sans mt-0.5">Borderless value. Local payouts.</p>
         </div>
         <div className="flex items-center gap-2">
           <ConnectionDot />
@@ -163,36 +190,17 @@ export default function Home() {
 
       {activeOrder && <CashoutInProgressBanner transaction={activeOrder} />}
 
-      {/* Circular quick actions — same destinations as before */}
-      <div className="mt-5 grid grid-cols-4 gap-2">
-        {ACTIONS.map(({ key, label, Icon, path, state, needsOrderLock }) => {
-          const disabled = needsOrderLock && (hasActiveOrder || !!activeOrder)
-          return (
-            <button
-              key={key}
-              type="button"
-              disabled={disabled}
-              onClick={() => navigate(path, state ? { state } : undefined)}
-              className="flex flex-col items-center gap-2 min-h-11 disabled:opacity-45 group"
-            >
-              <span className="w-14 h-14 rounded-full bg-rowan-surface border border-rowan-border shadow-soft flex items-center justify-center group-active:scale-95 transition-transform group-hover:border-rowan-green/40">
-                <Icon size={22} className={key === 'airtime' ? 'text-rowan-gold' : 'text-rowan-green'} />
-              </span>
-              <span className="text-rowan-text text-[11px] font-semibold font-sans tracking-wide uppercase">
-                {label}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-
-      <div className="mt-5 rounded-2xl bg-rowan-mint border border-rowan-green/20 px-4 py-3 flex items-center justify-between gap-3">
-        <p className="text-rowan-text text-sm font-medium font-sans">
-          Buy · Sell · Top up — on Stellar
-        </p>
-        <span className="text-[10px] uppercase tracking-wider text-rowan-green font-bold shrink-0">
-          Live
-        </span>
+      <div className="mt-5 rounded-3xl border border-rowan-border bg-rowan-surface p-2 shadow-soft">
+        <div className="grid grid-cols-3">
+          {ACTIONS.slice(0, 3).map((action) => (
+            <HomeAction key={action.key} action={action} disabled={action.needsOrderLock && (hasActiveOrder || !!activeOrder)} onNavigate={navigate} />
+          ))}
+        </div>
+        <div className="grid grid-cols-2 border-t border-rowan-border/80">
+          {ACTIONS.slice(3).map((action) => (
+            <HomeAction key={action.key} action={action} disabled={false} onNavigate={navigate} />
+          ))}
+        </div>
       </div>
 
       {autoFundingTestnet && testUsdcProvisioning === 'loading' && (
@@ -201,7 +209,7 @@ export default function Home() {
           <div>
             <p className="text-rowan-text text-sm font-medium">Setting up your testnet wallet</p>
             <p className="text-rowan-muted text-xs mt-1">
-              Adding {TESTNET_AUTO_USDC_AMOUNT} test USDC automatically — no action needed.
+              Adding {TESTNET_AUTO_USDC_AMOUNT} test USDC automatically. No action needed.
             </p>
           </div>
         </div>
@@ -290,7 +298,7 @@ export default function Home() {
             <Star size={28} className="text-rowan-green mx-auto mb-3" />
             <p className="font-serif text-rowan-text text-base">No transactions yet</p>
             <p className="text-rowan-muted text-xs mt-1 font-sans">
-              Receive, buy, sell, or buy airtime to get started
+              Receive, buy, sell, pay a bill, or top up to get started
             </p>
           </div>
         ) : (

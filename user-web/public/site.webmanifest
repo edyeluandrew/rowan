@@ -4,8 +4,8 @@
   "description": "Mobile money and digital asset infrastructure for Africa",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F7F9F7",
-  "theme_color": "#12B81A",
+  "background_color": "#0B0E11",
+  "theme_color": "#0B0E11",
   "lang": "en",
   "icons": [
     {

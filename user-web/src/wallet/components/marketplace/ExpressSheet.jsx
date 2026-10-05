@@ -10,6 +10,7 @@ import { formatPercent, formatDurationMinutes, getTraderDisplayName } from '../.
 import NetworkSelector from '../cashout/NetworkSelector'
 import Button from '../ui/Button'
 import PaymentMethodPill from '../ui/PaymentMethodPill'
+import { sanitizeAmount } from '../../utils/sanitizeAmount'
 
 /**
  * Binance-style Express bottom sheet: Buy|Sell, amount, network, live best match.
@@ -174,12 +175,13 @@ export default function ExpressSheet({ open, onClose, initialSide = 'buy' }) {
             </label>
             <div className="flex items-center bg-rowan-surface border border-rowan-border rounded-xl overflow-hidden min-h-12">
               <input
-                type="number"
+                type="text"
                 inputMode="decimal"
+                autoComplete="off"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => setAmount(sanitizeAmount(e.target.value, { decimals: isBuy ? 2 : 4 }))}
                 placeholder={isBuy ? '0' : '0.00'}
-                className="flex-1 min-w-0 bg-transparent px-4 py-3 text-rowan-text text-lg font-semibold outline-none"
+                className="flex-1 min-w-0 bg-transparent px-4 py-3 text-rowan-text text-lg font-semibold tabular-nums outline-none"
               />
               <span className="pr-4 text-rowan-muted text-sm font-medium">
                 {isBuy ? (currency || '') : 'USDC'}

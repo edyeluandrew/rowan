@@ -55,8 +55,8 @@ export default function CashoutVisual() {
 
         {/* Mobile money destinations */}
         <div className="flex gap-3">
-          <Chip label="MTN MoMo" sub="UGX 92,400" tone={{ bg: '#F0B90B', fg: '#000000' }} />
-          <Chip label="Airtel" sub="UGX 92,400" tone={{ bg: '#F0B90B', fg: '#000000' }} delayed />
+          <Chip label="MTN MoMo" sub="UGX 92,400" tone={{ bg: '#F0B90B', fg: '#181A20' }} />
+          <Chip label="Airtel" sub="UGX 92,400" tone={{ bg: '#F6465D', fg: '#FFFFFF' }} delayed />
         </div>
 
         <p className="mt-3 text-center text-[11px] font-medium text-rowan-muted">

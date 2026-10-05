@@ -16,7 +16,7 @@ export function FeatureGrid({ className = '' }) {
         {items.map(({ Icon, label, hint }) => (
           <li
             key={label}
-            className="rounded-2xl bg-white/90 border border-rowan-border/80 px-3 py-3 sm:px-4 sm:py-3.5 shadow-sm"
+            className="rounded-2xl bg-rowan-surface border border-rowan-border/80 px-3 py-3 sm:px-4 sm:py-3.5 shadow-sm"
           >
             <div className="w-9 h-9 rounded-xl bg-rowan-mint flex items-center justify-center mb-2" aria-hidden="true">
               <Icon size={18} className="text-rowan-green" strokeWidth={2} />

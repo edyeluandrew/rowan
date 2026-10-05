@@ -41,7 +41,12 @@ export default function Register() {
       await loginWithWallet()
       navigate('/home', { replace: true })
     } catch (err) {
-      setError(err.message)
+      const missing = /user not found/i.test(err.message || '')
+      setError(
+        missing
+          ? 'This wallet is already on this device. Add your phone number above to finish setup.'
+          : err.message,
+      )
     } finally {
       setLoading(false)
     }

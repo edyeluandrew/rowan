@@ -32,7 +32,7 @@ export default function QrDisplay({ qrCode, manualEntry, onCopy }) {
           <img
             src={qrCode}
             alt="2FA Setup QR Code"
-            className="w-48 h-48 rounded-xl border border-rowan-border bg-white p-2"
+            className="w-48 h-48 rounded-xl border border-rowan-border bg-[#FFFFFF] p-2"
           />
         ) : (
           <div className="w-48 h-48 rounded-xl border border-rowan-border bg-rowan-surface animate-pulse" />

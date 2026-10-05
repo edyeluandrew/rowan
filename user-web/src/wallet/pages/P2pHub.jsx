@@ -14,6 +14,7 @@ import useUserCountry from '../hooks/useUserCountry'
 import { getNetworksForCountry } from '../utils/country'
 import { NETWORKS, QUOTE_REFRESH_INTERVAL } from '../utils/constants'
 import Button from '../components/ui/Button'
+import { sanitizeAmount } from '../utils/sanitizeAmount'
 import client from '../api/client'
 
 /**
@@ -183,12 +184,13 @@ export default function P2pHub() {
               <div className="flex items-center bg-rowan-surface border border-rowan-border rounded-xl overflow-hidden min-h-11">
                 <input
                   id="p2p-amount"
-                  type="number"
-                  inputMode="numeric"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
                   value={minAmount}
-                  onChange={(e) => setMinAmount(e.target.value)}
-                  placeholder="Amount"
-                  className="flex-1 min-w-0 bg-transparent px-3 py-2.5 text-rowan-text text-sm outline-none"
+                  onChange={(e) => setMinAmount(sanitizeAmount(e.target.value))}
+                  placeholder="0"
+                  className="flex-1 min-w-0 bg-transparent px-3 py-2.5 text-rowan-text text-sm tabular-nums outline-none"
                 />
                 <span className="px-3 text-rowan-muted text-xs font-semibold border-l border-rowan-border shrink-0">
                   {fiatCurrency}

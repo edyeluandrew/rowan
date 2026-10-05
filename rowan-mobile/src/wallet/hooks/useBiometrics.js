@@ -73,5 +73,13 @@ export default function useBiometrics() {
     setIsEnabled(false)
   }, [])
 
-  return { isAvailable, isEnabled, biometricType, loading, authenticate, enable, disable }
+  return { isAvailable, isEnabled, biometricType, loading, authenticate, enable, disable, requiresGesture: false }
+}
+
+export function biometricLabel(type) {
+  if (type === 'FACE_ID') return 'Face ID'
+  if (type === 'TOUCH_ID') return 'Touch ID'
+  if (type === 'WINDOWS_HELLO') return 'Windows Hello'
+  if (type === 'FINGERPRINT') return 'fingerprint'
+  return 'biometrics'
 }

@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 import BottomSheet from '../ui/BottomSheet'
 import Button from '../ui/Button'
 import { ALERT_DIRECTIONS, ALERT_CURRENCIES } from '../../utils/constants'
+import { sanitizeAmount } from '../../utils/sanitizeAmount'
 
 /**
  * Bottom sheet form to create a new rate alert.
@@ -87,12 +88,13 @@ export default function CreateAlertSheet({ open, onClose, onCreate, creating, de
             Target rate
           </label>
           <input
-            type="number"
+            type="text"
             inputMode="decimal"
+            autoComplete="off"
             value={targetRate}
-            onChange={(e) => setTargetRate(e.target.value)}
-            placeholder="e.g. 4200"
-            className="w-full bg-rowan-bg border border-rowan-border rounded-xl px-4 py-3 text-rowan-text text-sm placeholder:text-rowan-muted/50 outline-none focus:border-rowan-yellow min-h-11"
+            onChange={(e) => setTargetRate(sanitizeAmount(e.target.value))}
+            placeholder="0"
+            className="w-full bg-rowan-bg border border-rowan-border rounded-xl px-4 py-3 text-rowan-text text-sm tabular-nums placeholder:text-rowan-muted/50 outline-none focus:border-rowan-yellow min-h-11"
           />
         </div>
 

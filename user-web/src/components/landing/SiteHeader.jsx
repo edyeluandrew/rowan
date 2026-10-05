@@ -12,7 +12,7 @@ const NAV = [
   { href: '#faq', label: 'FAQ' },
 ]
 
-export default function SiteHeader({ ctaLabel, onCta }) {
+export default function SiteHeader({ ctaLabel, onCta, ctaDisabled = false }) {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
@@ -54,7 +54,8 @@ export default function SiteHeader({ ctaLabel, onCta }) {
           <button
             type="button"
             onClick={onCta}
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-rowan-green px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(240,185,11,0.24)] transition active:scale-[0.98]"
+            disabled={ctaDisabled}
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-rowan-green px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(240,185,11,0.24)] transition active:scale-[0.98] disabled:opacity-60"
           >
             {ctaLabel}
             <ArrowRight size={15} aria-hidden="true" />
@@ -91,7 +92,8 @@ export default function SiteHeader({ ctaLabel, onCta }) {
                 setOpen(false)
                 onCta?.()
               }}
-              className="mt-3 mb-1 w-full rounded-2xl bg-rowan-green py-3 text-sm font-semibold text-white"
+              disabled={ctaDisabled}
+              className="mt-3 mb-1 w-full rounded-2xl bg-rowan-green py-3 text-sm font-semibold text-white disabled:opacity-60"
             >
               {ctaLabel}
             </button>

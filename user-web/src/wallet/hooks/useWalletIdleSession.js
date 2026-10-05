@@ -15,19 +15,19 @@ export async function walletSessionIsIdle() {
 }
 
 /**
- * Ends the wallet API session after 5 minutes with no taps / when the tab
- * stays in the background that long. Recovery phrase stays on the device.
+ * After 5 minutes with no taps, or that long in the background, pause the
+ * session so the person has to sign in again. The wallet key stays on device.
  */
 export default function useWalletIdleSession() {
-  const { isAuthenticated, role, logout } = useAuth()
+  const { isAuthenticated, role, sessionLocked, lockSession } = useAuth()
   const lastActiveRef = useRef(Date.now())
   const lastPersistRef = useRef(0)
-  const loggingOutRef = useRef(false)
+  const lockingRef = useRef(false)
 
   useEffect(() => {
-    if (!isAuthenticated || role !== ROLE_WALLET) return undefined
+    if (!isAuthenticated || role !== ROLE_WALLET || sessionLocked) return undefined
 
-    loggingOutRef.current = false
+    lockingRef.current = false
     lastActiveRef.current = Date.now()
     lastPersistRef.current = Date.now()
     markWalletActive()
@@ -41,11 +41,11 @@ export default function useWalletIdleSession() {
       }
     }
 
-    const expireIfNeeded = async () => {
-      if (loggingOutRef.current) return
+    const expireIfNeeded = () => {
+      if (lockingRef.current) return
       if (Date.now() - lastActiveRef.current < WALLET_IDLE_TIMEOUT_MS) return
-      loggingOutRef.current = true
-      await logout()
+      lockingRef.current = true
+      lockSession()
     }
 
     const onActivity = () => bump()
@@ -70,5 +70,5 @@ export default function useWalletIdleSession() {
       document.removeEventListener('visibilitychange', onVis)
       window.clearInterval(tick)
     }
-  }, [isAuthenticated, role, logout])
+  }, [isAuthenticated, role, sessionLocked, lockSession])
 }

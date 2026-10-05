@@ -264,7 +264,7 @@ export default function TwoFactorSettings() {
             <div className="space-y-3">
               <p className="text-rowan-muted text-sm font-medium">Step 1: Scan QR code</p>
               {qrCode && (
-                <div className="flex justify-center p-3 bg-white rounded-lg">
+                <div className="flex justify-center p-3 bg-[#FFFFFF] rounded-lg">
                   <img src={qrCode} alt="QR Code" className="w-40 h-40" />
                 </div>
               )}

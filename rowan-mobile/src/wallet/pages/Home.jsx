@@ -9,8 +9,8 @@ import {
   AlertTriangle,
   Bell,
   Coins,
-  Signal,
-  Wifi,
+  Receipt,
+  Smartphone,
 } from 'lucide-react'
 import useWallet from '../hooks/useWallet'
 import useRates from '../hooks/useRates'
@@ -126,53 +126,63 @@ export default function Home() {
 
       {activeOrder && <CashoutInProgressBanner transaction={activeOrder} />}
 
-      {/* Primary actions — short labels */}
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <button
-          type="button"
-          onClick={() => navigate('/wallet/receive')}
-          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
-        >
-          <ArrowDownLeft size={20} className="text-rowan-green" />
-          <span className="text-rowan-text text-xs font-medium">Receive</span>
-        </button>
-        <button
-          type="button"
-          disabled={hasActiveOrder || !!activeOrder}
-          onClick={() => navigate('/wallet/p2p', { state: { tab: 'buy' } })}
-          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
-        >
-          <ArrowDownToLine size={20} className="text-rowan-green" />
-          <span className="text-rowan-text text-xs font-medium">Buy</span>
-        </button>
-        <button
-          type="button"
-          disabled={hasActiveOrder || !!activeOrder}
-          onClick={() => navigate('/wallet/p2p', { state: { tab: 'sell' } })}
-          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50"
-        >
-          <ArrowUpFromLine size={20} className="text-rowan-green" />
-          <span className="text-rowan-text text-xs font-medium">Sell</span>
-        </button>
-      </div>
-
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => navigate('/wallet/utilities/airtime')}
-          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
-        >
-          <Signal size={20} className="text-rowan-yellow" />
-          <span className="text-rowan-text text-xs font-medium">Airtime</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate('/wallet/utilities/data')}
-          className="bg-rowan-surface border border-rowan-border rounded-xl px-2 py-3 min-h-11 flex flex-col items-center justify-center gap-1.5"
-        >
-          <Wifi size={20} className="text-rowan-yellow" />
-          <span className="text-rowan-text text-xs font-medium">Data</span>
-        </button>
+      <div className="mt-4 rounded-3xl border border-rowan-border bg-rowan-surface p-2">
+        <div className="grid grid-cols-3">
+          <button
+            type="button"
+            onClick={() => navigate('/wallet/receive')}
+            className="flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl py-2.5 active:scale-[0.98]"
+          >
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green">
+              <ArrowDownLeft size={20} strokeWidth={1.75} />
+            </span>
+            <span className="text-xs font-medium text-rowan-text">Receive</span>
+          </button>
+          <button
+            type="button"
+            disabled={hasActiveOrder || !!activeOrder}
+            onClick={() => navigate('/wallet/p2p', { state: { tab: 'buy' } })}
+            className="flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl py-2.5 disabled:opacity-40 active:scale-[0.98]"
+          >
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green">
+              <ArrowDownToLine size={20} strokeWidth={1.75} />
+            </span>
+            <span className="text-xs font-medium text-rowan-text">Buy</span>
+          </button>
+          <button
+            type="button"
+            disabled={hasActiveOrder || !!activeOrder}
+            onClick={() => navigate('/wallet/p2p', { state: { tab: 'sell' } })}
+            className="flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl py-2.5 disabled:opacity-40 active:scale-[0.98]"
+          >
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green">
+              <ArrowUpFromLine size={20} strokeWidth={1.75} />
+            </span>
+            <span className="text-xs font-medium text-rowan-text">Sell</span>
+          </button>
+        </div>
+        <div className="grid grid-cols-2 border-t border-rowan-border/80">
+          <button
+            type="button"
+            onClick={() => navigate('/wallet/utilities/bills')}
+            className="flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl py-2.5 active:scale-[0.98]"
+          >
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green">
+              <Receipt size={20} strokeWidth={1.75} />
+            </span>
+            <span className="text-xs font-medium text-rowan-text">Pay Bills</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/wallet/utilities/airtime')}
+            className="flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl py-2.5 active:scale-[0.98]"
+          >
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green">
+              <Smartphone size={20} strokeWidth={1.75} />
+            </span>
+            <span className="text-xs font-medium text-rowan-text">Top up</span>
+          </button>
+        </div>
       </div>
 
       {needsUsdc && CURRENT_NETWORK.isTest && (
@@ -188,8 +198,8 @@ export default function Home() {
           >
             <Coins size={16} />
             {testUsdcState === 'loading' && 'Adding test USDC...'}
-            {testUsdcState === 'success' && 'Test USDC added — refresh if needed'}
-            {testUsdcState === 'error' && 'Could not add test USDC — tap to retry'}
+            {testUsdcState === 'success' && 'Test USDC added. Refresh if needed'}
+            {testUsdcState === 'error' && 'Could not add test USDC. Tap to retry'}
             {testUsdcState === 'idle' && `Get ${TESTNET_AUTO_USDC_AMOUNT} free test USDC`}
           </button>
         </div>
@@ -279,7 +289,7 @@ export default function Home() {
             <Star size={32} className="text-rowan-muted mx-auto mb-3" />
             <p className="text-rowan-muted text-sm">No transactions yet</p>
             <p className="text-rowan-muted text-xs mt-1">
-              Receive, buy, sell, or airtime to get started
+              Receive, buy, sell, pay a bill, or top up to get started
             </p>
           </div>
         ) : (

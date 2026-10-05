@@ -55,7 +55,7 @@ function ReceivePhone({ screen }) {
             Show this QR to get paid
           </p>
           <div
-            className={`bg-white rounded-2xl p-3 shadow-sm border border-rowan-border/70 receive-demo-qr-target ${
+            className={`bg-[#FFFFFF] rounded-2xl p-3 shadow-sm border border-rowan-border/70 receive-demo-qr-target ${
               screen === 'locked' ? 'is-hit' : ''
             }`}
           >
@@ -174,7 +174,7 @@ function ScannerPhone({ screen }) {
 
             <div className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
               <div
-                className={`bg-white/95 rounded-lg p-1.5 receive-demo-qr-ghost ${locked ? 'is-locked' : ''} ${
+                className={`bg-[#FFFFFF] rounded-lg p-1.5 receive-demo-qr-ghost ${locked ? 'is-locked' : ''} ${
                   aiming ? 'is-scanning' : ''
                 }`}
               >

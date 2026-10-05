@@ -3,28 +3,28 @@
 @tailwind utilities;
 
 :root {
-  --rowan-green: #F0B90B;
+  --rowan-green: #FCD535;
   --rowan-green-dark: #F0B90B;
-  --rowan-mint: #000000;
+  --rowan-mint: #2B3139;
   --rowan-lime: #F0B90B;
   --rowan-gold: #F0B90B;
   --rowan-yellow: #F0B90B;
   --rowan-white: #FFFFFF;
-  --rowan-bg: #000000;
-  --rowan-surface: #000000;
-  --rowan-border: #FFFFFF;
-  --rowan-grey: #FFFFFF;
-  --rowan-text: #FFFFFF;
-  --rowan-red: #F0B90B;
-  --rowan-dark: #000000;
+  --rowan-bg: #0B0E11;
+  --rowan-surface: #1E2329;
+  --rowan-border: #2B3139;
+  --rowan-grey: #848E9C;
+  --rowan-text: #EAECEF;
+  --rowan-red: #F6465D;
+  --rowan-dark: #181A20;
   --font-serif: "Times New Roman", Times, Georgia, serif;
   --font-sans: "Source Sans 3", DM Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.bg-white { background-color: #000000; }
-.bg-rowan-green { background-color: #F0B90B; color: #000000; }
+.bg-white { background-color: #1E2329; }
+.bg-rowan-green { background-color: #FCD535; color: #181A20; }
 .bg-rowan-green.text-white,
-.bg-rowan-green .text-white { color: #000000 !important; }
+.bg-rowan-green .text-white { color: #181A20 !important; }
 
 * {
   -webkit-tap-highlight-color: transparent;
@@ -33,6 +33,7 @@
 
 html {
   background-color: var(--rowan-bg);
+  color-scheme: dark;
   height: 100%;
   scroll-behavior: smooth;
 }
@@ -520,30 +521,68 @@ details > summary::-webkit-details-marker {
 
 /* —— Landing story visual (map + glitter inflows) —— */
 .landing-story {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  max-width: 280px;
-}
-
-@media (min-width: 640px) {
-  .landing-story {
-    max-width: 360px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .landing-story {
-    max-width: 420px;
-  }
+  width: min(100%, 72vw, 520px);
+  margin: 0;
 }
 
 .landing-story-stage {
+  position: relative;
   width: 100%;
-  aspect-ratio: 200 / 220;
-  animation: landing-story-float 7s ease-in-out infinite;
+  aspect-ratio: 192 / 190;
+  background: transparent;
+}
+
+.landing-story-place {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: #B7BDC6;
+  text-align: center;
+}
+
+.landing-story-chips {
+  display: flex;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+  min-height: 1.7rem;
+  animation: landing-story-rise 0.45s ease both;
+}
+
+.landing-story-chip {
+  border-radius: 999px;
+  background: #FCD535;
+  color: #181A20;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0.32rem 0.7rem;
+  white-space: nowrap;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.landing-story-chip.is-ghost {
+  background: #1E2329;
+  color: #EAECEF;
+  border: 1px solid #2B3139;
+}
+
+.landing-story-caption {
+  margin: 0.9rem 0 0;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #EAECEF;
+  text-align: center;
 }
 
 .landing-story-scene.is-active {
@@ -638,6 +677,35 @@ details > summary::-webkit-details-marker {
   animation-delay: 0.8s;
 }
 
+.landing-story-pulse-ring-slow {
+  animation: landing-story-pulse 2.4s ease-out 1.5s infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.landing-story-pin-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: landing-pin-ring 2.6s ease-out infinite;
+}
+
+.landing-story-pin-shadow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: landing-pin-shadow 2.6s ease-in-out infinite;
+}
+
+@keyframes landing-pin-ring {
+  0% { opacity: 0.55; transform: scale(0.7); }
+  70% { opacity: 0; transform: scale(2.1); }
+  100% { opacity: 0; transform: scale(2.1); }
+}
+
+@keyframes landing-pin-shadow {
+  0%, 100% { opacity: 0.38; transform: scaleX(1); }
+  42% { opacity: 0.16; transform: scaleX(0.72); }
+}
+
 .landing-story-glitter-line {
   animation: landing-story-glitter-dash 1.35s linear infinite;
 }
@@ -682,6 +750,10 @@ details > summary::-webkit-details-marker {
   .landing-story-stage,
   .landing-story-pulse-ring,
   .landing-story-pulse-ring-delayed,
+  .landing-story-pulse-ring-slow,
+  .landing-story-pin-ring,
+  .landing-story-pin-shadow,
+  .landing-story-chips,
   .landing-story-glitter-line,
   .landing-story-coin,
   .landing-story-flow-down,

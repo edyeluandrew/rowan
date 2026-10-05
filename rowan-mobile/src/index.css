@@ -3,26 +3,26 @@
 @tailwind utilities;
 
 :root {
-  --rowan-green: #F0B90B;
+  --rowan-green: #FCD535;
   --rowan-green-dark: #F0B90B;
-  --rowan-mint: #000000;
+  --rowan-mint: #2B3139;
   --rowan-lime: #F0B90B;
   --rowan-gold: #F0B90B;
   --rowan-yellow: #F0B90B;
   --rowan-white: #FFFFFF;
-  --rowan-bg: #000000;
-  --rowan-surface: #000000;
-  --rowan-border: #FFFFFF;
-  --rowan-grey: #FFFFFF;
-  --rowan-text: #FFFFFF;
-  --rowan-red: #F0B90B;
-  --rowan-dark: #000000;
+  --rowan-bg: #0B0E11;
+  --rowan-surface: #1E2329;
+  --rowan-border: #2B3139;
+  --rowan-grey: #848E9C;
+  --rowan-text: #EAECEF;
+  --rowan-red: #F6465D;
+  --rowan-dark: #181A20;
 }
 
-.bg-white { background-color: #000000; }
-.bg-rowan-green { background-color: #F0B90B; color: #000000; }
+.bg-white { background-color: #1E2329; }
+.bg-rowan-green { background-color: #FCD535; color: #181A20; }
 .bg-rowan-green.text-white,
-.bg-rowan-green .text-white { color: #000000 !important; }
+.bg-rowan-green .text-white { color: #181A20 !important; }
 
 * {
   -webkit-tap-highlight-color: transparent;
@@ -31,6 +31,7 @@
 
 html {
   background-color: var(--rowan-bg);
+  color-scheme: dark;
 }
 
 body {

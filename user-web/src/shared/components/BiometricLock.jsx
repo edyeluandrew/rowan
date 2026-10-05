@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import useBiometrics from '../../wallet/hooks/useBiometrics';
+import useBiometrics, { biometricLabel } from '../../wallet/hooks/useBiometrics';
 import { useBiometricLock } from '../context/BiometricLockContext';
 import Button from '../../wallet/components/ui/Button';
 import { Fingerprint, ScanFace, Lock, LogOut, CheckCircle } from 'lucide-react';
@@ -25,7 +25,7 @@ export default function BiometricLock() {
   const [attemptCount, setAttemptCount] = useState(0);
   const [autoRetryTimer, setAutoRetryTimer] = useState(null);
 
-  const biometricLabel = biometricType === 'FACE_ID' ? 'Face ID' : 'Fingerprint';
+  const label = biometricLabel(biometricType);
   const BiometricIcon = biometricType === 'FACE_ID' ? ScanFace : Fingerprint;
 
   // Auto-dismiss when unlocked
@@ -125,7 +125,7 @@ export default function BiometricLock() {
             App Locked
           </h1>
           <p className="text-rowan-muted text-center mb-8">
-            Verify your {biometricLabel} to continue
+            Verify your {label} to continue
           </p>
 
           {/* Loading/Scanning state */}
@@ -148,7 +148,7 @@ export default function BiometricLock() {
             >
               <BiometricIcon size={20} className="inline mr-2" />
               {attemptCount === 0
-                ? `Verify ${biometricLabel}`
+                ? `Verify ${label}`
                 : `Try Again (${attemptCount})`}
             </Button>
           )}

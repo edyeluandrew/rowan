@@ -109,3 +109,15 @@ export function mapErrorMessage(message, fallback = 'Something went wrong. Pleas
   if (!message || typeof message !== 'string') return fallback
   return mapApiError({ message, response: { data: { error: message } } }, fallback)
 }
+
+/** Wallet key is on the device, but this address has no Rowan account yet. */
+export function isMissingWalletAccount(err) {
+  const msg = String(err?.message || err?.response?.data?.error || '')
+  return /user not found/i.test(msg)
+}
+
+/** This Stellar address is already a Rowan account — sign in instead of registering. */
+export function isWalletAlreadyRegistered(err) {
+  const msg = String(err?.message || err?.response?.data?.error || '')
+  return /already registered/i.test(msg)
+}

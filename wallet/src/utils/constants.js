@@ -86,7 +86,7 @@ export const STELLAR_TX_TIMEOUT_SECONDS = 180
 /* ── Hex colours for contexts where Tailwind classes are unavailable ── */
 export const ROWAN_BG_HEX = '#0B0E11'
 export const ROWAN_YELLOW_HEX = '#F0B90B'
-export const QR_FG_HEX = ROWAN_BG_HEX
+export const QR_FG_HEX = '#181A20'
 export const QR_BG_HEX = '#FFFFFF'
 
 export const STATE_ORDER = [

@@ -9,6 +9,7 @@ import CountryPicker from '../components/settings/CountryPicker'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import WalletTwoFactorLoginModal from './WalletTwoFactorLoginModal'
+import { isMissingWalletAccount, isWalletAlreadyRegistered } from '../utils/apiErrors'
 
 export default function Register() {
   const navigate = useNavigate()
@@ -39,12 +40,16 @@ export default function Register() {
       if (response?.requiresTwoFactorVerification === true) {
         setTempUserId(response.userId)
         setShow2faModal(true)
+        setLoading(false)
       } else {
         await saveCountryAndGoHome()
       }
     } catch (err) {
+      if (isWalletAlreadyRegistered(err)) {
+        await handleLogin()
+        return
+      }
       setError(err.message)
-    } finally {
       setLoading(false)
     }
   }
@@ -62,7 +67,11 @@ export default function Register() {
         await saveCountryAndGoHome()
       }
     } catch (err) {
-      setError(err.message)
+      if (isMissingWalletAccount(err)) {
+        setError('This wallet is already on this device. Add your phone number above to finish setup.')
+      } else {
+        setError(err.message)
+      }
     } finally {
       setLoading(false)
     }

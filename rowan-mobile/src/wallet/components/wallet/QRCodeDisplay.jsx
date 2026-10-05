@@ -9,7 +9,7 @@ import { QR_BG_HEX, QR_FG_HEX } from '../../utils/constants'
 export default function QRCodeDisplay({ value, size = 180, label }) {
   return (
     <div className="flex flex-col items-center gap-3">
-      <div className="bg-white p-4 rounded-2xl">
+      <div className="bg-[#FFFFFF] p-4 rounded-2xl">
         <QRCode
           value={value}
           size={size}

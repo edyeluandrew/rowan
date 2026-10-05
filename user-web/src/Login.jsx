@@ -12,6 +12,8 @@ import { formatAddress } from './wallet/utils/format'
 import WalletTwoFactorLoginModal from './wallet/pages/WalletTwoFactorLoginModal'
 import { TrustLine } from './wallet/components/onboarding/OnboardingBits'
 import LandingStoryVisual from './components/LandingStoryVisual'
+import { isMissingWalletAccount } from './wallet/utils/apiErrors'
+import useBiometrics, { biometricLabel } from './wallet/hooks/useBiometrics'
 import SiteHeader from './components/landing/SiteHeader'
 import Reveal from './components/landing/Reveal'
 import {
@@ -28,8 +30,10 @@ import {
 
 export default function Login() {
   const { loginWithWallet, setWalletAuthAfter2FA } = useAuth()
+  const { isAvailable, loading: biometricLoading, authenticate, biometricType } = useBiometrics()
   const navigate = useNavigate()
   const [storedPublicKey, setStoredPublicKey] = useState(null)
+  const [walletChecked, setWalletChecked] = useState(false)
   const [walletLoading, setWalletLoading] = useState(false)
   const [walletError, setWalletError] = useState(null)
   const [show2faModal, setShow2faModal] = useState(false)
@@ -44,6 +48,8 @@ export default function Login() {
         if (kp?.publicKey) setStoredPublicKey(kp.publicKey)
       } catch {
         /* no wallet */
+      } finally {
+        setWalletChecked(true)
       }
     })()
   }, [])
@@ -52,6 +58,13 @@ export default function Login() {
     setWalletLoading(true)
     setWalletError(null)
     try {
+      if (isAvailable) {
+        const verified = await authenticate()
+        if (!verified) {
+          setWalletError(`Confirm with ${biometricLabel(biometricType)} to sign in.`)
+          return
+        }
+      }
       const response = await loginWithWallet()
       if (response?.requiresTwoFactorVerification === true) {
         setTempUserId(response.userId)
@@ -60,6 +73,10 @@ export default function Login() {
         navigate('/wallet/home', { replace: true })
       }
     } catch (err) {
+      if (isMissingWalletAccount(err)) {
+        navigate('/register', { replace: true })
+        return
+      }
       setWalletError(err.message || 'Could not open wallet')
     } finally {
       setWalletLoading(false)
@@ -88,10 +105,11 @@ export default function Login() {
   }
 
   const primaryAction = () => {
+    if (!walletChecked || walletLoading) return
     if (storedPublicKey) return handleOpenWallet()
     return navigate('/wallet-setup')
   }
-  const primaryLabel = storedPublicKey ? 'Open wallet' : 'Get started'
+  const primaryLabel = !walletChecked || storedPublicKey ? 'Log in' : 'Get started'
 
   return (
     <div className="relative min-h-[100dvh] bg-rowan-bg text-rowan-text">
@@ -101,13 +119,13 @@ export default function Login() {
       />
 
       <div className="relative">
-        <SiteHeader ctaLabel={primaryLabel} onCta={primaryAction} />
+        <SiteHeader ctaLabel={walletChecked ? primaryLabel : 'Log in'} onCta={primaryAction} ctaDisabled={!walletChecked || walletLoading || (Boolean(storedPublicKey) && biometricLoading)} />
 
         <main>
           {/* —— Hero —— */}
           <section className="pt-8 pb-14 sm:pt-12 sm:pb-20 lg:pt-16 lg:pb-24" aria-labelledby="rowan-hero-heading">
             <div className="mx-auto w-full max-w-6xl px-5 sm:px-8 lg:px-12">
-              <div className="grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-14">
+              <div className="grid gap-10 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-center lg:gap-10">
                 <div>
                   <Reveal>
                     <p className="inline-flex items-center gap-2 rounded-full border border-rowan-green/30 bg-rowan-mint px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-rowan-green-dark font-sans">
@@ -137,13 +155,13 @@ export default function Login() {
                       <button
                         type="button"
                         onClick={primaryAction}
-                        disabled={walletLoading}
+                        disabled={walletLoading || !walletChecked || (Boolean(storedPublicKey) && biometricLoading)}
                         className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-rowan-green px-6 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(240,185,11,0.28)] transition active:scale-[0.99] disabled:opacity-60"
                       >
                         {walletLoading ? (
                           <>
                             <RefreshCw size={18} className="animate-spin" aria-hidden="true" />
-                            Opening…
+                            Signing in…
                           </>
                         ) : (
                           <>
@@ -214,11 +232,11 @@ export default function Login() {
                   />
                   <div className="relative mx-auto max-w-xl">
                     <h2 id="rowan-cta-heading" className="font-serif text-2xl sm:text-3xl lg:text-[2.1rem] text-rowan-text leading-snug">
-                      {storedPublicKey ? 'Your wallet is ready' : 'Create your wallet in about a minute'}
+                      {storedPublicKey ? 'Log back in' : 'Create your wallet in about a minute'}
                     </h2>
                     <p className="mt-3 text-sm sm:text-base text-rowan-muted font-sans leading-relaxed">
                       {storedPublicKey
-                        ? 'Pick up where you left off. Everything stays on this device.'
+                        ? 'Sign out only ends this session. This wallet stays on the device — log in to open it.'
                         : 'Free to create, no paperwork to start, and your keys never leave your device.'}
                     </p>
 
@@ -226,7 +244,7 @@ export default function Login() {
                       <button
                         type="button"
                         onClick={primaryAction}
-                        disabled={walletLoading}
+                        disabled={walletLoading || !walletChecked || (Boolean(storedPublicKey) && biometricLoading)}
                         className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-rowan-green px-7 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(240,185,11,0.28)] transition active:scale-[0.99] disabled:opacity-60"
                       >
                         {primaryLabel}
@@ -235,7 +253,7 @@ export default function Login() {
                       <button
                         type="button"
                         onClick={() => navigate('/import-wallet')}
-                        className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-rowan-border bg-white px-7 text-sm font-medium text-rowan-text transition hover:bg-white/70 font-sans"
+                        className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-rowan-border bg-white px-7 text-sm font-medium text-rowan-text transition hover:bg-rowan-surface font-sans"
                       >
                         Import a wallet
                       </button>
