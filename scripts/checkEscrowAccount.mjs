@@ -1,9 +1,3 @@
-#!/usr/bin/env node
-/**
- * Diagnostic script to check escrow account status on Stellar
- * Usage: node scripts/checkEscrowAccount.mjs
- */
-
 import dotenv from 'dotenv';
 import * as StellarSdk from '@stellar/stellar-sdk';
 

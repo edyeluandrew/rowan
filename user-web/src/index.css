@@ -3,22 +3,28 @@
 @tailwind utilities;
 
 :root {
-  --rowan-green: #12B81A;
-  --rowan-green-dark: #087A12;
-  --rowan-mint: #EAF8EE;
-  --rowan-lime: #DDEB3A;
-  --rowan-gold: #FFD51F;
-  --rowan-yellow: #12B81A;
+  --rowan-green: #F0B90B;
+  --rowan-green-dark: #F0B90B;
+  --rowan-mint: #000000;
+  --rowan-lime: #F0B90B;
+  --rowan-gold: #F0B90B;
+  --rowan-yellow: #F0B90B;
   --rowan-white: #FFFFFF;
-  --rowan-bg: #F7F9F7;
-  --rowan-border: #D8E0D9;
-  --rowan-grey: #7B8587;
-  --rowan-text: #22272B;
-  --rowan-red: #E53935;
-  --rowan-dark: #0B0F0C;
+  --rowan-bg: #000000;
+  --rowan-surface: #000000;
+  --rowan-border: #FFFFFF;
+  --rowan-grey: #FFFFFF;
+  --rowan-text: #FFFFFF;
+  --rowan-red: #F0B90B;
+  --rowan-dark: #000000;
   --font-serif: "Times New Roman", Times, Georgia, serif;
   --font-sans: "Source Sans 3", DM Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
+
+.bg-white { background-color: #000000; }
+.bg-rowan-green { background-color: #F0B90B; color: #000000; }
+.bg-rowan-green.text-white,
+.bg-rowan-green .text-white { color: #000000 !important; }
 
 * {
   -webkit-tap-highlight-color: transparent;
@@ -55,8 +61,8 @@ h1, h2, h3, .font-display {
 .rowan-atmosphere {
   background-color: var(--rowan-bg);
   background-image:
-    radial-gradient(ellipse 90% 50% at 50% -15%, rgba(18, 184, 26, 0.08), transparent 55%),
-    radial-gradient(circle at 1px 1px, rgba(18, 184, 26, 0.04) 1px, transparent 0);
+    radial-gradient(ellipse 90% 50% at 50% -15%, rgba(240, 185, 11, 0.08), transparent 55%),
+    radial-gradient(circle at 1px 1px, rgba(240, 185, 11, 0.04) 1px, transparent 0);
   background-size: auto, 22px 22px;
 }
 
@@ -102,7 +108,7 @@ input, select, textarea {
   display: block;
   object-fit: contain;
   /* Gold reads thin on the light page; a soft shadow keeps the edges defined. */
-  filter: drop-shadow(0 1px 2px rgba(11, 15, 12, 0.18));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.18));
 }
 
 /* —— Landing page chrome —— */
@@ -178,9 +184,9 @@ details > summary::-webkit-details-marker {
   z-index: 10;
   padding: 0.75rem 0.85rem 1rem;
   border-radius: 1.1rem 1.1rem 1.15rem 1.15rem;
-  background: #fff;
+  background: var(--rowan-surface);
   border-top: 1px solid var(--rowan-border);
-  box-shadow: 0 -12px 30px rgba(11, 15, 12, 0.16);
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.16);
   transform: translateY(105%);
   transition: transform 0.55s cubic-bezier(0.22, 1.2, 0.34, 1);
 }
@@ -264,23 +270,23 @@ details > summary::-webkit-details-marker {
   background:
     linear-gradient(
       145deg,
-      #f4f7f5 0%,
-      #c3ccc7 14%,
-      #8e9a95 30%,
-      #dfe6e2 46%,
-      #9fa9a4 62%,
-      #eef2f0 78%,
-      #a8b2ad 100%
+      #FFFFFF 0%,
+      #000000 14%,
+      #FFFFFF 30%,
+      #000000 46%,
+      #FFFFFF 62%,
+      #000000 78%,
+      #FFFFFF 100%
     );
   box-shadow:
-    0 22px 44px rgba(11, 15, 12, 0.22),
-    0 2px 6px rgba(11, 15, 12, 0.12);
+    0 22px 44px rgba(0, 0, 0, 0.22),
+    0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
 .receive-demo-bezel {
   border-radius: 1.65rem;
   padding: 0.3rem;
-  background: linear-gradient(165deg, #23282a 0%, #101314 55%, #1c2123 100%);
+  background: linear-gradient(165deg, #000000 0%, #000000 55%, #000000 100%);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
@@ -304,8 +310,8 @@ details > summary::-webkit-details-marker {
   position: absolute;
   z-index: 3;
   border-radius: 2px;
-  background: linear-gradient(180deg, #dfe6e2 0%, #98a39e 50%, #e6ebe8 100%);
-  box-shadow: 0 1px 2px rgba(11, 15, 12, 0.35);
+  background: linear-gradient(180deg, #FFFFFF 0%, #000000 50%, #FFFFFF 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .receive-demo-btn--silent {
@@ -355,7 +361,7 @@ details > summary::-webkit-details-marker {
   right: 2%;
   top: 0;
   z-index: 2;
-  filter: drop-shadow(0 22px 34px rgba(11, 15, 12, 0.34));
+  filter: drop-shadow(0 22px 34px rgba(0, 0, 0, 0.34));
   animation-name: rd-scanner-move;
 }
 
@@ -417,7 +423,7 @@ details > summary::-webkit-details-marker {
 }
 
 .receive-demo-qr-target.is-hit {
-  box-shadow: 0 0 0 3px rgba(18, 184, 26, 0.35);
+  box-shadow: 0 0 0 3px rgba(240, 185, 11, 0.35);
 }
 
 .receive-demo-scanline {
@@ -426,8 +432,8 @@ details > summary::-webkit-details-marker {
   right: 8%;
   height: 2px;
   border-radius: 999px;
-  background: linear-gradient(90deg, transparent, #12B81A, #DDEB3A, #12B81A, transparent);
-  box-shadow: 0 0 12px rgba(18, 184, 26, 0.8);
+  background: linear-gradient(90deg, transparent, #F0B90B, #F0B90B, #F0B90B, transparent);
+  box-shadow: 0 0 12px rgba(240, 185, 11, 0.8);
   animation: receive-demo-scan 1.1s ease-in-out infinite;
 }
 
@@ -443,7 +449,7 @@ details > summary::-webkit-details-marker {
 .receive-demo-qr-ghost.is-locked {
   opacity: 1;
   transform: scale(1);
-  box-shadow: 0 0 0 2px rgba(221, 235, 58, 0.85);
+  box-shadow: 0 0 0 2px rgba(252, 213, 53, 0.85);
 }
 
 .receive-demo-confirm {

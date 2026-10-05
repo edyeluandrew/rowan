@@ -86,7 +86,7 @@ export default function BillsPayVisual({ className = '' }) {
                   key={b.id}
                   className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition-all duration-500 ${
                     active
-                      ? 'border-rowan-green bg-white shadow-[0_6px_16px_rgba(18,184,26,0.16)] scale-[1.03]'
+                      ? 'border-rowan-green bg-white shadow-[0_6px_16px_rgba(240,185,11,0.16)] scale-[1.03]'
                       : 'border-rowan-border bg-white/70 opacity-60'
                   }`}
                 >
@@ -154,7 +154,7 @@ export default function BillsPayVisual({ className = '' }) {
                 </div>
 
                 <div
-                  className={`w-full rounded-xl bg-rowan-green py-2.5 text-center text-[11px] font-semibold text-white shadow-[0_6px_16px_rgba(18,184,26,0.28)] ${
+                  className={`w-full rounded-xl bg-rowan-green py-2.5 text-center text-[11px] font-semibold text-white shadow-[0_6px_16px_rgba(240,185,11,0.28)] ${
                     stage === 'paying' ? 'bills-demo-press' : ''
                   }`}
                 >

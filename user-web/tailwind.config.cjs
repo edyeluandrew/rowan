@@ -5,24 +5,26 @@ module.exports = {
     extend: {
       colors: {
         rowan: {
-          // Primary brand green — original palette restored
-          green: '#12B81A',
-          'green-dark': '#087A12',
-          mint: '#EAF8EE',
-          lime: '#DDEB3A',
-          // `yellow` kept as class name for backward compat → maps to primary green
-          yellow: '#12B81A',
-          // Real gold (MTN / coins / small accents)
-          gold: '#FFD51F',
-          red: '#E53935',
-          dark: '#0B0F0C',
+          green: '#F0B90B',
+          'green-dark': '#F0B90B',
+          mint: '#000000',
+          lime: '#F0B90B',
+          yellow: '#F0B90B',
+          gold: '#F0B90B',
+          red: '#F0B90B',
+          dark: '#000000',
           white: '#FFFFFF',
-          bg: '#F7F9F7',
-          surface: '#FFFFFF',
-          border: '#D8E0D9',
-          text: '#22272B',
-          muted: '#7B8587',
+          bg: '#000000',
+          surface: '#000000',
+          border: '#FFFFFF',
+          text: '#FFFFFF',
+          muted: '#FFFFFF',
         },
+        green: { 200: '#F0B90B', 400: '#F0B90B', 900: '#F0B90B' },
+        orange: { 400: '#F0B90B' },
+        red: { 200: '#FFFFFF', 400: '#F0B90B', 500: '#F0B90B', 600: '#F0B90B', 900: '#F0B90B' },
+        yellow: { 400: '#F0B90B', 500: '#F0B90B', 900: '#F0B90B' },
+        gray: { 200: '#FFFFFF', 300: '#FFFFFF', 400: '#FFFFFF', 700: '#000000', 800: '#000000', 900: '#000000' },
       },
       fontFamily: {
         serif: ['"Times New Roman"', 'Times', 'Georgia', 'serif'],
@@ -30,15 +32,15 @@ module.exports = {
         mono: ['SF Mono', 'Fira Code', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
-        soft: '0 8px 30px rgba(18, 184, 26, 0.08)',
-        lift: '0 16px 40px rgba(18, 184, 26, 0.1)',
-        glow: '0 0 0 1px rgba(18, 184, 26, 0.12), 0 12px 28px rgba(18, 184, 26, 0.12)',
+        soft: '0 8px 30px rgba(240, 185, 11, 0.08)',
+        lift: '0 16px 40px rgba(240, 185, 11, 0.1)',
+        glow: '0 0 0 1px rgba(240, 185, 11, 0.12), 0 12px 28px rgba(240, 185, 11, 0.12)',
       },
       backgroundImage: {
         'brand-hero':
-          'radial-gradient(ellipse 80% 60% at 20% 10%, rgba(18, 184, 26, 0.22), transparent 55%), radial-gradient(ellipse 70% 50% at 90% 90%, rgba(221, 235, 58, 0.12), transparent 50%), linear-gradient(160deg, #087A12 0%, #12B81A 55%, #0B0F0C 140%)',
+          'radial-gradient(ellipse 80% 60% at 20% 10%, rgba(240, 185, 11, 0.16), transparent 55%), radial-gradient(ellipse 70% 50% at 90% 90%, rgba(240, 185, 11, 0.08), transparent 50%), linear-gradient(160deg, #000000 0%, #000000 100%)',
         'page-glow':
-          'radial-gradient(ellipse 90% 40% at 50% -10%, rgba(18, 184, 26, 0.08), transparent 60%)',
+          'radial-gradient(ellipse 90% 40% at 50% -10%, rgba(240, 185, 11, 0.08), transparent 60%)',
       },
       animation: {
         'pulse-dot': 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite',

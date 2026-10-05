@@ -29,7 +29,7 @@ export default function PhoneFrame({ children, className = '', dark = false }) {
 
       <div className="receive-demo-rail">
         <div className="receive-demo-bezel">
-          <div className={`relative overflow-hidden rounded-[1.15rem] ${dark ? 'bg-[#0f1411]' : 'bg-rowan-bg'}`}>
+          <div className={`relative overflow-hidden rounded-[1.15rem] ${dark ? 'bg-black' : 'bg-rowan-bg'}`}>
             <div
               className="absolute top-1.5 left-1/2 z-20 h-[0.85rem] w-[26%] -translate-x-1/2 rounded-full bg-black"
               aria-hidden="true"

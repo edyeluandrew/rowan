@@ -17,7 +17,7 @@ export default function Button({
 
   const variants = {
     primary:
-      'bg-rowan-green text-white shadow-[0_8px_24px_rgba(18,184,26,0.22)] active:bg-rowan-green-dark hover:brightness-105',
+      'bg-rowan-green text-white shadow-[0_8px_24px_rgba(240,185,11,0.22)] active:bg-rowan-green-dark hover:brightness-105',
     ghost: 'bg-transparent border border-rowan-border text-rowan-muted hover:bg-rowan-mint/40',
     danger: 'bg-transparent border border-rowan-red text-rowan-red',
   }

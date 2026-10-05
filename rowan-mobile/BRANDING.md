@@ -1,76 +1,56 @@
 # Rowan Mobile App Branding
 
-This guide explains how to set up and maintain the Rowan app logo and icons for mobile deployment.
+How the Rowan logo, launcher icons and splash screens are set up for mobile.
 
-## Logo Assets
+## Source artwork
 
-### 1. **Favicon** (`public/favicon.svg`)
-The main Rowan logo in SVG format. Used for:
-- Web favicon (shows in browser tab)
-- Source for generating Android icons
-- Marketing materials
+**`public/rowan-mark.png`** — the Rowan leaf in gold (`#FFCE09`) on full transparency.
+This is the single source for every generated icon and splash.
 
-**Colors:**
-- Logo: `#F0B90B` (Rowan Yellow) with gradient to `#FFD700`
-- Background: `#000000` (Black)
+> `assets/app-icon.png` is the original artwork with an **opaque black background**
+> baked in. It is kept for reference only. Do not generate from it — it paints a
+> black tile behind the leaf on every icon and splash.
 
-### 2. **Splash Screen** (`public/splash.svg`)
-The launch splash screen shown when the app starts. Displays:
-- Rowan logo
-- App name "ROWAN"
-- Tagline "Stellar Liquidity Bridge"
-- Loading indicator
+The mark is also used in the app UI through `src/components/RowanLogo.jsx`.
 
-## Icon Generation
-
-### Quick Start
-
-To generate Android app icons from the SVG logo:
+## Generating icons and splashes
 
 ```bash
-npm install --save-dev sharp
 npm run generate-icons
+npx cap sync android
 ```
 
-This creates PNG icons in the correct sizes for all Android densities:
-- `mdpi`: 48×48 (baseline, 160 dpi)
-- `hdpi`: 72×72 (240 dpi)
-- `xhdpi`: 96×96 (320 dpi)
-- `xxhdpi`: 144×144 (480 dpi)
-- `xxxhdpi`: 192×192 (640 dpi)
+`scripts/generate-icons.mjs` writes, all from the transparent mark:
 
-### Manual Alternative
+| Output | Sizes | Background |
+| --- | --- | --- |
+| `ic_launcher_foreground.png` | 108, 162, 216, 324, 432 | transparent |
+| `ic_launcher.png` | 48, 72, 96, 144, 192 | `#F7F9F7` rounded square |
+| `ic_launcher_round.png` | 48, 72, 96, 144, 192 | `#F7F9F7` circle |
+| `splash.png` | 11 densities, existing sizes kept | `#F7F9F7` |
 
-If `sharp` is not available, you can:
+Files land in `android/app/src/main/res/{mipmap,drawable}-*/`.
 
-1. Use an online SVG-to-PNG converter (e.g., CloudConvert, Convertio)
-2. Convert `public/favicon.svg` to PNG at each size
-3. Place files in `android/app/src/main/res/mipmap-{density}/`
+### Why the foreground sizes differ
 
-### Files Generated
+Adaptive icons (API 26+) draw on a **108dp canvas** where the launcher masks it to a
+circle, squircle or rounded square. Only the middle **66dp** is guaranteed visible, so
+the leaf is drawn at 50% of the canvas to stay inside that safe zone. The legacy
+`ic_launcher.png` files are the smaller unmasked icons for older launchers.
 
-```
-android/app/src/main/res/
-├── mipmap-mdpi/
-│   ├── ic_launcher.png (48×48)
-│   └── ic_launcher_round.png (48×48)
-├── mipmap-hdpi/
-│   ├── ic_launcher.png (72×72)
-│   └── ic_launcher_round.png (72×72)
-├── mipmap-xhdpi/
-│   ├── ic_launcher.png (96×96)
-│   └── ic_launcher_round.png (96×96)
-├── mipmap-xxhdpi/
-│   ├── ic_launcher.png (144×144)
-│   └── ic_launcher_round.png (144×144)
-└── mipmap-xxxhdpi/
-    ├── ic_launcher.png (192×192)
-    └── ic_launcher_round.png (192×192)
-```
+## Background colour
 
-## Splash Screen
+Set in **three** places, keep them in sync:
 
-The splash screen is configured in `capacitor.config.json`:
+1. `android/app/src/main/res/values/ic_launcher_background.xml` → adaptive icon background
+2. `scripts/generate-icons.mjs` → `BRAND_BG`
+3. `capacitor.config.json` → `plugins.SplashScreen.backgroundColor`
+
+All currently `#F7F9F7`, the app background, so the splash blends into the first screen.
+
+## Splash screen
+
+Configured in `capacitor.config.json`:
 
 ```json
 {
@@ -78,7 +58,7 @@ The splash screen is configured in `capacitor.config.json`:
     "SplashScreen": {
       "launchShowDuration": 3000,
       "launchAutoHide": true,
-      "backgroundColor": "#000000",
+      "backgroundColor": "#F7F9F7",
       "androidSpin": false,
       "showSpinner": false
     }
@@ -86,87 +66,51 @@ The splash screen is configured in `capacitor.config.json`:
 }
 ```
 
-**Display settings:**
-- Duration: 3 seconds
-- Auto-hide when app is ready
-- Black background matching brand
-- No spinner (custom splash art displays instead)
-
-## iOS Configuration
-
-For iOS, icons are configured in `ios/App/App/Info.plist`:
+The Android launch theme also points at the same drawable, in
+`android/app/src/main/res/values/styles.xml`:
 
 ```xml
-<key>CFBundleIcons</key>
-<dict>
-  <key>CFBundlePrimaryIcon</key>
-  <dict>
-    <key>CFBundleIconFiles</key>
-    <array>
-      <!-- Icons will be generated here -->
-    </array>
-  </dict>
-</dict>
+<style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+    <item name="android:background">@drawable/splash</item>
+</style>
 ```
 
-To set up iOS icons:
+Once the web layer boots, `src/SplashScreen.jsx` takes over with the same mark while
+`AuthContext` reads secure storage, so the handoff is seamless.
+
+## Brand colours
+
+Defined in `tailwind.config.cjs` and mirrored as CSS variables in `src/index.css`.
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `rowan-green` | `#12B81A` | primary actions, brand |
+| `rowan-green-dark` | `#087A12` | pressed states |
+| `rowan-gold` | `#FFD51F` | the leaf mark, MTN accents |
+| `rowan-mint` | `#EAF8EE` | tinted surfaces |
+| `rowan-bg` | `#F7F9F7` | app background, icon background |
+| `rowan-surface` | `#FFFFFF` | cards |
+| `rowan-border` | `#D8E0D9` | hairlines |
+| `rowan-text` | `#22272B` | body text |
+| `rowan-muted` | `#7B8587` | secondary text |
+| `rowan-red` | `#E53935` | errors, Airtel accents |
+
+## Build and deploy
 
 ```bash
-npx cap sync ios
+npm run cap:build      # vite build + cap sync
+npm run cap:android    # open Android Studio
 ```
 
-Capacitor will copy the app icon to iOS automatically.
+After changing icons, **uninstall the app from the device first** — Android caches
+launcher icons aggressively and a reinstall over the top often keeps the old one.
 
-## Build & Deploy
+## iOS
 
-### Android
-
-```bash
-npm run cap:build      # Build web + sync to Android
-npm run cap:android    # Open Android Studio
-```
-
-Then in Android Studio:
-1. Build → Build Bundle(s) / APK(s)
-2. Icons will be included from the generated mipmap files
-
-### iOS
-
-```bash
-npm run cap:build      # Build web + sync to iOS
-npm run cap:ios        # Open Xcode
-```
-
-Then in Xcode:
-1. Update assets in Assets.xcassets
-2. Build → Archive
-3. Icons are already set
-
-## Customization
-
-To modify the logo:
-
-1. Edit `public/favicon.svg` (in any text editor or design tool)
-2. Ensure colors match the brand palette
-3. Run `npm run generate-icons` to regenerate all icon sizes
-4. Sync to mobile: `npm run cap:sync`
-
-## Brand Colors
-
-- **Primary Yellow**: `#F0B90B` (main action color, accent)
-- **Secondary Yellow**: `#FFD700` (gradient highlight)
-- **Background**: `#000000` (pure black)
-- **Text**: `#FFFFFF` (pure white)
-- **Success**: `#0ECB81` (green for confirmations)
-- **Error**: `#F6465D` (red for warnings)
+Not generated yet. `npx cap sync ios` copies the web layer, but the icon set in
+`ios/App/App/Assets.xcassets` still needs to be produced from the same mark.
 
 ## Resources
 
-- [Capacitor Icons & Splashes](https://capacitorjs.com/docs/guides/splashscreens-and-icons)
-- [Android Icon Design](https://developer.android.com/guide/practices/ui_guidelines/icon_design)
-- [iOS App Icon Guidelines](https://developer.apple.com/design/human-interface-guidelines/app-icons/)
-
----
-
-**Last Updated:** May 5, 2026
-**Icon Version:** 1.0 (Initial Rowan branding)
+- [Capacitor icons and splash screens](https://capacitorjs.com/docs/guides/splashscreens-and-icons)
+- [Android adaptive icons](https://developer.android.com/develop/ui/views/launch/icon_design_adaptive)

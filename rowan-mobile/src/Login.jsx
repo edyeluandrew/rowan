@@ -265,7 +265,7 @@ export default function Login() {
     <div className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-rowan-bg">
       {/* Ambient brand wash */}
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_50%_at_50%_0%,rgba(18,184,26,0.13),transparent_60%),radial-gradient(ellipse_70%_40%_at_50%_100%,rgba(18,184,26,0.07),transparent_55%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_50%_at_50%_0%,rgba(240,185,11,0.13),transparent_60%),radial-gradient(ellipse_70%_40%_at_50%_100%,rgba(240,185,11,0.07),transparent_55%)]"
         aria-hidden="true"
       />
 
@@ -334,7 +334,7 @@ export default function Login() {
               <button
                 onClick={handleOpenWallet}
                 disabled={walletLoading}
-                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-rowan-green py-4 text-base font-bold text-white shadow-[0_10px_24px_rgba(18,184,26,0.28)] transition-transform active:scale-[0.98] disabled:opacity-50"
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-rowan-green py-4 text-base font-bold text-white shadow-[0_10px_24px_rgba(240,185,11,0.28)] transition-transform active:scale-[0.98] disabled:opacity-50"
               >
                 {walletLoading ? 'Opening wallet…' : 'Open my wallet'}
                 {!walletLoading && <ArrowRight size={18} />}
@@ -354,7 +354,7 @@ export default function Login() {
             <>
               <button
                 onClick={() => navigate('/wallet-setup')}
-                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-rowan-green py-4 text-base font-bold text-white shadow-[0_10px_24px_rgba(18,184,26,0.28)] transition-transform active:scale-[0.98]"
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-rowan-green py-4 text-base font-bold text-white shadow-[0_10px_24px_rgba(240,185,11,0.28)] transition-transform active:scale-[0.98]"
               >
                 Get started <ArrowRight size={18} />
               </button>

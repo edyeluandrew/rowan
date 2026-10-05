@@ -129,3 +129,5 @@ export const CHART_MUTED = '#848E9C'
 export const CHART_GRID = '#2A2D35'
 
 export const STELLAR_EXPLORER_URL = import.meta.env.VITE_STELLAR_EXPLORER_URL
+
+

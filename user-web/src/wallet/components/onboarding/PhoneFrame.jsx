@@ -184,13 +184,13 @@ export default function PhoneFrame({ scene = 'home', size = 'md', className = ''
 
   return (
     <div className={`mx-auto ${s.wrap} select-none pointer-events-none ${className}`} aria-hidden>
-      <div className={`relative ${s.round} bg-[#1a1f1c] ${s.pad} shadow-[0_20px_50px_rgba(11,15,12,0.22)]`}>
-        <div className="absolute -left-[2px] top-16 w-[2px] h-6 rounded-l bg-[#2a302c]" />
-        <div className="absolute -left-[2px] top-24 w-[2px] h-9 rounded-l bg-[#2a302c]" />
-        <div className="absolute -right-[2px] top-20 w-[2px] h-10 rounded-r bg-[#2a302c]" />
+      <div className={`relative ${s.round} bg-black ${s.pad} shadow-[0_20px_50px_rgba(0,0,0,0.22)]`}>
+        <div className="absolute -left-[2px] top-16 w-[2px] h-6 rounded-l bg-black" />
+        <div className="absolute -left-[2px] top-24 w-[2px] h-9 rounded-l bg-black" />
+        <div className="absolute -right-[2px] top-20 w-[2px] h-10 rounded-r bg-black" />
 
         <div className={`relative ${s.inner} overflow-hidden bg-rowan-bg ${s.screen} flex flex-col`}>
-          <div className="absolute top-1.5 left-1/2 -translate-x-1/2 z-20 w-16 h-3.5 rounded-full bg-[#1a1f1c]" />
+          <div className="absolute top-1.5 left-1/2 -translate-x-1/2 z-20 w-16 h-3.5 rounded-full bg-black" />
           <PhoneStatusBar />
           <div className="flex-1 min-h-0 overflow-hidden">
             <Screen />

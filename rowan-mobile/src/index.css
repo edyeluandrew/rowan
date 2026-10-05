@@ -3,20 +3,26 @@
 @tailwind utilities;
 
 :root {
-  --rowan-green: #12B81A;
-  --rowan-green-dark: #087A12;
-  --rowan-mint: #EAF8EE;
-  --rowan-lime: #DDEB3A;
-  --rowan-gold: #FFD51F;
-  --rowan-yellow: #12B81A; /* legacy class alias → brand green */
+  --rowan-green: #F0B90B;
+  --rowan-green-dark: #F0B90B;
+  --rowan-mint: #000000;
+  --rowan-lime: #F0B90B;
+  --rowan-gold: #F0B90B;
+  --rowan-yellow: #F0B90B;
   --rowan-white: #FFFFFF;
-  --rowan-bg: #F7F9F7;
-  --rowan-border: #D8E0D9;
-  --rowan-grey: #7B8587;
-  --rowan-text: #22272B;
-  --rowan-red: #E53935;
-  --rowan-dark: #0B0F0C;
+  --rowan-bg: #000000;
+  --rowan-surface: #000000;
+  --rowan-border: #FFFFFF;
+  --rowan-grey: #FFFFFF;
+  --rowan-text: #FFFFFF;
+  --rowan-red: #F0B90B;
+  --rowan-dark: #000000;
 }
+
+.bg-white { background-color: #000000; }
+.bg-rowan-green { background-color: #F0B90B; color: #000000; }
+.bg-rowan-green.text-white,
+.bg-rowan-green .text-white { color: #000000 !important; }
 
 * {
   -webkit-tap-highlight-color: transparent;
@@ -71,4 +77,319 @@ input[type='number'] {
 /* Prevent iOS zoom on inputs */
 input, select, textarea {
   font-size: 16px;
+}
+
+/* ==========================================================================
+   Onboarding story (pre-auth carousel)
+   ========================================================================== */
+
+.rowan-logo-mark {
+  flex: none;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.18));
+}
+
+/* —— Slide shell —— */
+.ob-slide {
+  animation: ob-slide-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ob-slide.is-back {
+  animation-name: ob-slide-in-back;
+}
+
+@keyframes ob-slide-in {
+  from { opacity: 0; transform: translateX(22px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes ob-slide-in-back {
+  from { opacity: 0; transform: translateX(-22px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.ob-copy > * {
+  animation: ob-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ob-copy > *:nth-child(2) { animation-delay: 0.07s; }
+.ob-copy > *:nth-child(3) { animation-delay: 0.13s; }
+
+@keyframes ob-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* —— Segmented story progress —— */
+.ob-progress-track {
+  position: relative;
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--rowan-border);
+  overflow: hidden;
+}
+
+.ob-progress-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  border-radius: 999px;
+  background: var(--rowan-green);
+}
+
+.ob-progress-fill.is-done { transform: scaleX(1); }
+.ob-progress-fill.is-idle { transform: scaleX(0); }
+
+.ob-progress-fill.is-live {
+  animation: ob-progress var(--ob-duration, 6000ms) linear forwards;
+}
+
+@keyframes ob-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* —— Ambient stage glow behind every visual —— */
+.ob-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.ob-stage::before {
+  content: '';
+  position: absolute;
+  width: 78%;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(240, 185, 11, 0.16) 0%, rgba(240, 185, 11, 0) 68%);
+  animation: ob-breathe 6s ease-in-out infinite;
+}
+
+@keyframes ob-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+/* —— Africa map + glitter inflows —— */
+.landing-story-stage {
+  position: relative;
+  width: 100%;
+  /* Keeps the 200:220 map under ~250px tall so short devices do not overflow. */
+  max-width: 228px;
+  aspect-ratio: 200 / 220;
+  animation: landing-story-float 7s ease-in-out infinite;
+}
+
+@media (min-height: 750px) {
+  .landing-story-stage {
+    max-width: 268px;
+  }
+}
+
+@keyframes landing-story-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes landing-story-pulse {
+  0% { opacity: 0.55; transform: scale(0.85); }
+  70%, 100% { opacity: 0; transform: scale(1.35); }
+}
+
+.landing-story-pulse-ring,
+.landing-story-pulse-ring-delayed {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: landing-story-pulse 2.4s ease-out infinite;
+}
+
+.landing-story-pulse-ring-delayed { animation-delay: 0.8s; }
+
+@keyframes landing-story-glitter-dash {
+  0% { stroke-dashoffset: 0; opacity: 0.45; }
+  50% { opacity: 1; }
+  100% { stroke-dashoffset: -40; opacity: 0.55; }
+}
+
+.landing-story-glitter-line {
+  animation: landing-story-glitter-dash 1.35s linear infinite;
+}
+
+@keyframes landing-story-coin-glitter {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.88; }
+  40% { transform: translateY(-3px) scale(1.08); opacity: 1; }
+  70% { transform: translateY(-1px) scale(1.02); opacity: 0.95; }
+}
+
+.landing-story-coin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: landing-story-coin-glitter 2s ease-in-out infinite;
+}
+
+.landing-story-coin-b { animation-delay: 0.35s; }
+.landing-story-coin-c { animation-delay: 0.7s; }
+.landing-story-coin-d { animation-delay: 1s; }
+
+/* —— Cash out to mobile money —— */
+.ob-cash-drop {
+  animation: ob-cash-drop 2.6s ease-in-out infinite;
+}
+
+@keyframes ob-cash-drop {
+  0%, 12% { transform: translateY(-6px); opacity: 0; }
+  28% { opacity: 1; }
+  62% { transform: translateY(46px); opacity: 1; }
+  76%, 100% { transform: translateY(52px); opacity: 0; }
+}
+
+.ob-cash-rail {
+  animation: ob-cash-rail 2.6s ease-in-out infinite;
+}
+
+@keyframes ob-cash-rail {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.ob-cash-chip {
+  animation: ob-cash-chip 2.6s ease-in-out infinite;
+}
+
+.ob-cash-chip--b { animation-delay: 1.3s; }
+
+@keyframes ob-cash-chip {
+  0%, 55% { transform: translateY(0); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+  70% { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(240, 185, 11, 0.22); }
+  85%, 100% { transform: translateY(0); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+}
+
+/* —— Scan to receive —— */
+.ob-scan-frame {
+  position: relative;
+  overflow: hidden;
+}
+
+.ob-scan-beam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 38%;
+  background: linear-gradient(
+    to bottom,
+    rgba(240, 185, 11, 0) 0%,
+    rgba(240, 185, 11, 0.22) 55%,
+    rgba(240, 185, 11, 0.45) 100%
+  );
+  border-bottom: 2px solid var(--rowan-green);
+  animation: ob-scan-beam 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes ob-scan-beam {
+  0% { top: -38%; }
+  55%, 100% { top: 100%; }
+}
+
+.ob-scan-corner {
+  position: absolute;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 3px solid var(--rowan-green);
+  border-radius: 0.35rem;
+}
+
+.ob-scan-corner--tl { top: -3px; left: -3px; border-right: 0; border-bottom: 0; }
+.ob-scan-corner--tr { top: -3px; right: -3px; border-left: 0; border-bottom: 0; }
+.ob-scan-corner--bl { bottom: -3px; left: -3px; border-right: 0; border-top: 0; }
+.ob-scan-corner--br { bottom: -3px; right: -3px; border-left: 0; border-top: 0; }
+
+.ob-receipt {
+  animation: ob-receipt 4.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes ob-receipt {
+  0%, 45% { opacity: 0; transform: translateY(28px) scale(0.94); }
+  56%, 88% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(16px) scale(0.97); }
+}
+
+.ob-tick-ring {
+  animation: ob-tick-ring 4.8s ease-out infinite;
+}
+
+@keyframes ob-tick-ring {
+  0%, 50% { opacity: 0; transform: scale(0.6); }
+  62% { opacity: 0.7; transform: scale(1); }
+  78%, 100% { opacity: 0; transform: scale(1.7); }
+}
+
+/* —— Bills —— */
+.ob-bill-row {
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease,
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ob-bill-row.is-active {
+  transform: scale(1.035);
+  border-color: var(--rowan-green);
+  background: var(--rowan-mint);
+}
+
+.ob-bill-sheet {
+  transform: translateY(110%);
+  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ob-bill-sheet.is-open {
+  transform: translateY(0);
+}
+
+.ob-balance {
+  transition: color 0.3s ease;
+}
+
+.ob-balance.is-spent {
+  animation: ob-balance-dip 0.6s ease;
+}
+
+@keyframes ob-balance-dip {
+  0% { transform: translateY(-7px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.ob-paid-pop {
+  animation: ob-paid-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes ob-paid-pop {
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Honour reduced motion for the looping accents, but keep slide changes
+   legible so the story still reads as a sequence. */
+@media (prefers-reduced-motion: reduce) {
+  .ob-stage::before,
+  .landing-story-stage,
+  .landing-story-pulse-ring,
+  .landing-story-pulse-ring-delayed,
+  .landing-story-glitter-line,
+  .landing-story-coin,
+  .ob-cash-drop,
+  .ob-cash-rail,
+  .ob-cash-chip,
+  .ob-scan-beam,
+  .ob-receipt,
+  .ob-tick-ring {
+    animation: none !important;
+  }
+
+  .ob-receipt { opacity: 1; transform: none; }
 }

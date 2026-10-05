@@ -16,7 +16,7 @@ export default function OnboardingShell({
     <div className={`min-h-[100dvh] overflow-y-auto bg-rowan-bg text-rowan-text ${className}`}>
       {/* Soft brand wash */}
       <div
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(18,184,26,0.12),transparent_55%)]"
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(240,185,11,0.12),transparent_55%)]"
         aria-hidden
       />
 
@@ -50,7 +50,7 @@ export default function OnboardingShell({
         )}
 
         <div
-          className={`flex-1 rounded-3xl bg-white border border-rowan-border/90 shadow-[0_12px_40px_rgba(11,15,12,0.06)] p-5 sm:p-7 md:p-8 ${wide ? '' : ''}`}
+          className={`flex-1 rounded-3xl bg-white border border-rowan-border/90 shadow-[0_12px_40px_rgba(0,0,0,0.06)] p-5 sm:p-7 md:p-8 ${wide ? '' : ''}`}
         >
           {children}
         </div>

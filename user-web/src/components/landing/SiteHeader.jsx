@@ -54,7 +54,7 @@ export default function SiteHeader({ ctaLabel, onCta }) {
           <button
             type="button"
             onClick={onCta}
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-rowan-green px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(18,184,26,0.24)] transition active:scale-[0.98]"
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-rowan-green px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(240,185,11,0.24)] transition active:scale-[0.98]"
           >
             {ctaLabel}
             <ArrowRight size={15} aria-hidden="true" />

@@ -112,7 +112,7 @@ export function HowItWorks() {
           <ol className="space-y-4 list-none p-0 m-0">
             {STEPS.map((step, i) => (
               <Reveal as="li" key={step.n} delay={i * 90}>
-                <div className="flex gap-4 rounded-2xl border border-rowan-border bg-white p-5 shadow-[0_10px_30px_rgba(11,15,12,0.05)] transition hover:shadow-[0_16px_40px_rgba(18,184,26,0.12)] hover:border-rowan-green/40">
+                <div className="flex gap-4 rounded-2xl border border-rowan-border bg-white p-5 shadow-[0_10px_30px_rgba(0,0,0,0.25)] transition hover:shadow-[0_16px_40px_rgba(240,185,11,0.12)] hover:border-rowan-green/40">
                   <div className="shrink-0">
                     <div className="w-11 h-11 rounded-2xl bg-rowan-mint flex items-center justify-center">
                       <step.Icon size={19} className="text-rowan-green" aria-hidden="true" />
@@ -186,7 +186,7 @@ export function Features() {
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((f, i) => (
             <Reveal key={f.title} delay={(i % 3) * 80}>
-              <article className="h-full rounded-2xl border border-rowan-border bg-white p-5 transition hover:-translate-y-1 hover:border-rowan-green/40 hover:shadow-[0_18px_40px_rgba(18,184,26,0.12)]">
+              <article className="h-full rounded-2xl border border-rowan-border bg-white p-5 transition hover:-translate-y-1 hover:border-rowan-green/40 hover:shadow-[0_18px_40px_rgba(240,185,11,0.12)]">
                 <div className="w-10 h-10 rounded-xl bg-rowan-mint flex items-center justify-center mb-3.5">
                   <f.Icon size={18} className="text-rowan-green" aria-hidden="true" />
                 </div>

@@ -96,7 +96,7 @@ export default function Login() {
   return (
     <div className="relative min-h-[100dvh] bg-rowan-bg text-rowan-text">
       <div
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_100%_60%_at_50%_0%,rgba(18,184,26,0.14),transparent_55%),radial-gradient(ellipse_70%_40%_at_100%_100%,rgba(18,184,26,0.06),transparent_45%)]"
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_100%_60%_at_50%_0%,rgba(240,185,11,0.14),transparent_55%),radial-gradient(ellipse_70%_40%_at_100%_100%,rgba(240,185,11,0.06),transparent_45%)]"
         aria-hidden="true"
       />
 
@@ -138,7 +138,7 @@ export default function Login() {
                         type="button"
                         onClick={primaryAction}
                         disabled={walletLoading}
-                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-rowan-green px-6 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(18,184,26,0.28)] transition active:scale-[0.99] disabled:opacity-60"
+                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-rowan-green px-6 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(240,185,11,0.28)] transition active:scale-[0.99] disabled:opacity-60"
                       >
                         {walletLoading ? (
                           <>
@@ -209,7 +209,7 @@ export default function Login() {
               <Reveal>
                 <div className="relative overflow-hidden rounded-3xl border border-rowan-green/25 bg-rowan-mint px-6 py-10 sm:px-10 sm:py-14 text-center">
                   <div
-                    className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_50%_0%,rgba(18,184,26,0.18),transparent_60%)]"
+                    className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_50%_0%,rgba(240,185,11,0.18),transparent_60%)]"
                     aria-hidden="true"
                   />
                   <div className="relative mx-auto max-w-xl">
@@ -227,7 +227,7 @@ export default function Login() {
                         type="button"
                         onClick={primaryAction}
                         disabled={walletLoading}
-                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-rowan-green px-7 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(18,184,26,0.28)] transition active:scale-[0.99] disabled:opacity-60"
+                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-rowan-green px-7 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(240,185,11,0.28)] transition active:scale-[0.99] disabled:opacity-60"
                       >
                         {primaryLabel}
                         <ArrowRight size={18} aria-hidden="true" />

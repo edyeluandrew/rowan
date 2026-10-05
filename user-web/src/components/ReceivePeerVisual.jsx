@@ -59,7 +59,7 @@ function ReceivePhone({ screen }) {
               screen === 'locked' ? 'is-hit' : ''
             }`}
           >
-            <QRCode value={DEMO_ADDRESS} size={112} bgColor="#FFFFFF" fgColor="#0B0F0C" level="M" />
+            <QRCode value={DEMO_ADDRESS} size={112} bgColor="#FFFFFF" fgColor="#000000" level="M" />
           </div>
           <p className="mt-2.5 font-mono text-[9px] text-rowan-text bg-rowan-mint rounded-xl px-2.5 py-1.5 max-w-full truncate">
             {DEMO_SHORT}
@@ -76,7 +76,7 @@ function ReceivePhone({ screen }) {
 
         {received && (
           <div className="absolute inset-x-2 top-9 receive-demo-toast" aria-hidden="true">
-            <div className="rounded-2xl bg-white border border-rowan-green/40 shadow-[0_10px_24px_rgba(11,15,12,0.14)] px-3 py-2.5 flex items-center gap-2">
+            <div className="rounded-2xl bg-white border border-rowan-green/40 shadow-[0_10px_24px_rgba(0,0,0,0.14)] px-3 py-2.5 flex items-center gap-2">
               <div className="w-7 h-7 rounded-full bg-rowan-mint flex items-center justify-center shrink-0">
                 <ArrowDownLeft size={14} className="text-rowan-green" />
               </div>
@@ -156,18 +156,18 @@ function ScannerPhone({ screen }) {
               {DEMO_SHORT}
             </p>
             <div className="mt-auto pt-4">
-              <div className="w-full rounded-xl bg-rowan-green py-2.5 text-center text-[11px] font-semibold text-white shadow-[0_6px_16px_rgba(18,184,26,0.28)] receive-demo-cta-press">
+              <div className="w-full rounded-xl bg-rowan-green py-2.5 text-center text-[11px] font-semibold text-white shadow-[0_6px_16px_rgba(240,185,11,0.28)] receive-demo-cta-press">
                 Confirm send
               </div>
             </div>
           </div>
         ) : (
-          <div className="relative mx-3 flex-1 rounded-2xl overflow-hidden bg-[#1a2420] min-h-[200px]">
+          <div className="relative mx-3 flex-1 rounded-2xl overflow-hidden bg-black min-h-[200px]">
             <div
               className="absolute inset-0 opacity-40"
               style={{
                 background:
-                  'radial-gradient(ellipse at 50% 40%, rgba(18,184,26,0.25), transparent 55%), linear-gradient(180deg, #24302a 0%, #121916 100%)',
+                  'radial-gradient(ellipse at 50% 40%, rgba(240,185,11,0.18), transparent 55%), linear-gradient(180deg, #000000 0%, #000000 100%)',
               }}
               aria-hidden="true"
             />
@@ -178,7 +178,7 @@ function ScannerPhone({ screen }) {
                   aiming ? 'is-scanning' : ''
                 }`}
               >
-                <QRCode value={DEMO_ADDRESS} size={72} bgColor="#FFFFFF" fgColor="#0B0F0C" level="M" />
+                <QRCode value={DEMO_ADDRESS} size={72} bgColor="#FFFFFF" fgColor="#000000" level="M" />
               </div>
             </div>
 

@@ -14,7 +14,7 @@ export default function SplashScreen() {
   return (
     <div className="min-h-[100dvh] bg-rowan-bg flex flex-col items-center justify-center px-6">
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_40%,rgba(18,184,26,0.12),transparent_60%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_40%,rgba(240,185,11,0.12),transparent_60%)]"
         aria-hidden
       />
       <p className="relative font-serif text-5xl sm:text-6xl text-rowan-green tracking-tight">
