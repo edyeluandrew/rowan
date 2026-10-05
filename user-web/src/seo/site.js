@@ -10,7 +10,7 @@ export const DEFAULT_TITLE = 'Rowan | Mobile Money & Digital Asset Infrastructur
 export const DEFAULT_DESCRIPTION =
   'Buy and sell USDC with local traders, and pay airtime, data, and bills from one Rowan wallet.'
 
-export const OG_IMAGE_PATH = '/og-image.png'
+export const OG_IMAGE_PATH = '/og-share.png'
 export const OG_IMAGE_URL = `${SITE_URL}${OG_IMAGE_PATH}`
 
 /** Routes search engines should not index (auth + wallet app). */
