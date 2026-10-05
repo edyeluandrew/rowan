@@ -4,11 +4,11 @@
  */
 
 export const SITE_URL = 'https://rowanpay.app'
-export const SITE_NAME = 'Rowan'
+export const SITE_NAME = 'Rowan Pay'
 
-export const DEFAULT_TITLE = 'Rowan | Mobile Money & Digital Asset Infrastructure'
+export const DEFAULT_TITLE = 'Rowan Pay - Send, receive, and spend USDC on bills'
 export const DEFAULT_DESCRIPTION =
-  'Buy and sell USDC with local traders, and pay airtime, data, and bills from one Rowan wallet.'
+  'Rowan Pay is the wallet for buying and selling USDC with local traders, and paying airtime, data, and bills.'
 
 export const OG_IMAGE_PATH = '/og-share.png'
 export const OG_IMAGE_URL = `${SITE_URL}${OG_IMAGE_PATH}`
@@ -40,6 +40,7 @@ export function organizationJsonLd() {
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: SITE_NAME,
+    alternateName: 'Rowan',
     url: SITE_URL,
     logo: `${SITE_URL}/rowan-mark-512.png`,
     description: DEFAULT_DESCRIPTION,
