@@ -60,14 +60,16 @@ export function RailsStrip() {
   return (
     <section aria-label="Supported rails" className="border-y border-rowan-border/70 bg-rowan-surface py-3.5">
       <div className="rails-marquee">
-        <ul className="rails-track" aria-hidden="true">
-          {[...RAILS, ...RAILS].map((rail, i) => (
-            <li key={`${rail}-${i}`} className="flex items-center gap-2.5 shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-rowan-green" />
-              <span className="text-xs sm:text-sm font-sans text-rowan-muted whitespace-nowrap">{rail}</span>
-            </li>
-          ))}
-        </ul>
+        {[0, 1].map((copy) => (
+          <ul key={copy} className="rails-track" aria-hidden="true">
+            {RAILS.map((rail) => (
+              <li key={`${copy}-${rail}`} className="flex items-center gap-2.5 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-rowan-green" />
+                <span className="text-xs sm:text-sm font-sans text-rowan-muted whitespace-nowrap">{rail}</span>
+              </li>
+            ))}
+          </ul>
+        ))}
       </div>
       <p className="sr-only">{RAILS.join(', ')}</p>
     </section>
