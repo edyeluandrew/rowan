@@ -133,8 +133,8 @@ export default function Home() {
             onClick={() => navigate('/wallet/receive')}
             className="flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl py-2.5 active:scale-[0.98]"
           >
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green">
-              <ArrowDownLeft size={20} strokeWidth={1.75} />
+            <span className="flex items-center justify-center text-rowan-green">
+              <ArrowDownLeft size={22} strokeWidth={1.75} />
             </span>
             <span className="text-xs font-medium text-rowan-text">Receive</span>
           </button>
@@ -144,8 +144,8 @@ export default function Home() {
             onClick={() => navigate('/wallet/p2p', { state: { tab: 'buy' } })}
             className="flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl py-2.5 disabled:opacity-40 active:scale-[0.98]"
           >
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green">
-              <ArrowDownToLine size={20} strokeWidth={1.75} />
+            <span className="flex items-center justify-center text-rowan-green">
+              <ArrowDownToLine size={22} strokeWidth={1.75} />
             </span>
             <span className="text-xs font-medium text-rowan-text">Buy</span>
           </button>
@@ -155,8 +155,8 @@ export default function Home() {
             onClick={() => navigate('/wallet/p2p', { state: { tab: 'sell' } })}
             className="flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl py-2.5 disabled:opacity-40 active:scale-[0.98]"
           >
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green">
-              <ArrowUpFromLine size={20} strokeWidth={1.75} />
+            <span className="flex items-center justify-center text-rowan-green">
+              <ArrowUpFromLine size={22} strokeWidth={1.75} />
             </span>
             <span className="text-xs font-medium text-rowan-text">Sell</span>
           </button>
@@ -167,8 +167,8 @@ export default function Home() {
             onClick={() => navigate('/wallet/utilities/bills')}
             className="flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl py-2.5 active:scale-[0.98]"
           >
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green">
-              <Receipt size={20} strokeWidth={1.75} />
+            <span className="flex items-center justify-center text-rowan-green">
+              <Receipt size={22} strokeWidth={1.75} />
             </span>
             <span className="text-xs font-medium text-rowan-text">Pay Bills</span>
           </button>
@@ -177,8 +177,8 @@ export default function Home() {
             onClick={() => navigate('/wallet/utilities/airtime')}
             className="flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl py-2.5 active:scale-[0.98]"
           >
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green">
-              <Smartphone size={20} strokeWidth={1.75} />
+            <span className="flex items-center justify-center text-rowan-green">
+              <Smartphone size={22} strokeWidth={1.75} />
             </span>
             <span className="text-xs font-medium text-rowan-text">Top up</span>
           </button>

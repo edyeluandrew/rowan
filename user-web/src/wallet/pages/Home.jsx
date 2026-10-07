@@ -90,8 +90,8 @@ function HomeAction({ action, disabled, onNavigate }) {
       onClick={() => onNavigate(path, state ? { state } : undefined)}
       className="group flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl px-1 py-2.5 disabled:opacity-40"
     >
-      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rowan-bg text-rowan-green transition-colors group-hover:bg-rowan-mint group-active:scale-95">
-        <Icon size={20} strokeWidth={1.75} />
+      <span className="flex items-center justify-center text-rowan-green group-active:scale-95">
+        <Icon size={22} strokeWidth={1.75} />
       </span>
       <span className="text-center text-xs font-medium text-rowan-text font-sans">
         {label}
