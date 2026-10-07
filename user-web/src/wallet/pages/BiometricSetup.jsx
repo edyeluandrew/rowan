@@ -81,7 +81,7 @@ export default function BiometricSetup() {
           </div>
           <p className="text-rowan-text font-medium mb-2">Not available</p>
           <p className="text-rowan-muted text-sm">
-            Your device does not support Face ID or Fingerprint, or biometrics have not been set up in your device settings.
+            The website signs in with the wallet on this device. The phone app asks for the phone's PIN, fingerprint, or face unlock.
           </p>
         </div>
       ) : (

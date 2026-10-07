@@ -86,7 +86,7 @@ export default function SessionLock() {
           ? 'Checking this device…'
           : isAvailable
             ? "You have been away for a few minutes. Confirm with this device's PIN, fingerprint, or face unlock."
-            : 'You have been away for a few minutes. This device has no screen lock, so sign in to continue.'}
+            : 'You have been away for a few minutes. Sign in to continue.'}
       </p>
 
       <div className="w-full max-w-sm">
