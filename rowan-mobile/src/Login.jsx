@@ -21,7 +21,6 @@ import CashoutVisual from './components/story/CashoutVisual';
 import ScanReceiveVisual from './components/story/ScanReceiveVisual';
 import BillsVisual from './components/story/BillsVisual';
 import { isMissingWalletAccount } from './wallet/utils/apiErrors';
-import useBiometrics from './wallet/hooks/useBiometrics';
 
 const SLIDES = [
   {
@@ -60,7 +59,6 @@ async function tapFeedback() {
 
 export default function Login() {
   const { loginAsTrader, loginWithWallet, setWalletAuthAfter2FA } = useAuth();
-  const { isAvailable, loading: biometricLoading, authenticate } = useBiometrics();
   const navigate = useNavigate();
   const [mode, setMode] = useState('wallet'); // 'wallet' | 'trader'
   const [slide, setSlide] = useState(0);
@@ -126,13 +124,6 @@ export default function Login() {
     setWalletLoading(true);
     setWalletError(null);
     try {
-      if (isAvailable) {
-        const verified = await authenticate('Sign in to Rowan');
-        if (!verified) {
-          setWalletError("Confirm with this device's lock to sign in.");
-          return;
-        }
-      }
       const response = await loginWithWallet();
       if (response?.requiresTwoFactorVerification === true) {
         setTempUserId(response.userId);
@@ -350,7 +341,7 @@ export default function Login() {
             <>
               <button
                 onClick={handleOpenWallet}
-                disabled={walletLoading || !walletChecked || biometricLoading}
+                disabled={walletLoading || !walletChecked}
                 className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-rowan-green py-4 text-base font-bold text-white shadow-[0_10px_24px_rgba(240,185,11,0.28)] transition-transform active:scale-[0.98] disabled:opacity-50"
               >
                 {walletLoading ? 'Signing in…' : 'Log in'}

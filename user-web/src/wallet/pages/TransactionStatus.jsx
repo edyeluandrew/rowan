@@ -65,7 +65,7 @@ export default function TransactionStatus() {
   const [verifyError, setVerifyError] = useState(null)
 
   const { lockRequired } = useBiometricLock()
-  const { authenticate, biometricType, isAvailable, isEnabled } = useBiometrics()
+  const { authenticate, biometricType } = useBiometrics()
   const deviceLabel = biometricLabel(biometricType)
   const BiometricIcon = biometricType === 'FACE_ID' ? ScanFace : Fingerprint
 
@@ -289,7 +289,7 @@ export default function TransactionStatus() {
 
   const handleConfirmReceipt = async () => {
     // If biometric lock is enabled, require verification first
-    if (lockRequired || isEnabled || isAvailable) {
+    if (lockRequired) {
       setShowVerifyModal(true)
       return
     }

@@ -1,11 +1,9 @@
 /**
- * Shown after the wallet sits idle. The person confirms with the lock
- * already on this device, then Rowan signs the wallet back in.
+ * Shown after the wallet sits idle. Sign in uses the wallet already on this device.
  */
 import { useState } from 'react'
 import { Lock, LogOut } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
-import useBiometrics from '../hooks/useBiometrics'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import { isMissingWalletAccount } from '../utils/apiErrors'
 import Button from './ui/Button'
@@ -15,7 +13,6 @@ import { getSecure } from '../utils/storage'
 export default function SessionLock() {
   const { sessionLocked, loginWithWallet, setWalletAuthAfter2FA, logout } = useAuth()
   const { unlock } = useBiometricLock()
-  const { isAvailable, loading: detecting, authenticate } = useBiometrics()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [show2faModal, setShow2faModal] = useState(false)
@@ -36,13 +33,6 @@ export default function SessionLock() {
     setLoading(true)
     setError(null)
     try {
-      if (isAvailable) {
-        const verified = await authenticate()
-        if (!verified) {
-          setError("Confirm with this device's lock to continue.")
-          return
-        }
-      }
       const response = await loginWithWallet()
       await finish(response)
     } catch (err) {
@@ -82,15 +72,11 @@ export default function SessionLock() {
       <Lock size={56} className="mb-6 text-rowan-yellow" />
       <h1 className="mb-2 text-center text-2xl font-bold text-rowan-text">Session paused</h1>
       <p className="mb-8 max-w-xs text-center text-sm text-rowan-muted">
-        {detecting
-          ? 'Checking this device…'
-          : isAvailable
-            ? "You have been away for a few minutes. Confirm with this device's PIN, fingerprint, or face unlock."
-            : 'You have been away for a few minutes. Sign in to continue.'}
+        You have been away for a few minutes. Sign in to continue.
       </p>
 
       <div className="w-full max-w-sm">
-        <Button onClick={handleResume} loading={loading || detecting} disabled={detecting}>
+        <Button onClick={handleResume} loading={loading}>
           Sign in
         </Button>
       </div>

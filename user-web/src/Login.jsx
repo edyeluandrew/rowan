@@ -13,7 +13,6 @@ import WalletTwoFactorLoginModal from './wallet/pages/WalletTwoFactorLoginModal'
 import { TrustLine } from './wallet/components/onboarding/OnboardingBits'
 import LandingStoryVisual from './components/LandingStoryVisual'
 import { isMissingWalletAccount } from './wallet/utils/apiErrors'
-import useBiometrics from './wallet/hooks/useBiometrics'
 import SiteHeader from './components/landing/SiteHeader'
 import Reveal from './components/landing/Reveal'
 import {
@@ -30,7 +29,6 @@ import {
 
 export default function Login() {
   const { loginWithWallet, setWalletAuthAfter2FA } = useAuth()
-  const { isAvailable, loading: biometricLoading, authenticate } = useBiometrics()
   const navigate = useNavigate()
   const [storedPublicKey, setStoredPublicKey] = useState(null)
   const [walletChecked, setWalletChecked] = useState(false)
@@ -58,13 +56,6 @@ export default function Login() {
     setWalletLoading(true)
     setWalletError(null)
     try {
-      if (isAvailable) {
-        const verified = await authenticate()
-        if (!verified) {
-          setWalletError("Confirm with this device's lock to sign in.")
-          return
-        }
-      }
       const response = await loginWithWallet()
       if (response?.requiresTwoFactorVerification === true) {
         setTempUserId(response.userId)
@@ -119,7 +110,7 @@ export default function Login() {
       />
 
       <div className="relative">
-        <SiteHeader ctaLabel={walletChecked ? primaryLabel : 'Log in'} onCta={primaryAction} ctaDisabled={!walletChecked || walletLoading || (Boolean(storedPublicKey) && biometricLoading)} />
+        <SiteHeader ctaLabel={walletChecked ? primaryLabel : 'Log in'} onCta={primaryAction} ctaDisabled={!walletChecked || walletLoading} />
 
         <main>
           {/* —— Hero —— */}
@@ -155,7 +146,7 @@ export default function Login() {
                       <button
                         type="button"
                         onClick={primaryAction}
-                        disabled={walletLoading || !walletChecked || (Boolean(storedPublicKey) && biometricLoading)}
+                        disabled={walletLoading || !walletChecked}
                         className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-rowan-green px-6 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(240,185,11,0.28)] transition active:scale-[0.99] disabled:opacity-60"
                       >
                         {walletLoading ? (
@@ -244,7 +235,7 @@ export default function Login() {
                       <button
                         type="button"
                         onClick={primaryAction}
-                        disabled={walletLoading || !walletChecked || (Boolean(storedPublicKey) && biometricLoading)}
+                        disabled={walletLoading || !walletChecked}
                         className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-rowan-green px-7 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(240,185,11,0.28)] transition active:scale-[0.99] disabled:opacity-60"
                       >
                         {primaryLabel}
