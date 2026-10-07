@@ -1,12 +1,13 @@
 /**
- * Detects a platform authenticator (Windows Hello, Touch ID, Face ID, fingerprint)
- * and asks the device to confirm the person in front of it.
- * The check stays on this device. Rowan never receives biometric data.
+ * Asks this device to confirm the person in front of it.
+ * Uses the lock already on the device (PIN, fingerprint, or face).
+ * Rowan does not create a passkey and never receives biometric data.
  */
 import { useState, useEffect, useCallback } from 'react'
 import { getPreference, setPreference } from '../utils/storage'
 
-const CRED_KEY = 'rowan_platform_credential_id'
+const LOCK_KEY = 'rowan_device_lock_id'
+const OLD_PASSKEY_KEY = 'rowan_platform_credential_id'
 
 function bytesToB64(bytes) {
   let binary = ''
@@ -27,7 +28,7 @@ function detectType() {
   if (/iPhone|iPad/i.test(ua)) return 'FACE_ID'
   if (/Macintosh/i.test(ua)) return 'TOUCH_ID'
   if (/Android/i.test(ua)) return 'FINGERPRINT'
-  return 'BIOMETRIC'
+  return 'DEVICE_LOCK'
 }
 
 export function biometricLabel(type) {
@@ -35,7 +36,8 @@ export function biometricLabel(type) {
   if (type === 'TOUCH_ID') return 'Touch ID'
   if (type === 'WINDOWS_HELLO') return 'Windows Hello'
   if (type === 'FINGERPRINT') return 'fingerprint'
-  return 'biometrics'
+  if (type === 'DEVICE_PIN') return 'device PIN'
+  return "this device's lock"
 }
 
 export default function useBiometrics() {
@@ -47,6 +49,7 @@ export default function useBiometrics() {
     let cancelled = false
     ;(async () => {
       try {
+        await setPreference(OLD_PASSKEY_KEY, '')
         const detect = window.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable
         if (detect) {
           const ok = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
@@ -56,7 +59,7 @@ export default function useBiometrics() {
           }
         }
       } catch {
-        /* this browser has no platform authenticator */
+        /* this browser cannot ask the device lock */
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -69,7 +72,7 @@ export default function useBiometrics() {
   const authenticate = useCallback(async () => {
     if (!window.PublicKeyCredential || !navigator.credentials) return false
     const challenge = crypto.getRandomValues(new Uint8Array(32))
-    const existing = await getPreference(CRED_KEY)
+    const existing = await getPreference(LOCK_KEY)
     try {
       if (existing) {
         const result = await navigator.credentials.get({
@@ -89,8 +92,8 @@ export default function useBiometrics() {
           rp: { name: 'Rowan' },
           user: {
             id: crypto.getRandomValues(new Uint8Array(16)),
-            name: 'rowan',
-            displayName: 'Rowan',
+            name: 'device-lock',
+            displayName: 'Device lock',
           },
           pubKeyCredParams: [
             { type: 'public-key', alg: -7 },
@@ -99,18 +102,19 @@ export default function useBiometrics() {
           authenticatorSelection: {
             authenticatorAttachment: 'platform',
             userVerification: 'required',
-            residentKey: 'preferred',
+            residentKey: 'discouraged',
+            requireResidentKey: false,
           },
           timeout: 60000,
           attestation: 'none',
         },
       })
       if (!created) return false
-      await setPreference(CRED_KEY, bytesToB64(new Uint8Array(created.rawId)))
+      await setPreference(LOCK_KEY, bytesToB64(new Uint8Array(created.rawId)))
       return true
     } catch (err) {
       if (existing && (err?.name === 'InvalidStateError' || err?.name === 'NotFoundError')) {
-        await setPreference(CRED_KEY, '')
+        await setPreference(LOCK_KEY, '')
       }
       return false
     }
@@ -120,7 +124,7 @@ export default function useBiometrics() {
     const ok = await authenticate()
     if (ok) {
       await setPreference('rowan_biometric_enabled', 'true')
-      await setPreference('rowan_biometric_type', biometricType || 'BIOMETRIC')
+      await setPreference('rowan_biometric_type', biometricType || 'DEVICE_LOCK')
     }
     return ok
   }, [authenticate, biometricType])

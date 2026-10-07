@@ -21,7 +21,7 @@ import CashoutVisual from './components/story/CashoutVisual';
 import ScanReceiveVisual from './components/story/ScanReceiveVisual';
 import BillsVisual from './components/story/BillsVisual';
 import { isMissingWalletAccount } from './wallet/utils/apiErrors';
-import useBiometrics, { biometricLabel } from './wallet/hooks/useBiometrics';
+import useBiometrics from './wallet/hooks/useBiometrics';
 
 const SLIDES = [
   {
@@ -60,7 +60,7 @@ async function tapFeedback() {
 
 export default function Login() {
   const { loginAsTrader, loginWithWallet, setWalletAuthAfter2FA } = useAuth();
-  const { isAvailable, loading: biometricLoading, authenticate, biometricType } = useBiometrics();
+  const { isAvailable, loading: biometricLoading, authenticate } = useBiometrics();
   const navigate = useNavigate();
   const [mode, setMode] = useState('wallet'); // 'wallet' | 'trader'
   const [slide, setSlide] = useState(0);
@@ -129,7 +129,7 @@ export default function Login() {
       if (isAvailable) {
         const verified = await authenticate('Sign in to Rowan');
         if (!verified) {
-          setWalletError(`Confirm with ${biometricLabel(biometricType)} to sign in.`);
+          setWalletError("Confirm with this device's lock to sign in.");
           return;
         }
       }

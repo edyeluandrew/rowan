@@ -19,7 +19,7 @@ import useCountdown from '../hooks/useCountdown'
 import Button from '../components/ui/Button'
 import OrderShortId from '../components/ui/OrderShortId'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
-import useBiometrics from '../hooks/useBiometrics'
+import useBiometrics, { biometricLabel } from '../hooks/useBiometrics'
 import { normalizeWalletTransaction, isManualP2pTransaction, isBuyOrder, isAutomatedOfframp, isAutomatedOnramp } from '../utils/transactions'
 import { STATE_SUBTITLES } from '../utils/constants'
 import { getOrderGuidance } from '../utils/orderGuidance'
@@ -66,7 +66,7 @@ export default function TransactionStatus() {
 
   const { lockRequired } = useBiometricLock()
   const { authenticate, biometricType, isAvailable, isEnabled } = useBiometrics()
-  const biometricLabel = biometricType === 'FACE_ID' ? 'Face ID' : 'Fingerprint'
+  const deviceLabel = biometricLabel(biometricType)
   const BiometricIcon = biometricType === 'FACE_ID' ? ScanFace : Fingerprint
 
   const [showReviewModal, setShowReviewModal] = useState(false)
@@ -1069,7 +1069,7 @@ export default function TransactionStatus() {
               </div>
               <h3 className="text-rowan-text font-bold text-lg">Verify Your Identity</h3>
               <p className="text-rowan-muted text-sm mt-2 text-center">
-                Use {biometricLabel} to confirm USDC release
+                Use {deviceLabel} to confirm USDC release
               </p>
             </div>
             {verifyError && (
@@ -1082,7 +1082,7 @@ export default function TransactionStatus() {
                 loading={verifyingBiometric}
                 onClick={handleVerifyAndRelease}
               >
-                {verifyingBiometric ? 'Verifying...' : `Verify with ${biometricLabel}`}
+                {verifyingBiometric ? 'Verifying...' : `Verify with ${deviceLabel}`}
               </Button>
               <Button
                 variant="ghost"

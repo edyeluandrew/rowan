@@ -13,7 +13,7 @@ import WalletTwoFactorLoginModal from './wallet/pages/WalletTwoFactorLoginModal'
 import { TrustLine } from './wallet/components/onboarding/OnboardingBits'
 import LandingStoryVisual from './components/LandingStoryVisual'
 import { isMissingWalletAccount } from './wallet/utils/apiErrors'
-import useBiometrics, { biometricLabel } from './wallet/hooks/useBiometrics'
+import useBiometrics from './wallet/hooks/useBiometrics'
 import SiteHeader from './components/landing/SiteHeader'
 import Reveal from './components/landing/Reveal'
 import {
@@ -30,7 +30,7 @@ import {
 
 export default function Login() {
   const { loginWithWallet, setWalletAuthAfter2FA } = useAuth()
-  const { isAvailable, loading: biometricLoading, authenticate, biometricType } = useBiometrics()
+  const { isAvailable, loading: biometricLoading, authenticate } = useBiometrics()
   const navigate = useNavigate()
   const [storedPublicKey, setStoredPublicKey] = useState(null)
   const [walletChecked, setWalletChecked] = useState(false)
@@ -61,7 +61,7 @@ export default function Login() {
       if (isAvailable) {
         const verified = await authenticate()
         if (!verified) {
-          setWalletError(`Confirm with ${biometricLabel(biometricType)} to sign in.`)
+          setWalletError("Confirm with this device's lock to sign in.")
           return
         }
       }

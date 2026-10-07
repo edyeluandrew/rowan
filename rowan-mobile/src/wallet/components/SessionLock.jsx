@@ -1,26 +1,21 @@
 /**
- * Shown after the wallet sits idle. The person signs back in on this device.
- * Biometrics when the device has them, otherwise an explicit sign-in.
+ * Shown after the wallet sits idle. The person confirms with the lock
+ * already on this device, then Rowan signs the wallet back in.
  */
 import { useEffect, useRef, useState } from 'react'
-import { Fingerprint, ScanFace, Lock, LogOut } from 'lucide-react'
+import { Lock, LogOut } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
-import useBiometrics, { biometricLabel } from '../hooks/useBiometrics'
+import useBiometrics from '../hooks/useBiometrics'
 import { useBiometricLock } from '../../shared/context/BiometricLockContext'
 import { isMissingWalletAccount } from '../utils/apiErrors'
 import Button from './ui/Button'
 import WalletTwoFactorLoginModal from '../pages/WalletTwoFactorLoginModal'
 import { getSecure } from '../utils/storage'
 
-function IconFor({ type }) {
-  if (type === 'FACE_ID') return ScanFace
-  return Fingerprint
-}
-
 export default function SessionLock() {
   const { sessionLocked, loginWithWallet, setWalletAuthAfter2FA, logout } = useAuth()
   const { unlock } = useBiometricLock()
-  const { isAvailable, biometricType, loading: detecting, authenticate, requiresGesture } = useBiometrics()
+  const { isAvailable, loading: detecting, authenticate, requiresGesture } = useBiometrics()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [show2faModal, setShow2faModal] = useState(false)
@@ -43,7 +38,7 @@ export default function SessionLock() {
       if (isAvailable) {
         const verified = await authenticate('Sign in to Rowan')
         if (!verified) {
-          setError(`Confirm with ${biometricLabel(biometricType)} to continue.`)
+          setError("Confirm with this device's lock to continue.")
           return
         }
       }
@@ -71,9 +66,6 @@ export default function SessionLock() {
   }, [sessionLocked, detecting, isAvailable, requiresGesture])
 
   if (!sessionLocked) return null
-
-  const label = biometricLabel(biometricType)
-  const Icon = IconFor({ type: biometricType })
 
   const handleAfter2FA = async (verifyResponse) => {
     setLoading(true)
@@ -104,20 +96,13 @@ export default function SessionLock() {
         {detecting
           ? 'Checking this device…'
           : isAvailable
-            ? `You have been away for a few minutes. Use ${label} to sign back in.`
-            : 'You have been away for a few minutes. This device has no fingerprint or face unlock, so sign in to continue.'}
+            ? "You have been away for a few minutes. Confirm with this device's PIN, fingerprint, or face unlock."
+            : 'You have been away for a few minutes. This device has no screen lock, so sign in to continue.'}
       </p>
 
       <div className="w-full max-w-sm">
         <Button onClick={handleResume} loading={loading || detecting} disabled={detecting}>
-          {isAvailable ? (
-            <>
-              <Icon size={20} />
-              Sign in with {label}
-            </>
-          ) : (
-            'Sign in'
-          )}
+          {isAvailable ? 'Unlock' : 'Sign in'}
         </Button>
       </div>
 

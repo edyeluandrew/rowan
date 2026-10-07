@@ -2,9 +2,20 @@ import { useState, useEffect, useCallback } from 'react'
 import { getPreference, setPreference } from '../utils/storage'
 
 /**
- * Hook to manage biometric authentication (Face ID / Fingerprint).
- * Uses @capgo/capacitor-native-biometric under the hood.
+ * Asks this device to confirm the person in front of it.
+ * Uses the lock already on the phone: PIN, pattern, fingerprint, or face.
+ * Rowan does not create a passkey.
  */
+const DEVICE_LOCK_TYPES = [3, 4, 5, 7]
+
+function mapNativeType(biometryType) {
+  if (biometryType === 1) return 'TOUCH_ID'
+  if (biometryType === 2 || biometryType === 4) return 'FACE_ID'
+  if (biometryType === 3) return 'FINGERPRINT'
+  if (biometryType === 7) return 'DEVICE_PIN'
+  return 'DEVICE_LOCK'
+}
+
 export default function useBiometrics() {
   const [isAvailable, setIsAvailable] = useState(false)
   const [isEnabled, setIsEnabled] = useState(false)
@@ -16,11 +27,10 @@ export default function useBiometrics() {
     async function init() {
       try {
         const { NativeBiometric } = await import('@capgo/capacitor-native-biometric')
-        const result = await NativeBiometric.isAvailable()
+        const result = await NativeBiometric.isAvailable({ useFallback: true })
         if (!cancelled) {
-          setIsAvailable(result.isAvailable)
-          const type = result.biometryType === 1 ? 'FACE_ID' : 'FINGERPRINT'
-          setBiometricType(type)
+          setIsAvailable(Boolean(result.isAvailable || result.deviceIsSecure))
+          setBiometricType(mapNativeType(result.biometryType))
         }
       } catch {
         if (!cancelled) setIsAvailable(false)
@@ -47,10 +57,12 @@ export default function useBiometrics() {
     try {
       const { NativeBiometric } = await import('@capgo/capacitor-native-biometric')
       await NativeBiometric.verifyIdentity({
-        reason,
-        title: 'Rowan Authentication',
-        subtitle: reason,
-        description: '',
+        reason: reason || 'Confirm it is you',
+        title: 'Rowan',
+        subtitle: "Use this device's screen lock",
+        useFallback: true,
+        maxAttempts: 5,
+        allowedBiometryTypes: DEVICE_LOCK_TYPES,
       })
       return true
     } catch {
@@ -81,5 +93,6 @@ export function biometricLabel(type) {
   if (type === 'TOUCH_ID') return 'Touch ID'
   if (type === 'WINDOWS_HELLO') return 'Windows Hello'
   if (type === 'FINGERPRINT') return 'fingerprint'
-  return 'biometrics'
+  if (type === 'DEVICE_PIN') return 'device PIN'
+  return "this device's lock"
 }
