@@ -91,7 +91,7 @@ export default function SessionLock() {
 
       <div className="w-full max-w-sm">
         <Button onClick={handleResume} loading={loading || detecting} disabled={detecting}>
-          {isAvailable ? 'Unlock' : 'Sign in'}
+          Sign in
         </Button>
       </div>
 
