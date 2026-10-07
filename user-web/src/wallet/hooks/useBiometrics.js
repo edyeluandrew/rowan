@@ -1,6 +1,7 @@
 /**
- * On a PC or phone browser, Sign in asks Windows Hello, Touch ID, or the device PIN.
- * The check is tied to this device. Rowan does not offer Google Password Manager.
+ * Optional profile lock. Confirms with the device fingerprint or PIN.
+ * A discoverable passkey makes Windows try to save one and then fail, so this
+ * stays a local device check.
  */
 import { useState, useEffect, useCallback } from 'react'
 import { getPreference, setPreference } from '../utils/storage'
@@ -54,10 +55,9 @@ function creationOptions(challenge) {
     authenticatorSelection: {
       authenticatorAttachment: 'platform',
       userVerification: 'required',
-      residentKey: 'required',
-      requireResidentKey: true,
+      residentKey: 'discouraged',
+      requireResidentKey: false,
     },
-    hints: ['client-device'],
     attestation: 'none',
     timeout: 60000,
   }
@@ -103,7 +103,6 @@ export default function useBiometrics() {
             challenge,
             timeout: 60000,
             userVerification: 'required',
-            hints: ['client-device'],
             allowCredentials: [{
               type: 'public-key',
               id: b64ToBytes(existing),
@@ -125,8 +124,11 @@ export default function useBiometrics() {
       if (!created) return false
       await setPreference(LOCK_KEY, bytesToB64(new Uint8Array(created.rawId)))
       return true
-    } catch {
-      return false
+    } catch (err) {
+      if (err?.name === 'NotAllowedError') return false
+      const failed = new Error('Windows could not finish this check. Add a Windows Hello PIN in Settings, then try again.')
+      failed.cause = err
+      throw failed
     }
   }, [])
 

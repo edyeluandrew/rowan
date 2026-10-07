@@ -47,8 +47,7 @@ export default function BiometricSetup() {
         }
       }
     } catch (err) {
-      console.error('Toggle error:', err)
-      setStatusMessage({ type: 'error', text: err.message || 'An error occurred' })
+      setStatusMessage({ type: 'error', text: err.message || 'Could not turn this on' })
     } finally {
       setToggling(false)
     }
