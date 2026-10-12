@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Globe, Timer, BarChart3, TrendingUp, Settings,
+  Timer, BarChart3, TrendingUp, Settings,
   ChevronRight, LogOut, CreditCard,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -124,13 +124,13 @@ export default function Profile() {
 
       {/* USDC Wallet */}
       <div className="bg-rowan-surface rounded-xl p-4 mb-4">
-        <h3 className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Rowan wallet</h3>
+        <h3 className="text-rowan-muted text-xs uppercase tracking-wider mb-2">USDC address</h3>
         <p className="text-rowan-muted text-[10px] mb-2">
           Your trading USDC lives here. Buy locks come from this wallet. Sell payouts land here.
         </p>
         <div className="flex items-center gap-2">
           <span className="text-rowan-text text-xs font-mono flex-1 break-all">
-            {p.stellar_address || 'Not set — open Rowan Wallet to create one'}
+            {p.stellar_address || 'Not set yet'}
           </span>
           {p.stellar_address && (
             <button
@@ -141,19 +141,11 @@ export default function Profile() {
             </button>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => navigate('/trader/wallet')}
-          className="text-rowan-green text-xs font-medium mt-3 min-h-9"
-        >
-          Open Rowan Wallet →
-        </button>
       </div>
 
       {/* Navigation Links */}
       <div className="bg-rowan-surface rounded-xl mb-4 divide-y divide-rowan-border">
         {[
-          { to: '/trader/wallet', icon: Globe, label: 'Rowan Wallet', sub: 'USDC balance · add funds' },
           { to: '/trader/sla', icon: Timer, label: 'SLA Performance', sub: 'Payout targets' },
           { to: '/trader/performance/networks', icon: BarChart3, label: 'Network Performance', sub: 'Stats by network' },
           { to: '/trader/earnings', icon: TrendingUp, label: 'Earnings', sub: 'Breakdown & history' },

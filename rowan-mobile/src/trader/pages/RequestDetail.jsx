@@ -621,15 +621,8 @@ export default function RequestDetail() {
             {tx.trader_stellar_address || tx.stellar_address}
           </p>
           <p className="text-rowan-muted text-[10px] mt-2">
-            After the customer confirms MoMo, escrow releases USDC here. Manage it in Rowan Wallet.
+            After the customer confirms MoMo, escrow releases USDC to this address.
           </p>
-          <button
-            type="button"
-            onClick={() => navigate('/trader/wallet')}
-            className="text-rowan-green text-xs font-medium mt-2 min-h-9"
-          >
-            Open Rowan Wallet →
-          </button>
         </div>
       )}
 
@@ -708,10 +701,7 @@ export default function RequestDetail() {
 
       {/* Complete state — USDC release receipt */}
       {isComplete && (
-        <UsdcReceiptCard
-          tx={tx}
-          onViewWallet={() => navigate('/trader/wallet')}
-        />
+        <UsdcReceiptCard tx={tx} />
       )}
 
       {/* Confirm Payout Modal */}

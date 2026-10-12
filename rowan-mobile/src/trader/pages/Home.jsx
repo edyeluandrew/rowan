@@ -76,14 +76,9 @@ export default function Home() {
 
       {/* Rowan wallet */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <button
-          type="button"
-          onClick={() => navigate('/trader/wallet')}
-          className="w-full h-full text-left bg-rowan-surface border border-rowan-border rounded-md p-4"
-        >
+        <div className="w-full h-full text-left bg-rowan-surface border border-rowan-border rounded-md p-4">
           <div className="flex justify-between items-center">
-            <span className="text-rowan-muted text-xs uppercase tracking-wider">Rowan wallet</span>
-            <span className="text-rowan-yellow text-xs">Add USDC</span>
+            <span className="text-rowan-muted text-xs uppercase tracking-wider">USDC balance</span>
           </div>
           <p className="text-rowan-text text-2xl font-bold tabular-nums mt-1">
             {usdcBalance != null ? `${Number(usdcBalance).toFixed(2)} USDC` : '—'}
@@ -91,7 +86,7 @@ export default function Home() {
           {publicKey && (
             <p className="text-rowan-muted text-[10px] font-mono mt-1 truncate">{publicKey}</p>
           )}
-        </button>
+        </div>
 
         <div className="bg-rowan-surface border border-rowan-border rounded-md p-4">
           <div className="flex justify-between items-center mb-3">
