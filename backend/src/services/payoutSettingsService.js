@@ -21,6 +21,58 @@ function normalizeMobileNetwork(network) {
   return MOBILE_NETWORK_ALIASES[key] || key;
 }
 
+/**
+ * A sell-USDC ad cannot list more than this trader's Stellar USDC,
+ * including the other buy ads already listed.
+ */
+async function assertBuyInventoryWithinWallet(traderId, availableUsdc, excludeId = null) {
+  const amount = Number(availableUsdc);
+  if (!Number.isFinite(amount) || amount < 0) {
+    const err = new Error('available_usdc must be zero or more');
+    err.status = 400;
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const traderRes = await db.query(
+    `SELECT stellar_address FROM traders WHERE id = $1`,
+    [traderId]
+  );
+  const stellarAddress = traderRes.rows[0]?.stellar_address;
+  if (!stellarAddress) {
+    const err = new Error('Link a Rowan wallet before setting USDC inventory');
+    err.status = 400;
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const trust = await getTraderUsdcTrustlineStatus(stellarAddress);
+  if (!trust.ok && trust.reason === 'HORIZON_ERROR') {
+    const err = new Error('Could not read your USDC balance. Try again.');
+    err.status = 503;
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const balance = Number(trust.balance) || 0;
+  const others = await db.query(
+    `SELECT COALESCE(SUM(available_usdc), 0) AS total
+     FROM trader_payout_settings
+     WHERE trader_id = $1 AND ad_side = 'USER_BUY'
+       AND ($2::uuid IS NULL OR id <> $2::uuid)`,
+    [traderId, excludeId]
+  );
+  const total = Number(others.rows[0].total) + amount;
+  if (amount - balance > 1e-7 || total - balance > 1e-7) {
+    const err = new Error(
+      `USDC inventory cannot be more than the ${balance.toFixed(2)} USDC in your wallet`
+    );
+    err.status = 400;
+    err.statusCode = 400;
+    throw err;
+  }
+}
+
 class PayoutSettingsService {
   /**
    * Get all payout settings for a trader
@@ -40,7 +92,12 @@ class PayoutSettingsService {
     if (!stellarAddress) return { created: 0, updated: 0 };
 
     const trust = await getTraderUsdcTrustlineStatus(stellarAddress);
+    if (!trust.ok && trust.reason === 'HORIZON_ERROR') {
+      logger.warn(`[PayoutSettings] Buy-ad sync skipped, Horizon unread for ${traderId}`);
+      return { created: 0, updated: 0, skipped: true };
+    }
     const usdc = Number(trust.balance) > 0 ? Number(trust.balance) : 0;
+    let remaining = usdc;
 
     const sellRes = await db.query(
       `SELECT country, network, currency, min_amount, max_amount,
@@ -63,13 +120,11 @@ class PayoutSettingsService {
          WHERE trader_id = $1 AND network = $2 AND currency = $3 AND ad_side = 'USER_BUY'`,
         [traderId, sell.network, sell.currency]
       );
-      const rate = parseFloat(sell.rate_per_usdc);
-      const netFloat = parseFloat(sell.available_float || 0) - parseFloat(sell.reserved_float || 0);
-      const fromFloat = rate > 0 && netFloat > 0 ? netFloat / rate : 0;
       const reserved = parseFloat(existing.rows[0]?.reserved_usdc || 0);
-      const listed = Math.max(usdc, fromFloat, reserved);
+      const share = Math.max(0, remaining);
+      const listed = Math.max(reserved, Math.min(share, usdc));
+      remaining = Math.max(0, remaining - listed);
       if (existing.rows[0]) {
-        if (listed <= 0) continue;
         await db.query(
           `UPDATE trader_payout_settings
            SET available_usdc = $1, is_active = TRUE, updated_at = NOW()
@@ -236,7 +291,11 @@ class PayoutSettingsService {
     if (isBuyAd && (!available_usdc || available_usdc <= 0)) {
       const err = new Error('available_usdc is required for buy ads');
       err.status = 400;
+      err.statusCode = 400;
       throw err;
+    }
+    if (isBuyAd) {
+      await assertBuyInventoryWithinWallet(traderId, available_usdc);
     }
     if (rate_per_usdc == null || rate_per_usdc === '' || Number(rate_per_usdc) <= 0) {
       const err = new Error('rate_per_usdc is required (fiat per 1 USDC)');
@@ -349,10 +408,27 @@ class PayoutSettingsService {
       values.push(data.max_amount);
     }
     if (data.available_float !== undefined) {
+      const reservedFloat = parseFloat(existing.reserved_float || 0);
+      if (Number(data.available_float) < reservedFloat) {
+        const err = new Error(`Float must cover ${reservedFloat} already reserved on open trades`);
+        err.status = 400;
+        err.statusCode = 400;
+        throw err;
+      }
       updates.push(`available_float = $${paramIndex++}::NUMERIC`);
       values.push(data.available_float);
     }
     if (data.available_usdc !== undefined) {
+      if (existing.ad_side === 'USER_BUY') {
+        const reservedUsdc = parseFloat(existing.reserved_usdc || 0);
+        if (Number(data.available_usdc) < reservedUsdc) {
+          const err = new Error(`USDC inventory must cover ${reservedUsdc} already reserved on open trades`);
+          err.status = 400;
+          err.statusCode = 400;
+          throw err;
+        }
+        await assertBuyInventoryWithinWallet(traderId, data.available_usdc, id);
+      }
       updates.push(`available_usdc = $${paramIndex++}::NUMERIC`);
       values.push(data.available_usdc);
     }

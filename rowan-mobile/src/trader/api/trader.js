@@ -73,9 +73,9 @@ export async function getHistory(page = 1, limit = 20) {
   return data;
 }
 
-/** PUT /api/v1/trader/float */
-export async function updateFloat(currency, amount) {
-  const { data } = await client.put('/api/v1/trader/float', { currency, amount });
+/** PUT /api/v1/trader/float — updates the cash-out ad matching uses. */
+export async function updateFloat(payoutSettingId, amount) {
+  const { data } = await client.put('/api/v1/trader/float', { payoutSettingId, amount });
   return data;
 }
 

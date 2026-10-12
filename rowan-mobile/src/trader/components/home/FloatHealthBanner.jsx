@@ -1,5 +1,4 @@
 import { AlertTriangle, AlertOctagon, PlusCircle } from 'lucide-react';
-import { CURRENCY_FLAGS } from '../../utils/constants';
 
 /**
  * FloatHealthBanner — shows warning/critical float levels on Home screen.
@@ -40,8 +39,8 @@ export default function FloatHealthBanner({ floatHealth, onTopUp }) {
                 </p>
                 <p className="text-rowan-muted text-xs mt-1">
                   {isCritical
-                    ? `You may be skipped in trader matching. Top up your ${CURRENCY_FLAGS[currency] || ''} ${currency} float immediately.`
-                    : `Your ${CURRENCY_FLAGS[currency] || ''} ${currency} float is below the recommended level.`}
+                    ? `You may be skipped in trader matching. Top up your ${currency} float.`
+                    : `Your ${currency} float is below the level matching expects.`}
                 </p>
                 <button
                   onClick={() => onTopUp?.(currency)}

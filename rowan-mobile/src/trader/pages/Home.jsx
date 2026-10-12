@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Zap, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +14,8 @@ import FloatHealthBanner from '../components/home/FloatHealthBanner';
 import NotificationBadge from '../components/notifications/NotificationBadge';
 import { formatCurrency } from '../utils/format';
 import { useTraderWallet } from '../context/TraderWalletContext';
+import payoutSettingsAPI from '../api/payoutSettings';
+import { NETWORKS } from '../utils/constants';
 
 export default function Home() {
   const { trader } = useAuth();
@@ -24,14 +26,31 @@ export default function Home() {
   const { usdcBalance, publicKey } = useTraderWallet();
   const navigate = useNavigate();
   const [showFloat, setShowFloat] = useState(false);
+  const [floatInitialId, setFloatInitialId] = useState(null);
+  const [sellAds, setSellAds] = useState([]);
+
+  const loadSellAds = useCallback(async () => {
+    try {
+      const response = await payoutSettingsAPI.fetchPayoutSettings();
+      const rows = response?.data || [];
+      setSellAds(rows.filter((ad) => (ad.ad_side || 'USER_SELL') === 'USER_SELL' && ad.is_active !== false));
+    } catch {
+      setSellAds([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSellAds();
+  }, [loadSellAds]);
 
   const name = profile?.name || trader?.name || 'Trader';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-  /* Float balances from profile */
-  const floatBalances = profile?.float_balances || {};
-  const currencies = Object.entries(floatBalances).filter(([, v]) => v > 0);
+  const openFloat = (adId = null) => {
+    setFloatInitialId(adId);
+    setShowFloat(true);
+  };
 
   /* Active unconfirmed request */
   const activeRequest = active?.find((r) =>
@@ -79,31 +98,41 @@ export default function Home() {
             <span className="text-rowan-muted text-xs uppercase tracking-wider">Available Float</span>
             <button
               className="text-rowan-yellow text-xs font-medium border border-rowan-yellow rounded px-3 py-1"
-              onClick={() => setShowFloat(true)}
+              onClick={() => openFloat(sellAds[0]?.id || null)}
             >
               Update Float
             </button>
           </div>
-          {currencies.length === 0 && (
-            <p className="text-rowan-muted text-sm py-2">No float configured</p>
+          {sellAds.length === 0 && (
+            <p className="text-rowan-muted text-sm py-2">No cash-out float yet</p>
           )}
-          {currencies.map(([cur, amount], i) => (
-            <div
-              key={cur}
-              className={`flex justify-between items-center py-2 ${
-                i < currencies.length - 1 ? 'border-b border-rowan-border' : ''
-              }`}
-            >
-              <span className="text-rowan-text font-bold">{cur}</span>
-              <span className="text-rowan-yellow font-bold tabular-nums">
-                {formatCurrency(amount, cur)}
-              </span>
-            </div>
-          ))}
+          {sellAds.map((ad, i) => {
+            const net = Number(ad.available_float || 0) - Number(ad.reserved_float || 0);
+            const label = NETWORKS[ad.network]?.label || ad.network;
+            return (
+              <div
+                key={ad.id}
+                className={`flex justify-between items-center py-2 ${
+                  i < sellAds.length - 1 ? 'border-b border-rowan-border' : ''
+                }`}
+              >
+                <span className="text-rowan-text font-bold">{label} {ad.currency}</span>
+                <span className="text-rowan-yellow font-bold tabular-nums">
+                  {formatCurrency(net, ad.currency)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {floatHealth && <FloatHealthBanner health={floatHealth} />}
+      <FloatHealthBanner
+        floatHealth={floatHealth}
+        onTopUp={(currency) => {
+          const ad = sellAds.find((row) => row.currency === currency);
+          openFloat(ad?.id || sellAds[0]?.id || null);
+        }}
+      />
 
       {activeRequest && (
         <div
@@ -141,9 +170,13 @@ export default function Home() {
       {/* Float Update Modal */}
       {showFloat && (
         <FloatUpdateModal
-          currentFloat={floatBalances}
+          ads={sellAds}
+          initialId={floatInitialId}
           onClose={() => setShowFloat(false)}
-          onSuccess={refresh}
+          onSuccess={() => {
+            refresh();
+            loadSellAds();
+          }}
         />
       )}
     </div>

@@ -8,7 +8,8 @@ import db from '../db/index.js';
 import bcrypt from 'bcryptjs';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
-import { stroopsToUsdc } from '../utils/financial.js';
+import { stroopsToUsdc, fiatToUgx } from '../utils/financial.js';
+import payoutSettingsService from '../services/payoutSettingsService.js';
 import { maskPhoneNumber } from '../utils/phoneMasking.js';
 import { traderLoginLimiter, sensitiveActionLimiter } from '../middleware/rateLimits.js';
 import multer from 'multer';
@@ -441,11 +442,19 @@ router.get('/profile', authTrader, async (req, res, next) => {
     const trader = result.rows[0];
     if (!trader) return res.status(404).json({ error: 'Trader not found' });
 
-    // Build float_balances object for the frontend
+    // Matchable MoMo float: cash-out ads, after what is already reserved.
+    const floatRows = await db.query(
+      `SELECT currency,
+              SUM(available_float - COALESCE(reserved_float, 0)) AS net
+       FROM trader_payout_settings
+       WHERE trader_id = $1 AND ad_side = 'USER_SELL' AND is_active = TRUE
+       GROUP BY currency`,
+      [req.traderId]
+    );
     const float_balances = {};
-    if (trader.float_ugx > 0) float_balances.UGX = Number(trader.float_ugx);
-    if (trader.float_kes > 0) float_balances.KES = Number(trader.float_kes);
-    if (trader.float_tzs > 0) float_balances.TZS = Number(trader.float_tzs);
+    for (const row of floatRows.rows) {
+      float_balances[row.currency] = Number(row.net);
+    }
 
     res.json({
       trader: {
@@ -607,46 +616,57 @@ router.post('/requests/:id/decline', authTrader, async (req, res, next) => {
  */
 router.put('/float', authTrader, async (req, res, next) => {
   try {
-    const { floatUgx, floatKes, floatTzs } = req.body;
-
-    // At least one must be provided
-    if (floatUgx === undefined && floatKes === undefined && floatTzs === undefined) {
-      return res.status(400).json({ error: 'At least one of floatUgx, floatKes, floatTzs is required' });
+    const { payoutSettingId, currency, amount, floatUgx, floatKes, floatTzs } = req.body;
+    let nextAmount = amount;
+    let nextCurrency = currency ? String(currency).toUpperCase() : null;
+    if (nextAmount === undefined || nextAmount === null) {
+      if (floatUgx !== undefined) { nextAmount = floatUgx; nextCurrency = nextCurrency || 'UGX'; }
+      else if (floatKes !== undefined) { nextAmount = floatKes; nextCurrency = nextCurrency || 'KES'; }
+      else if (floatTzs !== undefined) { nextAmount = floatTzs; nextCurrency = nextCurrency || 'TZS'; }
+    }
+    const parsed = Number(nextAmount);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return res.status(400).json({ error: 'A float amount of zero or more is required' });
     }
 
-    // Build dynamic SET clause
-    const sets = [];
-    const params = [];
-    let idx = 1;
-
-    if (floatUgx !== undefined && floatUgx !== null) {
-      if (parseFloat(floatUgx) < 0) return res.status(400).json({ error: 'floatUgx must be >= 0' });
-      sets.push(`float_ugx = $${idx++}`);
-      params.push(parseInt(floatUgx));
-    }
-    if (floatKes !== undefined && floatKes !== null) {
-      if (parseFloat(floatKes) < 0) return res.status(400).json({ error: 'floatKes must be >= 0' });
-      sets.push(`float_kes = $${idx++}`);
-      params.push(parseInt(floatKes));
-    }
-    if (floatTzs !== undefined && floatTzs !== null) {
-      if (parseFloat(floatTzs) < 0) return res.status(400).json({ error: 'floatTzs must be >= 0' });
-      sets.push(`float_tzs = $${idx++}`);
-      params.push(parseInt(floatTzs));
+    let settingId = payoutSettingId || null;
+    if (!settingId) {
+      if (!nextCurrency) {
+        return res.status(400).json({ error: 'currency or payoutSettingId is required' });
+      }
+      const matches = await db.query(
+        `SELECT id FROM trader_payout_settings
+         WHERE trader_id = $1 AND ad_side = 'USER_SELL' AND is_active = TRUE AND currency = $2`,
+        [req.traderId, nextCurrency]
+      );
+      if (matches.rows.length === 0) {
+        return res.status(400).json({ error: 'Add a cash-out ad in payout settings before setting float' });
+      }
+      if (matches.rows.length > 1) {
+        return res.status(400).json({ error: 'Choose which network float to update' });
+      }
+      settingId = matches.rows[0].id;
     }
 
-    params.push(req.traderId);
-    await db.query(
-      `UPDATE traders SET ${sets.join(', ')} WHERE id = $${idx}`,
-      params
+    const owned = await db.query(
+      `SELECT id, ad_side FROM trader_payout_settings WHERE id = $1 AND trader_id = $2`,
+      [settingId, req.traderId]
     );
+    if (!owned.rows[0] || owned.rows[0].ad_side !== 'USER_SELL') {
+      return res.status(404).json({ error: 'Cash-out ad not found' });
+    }
+
+    const updated = await payoutSettingsService.updatePayoutSetting(settingId, req.traderId, {
+      available_float: parsed,
+    });
 
     res.json({
       success: true,
-      ...(floatUgx !== undefined && { floatUgx: parseInt(floatUgx) }),
-      ...(floatKes !== undefined && { floatKes: parseInt(floatKes) }),
-      ...(floatTzs !== undefined && { floatTzs: parseInt(floatTzs) }),
-      message: 'Float updated. You will now be matched for requests within your declared float.',
+      payoutSettingId: updated.id,
+      currency: updated.currency,
+      available_float: Number(updated.available_float),
+      reserved_float: Number(updated.reserved_float),
+      message: 'Float updated. Matching uses this cash-out ad.',
     });
   } catch (err) {
     next(err);
@@ -991,49 +1011,34 @@ router.post('/notifications/mark-all-read', authTrader, async (req, res, next) =
  */
 router.get('/float/health', authTrader, async (req, res, next) => {
   try {
-    const result = await db.query(
-      `SELECT id, name, is_active, float_ugx, float_kes, float_tzs, 
-              daily_limit, daily_volume, trust_score, last_active_at
-       FROM traders
-       WHERE id = $1`,
+    const rows = await db.query(
+      `SELECT currency,
+              SUM(available_float) AS available,
+              SUM(COALESCE(reserved_float, 0)) AS reserved
+       FROM trader_payout_settings
+       WHERE trader_id = $1 AND ad_side = 'USER_SELL' AND is_active = TRUE
+       GROUP BY currency`,
       [req.traderId]
     );
 
-    const trader = result.rows[0];
-    if (!trader) {
-      return res.status(404).json({ error: 'Trader not found' });
+    const LOW_FLOAT_UGX = 500000;
+    const health = {};
+    for (const row of rows.rows) {
+      const available = Number(row.available) || 0;
+      const reserved = Number(row.reserved) || 0;
+      const net = available - reserved;
+      let status = 'OK';
+      if (net <= 0) status = 'CRITICAL';
+      else if (fiatToUgx(net, row.currency) < LOW_FLOAT_UGX) status = 'WARNING';
+      health[row.currency] = {
+        status,
+        balance: net,
+        available,
+        reserved,
+      };
     }
 
-    // Calculate float health percentage
-    const minFloat = 100000; // Minimum expected float
-    const floatUgxHealth = Math.min(100, (trader.float_ugx / minFloat) * 100);
-    const floatKesHealth = Math.min(100, (trader.float_kes / minFloat) * 100);
-    const floatTzsHealth = Math.min(100, (trader.float_tzs / minFloat) * 100);
-
-    res.json({
-      traderId: trader.id,
-      name: trader.name,
-      isActive: trader.is_active,
-      floats: {
-        ugx: {
-          balance: parseFloat(trader.float_ugx),
-          health: Math.round(floatUgxHealth),
-        },
-        kes: {
-          balance: parseFloat(trader.float_kes),
-          health: Math.round(floatKesHealth),
-        },
-        tzs: {
-          balance: parseFloat(trader.float_tzs),
-          health: Math.round(floatTzsHealth),
-        },
-      },
-      dailyLimit: parseFloat(trader.daily_limit),
-      dailyVolume: parseFloat(trader.daily_volume),
-      remainingDaily: parseFloat(trader.daily_limit) - parseFloat(trader.daily_volume),
-      trustScore: parseFloat(trader.trust_score),
-      lastActiveAt: trader.last_active_at,
-    });
+    res.json(health);
   } catch (err) {
     next(err);
   }

@@ -16,6 +16,7 @@ import logger from '../utils/logger.js';
 import auditLogService from '../services/auditLogService.js';
 import { sensitiveActionLimiter } from '../middleware/rateLimits.js';
 import config from '../config/index.js';
+import { fiatToUgx } from '../utils/financial.js';
 import kycTierService from '../services/kyc/kycTierService.js';
 
 const router = Router();
@@ -1110,11 +1111,24 @@ router.get('/system/alerts', authAdmin, async (req, res, next) => {
     const alerts = [];
 
     const lowFloat = await db.query(`
-      SELECT id, name, float_ugx FROM traders
-      WHERE status = 'ACTIVE' AND float_ugx < 500000
+      SELECT t.id, t.name, ps.currency,
+             SUM(ps.available_float - COALESCE(ps.reserved_float, 0)) AS net_float
+      FROM traders t
+      JOIN trader_payout_settings ps ON ps.trader_id = t.id
+      WHERE t.status = 'ACTIVE'
+        AND ps.ad_side = 'USER_SELL'
+        AND ps.is_active = TRUE
+      GROUP BY t.id, t.name, ps.currency
     `);
     for (const t of lowFloat.rows) {
-      alerts.push({ id: `float-${t.id}`, type: 'warning', message: `${t.name} has low float (${t.float_ugx} UGX)`, created_at: new Date().toISOString() });
+      const net = Number(t.net_float) || 0;
+      if (fiatToUgx(net, t.currency) >= 500000) continue;
+      alerts.push({
+        id: `float-${t.id}-${t.currency}`,
+        type: 'warning',
+        message: `${t.name} has low ${t.currency} float (${net})`,
+        created_at: new Date().toISOString(),
+      });
     }
 
     const disputes = await db.query(`SELECT COUNT(*) as cnt FROM disputes WHERE status = 'OPEN'`);
