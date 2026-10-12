@@ -1,5 +1,6 @@
 /**
- * OTC trader website. Fills the screen and grows with the window.
+ * OTC trader website. The trader shell fills the window.
+ * This is separate from the customer wallet on rowanpay.app.
  */
 import { AuthProvider } from '../../../rowan-mobile/src/context/AuthContext'
 import TraderWebGate from '../../../rowan-mobile/src/trader/TraderWebGate'
