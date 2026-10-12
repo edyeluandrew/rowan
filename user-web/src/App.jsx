@@ -1,7 +1,6 @@
 /**
- * User-web App.
- * rowanpay.app is the customer wallet.
- * partners.rowanpay.app is the trader on/off-ramp.
+ * Customer wallet for rowanpay.app.
+ * The trader site is PartnerApp and does not use this tree.
  */
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
@@ -11,7 +10,6 @@ import Login from './Login'
 import NotFound from './pages/NotFound'
 import LegalDoc from './pages/LegalDoc'
 import SeoManager from './seo/SeoManager'
-import { isPartnerHost } from './trader/host'
 import WalletSetup from './wallet/pages/WalletSetup'
 import CreateWallet from './wallet/pages/CreateWallet'
 import BackupWallet from './wallet/pages/BackupWallet'
@@ -20,7 +18,6 @@ import Register from './wallet/pages/Register'
 import WalletTwoFactorVerify from './wallet/pages/WalletTwoFactorVerify'
 
 const WalletApp = lazy(() => import('./wallet/WalletApp'))
-const TraderWeb = lazy(() => import('./trader/TraderWeb'))
 
 function PublicOnly({ children }) {
   const { isAuthenticated } = useAuth()
@@ -32,26 +29,6 @@ export default function App() {
   const { isAuthenticated, isLoading, role } = useAuth()
 
   if (isLoading) return <SplashScreen />
-
-  const traderPortal = (
-    <Suspense fallback={<SplashScreen />}>
-      <TraderWeb />
-    </Suspense>
-  )
-
-  if (isPartnerHost()) {
-    return (
-      <>
-        <SeoManager />
-        <Routes>
-          <Route path="/legal/:doc" element={<LegalDoc />} />
-          <Route path="/trader/*" element={traderPortal} />
-          <Route path="/login" element={<Navigate to="/trader" replace />} />
-          <Route path="*" element={<Navigate to="/trader" replace />} />
-        </Routes>
-      </>
-    )
-  }
 
   return (
     <>

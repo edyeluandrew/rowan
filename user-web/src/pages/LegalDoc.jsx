@@ -3,7 +3,8 @@
  */
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
-import { useAuth, ROLE_WALLET } from '../context/AuthContext'
+import { useOptionalAuth, ROLE_WALLET } from '../context/AuthContext'
+import { isPartnerHost } from '../trader/host'
 import RowanLogo from '../components/RowanLogo'
 import terms from '../legal/terms.md?raw'
 import privacy from '../legal/privacy.md?raw'
@@ -23,11 +24,13 @@ const DOCS = {
 
 export default function LegalDoc() {
   const { doc } = useParams()
-  const { isAuthenticated, role } = useAuth()
+  const auth = useOptionalAuth()
   const entry = DOCS[doc]
-  if (!entry) return <Navigate to="/" replace />
+  if (!entry) return <Navigate to={isPartnerHost() ? '/trader' : '/'} replace />
 
-  const home = isAuthenticated && role === ROLE_WALLET ? '/wallet/home' : '/'
+  const home = isPartnerHost()
+    ? '/trader'
+    : (auth?.isAuthenticated && auth.role === ROLE_WALLET ? '/wallet/home' : '/')
 
   return (
     <main className="min-h-[100dvh] bg-rowan-bg text-rowan-text">
