@@ -10,6 +10,7 @@ import ConnectionDot from '../components/ui/ConnectionDot';
 import StatCard from '../components/cards/StatCard';
 import TrustScore from '../components/ui/TrustScore';
 import FloatUpdateModal from '../components/modals/FloatUpdateModal';
+import SetPriceModal from '../components/modals/SetPriceModal';
 import FloatHealthBanner from '../components/home/FloatHealthBanner';
 import NotificationBadge from '../components/notifications/NotificationBadge';
 import { formatCurrency } from '../utils/format';
@@ -26,7 +27,9 @@ export default function Home() {
   const { usdcBalance, publicKey } = useTraderWallet();
   const navigate = useNavigate();
   const [showFloat, setShowFloat] = useState(false);
+  const [showPrice, setShowPrice] = useState(false);
   const [floatInitialId, setFloatInitialId] = useState(null);
+  const [priceInitialId, setPriceInitialId] = useState(null);
   const [sellAds, setSellAds] = useState([]);
 
   const loadSellAds = useCallback(async () => {
@@ -50,6 +53,11 @@ export default function Home() {
   const openFloat = (adId = null) => {
     setFloatInitialId(adId);
     setShowFloat(true);
+  };
+
+  const openPrice = (adId = null) => {
+    setPriceInitialId(adId);
+    setShowPrice(true);
   };
 
   /* Active unconfirmed request */
@@ -111,7 +119,14 @@ export default function Home() {
                   i < sellAds.length - 1 ? 'border-b border-rowan-border' : ''
                 }`}
               >
-                <span className="text-rowan-text font-bold">{label} {ad.currency}</span>
+                <div className="min-w-0">
+                  <span className="text-rowan-text font-bold">{label} {ad.currency}</span>
+                  <p className="text-rowan-muted text-[11px]">
+                    {ad.rate_per_usdc
+                      ? `1 USDC = ${Number(ad.rate_per_usdc).toLocaleString()} ${ad.currency}`
+                      : 'No USDC price yet'}
+                  </p>
+                </div>
                 <span className="text-rowan-yellow font-bold tabular-nums">
                   {formatCurrency(net, ad.currency)}
                 </span>
@@ -119,6 +134,20 @@ export default function Home() {
             );
           })}
         </div>
+      </div>
+
+      <div className="bg-rowan-surface border border-rowan-border rounded-md p-4 mb-4 flex justify-between items-center gap-3">
+        <div>
+          <p className="text-rowan-muted text-xs uppercase tracking-wider">USDC price</p>
+          <p className="text-rowan-text text-sm mt-1">Fiat per 1 USDC on your cash-out ads</p>
+        </div>
+        <button
+          type="button"
+          className="text-rowan-yellow text-xs font-medium border border-rowan-yellow rounded px-3 py-1 shrink-0"
+          onClick={() => openPrice(sellAds[0]?.id || null)}
+        >
+          Set price
+        </button>
       </div>
 
       <FloatHealthBanner
@@ -163,6 +192,14 @@ export default function Home() {
       </div>
 
       {/* Float Update Modal */}
+      {showPrice && (
+        <SetPriceModal
+          ads={sellAds}
+          initialId={priceInitialId}
+          onClose={() => setShowPrice(false)}
+          onSuccess={loadSellAds}
+        />
+      )}
       {showFloat && (
         <FloatUpdateModal
           ads={sellAds}
