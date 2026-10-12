@@ -29,7 +29,7 @@ const AuthContext = createContext(null);
 export const ROLE_WALLET = 'user';
 export const ROLE_TRADER = 'trader';
 
-export function AuthProvider({ children }) {
+export function AuthProvider({ children, mode = 'app' }) {
   const [user, setUser] = useState(null);        // wallet user profile
   const [trader, setTrader] = useState(null);     // trader profile
   const [token, setToken] = useState(null);
@@ -59,6 +59,11 @@ export function AuthProvider({ children }) {
 
   /* ── Bootstrap: restore wallet session from secure storage ── */
   useEffect(() => {
+    if (mode === 'trader') {
+      // Trader sessions stay in memory. Do not read or clear the wallet key on this device.
+      setIsLoading(false);
+      return undefined;
+    }
     (async () => {
       try {
         console.log('[Auth] Starting bootstrap...');
@@ -104,7 +109,7 @@ export function AuthProvider({ children }) {
         setIsLoading(false);
       }
     })();
-  }, []);
+  }, [mode]);
 
   /* ═══════════════════════════════════════════════════════
    *  WALLET AUTH — SEP-10 challenge-response
@@ -330,6 +335,8 @@ export function AuthProvider({ children }) {
         loginAsTrader,
         signupAsTrader,
         setTraderAuthAfter2FA,
+        // Signup still calls login(token, trader) after the account is created.
+        login: setTraderAuthAfter2FA,
         // Shared
         logout,
       }}

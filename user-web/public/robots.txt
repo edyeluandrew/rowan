@@ -8,5 +8,8 @@ Disallow: /backup-wallet
 Disallow: /import-wallet
 Disallow: /register
 Disallow: /wallet-2fa-verify
+Disallow: /trader
+Disallow: /trader/
+Disallow: /login
 
 Sitemap: https://rowanpay.app/sitemap.xml

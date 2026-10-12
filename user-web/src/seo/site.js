@@ -22,6 +22,8 @@ export const NOINDEX_PATH_PREFIXES = [
   '/import-wallet',
   '/register',
   '/wallet-2fa-verify',
+  '/trader',
+  '/login',
 ]
 
 export const LEGAL_PAGES = {

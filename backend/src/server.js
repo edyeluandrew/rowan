@@ -260,6 +260,15 @@ app.use('/api/v1/utilities', utilitiesRoutes);
 app.use('/api/v1/disputes', disputesRoutes);
 app.use('/api/v1/trader/onboarding', traderOnboardingRoutes); // ← SPECIFIC path first
 app.use('/api/v1/trader/payout-settings', payoutSettingsRoutes);
+// Trader security handlers live on the auth router as /trader/auth/*.
+// The trader app calls /api/v1/trader/auth/*.
+app.use('/api/v1/trader/auth', authLimiter, (req, res, next) => {
+  const qIndex = req.url.indexOf('?');
+  const pathOnly = qIndex === -1 ? req.url : req.url.slice(0, qIndex);
+  const query = qIndex === -1 ? '' : req.url.slice(qIndex);
+  req.url = `/trader/auth${pathOnly}${query}`;
+  authRoutes(req, res, next);
+});
 app.use('/api/v1/trader', traderRoutes);                      // ← GENERAL path second
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/user', userRoutes);

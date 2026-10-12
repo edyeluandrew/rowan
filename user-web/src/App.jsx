@@ -1,5 +1,5 @@
 /**
- * User-web App — casual wallet only (no trader routes).
+ * User-web App — customer wallet plus the OTC trader portal at /trader.
  * Public marketing surface: https://rowanpay.app/
  */
 import { lazy, Suspense } from 'react'
@@ -18,6 +18,7 @@ import Register from './wallet/pages/Register'
 import WalletTwoFactorVerify from './wallet/pages/WalletTwoFactorVerify'
 
 const WalletApp = lazy(() => import('./wallet/WalletApp'))
+const TraderWeb = lazy(() => import('./trader/TraderWeb'))
 
 function PublicOnly({ children }) {
   const { isAuthenticated } = useAuth()
@@ -64,6 +65,16 @@ export default function App() {
         />
 
         <Route path="/legal/:doc" element={<LegalDoc />} />
+
+        <Route
+          path="/trader/*"
+          element={
+            <Suspense fallback={<SplashScreen />}>
+              <TraderWeb />
+            </Suspense>
+          }
+        />
+        <Route path="/login" element={<Navigate to="/trader" replace />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>

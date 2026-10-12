@@ -725,6 +725,30 @@ router.get(
 );
 
 /**
+ * DELETE /api/v1/trader/auth/sessions/all
+ * Revoke all sessions for trader.
+ * Registered before /:sessionId so "all" is not treated as an id.
+ */
+router.delete(
+  '/trader/auth/sessions/all',
+  authTrader,
+  async (req, res, next) => {
+    try {
+      const traderId = req.user.id;
+
+      await db.query(
+        `DELETE FROM trader_sessions WHERE trader_id = $1`,
+        [traderId]
+      );
+
+      res.json({ message: 'All sessions revoked' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
  * DELETE /api/v1/trader/auth/sessions/:sessionId
  * Revoke a specific session.
  */
@@ -746,29 +770,6 @@ router.delete(
       }
 
       res.json({ message: 'Session revoked' });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-/**
- * DELETE /api/v1/trader/auth/sessions/all
- * Revoke all sessions for trader.
- */
-router.delete(
-  '/trader/auth/sessions/all',
-  authTrader,
-  async (req, res, next) => {
-    try {
-      const traderId = req.user.id;
-
-      await db.query(
-        `DELETE FROM trader_sessions WHERE trader_id = $1`,
-        [traderId]
-      );
-
-      res.json({ message: 'All sessions revoked' });
     } catch (err) {
       next(err);
     }

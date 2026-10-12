@@ -65,11 +65,11 @@ export async function disableTwoFactor(code) {
 }
 
 /**
- * POST /api/v1/auth/2fa/backup-codes/regenerate
+ * POST /api/v1/trader/auth/2fa/backup-codes/regenerate
  * Regenerate backup codes (requires current TOTP code)
  * Body: { code } - current 6-digit code
  */
 export async function regenerateBackupCodes(code) {
-  const { data } = await client.post('/api/v1/auth/2fa/backup-codes/regenerate', { code });
+  const { data } = await client.post('/api/v1/trader/auth/2fa/backup-codes/regenerate', { code });
   return data;
 }

@@ -1,6 +1,11 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ['./index.html', './src/**/*.{js,jsx}'],
+  content: [
+    './index.html',
+    './src/**/*.{js,jsx}',
+    // Trader screens are shared with the phone app.
+    '../rowan-mobile/src/**/*.{js,jsx}',
+  ],
   theme: {
     extend: {
       colors: {
