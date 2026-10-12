@@ -16,9 +16,15 @@ let io = null;
 function init(httpServer) {
   // [CORS FIX] Socket.IO CORS configuration must use wildcard or regex, not array with '*'
   const corsOrigin = process.env.CORS_ORIGIN?.trim() || '*';
-  const socketCorsConfig = corsOrigin === '*' 
+  const allowedSocketOrigins = corsOrigin === '*'
+    ? null
+    : corsOrigin.split(',').map(o => o.trim()).filter(Boolean);
+  if (allowedSocketOrigins && !allowedSocketOrigins.includes('https://partners.rowanpay.app')) {
+    allowedSocketOrigins.push('https://partners.rowanpay.app');
+  }
+  const socketCorsConfig = corsOrigin === '*'
     ? { origin: true, credentials: true } // Allow all origins when using wildcard
-    : { origin: corsOrigin.split(',').map(o => o.trim()), credentials: true };
+    : { origin: allowedSocketOrigins, credentials: true };
 
   io = new Server(httpServer, {
     cors: socketCorsConfig,

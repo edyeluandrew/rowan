@@ -51,12 +51,6 @@ export default function SiteHeader({ ctaLabel, onCta, ctaDisabled = false }) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link
-            to="/trader"
-            className="hidden sm:inline-flex items-center text-sm font-sans text-rowan-muted hover:text-rowan-text px-2 min-h-10"
-          >
-            OTC Trader
-          </Link>
           <button
             type="button"
             onClick={onCta}
@@ -92,13 +86,6 @@ export default function SiteHeader({ ctaLabel, onCta, ctaDisabled = false }) {
                 {item.label}
               </a>
             ))}
-            <Link
-              to="/trader"
-              onClick={() => setOpen(false)}
-              className="block py-2.5 text-sm font-sans text-rowan-text border-b border-rowan-border/50"
-            >
-              OTC Trader
-            </Link>
             <button
               type="button"
               onClick={() => {

@@ -2,7 +2,7 @@
  * Website entry for the OTC trader app.
  * Renders the same screens as the phone app: sign-in, signup, then TraderApp.
  */
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth, ROLE_TRADER } from '../context/AuthContext';
 import SplashScreen from '../SplashScreen';
 import Signup from './pages/Signup';
@@ -19,7 +19,6 @@ function isPath(pathname, prefix) {
 export default function TraderWebGate() {
   const { isAuthenticated, isLoading, role } = useAuth();
   const { pathname } = useLocation();
-  const navigate = useNavigate();
 
   if (isLoading) return <SplashScreen />;
 
@@ -31,5 +30,5 @@ export default function TraderWebGate() {
   if (isPath(pathname, '/trader/reset-password')) return <ResetPassword />;
   if (isPath(pathname, '/trader/2fa-verify')) return <TwoFactorVerify />;
 
-  return <TraderLoginForm onBack={() => navigate('/')} />;
+  return <TraderLoginForm />;
 }

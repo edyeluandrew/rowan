@@ -187,6 +187,9 @@ if (corsOrigin === '*') {
   app.use(cors());
 } else {
   const allowedOrigins = corsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+  if (!allowedOrigins.includes('https://partners.rowanpay.app')) {
+    allowedOrigins.push('https://partners.rowanpay.app');
+  }
   logger.info(`[CORS] Allowlist: ${allowedOrigins.join(', ')}`);
   app.use(cors({
     origin(origin, callback) {

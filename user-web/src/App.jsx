@@ -1,6 +1,7 @@
 /**
- * User-web App — customer wallet plus the OTC trader portal at /trader.
- * Public marketing surface: https://rowanpay.app/
+ * User-web App.
+ * rowanpay.app is the customer wallet.
+ * partners.rowanpay.app is the trader on/off-ramp.
  */
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
@@ -10,6 +11,7 @@ import Login from './Login'
 import NotFound from './pages/NotFound'
 import LegalDoc from './pages/LegalDoc'
 import SeoManager from './seo/SeoManager'
+import { isPartnerHost } from './trader/host'
 import WalletSetup from './wallet/pages/WalletSetup'
 import CreateWallet from './wallet/pages/CreateWallet'
 import BackupWallet from './wallet/pages/BackupWallet'
@@ -30,6 +32,26 @@ export default function App() {
   const { isAuthenticated, isLoading, role } = useAuth()
 
   if (isLoading) return <SplashScreen />
+
+  const traderPortal = (
+    <Suspense fallback={<SplashScreen />}>
+      <TraderWeb />
+    </Suspense>
+  )
+
+  if (isPartnerHost()) {
+    return (
+      <>
+        <SeoManager />
+        <Routes>
+          <Route path="/legal/:doc" element={<LegalDoc />} />
+          <Route path="/trader/*" element={traderPortal} />
+          <Route path="/login" element={<Navigate to="/trader" replace />} />
+          <Route path="*" element={<Navigate to="/trader" replace />} />
+        </Routes>
+      </>
+    )
+  }
 
   return (
     <>
@@ -65,16 +87,6 @@ export default function App() {
         />
 
         <Route path="/legal/:doc" element={<LegalDoc />} />
-
-        <Route
-          path="/trader/*"
-          element={
-            <Suspense fallback={<SplashScreen />}>
-              <TraderWeb />
-            </Suspense>
-          }
-        />
-        <Route path="/login" element={<Navigate to="/trader" replace />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>

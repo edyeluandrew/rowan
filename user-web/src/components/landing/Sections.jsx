@@ -464,7 +464,6 @@ export function SiteFooter() {
               <li><a href="#features" className="text-sm text-rowan-muted hover:text-rowan-text font-sans">Features</a></li>
               <li><a href="#bills" className="text-sm text-rowan-muted hover:text-rowan-text font-sans">Pay bills</a></li>
               <li><a href="#security" className="text-sm text-rowan-muted hover:text-rowan-text font-sans">Security</a></li>
-              <li><Link to="/trader" className="text-sm text-rowan-muted hover:text-rowan-text font-sans">OTC Trader</Link></li>
             </ul>
           </div>
 
