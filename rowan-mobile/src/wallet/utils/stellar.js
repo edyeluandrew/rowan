@@ -257,14 +257,18 @@ export async function provisionUsdcWallet({ secretKey, publicKey, horizonUrl }) 
   }
 
   if (CURRENT_NETWORK.isTest) {
-    const activation = await requestBackendActivateAccount(publicKey)
-    if (activation?.xdr) {
-      await signAndSubmitSponsoredXdr(activation.xdr, secretKey, horizonUrl)
-      balances = await waitForTrustline(publicKey, horizonUrl)
-      if (balances.hasUsdcTrustline) {
-        return { funded: true, trustlineCreated: true, sponsored: true }
+    try {
+      const activation = await requestBackendActivateAccount(publicKey)
+      if (activation?.xdr) {
+        await signAndSubmitSponsoredXdr(activation.xdr, secretKey, horizonUrl)
+        balances = await waitForTrustline(publicKey, horizonUrl)
+        if (balances.hasUsdcTrustline) {
+          return { funded: true, trustlineCreated: true, sponsored: true }
+        }
+      } else {
+        balances = await loadAccountBalances(publicKey, horizonUrl)
       }
-    } else {
+    } catch {
       balances = await loadAccountBalances(publicKey, horizonUrl)
     }
   }

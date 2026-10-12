@@ -46,7 +46,7 @@ export function traderKeyStorageKey(traderId) {
  * claimed by two accounts.
  */
 export default function useTraderWallet(traderId) {
-  const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL
+  const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL || CURRENT_NETWORK.horizonUrl
   const storageKey = traderKeyStorageKey(traderId)
   const [keypair, setKeypair] = useState(null)
   const [linkedAddress, setLinkedAddress] = useState(null)
@@ -113,7 +113,8 @@ export default function useTraderWallet(traderId) {
     ;(async () => {
       try {
         if (!keypair.secretKey) return
-        const result = await provisionUsdcWallet({
+        const fund = CURRENT_NETWORK.isTest ? fundTestUsdcWallet : provisionUsdcWallet
+        const result = await fund({
           secretKey: keypair.secretKey,
           publicKey: keypair.publicKey,
           horizonUrl,
