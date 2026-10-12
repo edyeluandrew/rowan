@@ -39,7 +39,7 @@ export default function Home() {
   );
 
   return (
-    <div className="overflow-y-auto px-4 pt-4 sm:px-6 bg-rowan-bg min-h-screen">
+    <div className="overflow-y-auto px-4 pt-4 sm:px-6 lg:px-10 xl:px-14 bg-rowan-bg min-h-screen">
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <span className="text-rowan-muted text-sm">{greeting}, {name}</span>
@@ -56,27 +56,55 @@ export default function Home() {
       </div>
 
       {/* Rowan wallet */}
-      <button
-        type="button"
-        onClick={() => navigate('/trader/wallet')}
-        className="w-full text-left bg-rowan-surface border border-rowan-border rounded-md p-4 mb-4"
-      >
-        <div className="flex justify-between items-center">
-          <span className="text-rowan-muted text-xs uppercase tracking-wider">Rowan wallet</span>
-          <span className="text-rowan-yellow text-xs">Add USDC</span>
-        </div>
-        <p className="text-rowan-text text-2xl font-bold tabular-nums mt-1">
-          {usdcBalance != null ? `${Number(usdcBalance).toFixed(2)} USDC` : '—'}
-        </p>
-        {publicKey && (
-          <p className="text-rowan-muted text-[10px] font-mono mt-1 truncate">{publicKey}</p>
-        )}
-      </button>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <button
+          type="button"
+          onClick={() => navigate('/trader/wallet')}
+          className="w-full h-full text-left bg-rowan-surface border border-rowan-border rounded-md p-4"
+        >
+          <div className="flex justify-between items-center">
+            <span className="text-rowan-muted text-xs uppercase tracking-wider">Rowan wallet</span>
+            <span className="text-rowan-yellow text-xs">Add USDC</span>
+          </div>
+          <p className="text-rowan-text text-2xl font-bold tabular-nums mt-1">
+            {usdcBalance != null ? `${Number(usdcBalance).toFixed(2)} USDC` : '—'}
+          </p>
+          {publicKey && (
+            <p className="text-rowan-muted text-[10px] font-mono mt-1 truncate">{publicKey}</p>
+          )}
+        </button>
 
-      {/* Float Health Warning */}
+        <div className="bg-rowan-surface border border-rowan-border rounded-md p-4">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-rowan-muted text-xs uppercase tracking-wider">Available Float</span>
+            <button
+              className="text-rowan-yellow text-xs font-medium border border-rowan-yellow rounded px-3 py-1"
+              onClick={() => setShowFloat(true)}
+            >
+              Update Float
+            </button>
+          </div>
+          {currencies.length === 0 && (
+            <p className="text-rowan-muted text-sm py-2">No float configured</p>
+          )}
+          {currencies.map(([cur, amount], i) => (
+            <div
+              key={cur}
+              className={`flex justify-between items-center py-2 ${
+                i < currencies.length - 1 ? 'border-b border-rowan-border' : ''
+              }`}
+            >
+              <span className="text-rowan-text font-bold">{cur}</span>
+              <span className="text-rowan-yellow font-bold tabular-nums">
+                {formatCurrency(amount, cur)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {floatHealth && <FloatHealthBanner health={floatHealth} />}
 
-      {/* Active Request Banner */}
       {activeRequest && (
         <div
           className="bg-rowan-yellow text-rowan-bg font-bold rounded-md p-4 mb-4 flex justify-between items-center gap-3 select-none"
@@ -89,39 +117,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Float Balance Card */}
-      <div className="bg-rowan-surface border border-rowan-border rounded-md p-4 mb-4">
-        <div className="flex justify-between items-center mb-3">
-          <span className="text-rowan-muted text-xs uppercase tracking-wider">Available Float</span>
-          <button
-            className="text-rowan-yellow text-xs font-medium border border-rowan-yellow rounded px-3 py-1"
-            onClick={() => setShowFloat(true)}
-          >
-            Update Float
-          </button>
-        </div>
-        {currencies.length === 0 && (
-          <p className="text-rowan-muted text-sm py-2">No float configured</p>
-        )}
-        {currencies.map(([cur, amount], i) => (
-          <div
-            key={cur}
-            className={`flex justify-between items-center py-2 ${
-              i < currencies.length - 1 ? 'border-b border-rowan-border' : ''
-            }`}
-          >
-            <span className="text-rowan-text font-bold">
-              {cur}
-            </span>
-            <span className="text-rowan-yellow font-bold tabular-nums">
-              {formatCurrency(amount, cur)}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <StatCard
           label="Completed Today"
           value={stats?.completed_today ?? 0}
