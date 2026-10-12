@@ -102,7 +102,7 @@ export default function P2pHub() {
     maxAmount: offer.maxAmount ?? trader.maxAmount,
     availableFloat: offer.availableFloat,
     availableUsdc: offer.availableUsdc,
-    ratePerUsdc: offer.ratePerUsdc ?? trader.bestRatePerUsdc,
+    ratePerUsdc: offer.ratePerUsdc,
   })
 
   const handleTrade = (offer, trader) => {

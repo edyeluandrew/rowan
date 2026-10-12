@@ -35,7 +35,7 @@ export default function TraderGroupCard({
 
   const displayRate = Number(trader.bestRatePerUsdc) > 0
     ? Number(trader.bestRatePerUsdc)
-    : (Number(usdcToFiat) > 0 ? Number(usdcToFiat) : null)
+    : null
   const rateLine = formatUsdcRateLine(currency, displayRate)
   const vsMarketLine = Number(trader.bestRatePerUsdc) > 0
     ? formatUsdcRateVsMarket(currency, trader.bestRatePerUsdc, usdcToFiat)
@@ -55,11 +55,13 @@ export default function TraderGroupCard({
   const memberSince = formatMemberSince(trader.memberSince)
   const tradeCount = formatTradeCount(trader.completedOrders)
   const isVerified = trader.trustScore >= 80
-  const canBuy = isBuy && trader.bestRatePerUsdc > 0
+  const hasTraderPrice = Number(trader.bestRatePerUsdc) > 0
+  const offerPriced = (offer) => Number(offer?.ratePerUsdc) > 0
 
   const handleTradeClick = () => {
-    if (tradeDisabled || (isBuy && !canBuy)) return
+    if (tradeDisabled || !hasTraderPrice) return
     if (offers.length === 1) {
+      if (!offerPriced(offers[0])) return
       onTrade?.(offers[0], trader)
       return
     }
@@ -67,7 +69,7 @@ export default function TraderGroupCard({
   }
 
   const handleNetworkTap = (offer) => {
-    if (tradeDisabled || (isBuy && !offer.ratePerUsdc)) return
+    if (tradeDisabled || !offerPriced(offer)) return
     onTrade?.(offer, trader)
   }
 
@@ -104,7 +106,7 @@ export default function TraderGroupCard({
           {!isBuy && estimateLine && (
             <p className="text-rowan-text text-xs mt-1">{estimateLine} <span className="text-rowan-muted">(estimate)</span></p>
           )}
-          {isBuy && !canBuy && (
+          {!hasTraderPrice && (
             <p className="text-rowan-muted text-xs mt-1">Trader has not set a USDC price</p>
           )}
         </div>
@@ -115,7 +117,7 @@ export default function TraderGroupCard({
           <button
             key={offer.payoutSettingId}
             type="button"
-            disabled={tradeDisabled || (isBuy && !offer.ratePerUsdc)}
+            disabled={tradeDisabled || !offerPriced(offer)}
             onClick={() => handleNetworkTap(offer)}
             className="disabled:opacity-40"
           >
@@ -187,7 +189,7 @@ export default function TraderGroupCard({
         <Button
           className="py-3"
           onClick={handleTradeClick}
-          disabled={tradeDisabled || (isBuy && !canBuy)}
+          disabled={tradeDisabled || !hasTraderPrice}
         >
           {isBuy ? 'Buy' : 'Sell'}
         </Button>

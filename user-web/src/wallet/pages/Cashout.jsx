@@ -36,7 +36,7 @@ export default function Cashout() {
   } = location.state || {}
   const { isLocked } = useBiometricProtection()
   const { country, fiatCurrency: userFiat } = useUserCountry()
-  const { allRates, rates, refresh: refreshRates } = useRates(userFiat)
+  const { allRates, refresh: refreshRates } = useRates(userFiat)
   const { usdcBalance, hasUsdcTrustline } = useWallet()
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
   const adNetwork = presetNetwork || selectedAd?.network || null
@@ -99,7 +99,8 @@ export default function Cashout() {
   const rateValue = selectedRate?.rate || 0
   const currency = network ? NETWORKS[network]?.currency : userFiat
 
-  const usdcToFiatRate = Number(selectedAd?.ratePerUsdc || selectedAd?.rate_per_usdc || rates?.usdcToFiat || 0)
+  const traderRate = Number(selectedAd?.ratePerUsdc || selectedAd?.rate_per_usdc || 0)
+  const usdcToFiatRate = traderRate > 0 ? traderRate : 0
   const traderRateLine = formatUsdcRateLine(currency, selectedAd?.ratePerUsdc ?? selectedAd?.rate_per_usdc)
 
   const walletMaxNetFiat = useMemo(() => {
@@ -155,6 +156,7 @@ export default function Cashout() {
     !belowMin &&
     !exceedsTraderFloat &&
     network &&
+    traderRate > 0 &&
     phone.length >= 7 &&
     recipientName.trim().length >= 2
 

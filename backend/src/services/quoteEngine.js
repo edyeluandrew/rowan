@@ -772,6 +772,12 @@ async function createQuoteFromFiat({
   payoutSettingId = null,
 }) {
   const traderRate = await getTraderAdRatePerUsdc(payoutSettingId);
+  if (payoutSettingId && !traderRate) {
+    const err = new Error('Trader has not set a USDC price for this ad');
+    err.statusCode = 409;
+    err.code = 'TRADER_RATE_REQUIRED';
+    throw err;
+  }
   const computed = await computeQuoteFromTargetFiatUsdc(targetNetFiat, network, {
     ratePerUsdc: traderRate,
   });
