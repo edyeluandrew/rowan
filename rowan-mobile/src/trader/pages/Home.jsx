@@ -13,7 +13,6 @@ import FloatUpdateModal from '../components/modals/FloatUpdateModal';
 import FloatHealthBanner from '../components/home/FloatHealthBanner';
 import NotificationBadge from '../components/notifications/NotificationBadge';
 import { formatCurrency } from '../utils/format';
-import { CURRENCY_FLAGS } from '../utils/constants';
 import { useTraderWallet } from '../context/TraderWalletContext';
 
 export default function Home() {
@@ -40,7 +39,7 @@ export default function Home() {
   );
 
   return (
-    <div className="overflow-y-auto px-4 pt-4 pb-24 bg-rowan-bg min-h-screen">
+    <div className="overflow-y-auto px-4 pt-4 sm:px-6 bg-rowan-bg min-h-screen">
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <span className="text-rowan-muted text-sm">{greeting}, {name}</span>
@@ -80,10 +79,10 @@ export default function Home() {
       {/* Active Request Banner */}
       {activeRequest && (
         <div
-          className="bg-rowan-yellow text-rowan-bg font-bold rounded-md p-4 mb-4 flex justify-between items-center select-none"
+          className="bg-rowan-yellow text-rowan-bg font-bold rounded-md p-4 mb-4 flex justify-between items-center gap-3 select-none"
           onClick={() => navigate(`/trader/requests/${activeRequest.id}`)}
         >
-          <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5 min-w-0 text-sm sm:text-base">
             <Zap size={16} /> Active Payout — complete now
           </span>
           <ChevronRight size={20} />
@@ -112,7 +111,7 @@ export default function Home() {
             }`}
           >
             <span className="text-rowan-text font-bold">
-              {CURRENCY_FLAGS[cur] || ''} {cur}
+              {cur}
             </span>
             <span className="text-rowan-yellow font-bold tabular-nums">
               {formatCurrency(amount, cur)}
@@ -122,7 +121,7 @@ export default function Home() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <StatCard
           label="Completed Today"
           value={stats?.completed_today ?? 0}
