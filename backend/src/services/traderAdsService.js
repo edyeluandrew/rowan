@@ -97,9 +97,6 @@ async function listAds({
 
   const ads = (await Promise.all(
     result.rows.map(async (row) => {
-      const trustStatus = await getTraderUsdcTrustlineStatus(row.stellar_address);
-      if (!trustStatus.hasTrustline) return null;
-
       const stats = await traderStatsService.getTraderStats(row.trader_id);
       const online = traderStatsService.enrichOnlineStatus(row);
       return {
@@ -213,7 +210,9 @@ async function getAdById(payoutSettingId) {
   if (row.status !== 'ACTIVE' || row.verification_status !== 'VERIFIED') return null;
 
   const trustStatus = await getTraderUsdcTrustlineStatus(row.stellar_address);
-  if (!trustStatus.hasTrustline) return null;
+  if (!trustStatus.ok && trustStatus.reason === 'HORIZON_ERROR') {
+    logger.warn(`[Ads] Horizon unread for trader ${row.trader_id}; listing the ad anyway`);
+  }
 
   const stats = await traderStatsService.getTraderStats(row.trader_id);
   const reviews = await traderStatsService.getRecentReviews(row.trader_id, 10);
@@ -329,8 +328,6 @@ async function listBuyAds({
     `t.status = 'ACTIVE'`,
     `t.verification_status = 'VERIFIED'`,
     `t.stellar_address IS NOT NULL`,
-    `ps.rate_per_usdc IS NOT NULL`,
-    `ps.rate_per_usdc > 0`,
     `(
        (
          ps.ad_side = 'USER_BUY'
@@ -425,14 +422,18 @@ async function listBuyAds({
   const ads = (await Promise.all(
     result.rows.map(async (row) => {
       const trustStatus = await getTraderUsdcTrustlineStatus(row.stellar_address);
-      if (!trustStatus.hasTrustline && trustStatus.reason !== 'HORIZON_ERROR') return null;
+      if (!trustStatus.ok && trustStatus.reason === 'HORIZON_ERROR') {
+        logger.warn(`[Ads] Horizon unread for trader ${row.trader_id}; listing the buy ad anyway`);
+      }
       const rate = row.rate_per_usdc != null ? parseFloat(row.rate_per_usdc) : null;
       const fromUsdc = parseFloat(row.net_usdc_float);
       const fromFloat = rate > 0 ? parseFloat(row.net_float || 0) / rate : 0;
       const availableUsdc = row.ad_side === 'USER_BUY'
         ? fromUsdc
         : (Number.isFinite(fromUsdc) && fromUsdc > 0 ? fromUsdc : fromFloat);
-      if (!Number.isFinite(availableUsdc) || availableUsdc <= 0) return null;
+      const netFloat = parseFloat(row.net_float || 0);
+      if (row.ad_side === 'USER_BUY' && (!(Number.isFinite(availableUsdc)) || availableUsdc <= 0)) return null;
+      if (row.ad_side !== 'USER_BUY' && netFloat <= 0 && (!(Number.isFinite(availableUsdc)) || availableUsdc <= 0)) return null;
       const stats = await traderStatsService.getTraderStats(row.trader_id);
       const online = traderStatsService.enrichOnlineStatus(row);
       return {
