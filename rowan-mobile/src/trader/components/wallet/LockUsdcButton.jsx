@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Button from '../ui/Button';
 import { useTraderWallet } from '../../context/TraderWalletContext';
 import { lockUsdcToEscrow } from '../../utils/lockUsdc';
-import { verifyWalletAddress } from '../../api/wallet';
+import { CURRENT_NETWORK } from '../../../wallet/utils/constants';
 
 /**
  * Lock USDC into escrow from the trader's single Rowan wallet.
@@ -27,7 +27,7 @@ export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked,
     keypair.publicKey !== profileAddress &&
     !profileLinked
   );
-  const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL;
+  const horizonUrl = import.meta.env.VITE_STELLAR_HORIZON_URL || CURRENT_NETWORK.horizonUrl;
   const canSend = isReady && !profileSyncing && !addressMismatch && Number(usdcBalance || 0) >= usdcAmount && !!escrowAddress && !!memo;
 
   const handleLinkThisWallet = async () => {

@@ -12,6 +12,13 @@ import { requestBackendActivateAccount, requestBackendTestnetUsdc } from '../api
 
 const networkKey = import.meta.env.VITE_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet'
 
+function horizonServer(horizonUrl) {
+  const url = typeof horizonUrl === 'string' && horizonUrl.trim()
+    ? horizonUrl.trim()
+    : CURRENT_NETWORK.horizonUrl
+  return new Horizon.Server(url)
+}
+
 /** USDC asset for the active Stellar network */
 export function getUsdcAsset() {
   return new Asset('USDC', USDC_ISSUERS[networkKey])
@@ -74,7 +81,7 @@ export async function buildAndSignPayment({
   memo,
   horizonUrl,
 }) {
-  const server = new Horizon.Server(horizonUrl)
+  const server = horizonServer(horizonUrl)
   const keypair = Keypair.fromSecret(sourceSecretKey)
   const sourceAccount = await server.loadAccount(keypair.publicKey())
 
@@ -109,7 +116,7 @@ export async function buildAndSignUsdcPayment({
   memo,
   horizonUrl,
 }) {
-  const server = new Horizon.Server(horizonUrl)
+  const server = horizonServer(horizonUrl)
   const keypair = Keypair.fromSecret(sourceSecretKey)
   const sourceAccount = await server.loadAccount(keypair.publicKey())
   const usdcAsset = getUsdcAsset()
@@ -141,7 +148,7 @@ export async function buildAndSignUsdcPayment({
  * Submit a signed transaction XDR to Horizon.
  */
 export async function submitTransaction(signedXdr, horizonUrl) {
-  const server = new Horizon.Server(horizonUrl)
+  const server = horizonServer(horizonUrl)
   const transaction = TransactionBuilder.fromXDR(
     signedXdr,
     CURRENT_NETWORK.passphrase
@@ -179,7 +186,7 @@ function balancesFromAccount(account) {
  * Returns zero balances for unfunded accounts (404).
  */
 export async function loadAccountBalances(publicKey, horizonUrl) {
-  const server = new Horizon.Server(horizonUrl)
+  const server = horizonServer(horizonUrl)
   try {
     const account = await server.loadAccount(publicKey)
     return balancesFromAccount(account)
@@ -195,7 +202,7 @@ export async function loadAccountBalances(publicKey, horizonUrl) {
  * Build and sign a ChangeTrust op so this wallet can receive USDC.
  */
 export async function buildAndSignUsdcTrustline({ sourceSecretKey, horizonUrl }) {
-  const server = new Horizon.Server(horizonUrl)
+  const server = horizonServer(horizonUrl)
   const keypair = Keypair.fromSecret(sourceSecretKey)
   const account = await server.loadAccount(keypair.publicKey())
   const usdcAsset = getUsdcAsset()
@@ -368,7 +375,7 @@ function horizonPathRecords(result) {
  * Find the best XLM→USDC path on the Stellar DEX for receiving a USDC amount.
  */
 export async function findReceiveUsdcPath({ horizonUrl, usdcAmount }) {
-  const server = new Horizon.Server(horizonUrl)
+  const server = horizonServer(horizonUrl)
   const usdcAsset = getUsdcAsset()
   const amount = Number(usdcAmount)
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -411,7 +418,7 @@ export async function buildAndSignXlmToUsdcSwap({
   const sendMax = (pathInfo.sourceAmount * (1 + slippagePercent / 100)).toFixed(7)
   const destAmount = pathInfo.destAmount.toFixed(7)
 
-  const server = new Horizon.Server(horizonUrl)
+  const server = horizonServer(horizonUrl)
   const keypair = Keypair.fromSecret(sourceSecretKey)
   const account = await server.loadAccount(keypair.publicKey())
   const usdcAsset = getUsdcAsset()
