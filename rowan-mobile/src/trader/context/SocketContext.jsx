@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { getPreference } from '../utils/storage';
 import { SOCKET_RECONNECT_ATTEMPTS, SOCKET_RECONNECT_DELAY, SOCKET_RECONNECT_DELAY_MAX } from '../utils/constants';
+import { getApiUrl } from '../../shared/utils/config.js';
 
 const SocketContext = createContext(null);
 
@@ -31,9 +32,9 @@ export function SocketProvider({ children }) {
   useEffect(() => {
     if (!isAuthenticated || !token) return;
 
-    const s = io(import.meta.env.VITE_API_URL, {
+    const s = io(getApiUrl(), {
       auth: { token },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnectionAttempts: SOCKET_RECONNECT_ATTEMPTS,
       reconnectionDelay: SOCKET_RECONNECT_DELAY,
       reconnectionDelayMax: SOCKET_RECONNECT_DELAY_MAX,

@@ -6,6 +6,7 @@ import { getPreference } from '../utils/storage'
 import { scheduleLocalNotification } from '../utils/notifications'
 import { buildLocalNotificationExtra } from '../utils/notificationRoutes'
 import { onLogout } from '../api/client'
+import { getApiUrl } from '../../shared/utils/config.js'
 
 const SocketContext = createContext(null)
 
@@ -18,7 +19,7 @@ export function SocketProvider({ children }) {
   useEffect(() => {
     if (!isAuthenticated || !token) return
 
-    const socket = io(import.meta.env.VITE_API_URL, {
+    const socket = io(getApiUrl(), {
       auth: { token },
       reconnectionAttempts: SOCKET_RECONNECT_ATTEMPTS,
       reconnectionDelay: SOCKET_RECONNECT_DELAY,

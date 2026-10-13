@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getApiUrl } from '../utils/config.js';
 
 /** Module-level token — updated via setClientToken() */
 let _token = null;
@@ -21,7 +22,7 @@ export function onLogout(callback) {
 }
 
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: getApiUrl(),
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -35,6 +36,21 @@ console.log('[Client] Environment variables:', {
 
 /* ── Request interceptor: attach Bearer token ── */
 client.interceptors.request.use((config) => {
+  const apiUrl = getApiUrl();
+  config.baseURL = apiUrl;
+  if (typeof config.url === 'string' && config.url.startsWith('http')) {
+    try {
+      const target = new URL(config.url);
+      const api = new URL(apiUrl);
+      if (target.hostname.endsWith('.onrender.com') && target.hostname !== api.hostname) {
+        target.protocol = api.protocol;
+        target.host = api.host;
+        config.url = target.toString();
+      }
+    } catch {
+      /* keep the original url */
+    }
+  }
   if (_token) {
     config.headers.Authorization = `Bearer ${_token}`;
   }

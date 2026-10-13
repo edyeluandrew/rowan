@@ -39,6 +39,20 @@ function parseTomlText(text) {
   return toml
 }
 
+function toReachableEndpoint(endpoint) {
+  if (!endpoint) return endpoint
+  try {
+    const target = new URL(endpoint)
+    const api = new URL(getApiUrl())
+    if (target.hostname !== api.hostname) {
+      return `${api.origin}${target.pathname}${target.search}`
+    }
+  } catch {
+    /* keep the toml endpoint */
+  }
+  return endpoint
+}
+
 async function fetchTomlFromApi(apiUrl) {
   let lastErr
   for (let attempt = 1; attempt <= TOML_FETCH_RETRIES; attempt += 1) {
@@ -73,9 +87,9 @@ export async function fetchStellarToml(homeDomain = getHomeDomain()) {
     return tomlCache.get(domain)
   }
 
+  const apiUrl = getApiUrl()
   try {
     let toml
-    const apiUrl = getApiUrl()
 
     // The phone app's API host is Render, not a Stellar home domain.
     // Fetch toml from that API and retry while a sleeping server wakes up.
@@ -103,7 +117,7 @@ export async function fetchStellarToml(homeDomain = getHomeDomain()) {
 
     const result = {
       signingKey: toml.SIGNING_KEY,
-      webAuthEndpoint: toml.WEB_AUTH_ENDPOINT,
+      webAuthEndpoint: toReachableEndpoint(toml.WEB_AUTH_ENDPOINT),
       networkPassphrase: toml.NETWORK_PASSPHRASE || null,
     }
 
@@ -113,8 +127,14 @@ export async function fetchStellarToml(homeDomain = getHomeDomain()) {
     const hint = shouldFetchTomlFromApi()
       ? ' The API may still be waking up. Wait a minute and try again.'
       : ''
+    let host = domain
+    try {
+      host = new URL(apiUrl).host
+    } catch {
+      /* keep the home domain in the message */
+    }
     throw new Error(
-      `Failed to fetch stellar.toml from ${domain}: ${err.message}${hint}`
+      `Failed to fetch stellar.toml from ${host}: ${err.message}${hint}`
     )
   }
 }
