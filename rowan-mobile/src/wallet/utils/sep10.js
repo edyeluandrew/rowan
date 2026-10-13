@@ -22,10 +22,39 @@ import {
   StellarToml,
   WebAuth,
 } from '@stellar/stellar-sdk'
-import { getApiUrl, getHomeDomain } from '../../shared/utils/config.js'
+import { getApiUrl, getHomeDomain, shouldFetchTomlFromApi } from '../../shared/utils/config.js'
 
 // ── stellar.toml cache (one fetch per session per domain) ───────────
 const tomlCache = new Map()
+
+const TOML_FETCH_RETRIES = 4
+const TOML_FETCH_RETRY_MS = 5000
+
+function parseTomlText(text) {
+  const toml = {}
+  for (const line of text.split('\n')) {
+    const match = line.match(/^\s*([A-Z_]+)\s*=\s*"([^"]*)"/)
+    if (match) toml[match[1]] = match[2]
+  }
+  return toml
+}
+
+async function fetchTomlFromApi(apiUrl) {
+  let lastErr
+  for (let attempt = 1; attempt <= TOML_FETCH_RETRIES; attempt += 1) {
+    try {
+      const resp = await fetch(`${apiUrl}/.well-known/stellar.toml`)
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      return parseTomlText(await resp.text())
+    } catch (err) {
+      lastErr = err
+      if (attempt < TOML_FETCH_RETRIES) {
+        await new Promise((r) => setTimeout(r, TOML_FETCH_RETRY_MS * attempt))
+      }
+    }
+  }
+  throw lastErr
+}
 
 /**
  * Fetches stellar.toml from the server's home domain and returns
@@ -48,31 +77,15 @@ export async function fetchStellarToml(homeDomain = getHomeDomain()) {
     let toml
     const apiUrl = getApiUrl()
 
-    // Local dev or missing domain: fetch toml directly from the API server.
-    const isDev = !domain
-      || /^(localhost|127\.|10\.|192\.168\.|172\.|\d+\.\d+\.\d+\.\d+)/.test(domain)
-    if (isDev) {
-      const resp = await fetch(`${apiUrl}/.well-known/stellar.toml`)
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const text = await resp.text()
-      toml = {}
-      for (const line of text.split('\n')) {
-        const match = line.match(/^\s*([A-Z_]+)\s*=\s*"([^"]*)"/)
-        if (match) toml[match[1]] = match[2]
-      }
+    // The phone app's API host is Render, not a Stellar home domain.
+    // Fetch toml from that API and retry while a sleeping server wakes up.
+    if (shouldFetchTomlFromApi()) {
+      toml = await fetchTomlFromApi(apiUrl)
     } else {
       try {
         toml = await StellarToml.Resolver.resolve(domain)
       } catch {
-        // Fallback: same host may serve toml via API_URL (e.g. Render)
-        const resp = await fetch(`${apiUrl}/.well-known/stellar.toml`)
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-        const text = await resp.text()
-        toml = {}
-        for (const line of text.split('\n')) {
-          const match = line.match(/^\s*([A-Z_]+)\s*=\s*"([^"]*)"/)
-          if (match) toml[match[1]] = match[2]
-        }
+        toml = await fetchTomlFromApi(apiUrl)
       }
     }
 
@@ -97,8 +110,11 @@ export async function fetchStellarToml(homeDomain = getHomeDomain()) {
     tomlCache.set(domain, result)
     return result
   } catch (err) {
+    const hint = shouldFetchTomlFromApi()
+      ? ' The API may still be waking up. Wait a minute and try again.'
+      : ''
     throw new Error(
-      `Failed to fetch stellar.toml from ${domain}: ${err.message}`
+      `Failed to fetch stellar.toml from ${domain}: ${err.message}${hint}`
     )
   }
 }

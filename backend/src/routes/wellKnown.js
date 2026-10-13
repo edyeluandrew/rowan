@@ -13,6 +13,13 @@ const router = express.Router();
  * Reference: developers.stellar.org/docs/build/apps/wallet/sep10
  * Reference: github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0001.md
  */
+router.options('/stellar.toml', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.sendStatus(204);
+});
+
 router.get('/stellar.toml', (req, res) => {
   // Debug logging to verify API_URL is read correctly
   console.log('[stellar.toml] process.env.API_URL =', process.env.API_URL);

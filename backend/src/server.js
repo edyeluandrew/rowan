@@ -190,6 +190,9 @@ if (corsOrigin === '*') {
   if (!allowedOrigins.includes('https://partners.rowanpay.app')) {
     allowedOrigins.push('https://partners.rowanpay.app');
   }
+  for (const origin of ['http://localhost', 'https://localhost', 'capacitor://localhost']) {
+    if (!allowedOrigins.includes(origin)) allowedOrigins.push(origin);
+  }
   logger.info(`[CORS] Allowlist: ${allowedOrigins.join(', ')}`);
   app.use(cors({
     origin(origin, callback) {
