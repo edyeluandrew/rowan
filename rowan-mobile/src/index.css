@@ -176,14 +176,31 @@ input, select, textarea {
   50% { transform: scale(1.12); opacity: 1; }
 }
 
-/* —— Africa map + glitter inflows —— */
+/* —— Africa map with the Uganda pin —— */
+.landing-story {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  width: 100%;
+}
+
 .landing-story-stage {
   position: relative;
   width: 100%;
-  /* Keeps the 200:220 map under ~250px tall so short devices do not overflow. */
+  /* Keeps the map under ~250px tall so short devices do not overflow. */
   max-width: 228px;
-  aspect-ratio: 200 / 220;
+  aspect-ratio: 192 / 190;
   animation: landing-story-float 7s ease-in-out infinite;
+}
+
+.landing-story-place {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: #B7BDC6;
+  text-align: center;
 }
 
 @media (min-height: 750px) {
@@ -211,31 +228,27 @@ input, select, textarea {
 
 .landing-story-pulse-ring-delayed { animation-delay: 0.8s; }
 
-@keyframes landing-story-glitter-dash {
-  0% { stroke-dashoffset: 0; opacity: 0.45; }
-  50% { opacity: 1; }
-  100% { stroke-dashoffset: -40; opacity: 0.55; }
-}
-
-.landing-story-glitter-line {
-  animation: landing-story-glitter-dash 1.35s linear infinite;
-}
-
-@keyframes landing-story-coin-glitter {
-  0%, 100% { transform: translateY(0) scale(1); opacity: 0.88; }
-  40% { transform: translateY(-3px) scale(1.08); opacity: 1; }
-  70% { transform: translateY(-1px) scale(1.02); opacity: 0.95; }
-}
-
-.landing-story-coin {
+.landing-story-pin-ring {
   transform-box: fill-box;
   transform-origin: center;
-  animation: landing-story-coin-glitter 2s ease-in-out infinite;
+  animation: landing-pin-ring 2.6s ease-out infinite;
 }
 
-.landing-story-coin-b { animation-delay: 0.35s; }
-.landing-story-coin-c { animation-delay: 0.7s; }
-.landing-story-coin-d { animation-delay: 1s; }
+.landing-story-pin-shadow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: landing-pin-shadow 2.6s ease-in-out infinite;
+}
+
+@keyframes landing-pin-ring {
+  0% { opacity: 0.55; transform: scale(0.7); }
+  70%, 100% { opacity: 0; transform: scale(2.1); }
+}
+
+@keyframes landing-pin-shadow {
+  0%, 100% { opacity: 0.38; transform: scaleX(1); }
+  42% { opacity: 0.16; transform: scaleX(0.72); }
+}
 
 /* —— Cash out to mobile money —— */
 .ob-cash-drop {
@@ -381,8 +394,8 @@ input, select, textarea {
   .landing-story-stage,
   .landing-story-pulse-ring,
   .landing-story-pulse-ring-delayed,
-  .landing-story-glitter-line,
-  .landing-story-coin,
+  .landing-story-pin-ring,
+  .landing-story-pin-shadow,
   .ob-cash-drop,
   .ob-cash-rail,
   .ob-cash-chip,
