@@ -4,14 +4,15 @@
  * Balance ticks down so it reads as one continuous wallet.
  */
 import { useEffect, useState } from 'react'
-import { Zap, Droplets, Wifi, Smartphone, Check, ChevronLeft, Wallet } from 'lucide-react'
+import { Zap, Droplets, Check, ChevronLeft, Wallet } from 'lucide-react'
 import PhoneFrame, { StatusBar } from './PhoneFrame'
+import { NetworkBrand } from './brands/NetworkLogo'
 
 const BILLS = [
   { id: 'umeme', name: 'UMEME', sub: 'Yaka prepaid', Icon: Zap, amount: 'UGX 20,000', usdc: '5.30' },
   { id: 'nwsc', name: 'NWSC', sub: 'Water bill', Icon: Droplets, amount: 'UGX 15,000', usdc: '3.98' },
-  { id: 'data', name: 'MTN Data', sub: '5 GB bundle', Icon: Wifi, amount: 'UGX 12,000', usdc: '3.18' },
-  { id: 'airtime', name: 'Airtel Airtime', sub: '0700 000 000', Icon: Smartphone, amount: 'UGX 5,000', usdc: '1.33' },
+  { id: 'data', name: 'MTN Data', sub: '5 GB bundle', brand: 'MTN', amount: 'UGX 12,000', usdc: '3.18' },
+  { id: 'airtime', name: 'Airtel Airtime', sub: '0700 000 000', brand: 'AIRTEL', amount: 'UGX 5,000', usdc: '1.33' },
 ]
 
 /** Wallet balance shown before each payment lands. */
@@ -96,7 +97,11 @@ export default function BillsPayVisual({ className = '' }) {
                     }`}
                     aria-hidden="true"
                   >
-                    <b.Icon size={14} className={active ? 'text-rowan-green' : 'text-rowan-muted'} />
+                    {b.brand ? (
+                      <NetworkBrand network={b.brand} size={16} />
+                    ) : (
+                      <b.Icon size={14} className={active ? 'text-rowan-green' : 'text-rowan-muted'} />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-[10px] font-semibold text-rowan-text leading-tight truncate">{b.name}</p>

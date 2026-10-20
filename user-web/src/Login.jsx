@@ -5,13 +5,14 @@
  */
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, RefreshCw, ShieldCheck, Zap, Smartphone } from 'lucide-react'
+import { ArrowRight, RefreshCw, ShieldCheck, Zap } from 'lucide-react'
 import { useAuth } from './context/AuthContext'
 import { getSecure } from './shared/utils/storage'
 import { formatAddress } from './wallet/utils/format'
 import WalletTwoFactorLoginModal from './wallet/pages/WalletTwoFactorLoginModal'
 import { TrustLine } from './wallet/components/onboarding/OnboardingBits'
 import LandingStoryVisual from './components/LandingStoryVisual'
+import { AirtelMark, MtnMark } from './components/brands/NetworkLogo'
 import { isMissingWalletAccount } from './wallet/utils/apiErrors'
 import SiteHeader from './components/landing/SiteHeader'
 import Reveal from './components/landing/Reveal'
@@ -186,13 +187,19 @@ export default function Login() {
                       {[
                         { Icon: ShieldCheck, label: 'Escrow protected' },
                         { Icon: Zap, label: 'Payouts in minutes' },
-                        { Icon: Smartphone, label: 'MTN & Airtel' },
                       ].map(({ Icon, label }) => (
                         <li key={label} className="flex items-center gap-2">
                           <Icon size={15} className="text-rowan-green" aria-hidden="true" />
                           <span className="text-xs sm:text-sm text-rowan-muted font-sans">{label}</span>
                         </li>
                       ))}
+                      <li className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1" aria-hidden="true">
+                          <MtnMark size={16} />
+                          <AirtelMark size={16} />
+                        </span>
+                        <span className="text-xs sm:text-sm text-rowan-muted font-sans">MTN & Airtel</span>
+                      </li>
                     </ul>
                   </Reveal>
                 </div>

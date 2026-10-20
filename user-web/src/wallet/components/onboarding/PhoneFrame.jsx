@@ -1,3 +1,4 @@
+import { NetworkBrand } from '../../../components/brands/NetworkLogo'
 import {
   ArrowDownLeft,
   ArrowDownToLine,
@@ -9,7 +10,6 @@ import {
   Lock,
   Shield,
   Signal,
-  Smartphone,
   Wallet,
   Wifi,
 } from 'lucide-react'
@@ -83,17 +83,15 @@ function ScreenTrade() {
         </div>
       </div>
       {[
-        { name: 'MTN Mobile Money', rate: '3,850' },
-        { name: 'Airtel Money', rate: '3,842' },
+        { name: 'MTN Mobile Money', rate: '3,850', brand: 'MTN' },
+        { name: 'Airtel Money', rate: '3,842', brand: 'AIRTEL' },
       ].map((row) => (
         <div
           key={row.name}
           className="bg-white border border-rowan-border rounded-xl px-2 py-1.5 flex items-center justify-between"
         >
           <div className="flex items-center gap-1.5">
-            <div className="w-6 h-6 rounded-full bg-rowan-mint flex items-center justify-center">
-              <Smartphone size={11} className="text-rowan-green" />
-            </div>
+            <NetworkBrand network={row.brand} size={14} />
             <span className="text-[9px] font-semibold text-rowan-text">{row.name}</span>
           </div>
           <span className="text-[9px] font-bold text-rowan-green tabular-nums">{row.rate}</span>

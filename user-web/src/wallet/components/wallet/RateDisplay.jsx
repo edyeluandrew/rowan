@@ -1,6 +1,7 @@
 import { ArrowLeftRight } from 'lucide-react'
 import { NETWORKS } from '../../utils/constants'
 import Badge from '../ui/Badge'
+import { NetworkBrand } from '../../../components/brands/NetworkLogo'
 
 /**
  * Displays live exchange rates for all supported networks.
@@ -35,7 +36,10 @@ export default function RateDisplay({ allRates, loading, country = null }) {
           return (
             <div key={key} className="flex justify-between items-center py-2.5">
               <Badge color={network.color} bg={network.bg}>
-                {network.label}
+                <span className="inline-flex items-center gap-1.5">
+                  <NetworkBrand network={key} size={14} />
+                  {network.label}
+                </span>
               </Badge>
               <div className="flex items-center gap-2">
                 <ArrowLeftRight size={14} className="text-rowan-muted" />

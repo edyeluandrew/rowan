@@ -2,19 +2,16 @@
  * Slide 2: USDC balance flowing down into MTN and Airtel mobile money.
  */
 import { ArrowDown } from 'lucide-react';
+import { AirtelMark, MtnMark } from '../brands/NetworkLogo';
 
-function Chip({ label, sub, tone, delayed }) {
+function Chip({ label, sub, mark, delayed }) {
   return (
     <div
       className={`ob-cash-chip${delayed ? ' ob-cash-chip--b' : ''} flex-1 rounded-2xl bg-rowan-surface border border-rowan-border px-3 py-3 text-center`}
     >
-      <span
-        className="inline-flex items-center justify-center rounded-full px-3 py-1 text-[11px] font-bold"
-        style={{ background: tone.bg, color: tone.fg }}
-      >
-        {label}
-      </span>
-      <p className="mt-2 text-[13px] font-bold text-rowan-text tabular-nums">{sub}</p>
+      <span className="mx-auto flex h-10 items-center justify-center">{mark}</span>
+      <p className="mt-2 text-[12px] font-semibold text-rowan-text">{label}</p>
+      <p className="mt-0.5 text-[13px] font-bold text-rowan-text tabular-nums">{sub}</p>
     </div>
   );
 }
@@ -55,8 +52,8 @@ export default function CashoutVisual() {
 
         {/* Mobile money destinations */}
         <div className="flex gap-3">
-          <Chip label="MTN MoMo" sub="UGX 92,400" tone={{ bg: '#F0B90B', fg: '#181A20' }} />
-          <Chip label="Airtel" sub="UGX 92,400" tone={{ bg: '#F6465D', fg: '#FFFFFF' }} delayed />
+          <Chip label="MTN MoMo" sub="UGX 92,400" mark={<MtnMark size={40} />} />
+          <Chip label="Airtel Money" sub="UGX 92,400" mark={<AirtelMark size={40} />} delayed />
         </div>
 
         <p className="mt-3 text-center text-[11px] font-medium text-rowan-muted">

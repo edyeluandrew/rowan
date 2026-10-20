@@ -1,9 +1,8 @@
-import { Signal, Radio, Landmark, Smartphone } from 'lucide-react'
+import { Landmark, Smartphone } from 'lucide-react'
 import { NETWORKS, COUNTRY_CODES } from '../../utils/constants'
+import { NetworkBrand } from '../../../components/brands/NetworkLogo'
 
 const NETWORK_ICONS = {
-  MTN_MOMO_UG: Signal,
-  AIRTEL_UG: Radio,
   MPESA_KE: Landmark,
   VODACOM_TZ: Smartphone,
   TIGO_TZ: Smartphone,
@@ -24,6 +23,7 @@ export default function NetworkSelector({ selected, onSelect, country = null }) 
       </p>
       <div className={`grid gap-3 ${entries.length > 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {entries.map(([key, network]) => {
+          const brand = <NetworkBrand network={key} size={36} />
           const Icon = NETWORK_ICONS[key] || Smartphone
           const isSelected = selected === key
           return (
@@ -36,7 +36,9 @@ export default function NetworkSelector({ selected, onSelect, country = null }) 
                   : 'border-rowan-border bg-rowan-surface'
               }`}
             >
-              <Icon size={24} className={isSelected ? 'text-rowan-yellow' : network.color} />
+              {brand || (
+                <Icon size={24} className={isSelected ? 'text-rowan-yellow' : network.color} />
+              )}
               <span className="text-rowan-text text-sm font-medium">{network.label}</span>
               <span className="text-rowan-muted text-xs">
                 {COUNTRY_CODES[network.country]?.flag} {COUNTRY_CODES[network.country]?.name || network.country}

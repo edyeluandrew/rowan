@@ -22,6 +22,7 @@ import {
 import { Link } from 'react-router-dom'
 import Reveal from './Reveal'
 import RowanLogo from '../RowanLogo'
+import { NetworkBrand } from '../brands/NetworkLogo'
 import ReceivePeerVisual from '../ReceivePeerVisual'
 import BillsPayVisual from '../BillsPayVisual'
 
@@ -46,14 +47,14 @@ function SectionHeading({ eyebrow, title, blurb, id }) {
 /* —————————————————————————— rails strip —————————————————————————— */
 
 const RAILS = [
-  'Stellar USDC',
-  'MTN Mobile Money',
-  'Airtel Money',
-  'UMEME Yaka',
-  'NWSC Water',
-  'MTN Data',
-  'Airtel Airtime',
-  'Escrow protected',
+  { label: 'Stellar USDC' },
+  { label: 'MTN Mobile Money', brand: 'MTN' },
+  { label: 'Airtel Money', brand: 'AIRTEL' },
+  { label: 'UMEME Yaka' },
+  { label: 'NWSC Water' },
+  { label: 'MTN Data', brand: 'MTN' },
+  { label: 'Airtel Airtime', brand: 'AIRTEL' },
+  { label: 'Escrow protected' },
 ]
 
 export function RailsStrip() {
@@ -63,15 +64,19 @@ export function RailsStrip() {
         {[0, 1].map((copy) => (
           <ul key={copy} className="rails-track" aria-hidden="true">
             {RAILS.map((rail) => (
-              <li key={`${copy}-${rail}`} className="flex items-center gap-2.5 shrink-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-rowan-green" />
-                <span className="text-xs sm:text-sm font-sans text-rowan-muted whitespace-nowrap">{rail}</span>
+              <li key={`${copy}-${rail.label}`} className="flex items-center gap-2.5 shrink-0">
+                {rail.brand ? (
+                  <NetworkBrand network={rail.brand} size={16} />
+                ) : (
+                  <span className="w-1.5 h-1.5 rounded-full bg-rowan-green" />
+                )}
+                <span className="text-xs sm:text-sm font-sans text-rowan-muted whitespace-nowrap">{rail.label}</span>
               </li>
             ))}
           </ul>
         ))}
       </div>
-      <p className="sr-only">{RAILS.join(', ')}</p>
+      <p className="sr-only">{RAILS.map((rail) => rail.label).join(', ')}</p>
     </section>
   )
 }
