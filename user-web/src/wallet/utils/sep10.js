@@ -39,6 +39,20 @@ function parseTomlText(text) {
   return toml
 }
 
+function toReachableEndpoint(endpoint) {
+  if (!endpoint) return endpoint
+  try {
+    const target = new URL(endpoint)
+    const api = new URL(getApiUrl())
+    if (target.hostname !== api.hostname) {
+      return `${api.origin}${target.pathname}${target.search}`
+    }
+  } catch {
+    /* keep the toml endpoint */
+  }
+  return endpoint
+}
+
 async function fetchTomlFromApi(apiUrl) {
   let lastErr
   for (let attempt = 1; attempt <= TOML_FETCH_RETRIES; attempt += 1) {
@@ -103,7 +117,7 @@ export async function fetchStellarToml(homeDomain = getHomeDomain()) {
 
     const result = {
       signingKey: toml.SIGNING_KEY,
-      webAuthEndpoint: toml.WEB_AUTH_ENDPOINT,
+      webAuthEndpoint: toReachableEndpoint(toml.WEB_AUTH_ENDPOINT),
       networkPassphrase: toml.NETWORK_PASSPHRASE || null,
     }
 

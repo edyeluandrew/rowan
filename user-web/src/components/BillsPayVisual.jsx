@@ -141,7 +141,11 @@ export default function BillsPayVisual({ className = '' }) {
               <>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-8 h-8 rounded-xl bg-rowan-mint flex items-center justify-center shrink-0">
-                    <bill.Icon size={15} className="text-rowan-green" />
+                    {bill.brand ? (
+                      <NetworkBrand network={bill.brand} size={16} />
+                    ) : (
+                      <bill.Icon size={15} className="text-rowan-green" />
+                    )}
                   </div>
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold text-rowan-text leading-tight">{bill.name}</p>

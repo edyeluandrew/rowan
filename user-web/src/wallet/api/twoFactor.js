@@ -1,4 +1,5 @@
 import client from './client';
+import { getApiUrl } from '../../shared/utils/config.js';
 
 /**
  * GET /api/v1/user/2fa/status
@@ -36,7 +37,7 @@ export async function verifyTwoFactorSetup(code) {
  */
 export async function verifyTwoFactorLogin(userId, code) {
   const response = await fetch(
-    `${import.meta.env.VITE_API_URL}/api/v1/user/2fa/verify-login`,
+    `${getApiUrl()}/api/v1/user/2fa/verify-login`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

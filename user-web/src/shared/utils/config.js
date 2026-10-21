@@ -1,26 +1,36 @@
+const SITE_HOSTS = new Set(['rowanpay.app', 'www.rowanpay.app', 'partners.rowanpay.app'])
+
+function configuredApiUrl() {
+  const raw = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+  return raw.replace(/\/+$/, '')
+}
+
 /**
  * Resolve SEP-10 home domain from env.
- * Falls back to hostname of VITE_API_URL, then localhost.
+ * Stays the configured API host even when requests go through rowanpay.app.
  */
 export function getHomeDomain() {
   const explicit = import.meta.env.VITE_HOME_DOMAIN
   if (explicit && explicit.trim()) return explicit.trim()
 
-  const apiUrl = import.meta.env.VITE_API_URL
-  if (apiUrl) {
-    try {
-      return new URL(apiUrl).hostname
-    } catch {
-      /* invalid URL */
-    }
+  try {
+    return new URL(configuredApiUrl()).hostname
+  } catch {
+    return 'localhost'
   }
-
-  return 'localhost'
 }
 
 export function getApiUrl() {
-  const raw = import.meta.env.VITE_API_URL || 'http://localhost:4000'
-  return raw.replace(/\/+$/, '')
+  const configured = configuredApiUrl()
+  if (typeof window !== 'undefined' && SITE_HOSTS.has(window.location.hostname)) {
+    try {
+      const apiHost = new URL(configured).hostname
+      if (apiHost.endsWith('.onrender.com')) return window.location.origin
+    } catch {
+      /* keep the configured URL */
+    }
+  }
+  return configured
 }
 
 const HORIZON_BY_NETWORK = {
