@@ -480,10 +480,12 @@ export default function PayoutSettings() {
                   </div>
                 </div>
 
-                {setting.rate_per_usdc && (
+                {setting.rate_per_usdc ? (
                   <p className="text-sm text-yellow-400 mb-3">
                     1 USDC ≈ {Number(setting.rate_per_usdc).toLocaleString()} {setting.currency}
                   </p>
+                ) : (
+                  <p className="text-sm text-red-300 mb-3">No USDC price yet. Customer Sell stays off until you set one.</p>
                 )}
 
                 <div className="flex gap-2">

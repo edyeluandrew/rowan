@@ -226,8 +226,41 @@ class PayoutSettingsService {
     }
   }
 
+  /**
+   * Cash-out ads can be active with float and still have no price.
+   * Customer Sell stays disabled until rate_per_usdc is set. Use the price
+   * from this trader's sell-USDC ad when the cash-out ad has none.
+   */
+  async ensureCashoutRatesFromSellAds() {
+    await db.query(
+      `UPDATE trader_payout_settings sell
+       SET rate_per_usdc = src.rate_per_usdc,
+           updated_at = NOW()
+       FROM trader_payout_settings src
+       WHERE sell.ad_side = 'USER_SELL'
+         AND sell.is_active = TRUE
+         AND (sell.rate_per_usdc IS NULL OR sell.rate_per_usdc <= 0)
+         AND src.id = (
+           SELECT b.id
+           FROM trader_payout_settings b
+           WHERE b.trader_id = sell.trader_id
+             AND b.currency = sell.currency
+             AND b.ad_side = 'USER_BUY'
+             AND b.is_active = TRUE
+             AND b.rate_per_usdc IS NOT NULL
+             AND b.rate_per_usdc > 0
+           ORDER BY CASE WHEN b.network = sell.network THEN 0 ELSE 1 END,
+                    b.updated_at DESC
+           LIMIT 1
+         )`
+    );
+  }
+
   async getPayoutSettingsByTrader(traderId) {
     try {
+      await this.ensureCashoutRatesFromSellAds().catch((err) => {
+        logger.warn(`[PayoutSettings] Cash-out price sync skipped: ${err.message}`);
+      });
       await this.ensureBuyAdsFromCashoutAds(traderId).catch((err) => {
         logger.warn(`[PayoutSettings] Buy-ad sync skipped: ${err.message}`);
       });

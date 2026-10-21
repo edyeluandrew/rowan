@@ -20,6 +20,10 @@ async function listAds({
   page = 1,
   limit = 20,
 } = {}) {
+  await payoutSettingsService.ensureCashoutRatesFromSellAds().catch((err) => {
+    logger.warn(`[Ads] Cash-out price sync skipped: ${err.message}`);
+  });
+
   const params = [];
   const conditions = [
     `ps.is_active = TRUE`,
