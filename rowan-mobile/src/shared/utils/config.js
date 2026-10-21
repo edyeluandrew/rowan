@@ -6,6 +6,7 @@ import { Capacitor } from '@capacitor/core'
  * SEP-10 home domain stays the configured API host so challenges still match.
  */
 const REACHABLE_API_ORIGIN = 'https://rowanpay.app'
+const SITE_HOSTS = new Set(['rowanpay.app', 'www.rowanpay.app', 'partners.rowanpay.app'])
 
 function configuredApiUrl() {
   const raw = import.meta.env.VITE_API_URL || 'http://localhost:4000'
@@ -31,8 +32,10 @@ export function getApiUrl() {
   const configured = configuredApiUrl()
   try {
     const host = new URL(configured).hostname
-    if (host.endsWith('.onrender.com') && Capacitor.isNativePlatform()) {
-      return REACHABLE_API_ORIGIN
+    if (!host.endsWith('.onrender.com')) return configured
+    if (Capacitor.isNativePlatform()) return REACHABLE_API_ORIGIN
+    if (typeof window !== 'undefined' && SITE_HOSTS.has(window.location.hostname)) {
+      return window.location.origin
     }
   } catch {
     /* keep the configured URL */

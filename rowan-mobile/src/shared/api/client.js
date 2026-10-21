@@ -27,7 +27,7 @@ const client = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-console.log('[Client] BaseURL:', import.meta.env.VITE_API_URL || '(undefined)');
+console.log('[Client] BaseURL:', getApiUrl());
 console.log('[Client] Environment variables:', {
   VITE_API_URL: import.meta.env.VITE_API_URL,
   VITE_HOME_DOMAIN: import.meta.env.VITE_HOME_DOMAIN,
