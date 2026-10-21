@@ -35,6 +35,22 @@ export function estimateMaxNetFiatFromUsdc(usdcBalance, usdcToFiatRate, feePerce
   return gross / (1 + spreadPercent / 100) / (1 + feePercent / 100)
 }
 
+/** Mobile money the seller receives for a USDC amount at the trader's price. Fee is paid in extra USDC. */
+export function netFiatFromUsdcSell(usdcAmount, rate, feePercent = 1) {
+  const usdc = Number(usdcAmount)
+  const price = Number(rate)
+  if (!(usdc > 0) || !(price > 0)) return 0
+  return (usdc * price) / (1 + feePercent / 100)
+}
+
+/** USDC a seller sends to receive a target mobile-money amount. */
+export function usdcForNetFiat(fiatAmount, rate, feePercent = 1) {
+  const fiat = Number(fiatAmount)
+  const price = Number(rate)
+  if (!(fiat > 0) || !(price > 0)) return 0
+  return (fiat * (1 + feePercent / 100)) / price
+}
+
 export function formatFiatAmount(amount, currency, options = {}) {
   const value = Number(amount)
   if (!Number.isFinite(value)) return `— ${currency}`

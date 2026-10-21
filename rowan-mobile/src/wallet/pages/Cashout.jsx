@@ -10,10 +10,10 @@ import { getQuote } from '../api/cashout'
 import client from '../api/client'
 import { hashPhoneNumber } from '../utils/crypto'
 import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
-import { estimateMaxNetFiatFromUsdc } from '../utils/fiat'
+import { netFiatFromUsdcSell, usdcForNetFiat } from '../utils/fiat'
+import { sanitizeAmount } from '../utils/sanitizeAmount'
 import { getNetworksForCountry } from '../utils/country'
 import useUserCountry from '../hooks/useUserCountry'
-import AmountInput from '../components/cashout/AmountInput'
 import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
 import PaymentMethodPill from '../components/ui/PaymentMethodPill'
@@ -36,13 +36,18 @@ export default function Cashout() {
   } = location.state || {}
   const { isLocked } = useBiometricProtection()
   const { country, fiatCurrency: userFiat } = useUserCountry()
-  const { allRates, refresh: refreshRates } = useRates(userFiat)
+  const { refresh: refreshRates } = useRates(userFiat)
   const { usdcBalance, hasUsdcTrustline } = useWallet()
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
   const adNetwork = presetNetwork || selectedAd?.network || null
   const payoutSettingId = presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
   const networkLocked = !!(payoutSettingId && adNetwork)
-  const [fiatAmount, setFiatAmount] = useState(prefillFiat ? String(prefillFiat) : '')
+  const openedRate = Number(selectedAd?.ratePerUsdc || selectedAd?.rate_per_usdc || 0)
+  const [usdcAmount, setUsdcAmount] = useState(() => {
+    if (!prefillFiat || !(openedRate > 0)) return ''
+    const usdc = usdcForNetFiat(prefillFiat, openedRate)
+    return usdc > 0 ? String(Number(usdc.toFixed(4))) : ''
+  })
   const [network, setNetwork] = useState(adNetwork)
   const [phone, setPhone] = useState('')
   const [recipientName, setRecipientName] = useState('')
@@ -61,8 +66,6 @@ export default function Cashout() {
     [country]
   )
 
-  const netFiat = parseFloat(fiatAmount) || 0
-
   useEffect(() => {
     if (adNetwork) setNetwork(adNetwork)
   }, [adNetwork])
@@ -80,24 +83,17 @@ export default function Cashout() {
     }
   }, [activeLoading, activeTransaction, payoutSettingId, navigate])
 
-  const selectedRate = network && allRates
-    ? Array.isArray(allRates)
-      ? allRates.find((r) => r.network === network)
-      : allRates[network] != null
-        ? { rate: allRates[network], fee: 0 }
-        : null
-    : null
-  const rateValue = selectedRate?.rate || 0
   const currency = network ? NETWORKS[network]?.currency : userFiat
 
   const traderRate = Number(selectedAd?.ratePerUsdc || selectedAd?.rate_per_usdc || 0)
-  const usdcToFiatRate = traderRate > 0 ? traderRate : 0
   const traderRateLine = formatUsdcRateLine(currency, selectedAd?.ratePerUsdc ?? selectedAd?.rate_per_usdc)
 
-  const walletMaxNetFiat = useMemo(() => {
-    if (!usdcToFiatRate || usdcBalance == null) return null
-    return estimateMaxNetFiatFromUsdc(usdcBalance, usdcToFiatRate)
-  }, [usdcBalance, usdcToFiatRate])
+  const usdcToSell = parseFloat(usdcAmount) || 0
+  const receiveFiat = traderRate > 0
+    ? (currency === 'KES'
+        ? Number(netFiatFromUsdcSell(usdcToSell, traderRate).toFixed(2))
+        : Math.round(netFiatFromUsdcSell(usdcToSell, traderRate)))
+    : 0
 
   const selectedNetworkLimits = useMemo(
     () => networkLimits.find((l) => l.network === network),
@@ -107,41 +103,30 @@ export default function Cashout() {
   const traderMinFiat = selectedAd?.minAmount ?? null
   const traderMaxFiat = selectedAd?.maxAmount ?? null
   const traderFloatFiat = selectedAd?.availableFloat ?? selectedAd?.available_float ?? null
-  const traderUsdcAvailable = useMemo(() => {
-    const listed = selectedAd?.availableUsdc ?? selectedAd?.available_usdc
-    if (listed != null && Number(listed) > 0) return Number(listed)
-    const rate = Number(selectedAd?.ratePerUsdc || selectedAd?.rate_per_usdc || usdcToFiatRate || 0)
-    if (traderFloatFiat != null && rate > 0) return Number(traderFloatFiat) / rate
-    return null
-  }, [selectedAd, traderFloatFiat, usdcToFiatRate])
 
-  const maxNetFiat = useMemo(() => {
-    const caps = [
-      walletMaxNetFiat,
-      selectedNetworkLimits?.maxFiat,
-      traderMaxFiat,
-      traderFloatFiat,
-    ].filter((v) => v != null && Number.isFinite(v) && v > 0)
+  const maxUsdc = useMemo(() => {
+    const caps = []
+    if (usdcBalance != null && Number(usdcBalance) > 0) caps.push(Number(usdcBalance))
+    const room = (fiat) => (traderRate > 0 && Number(fiat) > 0 ? usdcForNetFiat(fiat, traderRate) : null)
+    ;[traderFloatFiat, traderMaxFiat, selectedNetworkLimits?.maxFiat].forEach((fiat) => {
+      const cap = room(fiat)
+      if (cap != null && cap > 0) caps.push(cap)
+    })
     if (caps.length === 0) return null
     return Math.min(...caps)
-  }, [walletMaxNetFiat, selectedNetworkLimits, traderMaxFiat, traderFloatFiat])
+  }, [usdcBalance, traderRate, traderFloatFiat, traderMaxFiat, selectedNetworkLimits])
 
-  const minNetFiat = traderMinFiat ?? selectedNetworkLimits?.minFiat ?? null
+  const minFiat = traderMinFiat ?? selectedNetworkLimits?.minFiat ?? null
+  const minUsdc = traderRate > 0 && Number(minFiat) > 0 ? usdcForNetFiat(minFiat, traderRate) : null
 
-  const usdcEstimate = usdcToFiatRate > 0 && netFiat > 0
-    ? (netFiat * 1.01) / usdcToFiatRate
-    : 0
-  const platformFeeUsdc = usdcToFiatRate > 0 && netFiat > 0
-    ? (netFiat * 0.01) / usdcToFiatRate
-    : 0
-
-  const exceedsWallet = maxNetFiat != null && netFiat > maxNetFiat
-  const belowMin = minNetFiat != null && netFiat > 0 && netFiat < minNetFiat
+  const exceedsWallet = usdcBalance != null && usdcToSell > Number(usdcBalance) + 1e-6
+  const belowMin = minUsdc != null && usdcToSell > 0 && usdcToSell + 1e-6 < minUsdc
   const exceedsTraderFloat =
-    traderFloatFiat != null && netFiat > 0 && netFiat > traderFloatFiat
+    traderFloatFiat != null && receiveFiat > 0 && receiveFiat > Number(traderFloatFiat)
 
   const canProceed =
-    netFiat > 0 &&
+    usdcToSell > 0 &&
+    receiveFiat > 0 &&
     hasUsdcTrustline !== false &&
     !exceedsWallet &&
     !belowMin &&
@@ -181,7 +166,7 @@ export default function Cashout() {
       const fullPhone = `${derivedCountryCode}${cleanPhone}`
       const phoneHash = await hashPhoneNumber(fullPhone)
       const quote = await getQuote({
-        fiatAmount: Math.round(netFiat),
+        fiatAmount: receiveFiat,
         network,
         phoneHash,
         payoutPhone: fullPhone,
@@ -194,7 +179,7 @@ export default function Cashout() {
           network,
           phone: fullPhone,
           recipientName: recipientName.trim(),
-          requestedFiat: Math.round(netFiat),
+          requestedFiat: receiveFiat,
           selectedAd,
           traderName: presetTraderName || selectedAd?.traderName,
           payoutSettingId,
@@ -215,8 +200,8 @@ export default function Cashout() {
   }
 
   const handleMax = () => {
-    if (maxNetFiat != null && maxNetFiat > 0) {
-      setFiatAmount(String(Math.floor(maxNetFiat)))
+    if (maxUsdc != null && maxUsdc > 0) {
+      setUsdcAmount(String(Number(maxUsdc.toFixed(4))))
     }
   }
 
@@ -260,43 +245,54 @@ export default function Cashout() {
         </div>
       )}
 
-      <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-6">
-        <p className="text-rowan-muted text-xs uppercase tracking-wider mb-2">Available to cash out</p>
-        <div className="flex items-baseline justify-between gap-2">
-          <div className="flex items-baseline gap-2">
-            <span className="text-rowan-text text-2xl font-bold tabular-nums">
-              {walletMaxNetFiat != null && currency
-                ? Math.floor(walletMaxNetFiat).toLocaleString()
-                : '—'}
-            </span>
-            <span className="text-rowan-muted">{currency || 'UGX'}</span>
-          </div>
-          {maxNetFiat != null && maxNetFiat > 0 && (
-            <button
-              type="button"
-              onClick={handleMax}
-              className="text-rowan-yellow text-xs font-medium border border-rowan-yellow/40 rounded-full px-3 py-1"
-            >
-              Max
-            </button>
-          )}
+      <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <label htmlFor="sell-usdc" className="text-rowan-muted text-xs uppercase tracking-wider">
+            USDC to sell
+          </label>
+          <span className="text-rowan-muted text-xs tabular-nums">
+            Balance {Number(usdcBalance || 0).toFixed(4)}
+          </span>
         </div>
+        <div className="flex min-h-14 items-center rounded-2xl border border-rowan-border bg-rowan-bg focus-within:border-rowan-yellow">
+          <input
+            id="sell-usdc"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={usdcAmount}
+            onChange={(e) => setUsdcAmount(sanitizeAmount(e.target.value, { decimals: 4 }))}
+            placeholder="0"
+            className="min-w-0 flex-1 bg-transparent px-4 py-3.5 text-2xl font-semibold tabular-nums text-rowan-text outline-none placeholder:text-rowan-muted/40"
+          />
+          <span className="pr-4 text-sm font-semibold text-rowan-muted">USDC</span>
+        </div>
+        {maxUsdc != null && maxUsdc > 0 && (
+          <button
+            type="button"
+            onClick={handleMax}
+            className="mt-3 text-rowan-yellow text-xs font-medium border border-rowan-yellow/40 rounded-full px-3 py-1"
+          >
+            Max
+          </button>
+        )}
       </div>
 
-      <AmountInput
-        fiatAmount={fiatAmount}
-        onFiatAmountChange={setFiatAmount}
-        currency={currency}
-        cryptoEstimate={usdcEstimate}
-        cryptoLabel="USDC you'll send"
-        fiatSubLabel={`${currency || 'UGX'} you'll receive`}
-        feeHint={
-          platformFeeUsdc > 0
-            ? `Rowan fee ${platformFeeUsdc.toFixed(4)} USDC — included in what you send, not taken from ${currency || 'UGX'}`
-            : null
-        }
-        maxFiat={maxNetFiat}
-      />
+      <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-6">
+        <p className="text-rowan-muted text-xs uppercase tracking-wider">You'll receive</p>
+        <p className="text-rowan-text text-3xl font-bold tabular-nums mt-1">
+          {receiveFiat > 0 ? Number(receiveFiat).toLocaleString('en-US') : '0'}
+          <span className="text-base font-semibold text-rowan-muted ml-2">{currency || userFiat}</span>
+        </p>
+        <p className="text-rowan-muted text-xs mt-2">
+          {traderRateLine || 'This trader has not set a USDC price yet'}
+        </p>
+        {receiveFiat > 0 && (
+          <p className="text-rowan-muted text-xs mt-1">
+            The 1% fee is inside the USDC you sell. This is the mobile money you get.
+          </p>
+        )}
+      </div>
 
       <div className="mt-6">
         {networkLocked && network ? (
