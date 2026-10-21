@@ -3,6 +3,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Edit2, Trash2, AlertCircle } from 'lucide-react';
 import payoutSettingsAPI from '../api/payoutSettings';
 import client from '../api/client';
@@ -18,8 +19,8 @@ const CURRENCIES = ['UGX', 'KES', 'TZS'];
 const COUNTRIES = { UG: 'Uganda', KE: 'Kenya', TZ: 'Tanzania' };
 
 const AD_TABS = {
-  sell: { ad_side: 'USER_SELL', label: 'Cash-out', floatLabel: 'MoMo float', floatKey: 'available_float', floatUnit: 'currency' },
-  buy: { ad_side: 'USER_BUY', label: 'Sell USDC', floatLabel: 'USDC inventory', floatKey: 'available_usdc', floatUnit: 'USDC' },
+  sell: { ad_side: 'USER_SELL', label: 'Buy USDC', floatLabel: 'Cash you can pay', floatKey: 'available_float', floatUnit: 'currency' },
+  buy: { ad_side: 'USER_BUY', label: 'Sell USDC', floatLabel: 'USDC you can sell', floatKey: 'available_usdc', floatUnit: 'USDC' },
 };
 
 function formatBandHint(band) {
@@ -50,8 +51,9 @@ function getEmptyFormData(adSide = 'USER_SELL') {
 }
 
 export default function PayoutSettings() {
+  const [searchParams] = useSearchParams();
   const [settings, setSettings] = useState([]);
-  const [tab, setTab] = useState('sell');
+  const [tab, setTab] = useState(searchParams.get('side') === 'buy' ? 'buy' : 'sell');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -260,7 +262,7 @@ export default function PayoutSettings() {
             <Plus size={24} />
           </button>
         </div>
-        <p className="text-gray-400 text-sm mt-2">Cash-out liquidity and USDC sell ads for P2P buy</p>
+        <p className="text-gray-400 text-sm mt-2">Set a buy ad and a sell ad. Price must stay inside the live market band.</p>
 
         <div className="flex gap-2 mt-4">
           {Object.entries(AD_TABS).map(([key, cfg]) => (
@@ -287,7 +289,7 @@ export default function PayoutSettings() {
 
       {tab === 'buy' && !showForm && (
         <div className="mx-4 mt-4 bg-blue-900/20 border border-blue-700 rounded-lg p-3 text-sm text-blue-200">
-          Sell USDC ads appear in the wallet Marketplace under Buy USDC. Customers pay you MoMo; you lock USDC in escrow per order.
+          A sell ad shows under Buy USDC in the customer wallet. They pay you mobile money, then you lock USDC for that order.
         </div>
       )}
 

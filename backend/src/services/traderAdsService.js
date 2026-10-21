@@ -328,25 +328,10 @@ async function listBuyAds({
     `t.status = 'ACTIVE'`,
     `t.verification_status = 'VERIFIED'`,
     `t.stellar_address IS NOT NULL`,
-    `(
-       (
-         ps.ad_side = 'USER_BUY'
-         AND (ps.available_usdc - COALESCE(ps.reserved_usdc, 0)) > 0
-       )
-       OR (
-         ps.ad_side = 'USER_SELL'
-         AND (ps.available_float - COALESCE(ps.reserved_float, 0)) > 0
-         AND NOT EXISTS (
-           SELECT 1 FROM trader_payout_settings b
-           WHERE b.trader_id = ps.trader_id
-             AND b.network = ps.network
-             AND b.currency = ps.currency
-             AND b.ad_side = 'USER_BUY'
-             AND b.is_active = TRUE
-             AND (b.available_usdc - COALESCE(b.reserved_usdc, 0)) > 0
-         )
-       )
-     )`,
+    `ps.ad_side = 'USER_BUY'`,
+    `(ps.available_usdc - COALESCE(ps.reserved_usdc, 0)) > 0`,
+    `ps.rate_per_usdc IS NOT NULL`,
+    `ps.rate_per_usdc > 0`,
     `(SELECT COUNT(*) FROM transactions tx
         WHERE tx.trader_id = t.id
           AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[]))
@@ -426,14 +411,8 @@ async function listBuyAds({
         logger.warn(`[Ads] Horizon unread for trader ${row.trader_id}; listing the buy ad anyway`);
       }
       const rate = row.rate_per_usdc != null ? parseFloat(row.rate_per_usdc) : null;
-      const fromUsdc = parseFloat(row.net_usdc_float);
-      const fromFloat = rate > 0 ? parseFloat(row.net_float || 0) / rate : 0;
-      const availableUsdc = row.ad_side === 'USER_BUY'
-        ? fromUsdc
-        : (Number.isFinite(fromUsdc) && fromUsdc > 0 ? fromUsdc : fromFloat);
-      const netFloat = parseFloat(row.net_float || 0);
-      if (row.ad_side === 'USER_BUY' && (!(Number.isFinite(availableUsdc)) || availableUsdc <= 0)) return null;
-      if (row.ad_side !== 'USER_BUY' && netFloat <= 0 && (!(Number.isFinite(availableUsdc)) || availableUsdc <= 0)) return null;
+      const availableUsdc = parseFloat(row.net_usdc_float);
+      if (!(rate > 0) || !(Number.isFinite(availableUsdc)) || availableUsdc <= 0) return null;
       const stats = await traderStatsService.getTraderStats(row.trader_id);
       const online = traderStatsService.enrichOnlineStatus(row);
       return {

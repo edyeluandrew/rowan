@@ -4,6 +4,7 @@ import Button from '../ui/Button';
 import { useTraderWallet } from '../../context/TraderWalletContext';
 import { lockUsdcToEscrow } from '../../utils/lockUsdc';
 import { CURRENT_NETWORK } from '../../../wallet/utils/constants';
+import ReleaseGate from '../../../shared/components/ReleaseGate';
 
 /**
  * Lock USDC into escrow from the trader's single Rowan wallet.
@@ -12,6 +13,7 @@ export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked,
   const navigate = useNavigate();
   const { keypair, publicKey, usdcBalance, isReady, refresh, setLinkedAddress, ensureWallet, linkedAddress, profileSyncing, replacedConflictingWallet } = useTraderWallet();
   const [sending, setSending] = useState(false);
+  const [releaseOpen, setReleaseOpen] = useState(false);
   const [linking, setLinking] = useState(false);
   const autoSent = useRef(false);
   const autoLinked = useRef(false);
@@ -118,7 +120,7 @@ export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked,
   useEffect(() => {
     if (!autoSend || autoSent.current || sending || !canSend) return;
     autoSent.current = true;
-    handleSend();
+    setReleaseOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when wallet is ready
   }, [autoSend, canSend, sending]);
 
@@ -164,7 +166,7 @@ export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked,
       <Button
         loading={sending || linking || profileSyncing}
         size="lg"
-        onClick={handleSend}
+        onClick={() => setReleaseOpen(true)}
         disabled={sending || linking || profileSyncing || !isReady}
       >
         Lock {usdcAmount.toFixed(4)} USDC
@@ -177,6 +179,15 @@ export default function LockUsdcButton({ tx, onLocked, onError, onProfileLinked,
       >
         Add USDC
       </button>
+      <ReleaseGate
+        open={releaseOpen}
+        title="Confirm this USDC lock"
+        onCancel={() => setReleaseOpen(false)}
+        onConfirmed={() => {
+          setReleaseOpen(false)
+          handleSend()
+        }}
+      />
     </div>
   );
 }

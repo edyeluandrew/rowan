@@ -31,14 +31,17 @@ export default function Home() {
   const [floatInitialId, setFloatInitialId] = useState(null);
   const [priceInitialId, setPriceInitialId] = useState(null);
   const [sellAds, setSellAds] = useState([]);
+  const [buyAds, setBuyAds] = useState([]);
 
   const loadSellAds = useCallback(async () => {
     try {
       const response = await payoutSettingsAPI.fetchPayoutSettings();
       const rows = response?.data || [];
       setSellAds(rows.filter((ad) => (ad.ad_side || 'USER_SELL') === 'USER_SELL' && ad.is_active !== false));
+      setBuyAds(rows.filter((ad) => ad.ad_side === 'USER_BUY' && ad.is_active !== false));
     } catch {
       setSellAds([]);
+      setBuyAds([]);
     }
   }, []);
 
@@ -134,6 +137,29 @@ export default function Home() {
             );
           })}
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <button
+          type="button"
+          onClick={() => navigate('/trader/payout-settings?side=sell')}
+          className="bg-rowan-surface border border-rowan-border rounded-md p-4 text-left"
+        >
+          <p className="text-rowan-text font-semibold text-sm">Buy ad</p>
+          <p className="text-rowan-muted text-xs mt-1">You pay mobile money and take USDC</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/trader/payout-settings?side=buy')}
+          className="bg-rowan-surface border border-rowan-border rounded-md p-4 text-left"
+        >
+          <p className="text-rowan-text font-semibold text-sm">Sell ad</p>
+          <p className="text-rowan-muted text-xs mt-1">
+            {Number(usdcBalance) > 0
+              ? `${buyAds.reduce((sum, ad) => sum + Math.max(0, Number(ad.available_usdc || 0) - Number(ad.reserved_usdc || 0)), 0).toFixed(2)} USDC listed for customers to buy`
+              : 'Add USDC in the wallet first. A buy needs USDC you can sell.'}
+          </p>
+        </button>
       </div>
 
       <div className="bg-rowan-surface border border-rowan-border rounded-md p-4 mb-4 flex justify-between items-center gap-3">

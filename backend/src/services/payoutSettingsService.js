@@ -78,9 +78,9 @@ class PayoutSettingsService {
    * Get all payout settings for a trader
    */
   /**
-   * Cash-out ads (USER_SELL) do not appear on Buy. Copy them to USER_BUY
-   * and set inventory from the trader's on-chain USDC so one online trader
-   * can take both sides without a second ad form.
+   * A cash-out ad is not a USDC sell. When the linked wallet holds USDC and
+   * the cash-out ad has a price, open a sell-USDC ad for the same network
+   * if the trader has not set one yet. Never write 0 over inventory they saved.
    */
   async ensureBuyAdsFromCashoutAds(traderId) {
     if (!traderId) return { created: 0, updated: 0 };
@@ -97,7 +97,15 @@ class PayoutSettingsService {
       return { created: 0, updated: 0, skipped: true };
     }
     const usdc = Number(trust.balance) > 0 ? Number(trust.balance) : 0;
-    let remaining = usdc;
+    if (!(usdc > 0)) return { created: 0, updated: 0, usdc: 0 };
+
+    const listedRes = await db.query(
+      `SELECT COALESCE(SUM(available_usdc), 0) AS total
+       FROM trader_payout_settings
+       WHERE trader_id = $1 AND ad_side = 'USER_BUY'`,
+      [traderId]
+    );
+    let remaining = Math.max(0, usdc - Number(listedRes.rows[0]?.total || 0));
 
     const sellRes = await db.query(
       `SELECT country, network, currency, min_amount, max_amount,
@@ -116,25 +124,38 @@ class PayoutSettingsService {
     let updated = 0;
     for (const sell of sellRes.rows) {
       const existing = await db.query(
-        `SELECT id, reserved_usdc FROM trader_payout_settings
+        `SELECT id, available_usdc, reserved_usdc, rate_per_usdc
+         FROM trader_payout_settings
          WHERE trader_id = $1 AND network = $2 AND currency = $3 AND ad_side = 'USER_BUY'`,
         [traderId, sell.network, sell.currency]
       );
-      const reserved = parseFloat(existing.rows[0]?.reserved_usdc || 0);
-      const share = Math.max(0, remaining);
-      const listed = Math.max(reserved, Math.min(share, usdc));
-      remaining = Math.max(0, remaining - listed);
       if (existing.rows[0]) {
+        const row = existing.rows[0];
+        const current = parseFloat(row.available_usdc || 0);
+        const reserved = parseFloat(row.reserved_usdc || 0);
+        const rateMissing = !(parseFloat(row.rate_per_usdc) > 0);
+        const empty = current <= 0 && reserved <= 0;
+        const fill = empty ? Math.min(remaining, usdc) : 0;
+        if (!rateMissing && !(empty && fill > 0)) continue;
+        if (empty && fill > 0) remaining = Math.max(0, remaining - fill);
         await db.query(
           `UPDATE trader_payout_settings
-           SET available_usdc = $1, is_active = TRUE, updated_at = NOW()
-           WHERE id = $2`,
-          [listed, existing.rows[0].id]
+           SET available_usdc = CASE WHEN $3::boolean THEN $1 ELSE available_usdc END,
+               rate_per_usdc = CASE
+                 WHEN rate_per_usdc IS NULL OR rate_per_usdc <= 0 THEN $2
+                 ELSE rate_per_usdc
+               END,
+               is_active = TRUE,
+               updated_at = NOW()
+           WHERE id = $4`,
+          [fill, sell.rate_per_usdc, empty && fill > 0, row.id]
         );
         updated += 1;
         continue;
       }
-      if (listed <= 0) continue;
+      if (remaining <= 0) continue;
+      const listed = Math.min(remaining, usdc);
+      remaining = Math.max(0, remaining - listed);
       try {
         await db.query(
           `INSERT INTO trader_payout_settings
@@ -159,9 +180,18 @@ class PayoutSettingsService {
         if (err.code !== '23505') throw err;
         await db.query(
           `UPDATE trader_payout_settings
-           SET available_usdc = $1, is_active = TRUE, updated_at = NOW()
+           SET available_usdc = CASE
+                 WHEN available_usdc IS NULL OR available_usdc <= 0 THEN $1
+                 ELSE available_usdc
+               END,
+               rate_per_usdc = CASE
+                 WHEN rate_per_usdc IS NULL OR rate_per_usdc <= 0 THEN $5
+                 ELSE rate_per_usdc
+               END,
+               is_active = TRUE,
+               updated_at = NOW()
            WHERE trader_id = $2 AND network = $3 AND currency = $4 AND ad_side = 'USER_BUY'`,
-          [listed, traderId, sell.network, sell.currency]
+          [listed, traderId, sell.network, sell.currency, sell.rate_per_usdc]
         );
         updated += 1;
       }

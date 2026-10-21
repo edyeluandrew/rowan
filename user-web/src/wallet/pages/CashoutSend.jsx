@@ -13,6 +13,7 @@ import { mapApiError } from '../utils/apiErrors'
 import { createSubmitGuard } from '../utils/submitGuard'
 import { getHorizonUrl } from '../../shared/utils/config'
 import { formatCurrency } from '../utils/p2pFormat'
+import ReleaseGate from '../../shared/components/ReleaseGate'
 
 export default function CashoutSend() {
   const navigate = useNavigate()
@@ -22,6 +23,7 @@ export default function CashoutSend() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [quoteExpired, setQuoteExpired] = useState(false)
+  const [releaseOpen, setReleaseOpen] = useState(false)
   const submitGuard = useRef(createSubmitGuard()).current
 
   useEffect(() => {
@@ -167,11 +169,20 @@ export default function CashoutSend() {
 
       {!quoteExpired && (
         <div className="mt-8">
-          <Button onClick={handleSendNow} loading={loading} disabled={loading}>
+          <Button onClick={() => setReleaseOpen(true)} loading={loading} disabled={loading}>
             {loading ? 'Sending… please wait' : 'Send this USDC'}
           </Button>
         </div>
       )}
+      <ReleaseGate
+        open={releaseOpen}
+        title="Confirm this USDC sell"
+        onCancel={() => setReleaseOpen(false)}
+        onConfirmed={() => {
+          setReleaseOpen(false)
+          handleSendNow()
+        }}
+      />
     </div>
   )
 }

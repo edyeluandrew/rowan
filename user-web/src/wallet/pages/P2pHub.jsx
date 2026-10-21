@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { RefreshCw, Zap } from 'lucide-react'
 import { listTraderAds, listBuyAds } from '../api/traders'
@@ -40,6 +40,7 @@ export default function P2pHub() {
   const [network, setNetwork] = useState(null)
   const [minAmount, setMinAmount] = useState('')
   const [debouncedMinAmount, setDebouncedMinAmount] = useState('')
+  const adsCache = useRef({})
 
   useEffect(() => {
     if (location.state?.tab === 'buy' || location.state?.tab === 'sell') {
@@ -57,18 +58,26 @@ export default function P2pHub() {
   }, [minAmount])
 
   const loadAds = useCallback(async (isRefresh = false, { silent = false } = {}) => {
+    const cacheKey = `${tab}|${fiatCurrency}|${network || ''}|${debouncedMinAmount || ''}`
+    const cached = adsCache.current[cacheKey]
+    if (cached && !isRefresh) {
+      setTraders(cached)
+      setLoading(false)
+    }
     if (isRefresh && !silent) setRefreshing(true)
-    else if (!isRefresh) setLoading(true)
+    else if (!cached && !isRefresh) setLoading(true)
     if (!isRefresh) setError(null)
     try {
       const params = { currency: fiatCurrency }
       if (network) params.network = network
       if (debouncedMinAmount) params.minAmount = parseFloat(debouncedMinAmount)
       const res = tab === 'buy' ? await listBuyAds(params) : await listTraderAds(params)
-      setTraders(res.traders || [])
+      const rows = res.traders || []
+      adsCache.current[cacheKey] = rows
+      setTraders(rows)
       setError(null)
     } catch (err) {
-      if (!isRefresh) {
+      if (!isRefresh && !cached) {
         setError(err.response?.data?.error || 'Could not load traders. Please try again.')
       }
     } finally {
@@ -91,6 +100,21 @@ export default function P2pHub() {
     const id = setInterval(() => loadAds(true, { silent: true }), QUOTE_REFRESH_INTERVAL)
     return () => clearInterval(id)
   }, [loadAds])
+
+  useEffect(() => {
+    const other = tab === 'buy' ? 'sell' : 'buy'
+    const cacheKey = `${other}|${fiatCurrency}|${network || ''}|${debouncedMinAmount || ''}`
+    if (adsCache.current[cacheKey]) return undefined
+    let cancelled = false
+    const params = { currency: fiatCurrency }
+    if (network) params.network = network
+    if (debouncedMinAmount) params.minAmount = parseFloat(debouncedMinAmount)
+    const request = other === 'buy' ? listBuyAds(params) : listTraderAds(params)
+    request.then((res) => {
+      if (!cancelled) adsCache.current[cacheKey] = res.traders || []
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [tab, fiatCurrency, network, debouncedMinAmount])
 
   const buildAdFromOffer = (offer, trader) => ({
     ...offer,

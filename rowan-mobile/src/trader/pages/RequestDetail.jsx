@@ -13,6 +13,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import ConfirmPayoutModal from '../components/modals/ConfirmPayoutModal';
 import TraderDisputeStatusCard from '../components/disputes/TraderDisputeStatusCard';
 import UsdcReceiptCard from '../components/wallet/UsdcReceiptCard';
+import ReleaseGate from '../../shared/components/ReleaseGate';
 import OrderChat from '../components/chat/OrderChat';
 import DisputeEvidenceSection from '../../wallet/components/disputes/DisputeEvidenceSection';
 import { uploadTraderDisputeEvidence, listTraderDisputeEvidence } from '../api/disputes';
@@ -102,6 +103,7 @@ export default function RequestDetail() {
   const [revealTimer, setRevealTimer] = useState(null);
   const [copiedOrderId, setCopiedOrderId] = useState(false);
   const [confirmingBuy, setConfirmingBuy] = useState(false);
+  const [releaseOpen, setReleaseOpen] = useState(false);
   const [verifyingUsdc, setVerifyingUsdc] = useState(false);
   const [usdcVerifyMsg, setUsdcVerifyMsg] = useState(null);
   const [accepting, setAccepting] = useState(false);
@@ -721,11 +723,20 @@ export default function RequestDetail() {
 
       {isBuyConfirmStep && (
         <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-rowan-bg/95 border-t border-rowan-yellow/30 backdrop-blur-sm">
-          <Button loading={confirmingBuy} size="lg" className="w-full" onClick={handleConfirmBuyReceived}>
+          <Button loading={confirmingBuy} size="lg" className="w-full" onClick={() => setReleaseOpen(true)}>
             I received MoMo — release USDC
           </Button>
         </div>
       )}
+      <ReleaseGate
+        open={releaseOpen}
+        title="Confirm this USDC release"
+        onCancel={() => setReleaseOpen(false)}
+        onConfirmed={() => {
+          setReleaseOpen(false)
+          handleConfirmBuyReceived()
+        }}
+      />
     </div>
   );
 }
