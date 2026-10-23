@@ -12,7 +12,6 @@ import { hashPhoneNumber } from '../utils/crypto'
 import { NETWORKS, COUNTRY_CODES } from '../utils/constants'
 import { netFiatFromUsdcSell, usdcForNetFiat } from '../utils/fiat'
 import { sanitizeAmount } from '../utils/sanitizeAmount'
-import { getNetworksForCountry } from '../utils/country'
 import useUserCountry from '../hooks/useUserCountry'
 import NetworkSelector from '../components/cashout/NetworkSelector'
 import PhoneInput from '../components/cashout/PhoneInput'
@@ -31,6 +30,7 @@ export default function Cashout() {
     payoutSettingId: presetPayoutSettingId,
     traderName: presetTraderName,
     network: presetNetwork,
+    traderOffers: presetOffers,
     prefillFiat,
     expressMatch,
   } = location.state || {}
@@ -39,9 +39,17 @@ export default function Cashout() {
   const { refresh: refreshRates } = useRates(userFiat)
   const { usdcBalance, hasUsdcTrustline } = useWallet()
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
-  const adNetwork = presetNetwork || selectedAd?.network || null
-  const payoutSettingId = presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id
-  const networkLocked = !!(payoutSettingId && adNetwork)
+  const traderOffers = Array.isArray(presetOffers) ? presetOffers : []
+  const mustPickNetwork = traderOffers.length > 1
+  const [pickedOffer, setPickedOffer] = useState(null)
+  const activeAd = mustPickNetwork ? pickedOffer : selectedAd
+  const adNetwork = mustPickNetwork
+    ? (pickedOffer?.network || null)
+    : (presetNetwork || selectedAd?.network || null)
+  const payoutSettingId = mustPickNetwork
+    ? (pickedOffer?.payoutSettingId || pickedOffer?.id || null)
+    : (presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id)
+  const networkLocked = !mustPickNetwork && !!(payoutSettingId && adNetwork)
   const openedRate = Number(selectedAd?.ratePerUsdc || selectedAd?.rate_per_usdc || 0)
   const [usdcAmount, setUsdcAmount] = useState(() => {
     if (!prefillFiat || !(openedRate > 0)) return ''
@@ -61,14 +69,10 @@ export default function Cashout() {
       .catch(() => {})
   }, [])
 
-  const countryNetworks = useMemo(
-    () => Object.keys(getNetworksForCountry(country)),
-    [country]
-  )
-
   useEffect(() => {
-    if (adNetwork) setNetwork(adNetwork)
-  }, [adNetwork])
+    if (mustPickNetwork || !adNetwork) return
+    setNetwork(adNetwork)
+  }, [adNetwork, mustPickNetwork])
 
   useEffect(() => {
     if (!activeLoading && activeTransaction?.id) {
@@ -78,15 +82,15 @@ export default function Cashout() {
 
   useEffect(() => {
     if (activeLoading || activeTransaction?.id) return
-    if (!payoutSettingId) {
+    if (!payoutSettingId && !mustPickNetwork) {
       navigate('/wallet/p2p', { replace: true, state: { tab: 'sell' } })
     }
-  }, [activeLoading, activeTransaction, payoutSettingId, navigate])
+  }, [activeLoading, activeTransaction, payoutSettingId, mustPickNetwork, navigate])
 
   const currency = network ? NETWORKS[network]?.currency : userFiat
 
-  const traderRate = Number(selectedAd?.ratePerUsdc || selectedAd?.rate_per_usdc || 0)
-  const traderRateLine = formatUsdcRateLine(currency, selectedAd?.ratePerUsdc ?? selectedAd?.rate_per_usdc)
+  const traderRate = Number(activeAd?.ratePerUsdc || activeAd?.rate_per_usdc || 0)
+  const traderRateLine = formatUsdcRateLine(currency, activeAd?.ratePerUsdc ?? activeAd?.rate_per_usdc)
 
   const usdcToSell = parseFloat(usdcAmount) || 0
   const receiveFiat = traderRate > 0
@@ -100,9 +104,9 @@ export default function Cashout() {
     [networkLimits, network]
   )
 
-  const traderMinFiat = selectedAd?.minAmount ?? null
-  const traderMaxFiat = selectedAd?.maxAmount ?? null
-  const traderFloatFiat = selectedAd?.availableFloat ?? selectedAd?.available_float ?? null
+  const traderMinFiat = activeAd?.minAmount ?? null
+  const traderMaxFiat = activeAd?.maxAmount ?? null
+  const traderFloatFiat = activeAd?.availableFloat ?? activeAd?.available_float ?? null
 
   const maxUsdc = useMemo(() => {
     const caps = []
@@ -152,7 +156,7 @@ export default function Cashout() {
     try {
       const snap = await refreshRates()
       const health = getRatesHealth(snap?.rates, snap?.fetchedAt, snap?.error)
-      const hasTraderRate = selectedAd?.ratePerUsdc != null || selectedAd?.rate_per_usdc != null
+      const hasTraderRate = activeAd?.ratePerUsdc != null || activeAd?.rate_per_usdc != null
       if (!health.ok && !hasTraderRate) {
         setError(health.message)
         return
@@ -180,8 +184,8 @@ export default function Cashout() {
           phone: fullPhone,
           recipientName: recipientName.trim(),
           requestedFiat: receiveFiat,
-          selectedAd,
-          traderName: presetTraderName || selectedAd?.traderName,
+          selectedAd: activeAd,
+          traderName: presetTraderName || activeAd?.traderName,
           payoutSettingId,
           liveUsdcToFiat: health.ok ? health.usdcToFiat : null,
           rateSnapshotAt: snap?.fetchedAt || Date.now(),
@@ -216,12 +220,12 @@ export default function Cashout() {
 
       <UsdcTrustlineSetup compact />
 
-      {(selectedAd || presetTraderName) && (
+      {(activeAd || presetTraderName || mustPickNetwork) && (
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4 flex items-start gap-3">
           <UserCheck size={18} className="text-rowan-yellow shrink-0 mt-0.5" />
           <div>
             <p className="text-rowan-text text-sm font-medium">
-              Trading with {presetTraderName || selectedAd?.traderName || 'selected trader'}
+              Trading with {presetTraderName || activeAd?.traderName || 'selected trader'}
             </p>
             {traderRateLine && (
               <p className="text-rowan-yellow text-xs font-medium mt-1">{traderRateLine}</p>
@@ -230,7 +234,7 @@ export default function Cashout() {
         </div>
       )}
 
-      {!selectedAd && !presetTraderName && (
+      {!activeAd && !presetTraderName && !mustPickNetwork && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm font-medium">Cash out to your phone</p>
           <p className="text-rowan-muted text-xs mt-1">
@@ -239,7 +243,7 @@ export default function Cashout() {
         </div>
       )}
 
-      {expressMatch && (selectedAd || presetTraderName) && (
+      {expressMatch && (activeAd || presetTraderName) && (
         <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 mb-4">
           <p className="text-rowan-text text-sm font-medium">Express match</p>
         </div>
@@ -285,7 +289,9 @@ export default function Cashout() {
           <span className="text-base font-semibold text-rowan-muted ml-2">{currency || userFiat}</span>
         </p>
         <p className="text-rowan-muted text-xs mt-2">
-          {traderRateLine || 'This trader has not set a USDC price yet'}
+          {mustPickNetwork && !network
+            ? 'Choose MTN or Airtel to see what you will receive.'
+            : (traderRateLine || 'This trader has not set a USDC price yet')}
         </p>
         {receiveFiat > 0 && (
           <p className="text-rowan-muted text-xs mt-1">
@@ -295,7 +301,18 @@ export default function Cashout() {
       </div>
 
       <div className="mt-6">
-        {networkLocked && network ? (
+        {mustPickNetwork ? (
+          <NetworkSelector
+            selected={network}
+            onSelect={(key) => {
+              setPickedOffer(traderOffers.find((offer) => offer.network === key) || null)
+              setNetwork(key)
+            }}
+            country={country}
+            networks={traderOffers.map((offer) => offer.network)}
+            prompt="Choose the network you want to receive on"
+          />
+        ) : networkLocked && network ? (
           <div>
             <p className="text-rowan-muted text-xs uppercase tracking-wider mb-3">
               Mobile money network

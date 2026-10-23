@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ChevronLeft, ShieldCheck, ThumbsUp, ThumbsDown, RefreshCw, MoreVertical } from 'lucide-react'
-import { getTraderProfile, getTraderAd } from '../api/traders'
+import { getTraderProfile } from '../api/traders'
 import { blockTrader, unblockTrader } from '../api/user'
 import useRates from '../hooks/useRates'
 import {
@@ -20,14 +20,13 @@ export default function TraderProfile() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const preselectedAd = location.state?.ad
   const marketplaceMode = location.state?.mode === 'buy' ? 'buy' : 'sell'
   const isBuyMode = marketplaceMode === 'buy'
   const { allRates, rates } = useRates()
   const usdcToFiat = rates?.usdcToFiat
 
   const [profile, setProfile] = useState(null)
-  const [selectedAd, setSelectedAd] = useState(preselectedAd || null)
+  const [selectedAd, setSelectedAd] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -41,13 +40,11 @@ export default function TraderProfile() {
     getTraderProfile(id)
       .then((data) => {
         setProfile(data)
-        if (!preselectedAd) {
-          const filtered = (data.ads || []).filter((ad) => {
-            const side = ad.adSide || ad.ad_side || 'USER_SELL'
-            return isBuyMode ? side === 'USER_BUY' : side === 'USER_SELL'
-          })
-          if (filtered.length === 1) setSelectedAd(filtered[0])
-        }
+        const filtered = (data.ads || []).filter((ad) => {
+          const side = ad.adSide || ad.ad_side || 'USER_SELL'
+          return isBuyMode ? side === 'USER_BUY' : side === 'USER_SELL'
+        })
+        setSelectedAd(filtered.length === 1 ? filtered[0] : null)
       })
       .catch((err) => {
         setError(err.response?.data?.error || 'Could not load this trader. Please try again.')
@@ -58,13 +55,6 @@ export default function TraderProfile() {
   useEffect(() => {
     loadProfile()
   }, [id])
-
-  useEffect(() => {
-    if (!preselectedAd?.payoutSettingId) return
-    getTraderAd(preselectedAd.payoutSettingId)
-      .then((ad) => setSelectedAd(ad))
-      .catch(() => {})
-  }, [preselectedAd?.payoutSettingId])
 
   const handleTrade = () => {
     if (!selectedAd) return
@@ -223,6 +213,13 @@ export default function TraderProfile() {
         <h2 className="text-rowan-text text-sm font-semibold mb-3">
           {isBuyMode ? 'USDC offers' : 'Cash-out offers'}
         </h2>
+        {visibleAds.length > 1 && (
+          <p className="text-rowan-muted text-sm mb-3">
+            {isBuyMode
+              ? 'Choose the network you want to pay with.'
+              : 'Choose the network you want to receive on.'}
+          </p>
+        )}
         <div className="space-y-2">
           {visibleAds.length === 0 && (
             <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4 text-center">

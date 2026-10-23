@@ -68,11 +68,6 @@ export default function TraderGroupCard({
     onPickNetwork?.(trader)
   }
 
-  const handleNetworkTap = (offer) => {
-    if (tradeDisabled || !offerPriced(offer)) return
-    onTrade?.(offer, trader)
-  }
-
   return (
     <div className="bg-rowan-surface border border-rowan-border rounded-xl p-4">
       <div className="flex items-start justify-between gap-3">
@@ -114,15 +109,9 @@ export default function TraderGroupCard({
 
       <div className="flex flex-wrap gap-2 mt-3">
         {offers.map((offer) => (
-          <button
-            key={offer.payoutSettingId}
-            type="button"
-            disabled={tradeDisabled || !offerPriced(offer)}
-            onClick={() => handleNetworkTap(offer)}
-            className="disabled:opacity-40"
-          >
+          <span key={offer.payoutSettingId} className={!offerPriced(offer) ? 'opacity-40' : undefined}>
             <PaymentMethodPill network={offer.network} />
-          </button>
+          </span>
         ))}
       </div>
 

@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Zap, ShieldCheck, Clock, X } from 'lucide-react'
 import { previewExpress } from '../../api/express'
 import useUserCountry from '../../hooks/useUserCountry'
 import useWallet from '../../hooks/useWallet'
 import { NETWORKS } from '../../utils/constants'
-import { getNetworksForCountry } from '../../utils/country'
 import { formatPercent, formatDurationMinutes, getTraderDisplayName } from '../../utils/p2pFormat'
 import NetworkSelector from '../cashout/NetworkSelector'
 import Button from '../ui/Button'
@@ -26,20 +25,14 @@ export default function ExpressSheet({ open, onClose, initialSide = 'buy' }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const countryNetworks = useMemo(
-    () => Object.keys(getNetworksForCountry(country)),
-    [country]
-  )
-
   useEffect(() => {
     if (!open) return
     setSide(initialSide === 'sell' ? 'sell' : 'buy')
     setAmount('')
     setPreview(null)
     setError(null)
-    const first = countryNetworks[0] || null
-    setNetwork(first)
-  }, [open, initialSide, countryNetworks])
+    setNetwork(null)
+  }, [open, initialSide])
 
   const currency = network ? NETWORKS[network]?.currency : fiatCurrency
   const isBuy = side === 'buy'

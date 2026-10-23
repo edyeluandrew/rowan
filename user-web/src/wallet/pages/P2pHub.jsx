@@ -4,7 +4,6 @@ import { RefreshCw, Zap } from 'lucide-react'
 import { listTraderAds, listBuyAds } from '../api/traders'
 import useActiveTransaction from '../hooks/useActiveTransaction'
 import TraderGroupCard from '../components/marketplace/TraderGroupCard'
-import NetworkPickSheet from '../components/marketplace/NetworkPickSheet'
 import ExpressSheet from '../components/marketplace/ExpressSheet'
 import MarketplaceSkeleton from '../components/marketplace/MarketplaceSkeleton'
 import MarketplaceEmpty from '../components/marketplace/MarketplaceEmpty'
@@ -31,7 +30,6 @@ export default function P2pHub() {
   const { rates } = useRates(fiatCurrency)
   const { usdcBalance } = useWallet()
   const [traders, setTraders] = useState([])
-  const [pickTrader, setPickTrader] = useState(null)
   const [expressOpen, setExpressOpen] = useState(false)
   const [typicalTradeMinutes, setTypicalTradeMinutes] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -132,7 +130,6 @@ export default function P2pHub() {
   const handleTrade = (offer, trader) => {
     if (hasActiveOrder || !offer) return
     const ad = buildAdFromOffer(offer, trader)
-    setPickTrader(null)
     if (tab === 'buy') {
       navigate('/wallet/buy', {
         state: {
@@ -154,10 +151,24 @@ export default function P2pHub() {
     })
   }
 
+  const openMultiNetworkTrade = (trader) => {
+    if (hasActiveOrder) return
+    const offers = (trader.offers || []).filter((offer) => Number(offer.ratePerUsdc) > 0)
+    if (offers.length <= 1) {
+      if (offers[0]) handleTrade(offers[0], trader)
+      return
+    }
+    navigate(tab === 'buy' ? '/wallet/buy' : '/wallet/cashout', {
+      state: {
+        traderName: trader.traderName,
+        traderOffers: offers.map((offer) => buildAdFromOffer(offer, trader)),
+      },
+    })
+  }
+
   const handleViewProfile = (trader) => {
-    const firstOffer = trader.offers?.[0]
     navigate(`/wallet/traders/${trader.traderId}`, {
-      state: { ad: firstOffer ? buildAdFromOffer(firstOffer, trader) : null, mode: tab },
+      state: { mode: tab },
     })
   }
 
@@ -314,7 +325,7 @@ export default function P2pHub() {
                   typicalTradeMinutes={typicalTradeMinutes}
                   onTrade={handleTrade}
                   onViewProfile={handleViewProfile}
-                  onPickNetwork={setPickTrader}
+                  onPickNetwork={openMultiNetworkTrade}
                   tradeDisabled={hasActiveOrder}
                 />
               ))}
@@ -322,15 +333,6 @@ export default function P2pHub() {
           )}
         </div>
       </div>
-
-      <NetworkPickSheet
-        open={!!pickTrader}
-        traderName={pickTrader?.traderName}
-        offers={pickTrader?.offers || []}
-        mode={tab}
-        onSelect={(offer) => handleTrade(offer, pickTrader)}
-        onClose={() => setPickTrader(null)}
-      />
 
       <ExpressSheet
         open={expressOpen}
