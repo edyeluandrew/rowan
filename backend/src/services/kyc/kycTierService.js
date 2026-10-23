@@ -47,6 +47,26 @@ function usdToUgx(usd) {
 export function resolveLimits(user, countryCode) {
   const level = user?.kyc_level || 'NONE';
   const country = countryCode ? countryService.getCountry(countryCode) : null;
+  const products = Object.fromEntries(
+    Object.entries(KYC_PRODUCTS).map(([product, required]) => [
+      product,
+      canAccessProduct(level, product),
+    ])
+  );
+  const tierLabel = level === 'VERIFIED' ? 'Tier 3' : level === 'BASIC' ? 'Tier 2' : 'Tier 1';
+
+  if (config.stellar.limitsOpen) {
+    const openUgx = 1_000_000_000;
+    return {
+      kycLevel: level,
+      countryCode: country?.code || countryCode || null,
+      perTxUgx: openUgx,
+      dailyUgx: openUgx,
+      tierLabel,
+      products,
+    };
+  }
+
   const kycConfig = country?.kycConfig || {};
   const configLimits = config.kycLimits[level] || config.kycLimits.NONE;
 
@@ -76,13 +96,8 @@ export function resolveLimits(user, countryCode) {
     countryCode: country?.code || countryCode || null,
     perTxUgx,
     dailyUgx,
-    tierLabel: level === 'VERIFIED' ? 'Tier 3' : level === 'BASIC' ? 'Tier 2' : 'Tier 1',
-    products: Object.fromEntries(
-      Object.entries(KYC_PRODUCTS).map(([product, required]) => [
-        product,
-        canAccessProduct(level, product),
-      ])
-    ),
+    tierLabel,
+    products,
   };
 }
 

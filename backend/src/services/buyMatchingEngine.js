@@ -72,7 +72,7 @@ async function matchBuyTrader(transactionId) {
              AND ((ps.available_float - COALESCE(ps.reserved_float, 0)) / ps.rate_per_usdc) >= $5
            )
          )
-         AND (t.daily_volume + $6) <= t.daily_limit_ugx
+         AND ${config.stellar.limitsOpen ? '($6 = $6)' : '(t.daily_volume + $6) <= t.daily_limit_ugx'}
          AND (SELECT COUNT(*) FROM transactions tx
                 WHERE tx.trader_id = t.id
                   AND tx.state IN ('TRADER_MATCHED','FIAT_PAYOUT_SUBMITTED','USER_CONFIRMATION_PENDING'))

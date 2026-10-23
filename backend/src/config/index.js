@@ -15,6 +15,9 @@ const config = {
   stellar: {
     network: process.env.STELLAR_NETWORK || 'testnet',
     isMainnet: (process.env.STELLAR_NETWORK || 'testnet') === 'mainnet',
+    // Wallet tier caps and trader daily volume apply on mainnet.
+    // Testnet leaves them open so a test trade is not stopped mid-flow.
+    limitsOpen: (process.env.STELLAR_NETWORK || 'testnet') !== 'mainnet',
     horizonUrl: process.env.HORIZON_URL || 'https://horizon-testnet.stellar.org',
     escrowPublicKey: process.env.ESCROW_PUBLIC_KEY,
     escrowSecretKey: process.env.ESCROW_SECRET_KEY,

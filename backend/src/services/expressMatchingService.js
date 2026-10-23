@@ -136,7 +136,7 @@ async function findBestSellAdForExpress({
     `ps.currency = $2`,
     `$3 BETWEEN ps.min_amount AND ps.max_amount`,
     `(ps.available_float - ps.reserved_float) >= $3`,
-    `(t.daily_volume + $4) <= t.daily_limit_ugx`,
+    config.stellar.limitsOpen ? '($4 = $4)' : '(t.daily_volume + $4) <= t.daily_limit_ugx',
     `(SELECT COUNT(*) FROM transactions tx
         WHERE tx.trader_id = t.id
           AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[]))

@@ -143,7 +143,7 @@ async function matchTrader(transactionId) {
            AND ps.currency = $2
            AND $3 BETWEEN ps.min_amount AND ps.max_amount
            AND (ps.available_float - ps.reserved_float) >= $3
-           AND (t.daily_volume + $4) <= t.daily_limit_ugx
+           AND ${config.stellar.limitsOpen ? '($4 = $4)' : '(t.daily_volume + $4) <= t.daily_limit_ugx'}
            AND t.id <> ALL($5::uuid[])
            AND (SELECT COUNT(*) FROM transactions tx
                   WHERE tx.trader_id = t.id
