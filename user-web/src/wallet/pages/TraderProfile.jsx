@@ -42,11 +42,7 @@ export default function TraderProfile() {
     getTraderProfile(id)
       .then((data) => {
         setProfile(data)
-        const filtered = (data.ads || []).filter((ad) => {
-          const side = ad.adSide || ad.ad_side || 'USER_SELL'
-          return isBuyMode ? side === 'USER_BUY' : side === 'USER_SELL'
-        })
-        setSelectedAd(filtered.length === 1 ? filtered[0] : null)
+        setSelectedAd(null)
       })
       .catch((err) => {
         setError(err.response?.data?.error || 'Could not load this trader. Please try again.')
@@ -215,7 +211,7 @@ export default function TraderProfile() {
         <h2 className="text-rowan-text text-sm font-semibold mb-3">
           {isBuyMode ? 'USDC offers' : 'Cash-out offers'}
         </h2>
-        {visibleAds.length > 1 && (
+        {visibleAds.length > 0 && !selectedAd && (
           <p className="text-rowan-muted text-sm mb-3">
             {isBuyMode
               ? 'Choose the network you want to pay with.'

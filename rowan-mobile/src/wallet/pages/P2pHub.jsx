@@ -16,6 +16,32 @@ import Button from '../components/ui/Button'
 import { sanitizeAmount } from '../utils/sanitizeAmount'
 import client from '../api/client'
 
+function mergeSilentTraders(previous, incoming) {
+  const incomingById = new Map((incoming || []).map((trader) => [trader.traderId, trader]))
+  const seen = new Set()
+  const ids = []
+  for (const trader of [...(previous || []), ...(incoming || [])]) {
+    if (!trader?.traderId || seen.has(trader.traderId)) continue
+    seen.add(trader.traderId)
+    ids.push(trader.traderId)
+  }
+  return ids.map((id) => {
+    const next = incomingById.get(id)
+    const prior = (previous || []).find((trader) => trader.traderId === id)
+    if (!next) return prior
+    if (!prior?.offers?.length) return next
+    const freshByNetwork = new Map((next.offers || []).map((offer) => [offer.network, offer]))
+    const seenNetworks = new Set()
+    const offers = []
+    for (const offer of [...prior.offers, ...(next.offers || [])]) {
+      if (!offer?.network || seenNetworks.has(offer.network)) continue
+      seenNetworks.add(offer.network)
+      offers.push(freshByNetwork.get(offer.network) || offer)
+    }
+    return { ...next, offers }
+  })
+}
+
 /**
  * P2P hub — Buy/Sell toggle + Express on the side; trader list switches in place.
  */
@@ -41,6 +67,7 @@ export default function P2pHub() {
   const touchStartY = useRef(0)
   const pulling = useRef(false)
   const adsCache = useRef({})
+  const loadSeq = useRef(0)
 
   useEffect(() => {
     if (location.state?.tab === 'buy' || location.state?.tab === 'sell') {
@@ -60,6 +87,7 @@ export default function P2pHub() {
   const loadAds = useCallback(async (isRefresh = false, { silent = false } = {}) => {
     const cacheKey = `${tab}|${fiatCurrency}|${network || ''}|${debouncedMinAmount || ''}`
     const cached = adsCache.current[cacheKey]
+    const seq = ++loadSeq.current
     if (cached && !isRefresh) {
       setTraders(cached)
       setLoading(false)
@@ -72,17 +100,23 @@ export default function P2pHub() {
       if (network) params.network = network
       if (debouncedMinAmount) params.minAmount = parseFloat(debouncedMinAmount)
       const res = tab === 'buy' ? await listBuyAds(params) : await listTraderAds(params)
-      const rows = res.traders || []
+      if (seq !== loadSeq.current) return
+      const rows = silent
+        ? mergeSilentTraders(adsCache.current[cacheKey] || [], res.traders || [])
+        : (res.traders || [])
       adsCache.current[cacheKey] = rows
       setTraders(rows)
       setError(null)
     } catch (err) {
+      if (seq !== loadSeq.current) return
       if (!isRefresh && !cached) {
         setError(err.response?.data?.error || 'Could not load traders. Please try again.')
       }
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      if (seq === loadSeq.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
   }, [network, debouncedMinAmount, fiatCurrency, tab])
 
@@ -149,37 +183,10 @@ export default function P2pHub() {
     ratePerUsdc: offer.ratePerUsdc,
   })
 
-  const handleTrade = (offer, trader) => {
-    if (hasActiveOrder || !offer) return
-    const ad = buildAdFromOffer(offer, trader)
-    if (tab === 'buy') {
-      navigate('/wallet/buy', {
-        state: {
-          selectedAd: ad,
-          payoutSettingId: ad.payoutSettingId,
-          traderName: trader.traderName,
-          network: ad.network,
-        },
-      })
-      return
-    }
-    navigate('/wallet/cashout', {
-      state: {
-        selectedAd: ad,
-        payoutSettingId: ad.payoutSettingId,
-        traderName: trader.traderName,
-        network: ad.network,
-      },
-    })
-  }
-
   const openMultiNetworkTrade = (trader) => {
     if (hasActiveOrder) return
-    const offers = (trader.offers || []).filter((offer) => Number(offer.ratePerUsdc) > 0)
-    if (offers.length <= 1) {
-      if (offers[0]) handleTrade(offers[0], trader)
-      return
-    }
+    const offers = trader.offers || []
+    if (offers.length === 0) return
     navigate(tab === 'buy' ? '/wallet/buy' : '/wallet/cashout', {
       state: {
         traderName: trader.traderName,
@@ -334,7 +341,6 @@ export default function P2pHub() {
               usdcToFiat={rates?.usdcToFiat}
               walletBalance={usdcBalance}
               typicalTradeMinutes={typicalTradeMinutes}
-              onTrade={handleTrade}
               onViewProfile={handleViewProfile}
               onPickNetwork={openMultiNetworkTrade}
               tradeDisabled={hasActiveOrder}

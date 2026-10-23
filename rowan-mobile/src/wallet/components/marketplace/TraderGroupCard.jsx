@@ -12,6 +12,7 @@ import {
   getTraderDisplayName,
 } from '../../utils/p2pFormat'
 import { estimateMaxNetFiatFromUsdc } from '../../utils/fiat'
+import { NETWORKS } from '../../utils/constants'
 import PaymentMethodPill from '../ui/PaymentMethodPill'
 import Button from '../ui/Button'
 
@@ -23,14 +24,15 @@ export default function TraderGroupCard({
   usdcToFiat,
   walletBalance,
   typicalTradeMinutes,
-  onTrade,
   onViewProfile,
   onPickNetwork,
   tradeDisabled = false,
 }) {
   const isBuy = mode === 'buy'
-  const offers = trader.offers || []
-  const primaryNetwork = offers[0]?.network
+  const networkOrder = Object.keys(NETWORKS)
+  const offers = [...(trader.offers || [])].sort(
+    (a, b) => networkOrder.indexOf(a.network) - networkOrder.indexOf(b.network)
+  )
   const currency = trader.currency || offers[0]?.currency
 
   const displayRate = Number(trader.bestRatePerUsdc) > 0
@@ -56,15 +58,9 @@ export default function TraderGroupCard({
   const tradeCount = formatTradeCount(trader.completedOrders)
   const isVerified = trader.trustScore >= 80
   const hasTraderPrice = Number(trader.bestRatePerUsdc) > 0
-  const offerPriced = (offer) => Number(offer?.ratePerUsdc) > 0
 
   const handleTradeClick = () => {
-    if (tradeDisabled || !hasTraderPrice) return
-    if (offers.length === 1) {
-      if (!offerPriced(offers[0])) return
-      onTrade?.(offers[0], trader)
-      return
-    }
+    if (tradeDisabled || !hasTraderPrice || offers.length === 0) return
     onPickNetwork?.(trader)
   }
 
@@ -109,7 +105,7 @@ export default function TraderGroupCard({
 
       <div className="flex flex-wrap gap-2 mt-3">
         {offers.map((offer) => (
-          <span key={offer.payoutSettingId} className={!offerPriced(offer) ? 'opacity-40' : undefined}>
+          <span key={offer.network || offer.payoutSettingId}>
             <PaymentMethodPill network={offer.network} />
           </span>
         ))}

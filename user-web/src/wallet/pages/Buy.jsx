@@ -49,7 +49,7 @@ export default function Buy() {
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
 
   const traderOffers = Array.isArray(presetOffers) ? presetOffers : []
-  const mustPickNetwork = traderOffers.length > 1
+  const mustPickNetwork = traderOffers.length > 0
   const [pickedOffer, setPickedOffer] = useState(null)
   const activeAd = mustPickNetwork ? pickedOffer : selectedAd
   const adNetwork = mustPickNetwork
