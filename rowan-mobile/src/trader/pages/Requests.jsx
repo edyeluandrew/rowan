@@ -9,7 +9,8 @@ export default function Requests() {
   const [tab, setTab] = useState('incoming'); // 'incoming' | 'active'
   const [selectedRequest, setSelectedRequest] = useState(null);
   const { pending, active, loading, setPending, setActive } = useRequests();
-  const { isConnected } = useSocket();
+  const { connectionStatus } = useSocket();
+  const offline = connectionStatus === 'offline';
 
   const list = tab === 'incoming' ? pending : active;
 
@@ -67,11 +68,11 @@ export default function Requests() {
           <div className="flex items-center gap-2">
             <div
               className={`w-2.5 h-2.5 rounded-full ${
-                isConnected ? 'bg-rowan-green animate-pulse-dot' : 'bg-rowan-red'
+                offline ? 'bg-rowan-red' : 'bg-rowan-green animate-pulse-dot'
               }`}
             />
-            <span className={`text-xs ${isConnected ? 'text-rowan-green' : 'text-rowan-red'}`}>
-              {isConnected ? 'Live' : 'Connection lost'}
+            <span className={`text-xs ${offline ? 'text-rowan-red' : 'text-rowan-green'}`}>
+              {offline ? 'Connection lost' : 'Live'}
             </span>
           </div>
         </div>

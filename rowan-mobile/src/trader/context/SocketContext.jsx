@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { getPreference } from '../utils/storage';
 import { SOCKET_RECONNECT_ATTEMPTS, SOCKET_RECONNECT_DELAY, SOCKET_RECONNECT_DELAY_MAX } from '../utils/constants';
-import { getApiUrl } from '../../shared/utils/config.js';
+import { getApiUrl, liveSocketOptions } from '../../shared/utils/config.js';
 
 const SocketContext = createContext(null);
 
@@ -25,7 +25,7 @@ function playPing() {
 
 export function SocketProvider({ children }) {
   const { token, isAuthenticated } = useAuth();
-  const [isConnected, setIsConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
   const socketRef = useRef(null);
   const retryRef = useRef(0);
 
@@ -33,8 +33,7 @@ export function SocketProvider({ children }) {
     if (!isAuthenticated || !token) return;
 
     const s = io(getApiUrl(), {
-      auth: { token },
-      transports: ['polling', 'websocket'],
+      ...liveSocketOptions(token),
       reconnectionAttempts: SOCKET_RECONNECT_ATTEMPTS,
       reconnectionDelay: SOCKET_RECONNECT_DELAY,
       reconnectionDelayMax: SOCKET_RECONNECT_DELAY_MAX,
@@ -43,18 +42,18 @@ export function SocketProvider({ children }) {
     socketRef.current = s;
 
     s.on('connect', () => {
-      setIsConnected(true);
+      setConnectionStatus('online');
       retryRef.current = 0;
     });
 
     s.on('disconnect', () => {
-      setIsConnected(false);
+      setConnectionStatus((current) => (current === 'online' ? 'offline' : current));
     });
 
     s.on('connect_error', () => {
       retryRef.current += 1;
       if (retryRef.current >= SOCKET_RECONNECT_ATTEMPTS) {
-        setIsConnected(false);
+        setConnectionStatus('offline');
       }
     });
 
@@ -80,7 +79,7 @@ export function SocketProvider({ children }) {
         sock.disconnect();
       }, 0);
       socketRef.current = null;
-      setIsConnected(false);
+      setConnectionStatus('connecting');
     };
   }, [isAuthenticated, token]);
 
@@ -99,7 +98,7 @@ export function SocketProvider({ children }) {
   }, []);
 
   return (
-    <SocketContext.Provider value={{ socket: socketRef.current, isConnected, on, off, joinOrder }}>
+    <SocketContext.Provider value={{ socket: socketRef.current, isConnected: connectionStatus === 'online', connectionStatus, on, off, joinOrder }}>
       {children}
     </SocketContext.Provider>
   );

@@ -67,6 +67,22 @@ export function getHorizonUrl() {
   return configured
 }
 
+/** Socket.io through the site stays on HTTP polling. A websocket upgrade here drops and paints the app offline. */
+export function liveSocketOptions(token) {
+  const url = getApiUrl()
+  let throughSite = false
+  try {
+    throughSite = SITE_HOSTS.has(new URL(url).hostname)
+  } catch {
+    throughSite = false
+  }
+  return {
+    auth: { token },
+    transports: throughSite ? ['polling'] : ['polling', 'websocket'],
+    upgrade: !throughSite,
+  }
+}
+
 /** True when stellar.toml should be fetched from VITE_API_URL (not StellarToml.Resolver). */
 export function shouldFetchTomlFromApi() {
   if (import.meta.env.VITE_API_URL?.trim()) return true

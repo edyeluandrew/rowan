@@ -6,13 +6,13 @@ import { getPreference } from '../utils/storage'
 import { scheduleLocalNotification } from '../utils/notifications'
 import { buildLocalNotificationExtra } from '../utils/notificationRoutes'
 import { onLogout } from '../api/client'
-import { getApiUrl } from '../../shared/utils/config.js'
+import { getApiUrl, liveSocketOptions } from '../../shared/utils/config.js'
 
 const SocketContext = createContext(null)
 
 export function SocketProvider({ children }) {
   const { token, isAuthenticated, user } = useAuth()
-  const [isConnected, setIsConnected] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState('connecting')
   const socketRef = useRef(null)
   const audioCtxRef = useRef(null)
 
@@ -20,21 +20,21 @@ export function SocketProvider({ children }) {
     if (!isAuthenticated || !token) return
 
     const socket = io(getApiUrl(), {
-      auth: { token },
+      ...liveSocketOptions(token),
       reconnectionAttempts: SOCKET_RECONNECT_ATTEMPTS,
       reconnectionDelay: SOCKET_RECONNECT_DELAY,
       reconnectionDelayMax: SOCKET_RECONNECT_DELAY_MAX,
     })
 
     socket.on('connect', () => {
-      setIsConnected(true)
+      setConnectionStatus('online')
       if (user?.id) {
         socket.emit('join', `user:${user.id}`)
       }
     })
 
     socket.on('disconnect', () => {
-      setIsConnected(false)
+      setConnectionStatus((current) => (current === 'online' ? 'offline' : current))
     })
 
     socket.on('transaction_complete', (data) => {
@@ -158,7 +158,7 @@ export function SocketProvider({ children }) {
   }, [])
 
   return (
-    <SocketContext.Provider value={{ socket: socketRef.current, isConnected, on, off, joinOrder }}>
+    <SocketContext.Provider value={{ socket: socketRef.current, isConnected: connectionStatus === 'online', connectionStatus, on, off, joinOrder }}>
       {children}
     </SocketContext.Provider>
   )

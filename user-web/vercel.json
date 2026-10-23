@@ -54,6 +54,14 @@
       "destination": "https://rowan-1-9crb.onrender.com/health"
     },
     {
+      "source": "/socket.io",
+      "destination": "https://rowan-1-9crb.onrender.com/socket.io"
+    },
+    {
+      "source": "/socket.io/",
+      "destination": "https://rowan-1-9crb.onrender.com/socket.io/"
+    },
+    {
       "source": "/socket.io/:path*",
       "destination": "https://rowan-1-9crb.onrender.com/socket.io/:path*"
     },
