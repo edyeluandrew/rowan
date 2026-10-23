@@ -31,8 +31,8 @@ const payoutProofUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok = ['image/jpeg', 'image/png', 'image/jpg'].includes(file.mimetype);
-    cb(ok ? null : new Error('Only JPEG and PNG images are allowed'), ok);
+    const ok = !file.mimetype || file.mimetype.startsWith('image/');
+    cb(ok ? null : new Error('Use a photo of the payment'), ok);
   },
 });
 
@@ -207,7 +207,7 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
               t.network, t.state, t.trader_matched_at, t.matched_at,
               t.fiat_sent_at, t.created_at, t.completed_at, t.user_id, t.trader_id,
               t.payout_phone, t.payout_name, t.stellar_release_tx, t.payment_expires_at,
-              t.preferred_payout_setting_id, t.order_side, t.payout_reference,
+              t.preferred_payout_setting_id, t.order_side, t.payout_reference, t.payout_proof_url,
               q.memo AS escrow_memo, q.escrow_address,
               tr.stellar_address AS trader_stellar_address,
               tr.stellar_address
@@ -223,10 +223,17 @@ router.get('/requests/:id', authTrader, async (req, res, next) => {
       return res.status(404).json({ error: 'Request not found or not assigned to you' });
     }
 
+    let payoutProofUrl = tx.payout_proof_url || null;
+    if (payoutProofUrl && !String(payoutProofUrl).startsWith('http')) {
+      const signed = await storageService.getSignedUrl(payoutProofUrl, 60 * 60 * 24 * 7);
+      payoutProofUrl = signed?.url || null;
+    }
+
     // [USDC FIX] usdc_amount is NUMERIC(18,7) decimal, not stroops.
     res.json({
       data: {
         ...tx,
+        payout_proof_url: payoutProofUrl,
         usdc_amount: Number(tx.usdc_amount) || 0,
         selection_method: tx.preferred_payout_setting_id ? 'manual' : 'auto',
         // Full payout details returned only to assigned trader
@@ -312,19 +319,15 @@ router.post('/requests/:id/accept', authTrader, async (req, res, next) => {
  */
 router.post('/requests/:id/payout-sent', authTrader, sensitiveActionLimiter, payoutProofUpload.single('proof_image'), async (req, res, next) => {
   try {
-    const reference = req.body?.reference ?? req.body?.payout_reference ?? req.body?.payoutReference;
-
-    if (!reference || typeof reference !== 'string' || reference.trim().length === 0) {
-      logger.warn(`[Trader] payout-sent missing reference for ${req.params.id}`, {
-        bodyKeys: Object.keys(req.body || {}),
-        contentType: req.headers['content-type'],
-        hasFile: !!req.file,
-      });
+    if (!req.file) {
       return res.status(400).json({
-        error: 'Mobile money reference is required',
-        details: 'Please provide a valid reference number from your mobile money provider.',
+        error: 'Add a photo of the mobile money payment',
       });
     }
+
+    const reference = String(
+      req.body?.reference ?? req.body?.payout_reference ?? req.body?.payoutReference ?? 'screenshot'
+    ).trim() || 'screenshot';
 
     let proofStorageKey = null;
     let proofSignedUrl = null;

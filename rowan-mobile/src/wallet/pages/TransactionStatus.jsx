@@ -4,6 +4,7 @@ import { ChevronLeft, PartyPopper, RotateCcw, RefreshCw, XCircle, ShieldCheck, F
 import { getTransactionStatus, confirmReceipt, openDispute, cancelOrder } from '../api/cashout'
 import { submitBuyPayment } from '../api/buy'
 import PaymentDetailsCard from '../components/chat/PaymentDetailsCard'
+import PaymentProofPicker from '../components/orders/PaymentProofPicker'
 import { uploadDisputeEvidence, listDisputeEvidence } from '../api/user'
 import DisputeEvidenceSection from '../components/disputes/DisputeEvidenceSection'
 import useSocketHook from '../hooks/useSocket'
@@ -62,7 +63,8 @@ export default function TransactionStatus() {
   const [cancelling, setCancelling] = useState(false)
   const [cancelNotice, setCancelNotice] = useState(null)
   const [appealCountdown, setAppealCountdown] = useState('')
-  const [buyPaymentRef, setBuyPaymentRef] = useState('')
+  const [buyProofFile, setBuyProofFile] = useState(null)
+  const [buyProofPreview, setBuyProofPreview] = useState(null)
   const [submittingBuyPayment, setSubmittingBuyPayment] = useState(false)
   const [buyPaymentError, setBuyPaymentError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -232,20 +234,35 @@ export default function TransactionStatus() {
         account_number: transaction.traderReceivePhone,
         account_name: transaction.traderReceiveName || transaction.traderName || 'Trader',
         amount: formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency),
-        reference: activeTxId ? `ROW-${activeTxId.replace(/-/g, '').slice(0, 8).toUpperCase()}` : 'ROW',
       }
     : null
 
+  const handleBuyProof = (file) => {
+    if (buyProofPreview) URL.revokeObjectURL(buyProofPreview)
+    if (!file) {
+      setBuyProofFile(null)
+      setBuyProofPreview(null)
+      return
+    }
+    if (file.type && !file.type.startsWith('image/')) {
+      setBuyPaymentError('Use a photo of the payment')
+      return
+    }
+    setBuyProofFile(file)
+    setBuyProofPreview(URL.createObjectURL(file))
+    setBuyPaymentError(null)
+  }
+
   const handleSubmitBuyPayment = async () => {
-    if (!buyPaymentRef.trim()) {
-      setBuyPaymentError('Enter your mobile money reference')
+    if (!buyProofFile) {
+      setBuyPaymentError('Add a photo of the mobile money payment')
       return
     }
     setSubmittingBuyPayment(true)
     setBuyPaymentError(null)
     try {
-      await submitBuyPayment({ transactionId: activeTxId, paymentReference: buyPaymentRef.trim() })
-      setTransaction((prev) => mergeTransaction(prev, { state: 'FIAT_PAYOUT_SUBMITTED', payoutReference: buyPaymentRef.trim() }))
+      await submitBuyPayment({ transactionId: activeTxId, proofFile: buyProofFile })
+      setTransaction((prev) => mergeTransaction(prev, { state: 'FIAT_PAYOUT_SUBMITTED' }))
     } catch (err) {
       setBuyPaymentError(mapApiError(err, 'Could not submit payment'))
     } finally {
@@ -617,7 +634,7 @@ export default function TransactionStatus() {
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 my-4 text-center">
           <p className="text-rowan-text text-sm font-semibold">Waiting for trader to lock USDC</p>
           <p className="text-rowan-muted text-xs mt-2">
-            After they lock escrow, you will see their MoMo number and the <strong className="text-rowan-text">I have sent fiat</strong> button.
+            After they lock USDC, you get their mobile money number. Send the money, then add a photo.
           </p>
         </div>
       )}
@@ -648,22 +665,16 @@ export default function TransactionStatus() {
               MoMo details may also appear in chat. Use the trader&apos;s verified {getNetworkLabel(transaction.network)} number.
             </p>
           )}
-          <input
-            type="text"
-            value={buyPaymentRef}
-            onChange={(e) => setBuyPaymentRef(e.target.value)}
-            placeholder="Mobile money reference (required)"
-            className="w-full bg-rowan-bg border border-rowan-border rounded-xl px-4 py-3 text-rowan-text text-sm min-h-11"
-          />
+          <PaymentProofPicker preview={buyProofPreview} onFile={handleBuyProof} />
           {buyPaymentError && <p className="text-rowan-red text-xs">{buyPaymentError}</p>}
         </div>
       )}
 
       {isBuy && !isAutomatedBuy && transaction?.state === 'FIAT_PAYOUT_SUBMITTED' && (
         <div className="bg-rowan-surface rounded-xl p-4 my-4 text-center">
-          <p className="text-rowan-text text-sm font-medium">Fiat marked as sent</p>
+          <p className="text-rowan-text text-sm font-medium">Payment photo sent</p>
           <p className="text-rowan-muted text-xs mt-2">
-            Waiting for the trader to tap <strong className="text-rowan-text">I received MoMo — release USDC</strong>.
+            Waiting for the trader to release your USDC.
           </p>
         </div>
       )}
@@ -725,10 +736,12 @@ export default function TransactionStatus() {
             <p className="text-rowan-text text-sm font-medium mt-2">
               {formatCurrency(transaction.fiatAmount, transaction.fiatCurrency || transaction.currency)} via {getNetworkLabel(transaction.network)}
             </p>
-            {transaction.payoutReference && (
-              <p className="text-rowan-muted text-xs mt-1 font-mono">
-                Ref: {transaction.payoutReference}
-              </p>
+            {transaction.payoutProofUrl && (
+              <img
+                src={transaction.payoutProofUrl}
+                alt="Payment photo"
+                className="rounded-xl max-h-44 w-full object-cover border border-rowan-border mt-3"
+              />
             )}
             <p className="text-rowan-muted text-xs mt-2">
               Check your balance. If this exact amount arrived, tap I got it.
@@ -895,9 +908,9 @@ export default function TransactionStatus() {
             onClick={handleSubmitBuyPayment}
             size="lg"
             className="w-full"
-            disabled={!buyPaymentRef.trim()}
+            disabled={!buyProofFile}
           >
-            I have sent fiat
+            I&apos;ve sent the mobile money
           </Button>
         </div>
       )}

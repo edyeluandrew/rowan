@@ -59,7 +59,7 @@ export function getOrderGuidance(transaction, {
     if (isBuy) {
       return {
         title: 'Your turn: send mobile money',
-        body: 'Send the exact MoMo amount to the trader, then enter the payment reference and tap “I have sent fiat”.',
+        body: 'Send the exact amount to the trader, then add a photo of the payment.',
         tip: 'Only send via the number shown here. Chat the trader if details look wrong.',
         urgency: 'soon',
       }

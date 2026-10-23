@@ -183,7 +183,7 @@ export const STATE_SUBTITLES = {
 
 export const BUY_STATE_SUBTITLES = {
   TRADER_MATCHED: 'Waiting for trader to lock USDC in escrow',
-  ESCROW_LOCKED: 'Pay the trader via MoMo, then tap I have sent fiat',
+  ESCROW_LOCKED: 'Pay the trader, then add a photo of the payment',
   FIAT_PAYOUT_SUBMITTED: 'Waiting for trader to confirm they received MoMo',
   USER_CONFIRMATION_PENDING: 'Trader confirmed — releasing USDC to you',
   COMPLETE: 'Done — USDC is in your wallet',

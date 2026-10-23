@@ -58,7 +58,6 @@ export default function PaymentDetailsCard({ payload, viewerRole = 'user' }) {
             }
           />
           <Row label="Amount" value={payload.amount} />
-          <Row label="Reference" value={payload.reference} />
         </div>
       </div>
     </div>

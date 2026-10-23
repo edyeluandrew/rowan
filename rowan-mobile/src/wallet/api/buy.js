@@ -16,16 +16,10 @@ export function confirmBuyOrder({ quoteId }) {
   return client.post('/api/v1/buy/confirm', { quoteId }).then((res) => res.data)
 }
 
-export function submitBuyPayment({ transactionId, paymentReference, proofFile }) {
-  if (!proofFile) {
-    return client.post('/api/v1/buy/payment-sent', {
-      transactionId,
-      paymentReference,
-    }).then((res) => res.data)
-  }
+export function submitBuyPayment({ transactionId, proofFile }) {
   const form = new FormData()
   form.append('transactionId', transactionId)
-  form.append('paymentReference', paymentReference)
+  form.append('paymentReference', 'screenshot')
   form.append('proof', proofFile)
   return client.post('/api/v1/buy/payment-sent', form, {
     headers: { 'Content-Type': 'multipart/form-data' },

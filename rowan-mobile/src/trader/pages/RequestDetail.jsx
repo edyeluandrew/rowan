@@ -351,7 +351,7 @@ export default function RequestDetail() {
         <div className="bg-rowan-yellow/10 border border-rowan-yellow/30 rounded-xl p-4 mb-4">
           <p className="text-rowan-yellow text-sm font-semibold">Accept this request to send fiat</p>
           <p className="text-rowan-muted text-xs mt-1">
-            Customer USDC is in escrow. After you accept, you&apos;ll see their MoMo details and the <strong className="text-rowan-text">I have sent fiat</strong> button.
+            Customer USDC is in escrow. After you accept, send them mobile money and add a photo of the payment.
           </p>
           <Button
             className="mt-3"
@@ -517,10 +517,7 @@ export default function RequestDetail() {
         <div className="bg-rowan-surface rounded-xl p-4 mb-4 border border-rowan-border">
           <p className="text-rowan-text text-sm font-semibold">Step 2: Waiting for customer MoMo</p>
           <p className="text-rowan-muted text-xs mt-2">
-            USDC is locked. Customer must pay your MoMo and tap <strong className="text-rowan-text">I have sent fiat</strong> on their wallet app.
-          </p>
-          <p className="text-rowan-yellow text-xs mt-2">
-            Your <strong>I received MoMo — release USDC</strong> button appears only after they do that.
+            USDC is locked. The customer sends mobile money and adds a photo of the payment. Your release button shows up after that.
           </p>
         </div>
       )}
@@ -529,10 +526,14 @@ export default function RequestDetail() {
         <div className="bg-rowan-surface rounded-xl p-4 mb-4 space-y-2 border-2 border-rowan-yellow/50">
           <p className="text-rowan-text text-sm font-semibold">Step 3: Confirm you received MoMo</p>
           <p className="text-rowan-muted text-xs">
-            Check your mobile money. Then tap below to release escrowed USDC to the customer.
+            Check your mobile money. If this amount is there, release the USDC.
           </p>
-          {tx.payout_reference && (
-            <p className="text-rowan-muted text-xs">Reference: <span className="text-rowan-text font-mono">{tx.payout_reference}</span></p>
+          {tx.payout_proof_url && (
+            <img
+              src={tx.payout_proof_url}
+              alt="Payment photo"
+              className="rounded-xl max-h-44 w-full object-cover border border-rowan-border"
+            />
           )}
         </div>
       )}
@@ -635,8 +636,7 @@ export default function RequestDetail() {
             Your turn: send mobile money
           </h3>
           <p className="text-rowan-muted text-xs mb-3">
-            Do not send USDC. Pay the exact fiat amount below — do not deduct fees.
-            Your profit is in the USDC you receive. Then tap <strong className="text-rowan-text">I have sent fiat</strong>.
+            Pay this exact amount. Do not take a fee out of it. Then add a photo of the receipt.
           </p>
           <div className="space-y-3">
             <div>
@@ -666,25 +666,23 @@ export default function RequestDetail() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(`${tx.fiat_amount}`);
-                  alert('Amount copied!');
-                }}
-                className="text-rowan-muted text-xs font-medium flex-1 py-3 min-h-11 border border-rowan-border rounded-xl"
-              >
-                Copy amount
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowConfirm(true)}
-                className="text-rowan-bg text-xs font-semibold flex-1 py-3 min-h-11 bg-rowan-green rounded-xl"
-              >
-                I have sent fiat
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(`${tx.fiat_amount}`);
+                alert('Amount copied!');
+              }}
+              className="text-rowan-muted text-xs font-medium w-full py-3 min-h-11 border border-rowan-border rounded-xl"
+            >
+              Copy amount
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowConfirm(true)}
+              className="text-rowan-bg text-sm font-semibold w-full py-3 min-h-11 bg-rowan-green rounded-xl"
+            >
+              I&apos;ve sent the mobile money
+            </button>
           </div>
         </div>
       )}
@@ -693,10 +691,10 @@ export default function RequestDetail() {
       {isAwaitingConfirmation && !isBuyOrder && (
         <div className="bg-rowan-green/10 border border-rowan-green/30 rounded-xl p-4 text-center mb-4">
           <p className="text-rowan-green text-sm font-medium">
-            Fiat marked as sent
+            Payment photo sent
           </p>
           <p className="text-rowan-muted text-xs mt-1">
-            Waiting for the customer to confirm they received MoMo. Then escrow releases USDC to your wallet.
+            Waiting for the customer to confirm they received the mobile money. Then USDC is released to your wallet.
           </p>
         </div>
       )}
@@ -724,7 +722,7 @@ export default function RequestDetail() {
       {isBuyConfirmStep && (
         <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-rowan-bg/95 border-t border-rowan-yellow/30 backdrop-blur-sm">
           <Button loading={confirmingBuy} size="lg" className="w-full" onClick={() => setReleaseOpen(true)}>
-            I received MoMo — release USDC
+            Release USDC
           </Button>
         </div>
       )}

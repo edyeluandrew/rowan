@@ -26,8 +26,8 @@ const paymentProofUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok = ['image/jpeg', 'image/png', 'image/jpg'].includes(file.mimetype);
-    cb(ok ? null : new Error('Only JPEG and PNG images are allowed'), ok);
+    const ok = !file.mimetype || file.mimetype.startsWith('image/');
+    cb(ok ? null : new Error('Use a photo of the payment'), ok);
   },
 });
 
@@ -180,7 +180,11 @@ router.post(
   validate(['transactionId', 'paymentReference']),
   async (req, res, next) => {
     try {
-      const { transactionId, paymentReference } = req.body;
+      const { transactionId } = req.body;
+      if (!req.file) {
+        return res.status(400).json({ error: 'Add a photo of the mobile money payment' });
+      }
+      const paymentReference = String(req.body.paymentReference || 'screenshot').trim() || 'screenshot';
       let proofStorageKey = null;
       let proofSignedUrl = null;
 
