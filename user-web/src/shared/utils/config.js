@@ -38,12 +38,33 @@ const HORIZON_BY_NETWORK = {
   mainnet: 'https://horizon.stellar.org',
 }
 
-/** Horizon URL — env override, else default for active network (testnet default). */
-export function getHorizonUrl() {
+const HORIZON_PROXY_PATH = {
+  'horizon-testnet.stellar.org': '/horizon-testnet',
+  'horizon.stellar.org': '/horizon-mainnet',
+}
+
+function configuredHorizonUrl() {
   const explicit = import.meta.env.VITE_STELLAR_HORIZON_URL?.trim()
   if (explicit) return explicit.replace(/\/+$/, '')
   const net = import.meta.env.VITE_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet'
   return HORIZON_BY_NETWORK[net]
+}
+
+/**
+ * Horizon URL. On the live site, account reads go through rowanpay.app
+ * because some networks reset a direct connection to horizon-testnet.
+ */
+export function getHorizonUrl() {
+  const configured = configuredHorizonUrl()
+  if (typeof window !== 'undefined' && SITE_HOSTS.has(window.location.hostname)) {
+    try {
+      const proxyPath = HORIZON_PROXY_PATH[new URL(configured).hostname]
+      if (proxyPath) return `${window.location.origin}${proxyPath}`
+    } catch {
+      /* keep the configured URL */
+    }
+  }
+  return configured
 }
 
 /** True when stellar.toml should be fetched from VITE_API_URL (not StellarToml.Resolver). */

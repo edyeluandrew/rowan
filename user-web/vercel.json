@@ -58,6 +58,14 @@
       "destination": "https://rowan-1-9crb.onrender.com/socket.io/:path*"
     },
     {
+      "source": "/horizon-testnet/:path*",
+      "destination": "https://horizon-testnet.stellar.org/:path*"
+    },
+    {
+      "source": "/horizon-mainnet/:path*",
+      "destination": "https://horizon.stellar.org/:path*"
+    },
+    {
       "source": "/((?!.*\\.(?:png|ico|svg|webmanifest|txt|xml|json|webp)$).*)",
       "destination": "/index.html"
     }
