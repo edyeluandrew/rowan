@@ -482,7 +482,7 @@ export default function PayoutSettings() {
 
                 {setting.rate_per_usdc ? (
                   <p className="text-sm text-yellow-400 mb-3">
-                    1 USDC ≈ {Number(setting.rate_per_usdc).toLocaleString()} {setting.currency}
+                    1 USDC = {Number(setting.rate_per_usdc).toLocaleString()} {setting.currency}
                   </p>
                 ) : (
                   <p className="text-sm text-red-300 mb-3">No USDC price yet. Customer Sell stays off until you set one.</p>

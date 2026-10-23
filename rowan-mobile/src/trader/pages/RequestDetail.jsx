@@ -601,7 +601,7 @@ export default function RequestDetail() {
           <div className="flex justify-between">
             <span className="text-rowan-muted text-xs">Rate</span>
             <span className="text-rowan-text text-sm">
-              1 USDC ≈ {formatCurrency(tx.rate, tx.fiat_currency)}
+              1 USDC = {formatCurrency(tx.rate, tx.fiat_currency)}
             </span>
           </div>
         )}

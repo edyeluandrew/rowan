@@ -112,11 +112,11 @@ export function formatXlmRateLine(currency, rate) {
   return `1 XLM = ${currency} ${formatted}`
 }
 
-/** e.g. "1 USDC ≈ UGX 3,728" — trader-set buy price */
+/** e.g. "1 USDC = UGX 4,000" — the price the trader set */
 export function formatUsdcRateLine(currency, ratePerUsdc) {
   if (!currency || ratePerUsdc == null || !Number.isFinite(Number(ratePerUsdc))) return null
   const formatted = Number(ratePerUsdc).toLocaleString('en-US', { maximumFractionDigits: 2 })
-  return `1 USDC ≈ ${currency} ${formatted}`
+  return `1 USDC = ${currency} ${formatted}`
 }
 
 /** e.g. "Ref UGX 3,720 · +1.6%" */
