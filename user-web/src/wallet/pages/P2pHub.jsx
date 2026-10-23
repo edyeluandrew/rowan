@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { RefreshCw, Zap } from 'lucide-react'
 import { listTraderAds, listBuyAds } from '../api/traders'
@@ -10,36 +10,23 @@ import MarketplaceEmpty from '../components/marketplace/MarketplaceEmpty'
 import useRates from '../hooks/useRates'
 import useWallet from '../hooks/useWallet'
 import useUserCountry from '../hooks/useUserCountry'
-import { getNetworksForCountry } from '../utils/country'
 import { NETWORKS, QUOTE_REFRESH_INTERVAL } from '../utils/constants'
 import Button from '../components/ui/Button'
 import { sanitizeAmount } from '../utils/sanitizeAmount'
 import client from '../api/client'
 
-function mergeSilentTraders(previous, incoming) {
-  const incomingById = new Map((incoming || []).map((trader) => [trader.traderId, trader]))
+function networksOnTraders(traders) {
+  const order = Object.keys(NETWORKS)
   const seen = new Set()
-  const ids = []
-  for (const trader of [...(previous || []), ...(incoming || [])]) {
-    if (!trader?.traderId || seen.has(trader.traderId)) continue
-    seen.add(trader.traderId)
-    ids.push(trader.traderId)
-  }
-  return ids.map((id) => {
-    const next = incomingById.get(id)
-    const prior = (previous || []).find((trader) => trader.traderId === id)
-    if (!next) return prior
-    if (!prior?.offers?.length) return next
-    const freshByNetwork = new Map((next.offers || []).map((offer) => [offer.network, offer]))
-    const seenNetworks = new Set()
-    const offers = []
-    for (const offer of [...prior.offers, ...(next.offers || [])]) {
-      if (!offer?.network || seenNetworks.has(offer.network)) continue
-      seenNetworks.add(offer.network)
-      offers.push(freshByNetwork.get(offer.network) || offer)
+  const keys = []
+  for (const trader of traders || []) {
+    for (const offer of trader.offers || []) {
+      if (!offer?.network || seen.has(offer.network)) continue
+      seen.add(offer.network)
+      keys.push(offer.network)
     }
-    return { ...next, offers }
-  })
+  }
+  return keys.sort((a, b) => order.indexOf(a) - order.indexOf(b))
 }
 
 /**
@@ -51,7 +38,7 @@ export default function P2pHub() {
   const initialTab = location.state?.tab === 'sell' ? 'sell' : 'buy'
   const [tab, setTab] = useState(initialTab)
   const { country, fiatCurrency } = useUserCountry()
-  const countryNetworks = useMemo(() => Object.keys(getNetworksForCountry(country)), [country])
+  const [marketNetworks, setMarketNetworks] = useState([])
   const { activeTransaction, hasActiveOrder } = useActiveTransaction()
   const { rates } = useRates(fiatCurrency)
   const { usdcBalance } = useWallet()
@@ -78,6 +65,12 @@ export default function P2pHub() {
   }, [country, tab])
 
   useEffect(() => {
+    if (network && marketNetworks.length > 0 && !marketNetworks.includes(network)) {
+      setNetwork(null)
+    }
+  }, [marketNetworks, network])
+
+  useEffect(() => {
     const timer = setTimeout(() => setDebouncedMinAmount(minAmount), 400)
     return () => clearTimeout(timer)
   }, [minAmount])
@@ -99,11 +92,10 @@ export default function P2pHub() {
       if (debouncedMinAmount) params.minAmount = parseFloat(debouncedMinAmount)
       const res = tab === 'buy' ? await listBuyAds(params) : await listTraderAds(params)
       if (seq !== loadSeq.current) return
-      const rows = silent
-        ? mergeSilentTraders(adsCache.current[cacheKey] || [], res.traders || [])
-        : (res.traders || [])
+      const rows = res.traders || []
       adsCache.current[cacheKey] = rows
       setTraders(rows)
+      if (!network) setMarketNetworks(networksOnTraders(rows))
       setError(null)
     } catch (err) {
       if (seq !== loadSeq.current) return
@@ -163,7 +155,13 @@ export default function P2pHub() {
 
   const openMultiNetworkTrade = (trader) => {
     if (hasActiveOrder) return
-    const offers = trader.offers || []
+    const seen = new Set()
+    const offers = []
+    for (const offer of trader.offers || []) {
+      if (!offer?.network || seen.has(offer.network)) continue
+      seen.add(offer.network)
+      offers.push(offer)
+    }
     if (offers.length === 0) return
     navigate(tab === 'buy' ? '/wallet/buy' : '/wallet/cashout', {
       state: {
@@ -248,7 +246,7 @@ export default function P2pHub() {
                 className="w-full bg-rowan-surface border border-rowan-border rounded-xl px-3 py-2.5 text-rowan-text text-sm min-h-11 appearance-none"
               >
                 <option value="">All payments</option>
-                {countryNetworks.map((key) => (
+                {marketNetworks.map((key) => (
                   <option key={key} value={key}>
                     {NETWORKS[key]?.label || key}
                   </option>

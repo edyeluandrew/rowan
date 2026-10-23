@@ -40,15 +40,19 @@ export default function Cashout() {
   const { usdcBalance, hasUsdcTrustline } = useWallet()
   const { activeTransaction, loading: activeLoading } = useActiveTransaction()
   const traderOffers = Array.isArray(presetOffers) ? presetOffers : []
-  const mustPickNetwork = traderOffers.length > 0
+  const offerNetworks = [...new Set(traderOffers.map((offer) => offer.network).filter(Boolean))]
+  const mustPickNetwork = offerNetworks.length > 1
+  const soleOffer = offerNetworks.length === 1
+    ? (traderOffers.find((offer) => offer.network === offerNetworks[0]) || null)
+    : null
   const [pickedOffer, setPickedOffer] = useState(null)
-  const activeAd = mustPickNetwork ? pickedOffer : selectedAd
+  const activeAd = mustPickNetwork ? pickedOffer : (selectedAd || soleOffer)
   const adNetwork = mustPickNetwork
     ? (pickedOffer?.network || null)
-    : (presetNetwork || selectedAd?.network || null)
+    : (presetNetwork || activeAd?.network || null)
   const payoutSettingId = mustPickNetwork
     ? (pickedOffer?.payoutSettingId || pickedOffer?.id || null)
-    : (presetPayoutSettingId || selectedAd?.payoutSettingId || selectedAd?.id)
+    : (presetPayoutSettingId || activeAd?.payoutSettingId || activeAd?.id)
   const networkLocked = !mustPickNetwork && !!(payoutSettingId && adNetwork)
   const openedRate = Number(selectedAd?.ratePerUsdc || selectedAd?.rate_per_usdc || 0)
   const [usdcAmount, setUsdcAmount] = useState(() => {
@@ -290,7 +294,7 @@ export default function Cashout() {
         </p>
         <p className="text-rowan-muted text-xs mt-2">
           {mustPickNetwork && !network
-            ? 'Choose MTN or Airtel to see what you will receive.'
+            ? `Choose ${offerNetworks.map((key) => NETWORKS[key]?.label || key).join(' or ')} to see what you will receive.`
             : (traderRateLine || 'This trader has not set a USDC price yet')}
         </p>
         {receiveFiat > 0 && (
@@ -309,8 +313,8 @@ export default function Cashout() {
               setNetwork(key)
             }}
             country={country}
-            networks={traderOffers.map((offer) => offer.network)}
-            prompt="Choose the network you want to receive on"
+            networks={offerNetworks}
+            prompt={`Choose ${offerNetworks.map((key) => NETWORKS[key]?.label || key).join(' or ')}`}
           />
         ) : networkLocked && network ? (
           <div>
@@ -321,9 +325,9 @@ export default function Cashout() {
               <PaymentMethodPill network={network} />
             </div>
           </div>
-        ) : (
+        ) : !presetTraderName ? (
           <NetworkSelector selected={network} onSelect={setNetwork} country={country} />
-        )}
+        ) : null}
       </div>
 
       <div className="mt-6">
