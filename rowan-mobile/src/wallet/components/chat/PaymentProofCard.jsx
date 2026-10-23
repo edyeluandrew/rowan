@@ -18,7 +18,6 @@ export default function PaymentProofCard({ payload }) {
         <p className="text-rowan-text font-semibold mb-3">✅ Trader Payment Proof</p>
         <div className="border-t border-rowan-border/50 pt-3 space-y-2 text-rowan-text">
           <Row label="Network" value={getNetworkLabel(payload.network) || payload.network} />
-          <Row label="Reference" value={payload.reference} />
           <Row label="Amount" value={payload.amount} />
           {sentAt && <Row label="Sent at" value={sentAt} />}
         </div>

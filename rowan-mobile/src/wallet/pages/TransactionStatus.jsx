@@ -665,8 +665,6 @@ export default function TransactionStatus() {
               MoMo details may also appear in chat. Use the trader&apos;s verified {getNetworkLabel(transaction.network)} number.
             </p>
           )}
-          <PaymentProofPicker preview={buyProofPreview} onFile={handleBuyProof} />
-          {buyPaymentError && <p className="text-rowan-red text-xs">{buyPaymentError}</p>}
         </div>
       )}
 
@@ -902,7 +900,13 @@ export default function TransactionStatus() {
 
       {/* Buy: sticky I have sent fiat — always visible while paying */}
       {isBuy && !isAutomatedBuy && transaction?.state === 'ESCROW_LOCKED' && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-rowan-bg/95 border-t border-rowan-yellow/40 backdrop-blur-sm safe-area-pb">
+        <div className="h-64" />
+      )}
+
+      {isBuy && !isAutomatedBuy && transaction?.state === 'ESCROW_LOCKED' && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-rowan-bg/95 border-t border-rowan-yellow/40 backdrop-blur-sm safe-area-pb space-y-3">
+          <PaymentProofPicker preview={buyProofPreview} onFile={handleBuyProof} />
+          {buyPaymentError && <p className="text-rowan-red text-xs">{buyPaymentError}</p>}
           <Button
             loading={submittingBuyPayment}
             onClick={handleSubmitBuyPayment}
