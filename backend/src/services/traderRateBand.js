@@ -96,18 +96,14 @@ export async function assertRateWithinMarketBand(ratePerUsdc, currency) {
 }
 
 /**
- * Quote-time check for an already posted rate.
- * If FX is down, do not freeze the order — listing already filtered when FX was up.
+ * A rate the trader already saved stays usable.
+ * New saves still have to sit inside the live band.
+ * If FX is down, do not freeze the order.
  */
 export async function assertPostedRateWithinBand(ratePerUsdc, currency) {
   const rate = Number(ratePerUsdc);
   if (!Number.isFinite(rate) || rate <= 0) return null;
-  const band = await getBandForCurrency(currency);
-  if (!band) return null;
-  if (!isWithinBand(rate, band)) {
-    throw outOfBandError(rate, band, { forUser: true });
-  }
-  return band;
+  return getBandForCurrency(currency);
 }
 
 /** Drop posted rates outside the live band. Keep unpriced ads. If FX is down, keep all. */

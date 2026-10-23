@@ -3,7 +3,7 @@ import traderStatsService from './traderStatsService.js';
 import payoutSettingsService from './payoutSettingsService.js';
 import logger from '../utils/logger.js';
 import { assertTraderCanReceiveUsdc, getTraderUsdcTrustlineStatus } from './traderStellarService.js';
-import { assertPostedRateWithinBand, filterAdsByMarketBand, getBandForCurrency, isWithinBand } from './traderRateBand.js';
+import { assertPostedRateWithinBand, getBandForCurrency, isWithinBand } from './traderRateBand.js';
 
 const ACTIVE_ORDER_STATES = ['TRADER_MATCHED', 'FIAT_PAYOUT_SUBMITTED', 'USER_CONFIRMATION_PENDING'];
 
@@ -31,7 +31,10 @@ async function listAds({
     `t.status = 'ACTIVE'`,
     `t.verification_status = 'VERIFIED'`,
     `t.stellar_address IS NOT NULL`,
-    `(ps.available_float - ps.reserved_float) > 0`,
+    `(
+      (ps.available_float - ps.reserved_float) > 0
+      OR (ps.rate_per_usdc IS NOT NULL AND ps.rate_per_usdc > 0)
+    )`,
     `(SELECT COUNT(*) FROM transactions tx
         WHERE tx.trader_id = t.id
           AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[]))
@@ -63,38 +66,49 @@ async function listAds({
     conditions.push(`ps.min_amount <= $${params.length}`);
   }
 
-  const offset = (Math.max(1, page) - 1) * Math.min(limit, 50);
-  params.push(Math.min(limit, 50));
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+  const offset = (Math.max(1, page) - 1) * pageSize;
+  params.push(pageSize);
   params.push(offset);
 
   const query = `
-    SELECT
-      ps.id AS payout_setting_id,
-      ps.trader_id,
-      t.name AS trader_name,
-      t.stellar_address,
-      t.trust_score,
-      t.created_at AS member_since,
-      t.last_seen_at,
-      t.last_active_at,
-      t.max_concurrent_orders,
-      ps.network,
-      ps.currency,
-      ps.country,
-      ps.min_amount,
-      ps.max_amount,
-      ps.available_float,
-      ps.reserved_float,
-      ps.rate_per_usdc,
-      (ps.available_float - ps.reserved_float) AS net_float,
-      (SELECT COUNT(*)::int FROM transactions tx
-         WHERE tx.trader_id = t.id
-           AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_orders
-    FROM trader_payout_settings ps
-    JOIN traders t ON t.id = ps.trader_id
-    WHERE ${conditions.join(' AND ')}
-    ORDER BY t.trust_score DESC, net_float DESC
-    LIMIT $${params.length - 1} OFFSET $${params.length}
+    WITH matching AS (
+      SELECT
+        ps.id AS payout_setting_id,
+        ps.trader_id,
+        t.name AS trader_name,
+        t.stellar_address,
+        t.trust_score,
+        t.created_at AS member_since,
+        t.last_seen_at,
+        t.last_active_at,
+        t.max_concurrent_orders,
+        ps.network,
+        ps.currency,
+        ps.country,
+        ps.min_amount,
+        ps.max_amount,
+        ps.available_float,
+        ps.reserved_float,
+        ps.rate_per_usdc,
+        (ps.available_float - ps.reserved_float) AS net_float,
+        (SELECT COUNT(*)::int FROM transactions tx
+           WHERE tx.trader_id = t.id
+             AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_orders
+      FROM trader_payout_settings ps
+      JOIN traders t ON t.id = ps.trader_id
+      WHERE ${conditions.join(' AND ')}
+    ),
+    trader_page AS (
+      SELECT trader_id
+      FROM matching
+      GROUP BY trader_id
+      ORDER BY MAX(trust_score) DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    )
+    SELECT * FROM matching
+    WHERE trader_id IN (SELECT trader_id FROM trader_page)
+    ORDER BY trust_score DESC, net_float DESC
   `;
 
   const result = await db.query(query, params);
@@ -130,7 +144,7 @@ async function listAds({
     })
   )).filter(Boolean);
 
-  return { ads: await filterAdsByMarketBand(ads), page: Math.max(1, page), limit: Math.min(limit, 50) };
+  return { ads, page: Math.max(1, page), limit: Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50) };
 }
 
 /**
@@ -363,48 +377,52 @@ async function listBuyAds({
     conditions.push(`ps.min_amount <= $${params.length}`);
   }
 
-  const offset = (Math.max(1, page) - 1) * Math.min(limit, 50);
-  params.push(Math.min(limit, 50));
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+  const offset = (Math.max(1, page) - 1) * pageSize;
+  params.push(pageSize);
   params.push(offset);
 
   const query = `
-    SELECT
-      ps.id AS payout_setting_id,
-      ps.trader_id,
-      t.name AS trader_name,
-      t.trust_score,
-      t.created_at AS member_since,
-      t.last_seen_at,
-      t.last_active_at,
-      ps.network,
-      ps.currency,
-      ps.country,
-      ps.min_amount,
-      ps.max_amount,
-      ps.ad_side,
-      ps.available_usdc,
-      ps.reserved_usdc,
-      ps.available_float,
-      ps.reserved_float,
-      (ps.available_usdc - COALESCE(ps.reserved_usdc, 0)) AS net_usdc_float,
-      (ps.available_float - COALESCE(ps.reserved_float, 0)) AS net_float,
-      ps.rate_per_usdc,
-      t.stellar_address,
-      (SELECT COUNT(*)::int FROM transactions tx
-         WHERE tx.trader_id = t.id
-           AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_orders
-    FROM trader_payout_settings ps
-    JOIN traders t ON t.id = ps.trader_id
-    WHERE ${conditions.join(' AND ')}
-    ORDER BY t.trust_score DESC,
-             GREATEST(
-               COALESCE((ps.available_usdc - COALESCE(ps.reserved_usdc, 0)), 0),
-               CASE WHEN ps.rate_per_usdc > 0
-                 THEN (ps.available_float - COALESCE(ps.reserved_float, 0)) / ps.rate_per_usdc
-                 ELSE 0
-               END
-             ) DESC
-    LIMIT $${params.length - 1} OFFSET $${params.length}
+    WITH matching AS (
+      SELECT
+        ps.id AS payout_setting_id,
+        ps.trader_id,
+        t.name AS trader_name,
+        t.trust_score,
+        t.created_at AS member_since,
+        t.last_seen_at,
+        t.last_active_at,
+        ps.network,
+        ps.currency,
+        ps.country,
+        ps.min_amount,
+        ps.max_amount,
+        ps.ad_side,
+        ps.available_usdc,
+        ps.reserved_usdc,
+        ps.available_float,
+        ps.reserved_float,
+        (ps.available_usdc - COALESCE(ps.reserved_usdc, 0)) AS net_usdc_float,
+        (ps.available_float - COALESCE(ps.reserved_float, 0)) AS net_float,
+        ps.rate_per_usdc,
+        t.stellar_address,
+        (SELECT COUNT(*)::int FROM transactions tx
+           WHERE tx.trader_id = t.id
+             AND tx.state::text = ANY('{TRADER_MATCHED,FIAT_PAYOUT_SUBMITTED,USER_CONFIRMATION_PENDING}'::text[])) AS active_orders
+      FROM trader_payout_settings ps
+      JOIN traders t ON t.id = ps.trader_id
+      WHERE ${conditions.join(' AND ')}
+    ),
+    trader_page AS (
+      SELECT trader_id
+      FROM matching
+      GROUP BY trader_id
+      ORDER BY MAX(trust_score) DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    )
+    SELECT * FROM matching
+    WHERE trader_id IN (SELECT trader_id FROM trader_page)
+    ORDER BY trust_score DESC, net_usdc_float DESC
   `;
 
   const result = await db.query(query, params);
@@ -446,7 +464,7 @@ async function listBuyAds({
     })
   )).filter(Boolean);
 
-  return { ads: await filterAdsByMarketBand(ads), page: Math.max(1, page), limit: Math.min(limit, 50) };
+  return { ads, page: Math.max(1, page), limit: Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50) };
 }
 
 /**
